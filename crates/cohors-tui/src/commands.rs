@@ -33,5 +33,5 @@ pub fn scan(cli: &Cli) -> Result<()> {
 /// Bare `cohors` — launch the interactive dashboard.
 pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = Arc::new(Scanner::from_cli(cli)?);
-    crate::tui::run(scanner)
+    crate::tui::run(scanner, !cli.no_cache)
 }

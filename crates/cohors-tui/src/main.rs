@@ -6,6 +6,7 @@
 
 mod action;
 mod app;
+mod cache;
 mod cli;
 mod commands;
 mod logging;

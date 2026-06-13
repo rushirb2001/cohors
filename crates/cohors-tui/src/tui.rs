@@ -53,17 +53,25 @@ enum BgMsg {
 }
 
 /// Run the dashboard to completion, always restoring the terminal afterward.
-pub fn run(scanner: Arc<Scanner>) -> Result<()> {
+pub fn run(scanner: Arc<Scanner>, use_cache: bool) -> Result<()> {
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_loop(&mut terminal, scanner);
+    let result = run_loop(&mut terminal, scanner, use_cache);
     let _ = restore_terminal(&mut terminal);
     result
 }
 
-fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>) -> Result<()> {
+fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Result<()> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
+    // Warm start: paint cached snapshots instantly, then refresh in background.
+    if use_cache
+        && let Some(cached) = crate::cache::load()
+        && !cached.is_empty()
+    {
+        app.set_repos(cached);
+        app.status = Some("refreshing…".to_string());
+    }
     app.scanning = true;
     spawn_scan(&scanner, tx.clone());
 
@@ -273,6 +281,7 @@ fn spawn_scan(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
     let scanner = Arc::clone(scanner);
     std::thread::spawn(move || {
         let repos = scanner.scan();
+        crate::cache::save(&repos);
         let _ = tx.send(BgMsg::Scanned(repos));
     });
 }
