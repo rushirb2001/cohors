@@ -1,0 +1,22 @@
+[package]
+name = "cohors-tui"
+description = "Terminal dashboard for cohors; builds the `cohors` binary."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+# We want the binary to be named `cohors`, not `cohors-tui`. Declaring the bin
+# explicitly and disabling auto-discovery avoids a duplicate target from the
+# same `src/main.rs`.
+autobins = false
+
+[[bin]]
+name = "cohors"
+path = "src/main.rs"
+
+[dependencies]
+cohors-core = { workspace = true }
+cohors-config = { workspace = true }
+cohors-git = { workspace = true }

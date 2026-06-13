@@ -1,0 +1,12 @@
+[package]
+name = "cohors-git"
+description = "Local git data source for cohors: repo discovery and per-repo snapshots via gix."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+cohors-core = { workspace = true }

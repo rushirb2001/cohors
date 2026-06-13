@@ -1,0 +1,12 @@
+[package]
+name = "cohors-core"
+description = "Pure, WASM-safe domain logic for cohors: models, the RepoProvider trait, and sort/filter/fuzzy ranking."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }

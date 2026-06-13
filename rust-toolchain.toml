@@ -1,0 +1,8 @@
+# Pin the toolchain so the `clippy -D warnings` gate stays reproducible across
+# machines and CI. A floating `stable` can suddenly fail when a new release
+# introduces lints; bump this deliberately instead.
+[toolchain]
+channel = "1.96.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

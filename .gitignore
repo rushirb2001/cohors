@@ -1,7 +1,8 @@
 # Rust
 /target
 **/target
-Cargo.lock        # keep for the binary crate; remove this line if you decide to commit it
+# Cargo.lock is committed: cohors ships as a binary, so a locked dependency
+# graph gives reproducible builds.
 *.rs.bk
 *.pdb
 
