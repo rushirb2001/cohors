@@ -50,8 +50,12 @@ globset = "0.4"
 glob = "0.3"
 rayon = "1"
 
+# TUI / CLI front-end (cohors-tui).
+clap = { version = "4", features = ["derive"] }
+
 # Dev/test helpers.
 tempfile = "3"
+assert_cmd = "2"
 
 # Internal crates referenced by path. Front-ends depend on these, never on the
 # concrete data source directly (everything funnels through cohors-core).

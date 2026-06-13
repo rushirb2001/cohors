@@ -47,8 +47,9 @@ pub fn log_file() -> Result<Utf8PathBuf, ConfigError> {
 }
 
 /// The user's home directory, as UTF-8. Uses the `directories` crate so this
-/// works on Windows (`%USERPROFILE%`) as well as Unix.
-fn home_dir() -> Result<Utf8PathBuf, ConfigError> {
+/// works on Windows (`%USERPROFILE%`) as well as Unix. Public so the binary can
+/// expand `~` in roots and alias keys against it.
+pub fn home_dir() -> Result<Utf8PathBuf, ConfigError> {
     let base = directories::BaseDirs::new().ok_or(ConfigError::NoHome)?;
     Utf8PathBuf::from_path_buf(base.home_dir().to_path_buf()).map_err(ConfigError::NonUtf8Path)
 }
