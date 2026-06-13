@@ -33,6 +33,13 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # WASM-safe core.
 nucleo-matcher = "0.3"
 
+# Config parsing + cross-platform base directories (cohors-config).
+toml = "0.8"
+directories = "5"
+
+# Dev/test helpers.
+tempfile = "3"
+
 # Internal crates referenced by path. Front-ends depend on these, never on the
 # concrete data source directly (everything funnels through cohors-core).
 cohors-core = { path = "crates/cohors-core" }
