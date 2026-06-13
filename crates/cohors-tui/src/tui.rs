@@ -1,126 +1,327 @@
-//! Terminal setup/teardown and the async event loop.
+//! Terminal setup/teardown and the synchronous event loop (ADR-012).
 //!
-//! Input (a blocking reader thread), scan results (a `spawn_blocking` worker),
-//! and a timer tick all feed one channel; the loop updates [`App`] and redraws.
-//! Per ADR-010 the heavy work runs off the UI: the scan never blocks input.
+//! The loop polls input on the main thread; scans and fetch/pull run on
+//! `std::thread`s that report back over an `mpsc` channel drained each tick, so
+//! the UI never blocks on I/O. Interactive children (editor, lazygit) are run
+//! by suspending the terminal while the loop isn't polling input — so they
+//! own stdin cleanly — then resuming and refreshing.
 //!
-//! A panic hook restores the terminal (leaves the alternate screen and raw
-//! mode) *before* the panic prints — a corrupted terminal on crash is the #1
-//! TUI papercut.
+//! A panic hook restores the terminal before the panic prints.
 
 use std::io::Stdout;
 use std::sync::Arc;
+use std::sync::mpsc::{self, Sender};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use cohors_core::RepoSnapshot;
+use camino::Utf8PathBuf;
+use cohors_core::{RepoId, RepoRef, RepoSnapshot};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::crossterm::event::{self, Event, KeyEvent, KeyEventKind};
+use ratatui::crossterm::event::{self, Event, KeyEventKind};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use tokio::sync::mpsc::{self, UnboundedSender};
 
+use crate::action;
 use crate::app::{App, Cmd};
 use crate::scan::Scanner;
 use crate::ui;
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
 
-/// Everything that can wake the event loop.
-enum AppEvent {
-    Input(KeyEvent),
-    Resize,
+/// Input poll timeout; also the spinner-animation cadence.
+const POLL: Duration = Duration::from_millis(100);
+
+/// Which background git action to run.
+#[derive(Clone, Copy)]
+enum ActionKind {
+    Fetch,
+    Pull,
+}
+
+/// Messages from background threads to the loop.
+enum BgMsg {
     Scanned(Vec<RepoSnapshot>),
+    ActionDone {
+        id: RepoId,
+        message: String,
+        // Boxed: a RepoSnapshot is large relative to the other variant.
+        snapshot: Option<Box<RepoSnapshot>>,
+    },
 }
 
 /// Run the dashboard to completion, always restoring the terminal afterward.
-pub async fn run(scanner: Arc<Scanner>) -> Result<()> {
+pub fn run(scanner: Arc<Scanner>) -> Result<()> {
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_loop(&mut terminal, scanner).await;
-    // Restore even if the loop errored; surface the loop's result.
+    let result = run_loop(&mut terminal, scanner);
     let _ = restore_terminal(&mut terminal);
     result
 }
 
-async fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>) -> Result<()> {
-    let (tx, mut rx) = mpsc::unbounded_channel::<AppEvent>();
-    spawn_input_reader(tx.clone());
+fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>) -> Result<()> {
+    let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
     app.scanning = true;
     spawn_scan(&scanner, tx.clone());
 
-    let mut ticker = tokio::time::interval(Duration::from_millis(120));
-    terminal.draw(|f| ui::render(f, &app, now_secs()))?;
+    // The total of an in-flight `fetch all` batch (for aggregate progress).
+    let mut fetch_all_total: Option<usize> = None;
 
     loop {
-        tokio::select! {
-            maybe = rx.recv() => {
-                let Some(ev) = maybe else { break };
-                match ev {
-                    AppEvent::Input(key) => match app.on_key(key) {
-                        Cmd::Quit => break,
-                        Cmd::Refresh => {
-                            if !app.scanning {
-                                app.scanning = true;
-                                app.status = Some("refreshing…".to_string());
-                                spawn_scan(&scanner, tx.clone());
-                            }
-                        }
-                        Cmd::None => {}
-                    },
-                    AppEvent::Resize => {}
-                    AppEvent::Scanned(repos) => {
-                        app.set_repos(repos);
-                        app.scanning = false;
-                        app.status = None;
-                    }
-                }
-            }
-            _ = ticker.tick() => {
-                if app.scanning {
-                    app.spinner = app.spinner.wrapping_add(1);
-                }
-            }
-        }
         terminal.draw(|f| ui::render(f, &app, now_secs()))?;
+
+        if event::poll(POLL)? {
+            if let Event::Key(key) = event::read()?
+                && key.kind == KeyEventKind::Press
+            {
+                match app.on_key(key) {
+                    Cmd::Quit => break,
+                    Cmd::Refresh => start_refresh(&mut app, &scanner, &tx),
+                    Cmd::FetchSelected => start_action_selected(&mut app, &tx, ActionKind::Fetch),
+                    Cmd::FetchAll => start_fetch_all(&mut app, &tx, &mut fetch_all_total),
+                    Cmd::PullSelected => start_action_selected(&mut app, &tx, ActionKind::Pull),
+                    Cmd::CopyPath => copy_selected(&mut app),
+                    Cmd::RevealFileManager => reveal_selected(&mut app),
+                    Cmd::OpenEditor => open_editor(terminal, &mut app, &scanner, &tx)?,
+                    Cmd::Lazygit => open_lazygit(terminal, &mut app, &scanner, &tx)?,
+                    Cmd::None => {}
+                }
+            }
+        } else if app.scanning || !app.busy.is_empty() {
+            // Timed out with work in flight: animate the spinner.
+            app.spinner = app.spinner.wrapping_add(1);
+        }
+
+        drain_background(&mut app, &rx, &mut fetch_all_total);
     }
     Ok(())
 }
 
-/// Run a scan on a blocking worker and deliver the result to the loop.
-fn spawn_scan(scanner: &Arc<Scanner>, tx: UnboundedSender<AppEvent>) {
-    let scanner = Arc::clone(scanner);
-    tokio::task::spawn_blocking(move || {
-        let repos = scanner.scan();
-        let _ = tx.send(AppEvent::Scanned(repos));
+/// Apply any background results that have arrived.
+fn drain_background(
+    app: &mut App,
+    rx: &mpsc::Receiver<BgMsg>,
+    fetch_all_total: &mut Option<usize>,
+) {
+    while let Ok(msg) = rx.try_recv() {
+        match msg {
+            BgMsg::Scanned(repos) => {
+                app.set_repos(repos);
+                app.scanning = false;
+                if app.status.as_deref() == Some("refreshing…") {
+                    app.status = None;
+                }
+            }
+            BgMsg::ActionDone {
+                id,
+                message,
+                snapshot,
+            } => {
+                app.busy.remove(&id);
+                if let Some(new_snapshot) = snapshot {
+                    replace_snapshot(app, &id, *new_snapshot);
+                }
+                match fetch_all_total {
+                    Some(total) if app.busy.is_empty() => {
+                        app.status = Some(format!("fetched {total} repos"));
+                        *fetch_all_total = None;
+                    }
+                    Some(_) => app.status = Some(format!("fetching… {} left", app.busy.len())),
+                    None => app.status = Some(message),
+                }
+            }
+        }
+    }
+}
+
+fn start_refresh(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
+    if app.scanning {
+        return;
+    }
+    app.scanning = true;
+    app.status = Some("refreshing…".to_string());
+    spawn_scan(scanner, tx.clone());
+}
+
+/// Start a fetch/pull on the selected repo.
+fn start_action_selected(app: &mut App, tx: &Sender<BgMsg>, kind: ActionKind) {
+    let Some((id, path, name)) = selected_target(app) else {
+        app.status = Some("no repo selected".to_string());
+        return;
+    };
+    if app.busy.contains(&id) {
+        return;
+    }
+    app.status = Some(match kind {
+        ActionKind::Fetch => format!("fetching {name}…"),
+        ActionKind::Pull => format!("pulling {name}…"),
+    });
+    app.busy.insert(id.clone());
+    spawn_action(tx.clone(), kind, id, path, name);
+}
+
+/// Start a fetch on every (readable) repo.
+fn start_fetch_all(app: &mut App, tx: &Sender<BgMsg>, fetch_all_total: &mut Option<usize>) {
+    let targets: Vec<(RepoId, Utf8PathBuf, String)> = app
+        .repos
+        .iter()
+        .filter(|r| !r.has_error())
+        .filter_map(|r| r.path.clone().map(|p| (r.id.clone(), p, r.name.clone())))
+        .filter(|(id, _, _)| !app.busy.contains(id))
+        .collect();
+
+    if targets.is_empty() {
+        app.status = Some("no repos to fetch".to_string());
+        return;
+    }
+    *fetch_all_total = Some(targets.len());
+    app.status = Some(format!("fetching {} repos…", targets.len()));
+    for (id, path, name) in targets {
+        app.busy.insert(id.clone());
+        spawn_action(tx.clone(), ActionKind::Fetch, id, path, name);
+    }
+}
+
+fn copy_selected(app: &mut App) {
+    let Some(path) = selected_path(app) else {
+        app.status = Some("no repo selected".to_string());
+        return;
+    };
+    app.status = Some(match action::copy_to_clipboard(path.as_str()) {
+        Ok(()) => format!("copied {path}"),
+        Err(e) => format!("copy failed: {e}"),
     });
 }
 
-/// Read terminal events on a dedicated thread (crossterm's `read` blocks).
-fn spawn_input_reader(tx: UnboundedSender<AppEvent>) {
+fn reveal_selected(app: &mut App) {
+    let Some(path) = selected_path(app) else {
+        app.status = Some("no repo selected".to_string());
+        return;
+    };
+    if let Err(e) = action::reveal(&path) {
+        app.status = Some(format!("open failed: {e}"));
+    }
+}
+
+fn open_editor(
+    terminal: &mut Tui,
+    app: &mut App,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
+) -> Result<()> {
+    let Some(path) = selected_path(app) else {
+        app.status = Some("no repo selected".to_string());
+        return Ok(());
+    };
+    let Some(editor) = scanner.editor_command() else {
+        app.status = Some("no editor configured (set `editor`, or $EDITOR/$VISUAL)".to_string());
+        return Ok(());
+    };
+    let argv = action::editor_argv(&editor, &path);
+    run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
+}
+
+fn open_lazygit(
+    terminal: &mut Tui,
+    app: &mut App,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
+) -> Result<()> {
+    let Some(path) = selected_path(app) else {
+        app.status = Some("no repo selected".to_string());
+        return Ok(());
+    };
+    let argv = vec![
+        "lazygit".to_string(),
+        "-p".to_string(),
+        path.as_str().to_string(),
+    ];
+    run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
+}
+
+/// Suspend the TUI, run an interactive child to completion, then resume and
+/// refresh (the child may have changed repo state).
+fn run_interactive_then_refresh(
+    terminal: &mut Tui,
+    app: &mut App,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
+    argv: &[String],
+) -> Result<()> {
+    if argv.is_empty() {
+        return Ok(());
+    }
+    suspend_terminal(terminal)?;
+    let spawned = std::process::Command::new(&argv[0])
+        .args(&argv[1..])
+        .status();
+    resume_terminal(terminal)?;
+
+    match spawned {
+        Ok(_) => start_refresh(app, scanner, tx),
+        Err(e) => app.status = Some(format!("{}: {e}", argv[0])),
+    }
+    Ok(())
+}
+
+// ----- background workers ---------------------------------------------------
+
+fn spawn_scan(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
+    let scanner = Arc::clone(scanner);
     std::thread::spawn(move || {
-        loop {
-            match event::read() {
-                Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => {
-                    if tx.send(AppEvent::Input(key)).is_err() {
-                        break; // receiver gone: app is exiting
-                    }
-                }
-                Ok(Event::Resize(_, _)) => {
-                    if tx.send(AppEvent::Resize).is_err() {
-                        break;
-                    }
-                }
-                Ok(_) => {}
-                Err(_) => break,
-            }
-        }
+        let repos = scanner.scan();
+        let _ = tx.send(BgMsg::Scanned(repos));
     });
 }
+
+/// Run a git action on a worker thread, then re-snapshot the repo so the row
+/// reflects the new ahead/behind, and report back.
+fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathBuf, name: String) {
+    std::thread::spawn(move || {
+        let outcome = match kind {
+            ActionKind::Fetch => action::fetch(&path, &name),
+            ActionKind::Pull => action::pull_ff(&path, &name),
+        };
+        let message = match outcome {
+            Ok(m) | Err(m) => m,
+        };
+        let snapshot = Some(Box::new(cohors_git::snapshot_repo(&RepoRef {
+            id: id.clone(),
+            path: Some(path),
+        })));
+        let _ = tx.send(BgMsg::ActionDone {
+            id,
+            message,
+            snapshot,
+        });
+    });
+}
+
+// ----- selection helpers ----------------------------------------------------
+
+/// (id, path, name) of the selected repo, if it has a path.
+fn selected_target(app: &App) -> Option<(RepoId, Utf8PathBuf, String)> {
+    let repo = app.selected_repo()?;
+    let path = repo.path.clone()?;
+    Some((repo.id.clone(), path, repo.name.clone()))
+}
+
+fn selected_path(app: &App) -> Option<Utf8PathBuf> {
+    app.selected_repo().and_then(|r| r.path.clone())
+}
+
+/// Replace a repo's snapshot in place, preserving its (possibly aliased) name.
+fn replace_snapshot(app: &mut App, id: &RepoId, mut new_snapshot: RepoSnapshot) {
+    if let Some(i) = app.repos.iter().position(|r| &r.id == id) {
+        new_snapshot.name = app.repos[i].name.clone();
+        app.repos[i] = new_snapshot;
+    }
+}
+
+// ----- terminal plumbing ----------------------------------------------------
 
 fn now_secs() -> i64 {
     SystemTime::now()
@@ -145,8 +346,22 @@ fn restore_terminal(terminal: &mut Tui) -> Result<()> {
     Ok(())
 }
 
-/// Install a panic hook that restores the terminal before the default hook
-/// prints the panic message.
+/// Hand the terminal back to the shell so a child process can use it.
+fn suspend_terminal(terminal: &mut Tui) -> Result<()> {
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    Ok(())
+}
+
+/// Re-take the terminal after a child exits, forcing a full repaint.
+fn resume_terminal(terminal: &mut Tui) -> Result<()> {
+    enable_raw_mode()?;
+    execute!(terminal.backend_mut(), EnterAlternateScreen)?;
+    terminal.clear()?;
+    Ok(())
+}
+
+/// Restore the terminal before the default panic hook prints the message.
 fn install_panic_hook() {
     let original = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {

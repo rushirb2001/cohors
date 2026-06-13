@@ -4,6 +4,7 @@
 //! dashboard when invoked bare).
 #![forbid(unsafe_code)]
 
+mod action;
 mod app;
 mod cli;
 mod commands;

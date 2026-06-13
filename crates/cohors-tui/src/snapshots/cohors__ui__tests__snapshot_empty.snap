@@ -11,4 +11,4 @@ expression: "render_to_string(&app, 92, 10)"
 │                Run `cohors init` to create a config, or pass --root <dir>.               │
 │                                                                                          │
 │                                                                                          │
-└ j/k move · / filter · d dirty · s sort · r refresh · ? help · q quit ────────────────────┘
+└ j/k move · / filter · d dirty · s sort · ⏎ open · F fetch · p pull · L lazygit · ? help ·┘

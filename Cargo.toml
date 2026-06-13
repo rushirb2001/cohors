@@ -55,7 +55,8 @@ clap = { version = "4", features = ["derive"] }
 # ratatui re-exports crossterm, so the TUI uses `ratatui::crossterm` rather than
 # a separate crossterm dep — that keeps the two versions in lockstep.
 ratatui = "0.30"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }
+# Clipboard for the "copy path" action.
+arboard = "3"
 
 # Dev/test helpers.
 tempfile = "3"

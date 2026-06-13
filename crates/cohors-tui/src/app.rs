@@ -6,7 +6,9 @@
 //! returns a [`Cmd`] telling the event loop what side effect to run (quit,
 //! rescan), keeping I/O out of the state.
 
-use cohors_core::{RepoSnapshot, SortMode, ViewParams, ViewRow, compute_view};
+use std::collections::HashSet;
+
+use cohors_core::{RepoId, RepoSnapshot, SortMode, ViewParams, ViewRow, compute_view};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Which input mode the dashboard is in.
@@ -19,13 +21,28 @@ pub enum Mode {
     Help,
 }
 
-/// A side effect for the event loop to perform after a key is handled.
+/// A side effect for the event loop to perform after a key is handled. Actions
+/// that target a repo operate on the current selection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Cmd {
     None,
     Quit,
     /// Re-run the scan.
     Refresh,
+    /// Fetch the selected repo.
+    FetchSelected,
+    /// Fetch every repo.
+    FetchAll,
+    /// Pull (fast-forward-only) the selected repo.
+    PullSelected,
+    /// Open the selected repo in the editor.
+    OpenEditor,
+    /// Reveal the selected repo in the file manager.
+    RevealFileManager,
+    /// Open the selected repo in lazygit.
+    Lazygit,
+    /// Copy the selected repo's path to the clipboard.
+    CopyPath,
 }
 
 /// All dashboard state.
@@ -43,6 +60,8 @@ pub struct App {
     pub status: Option<String>,
     /// Animation tick for the spinner.
     pub spinner: usize,
+    /// Repos with an action (fetch/pull) in flight — shown with a row spinner.
+    pub busy: HashSet<RepoId>,
     /// Configured roots, for the empty/loading states.
     pub roots: Vec<String>,
     /// Config file path, for the help overlay.
@@ -61,6 +80,7 @@ impl App {
             scanning: false,
             status: None,
             spinner: 0,
+            busy: HashSet::new(),
             roots,
             config_path,
         }
@@ -137,6 +157,14 @@ impl App {
             }
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char('r') => return Cmd::Refresh,
+            // Actions (operate on the selection / all repos).
+            KeyCode::Char('f') => return Cmd::FetchSelected,
+            KeyCode::Char('F') => return Cmd::FetchAll,
+            KeyCode::Char('p') => return Cmd::PullSelected,
+            KeyCode::Enter => return Cmd::OpenEditor,
+            KeyCode::Char('o') => return Cmd::RevealFileManager,
+            KeyCode::Char('L') => return Cmd::Lazygit,
+            KeyCode::Char('y') => return Cmd::CopyPath,
             _ => {}
         }
         Cmd::None
@@ -298,6 +326,21 @@ mod tests {
     fn refresh_key_requests_rescan() {
         let mut app = app_with(&[("a", false)]);
         assert_eq!(app.on_key(key('r')), Cmd::Refresh);
+    }
+
+    #[test]
+    fn action_keys_map_to_commands() {
+        let mut app = app_with(&[("a", false)]);
+        assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
+        assert_eq!(app.on_key(key('F')), Cmd::FetchAll);
+        assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
+        assert_eq!(app.on_key(key('o')), Cmd::RevealFileManager);
+        assert_eq!(app.on_key(key('L')), Cmd::Lazygit);
+        assert_eq!(app.on_key(key('y')), Cmd::CopyPath);
+        assert_eq!(
+            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Cmd::OpenEditor
+        );
     }
 
     #[test]

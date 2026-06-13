@@ -67,6 +67,11 @@ impl Scanner {
     pub fn config_path(&self) -> String {
         self.config_path.clone()
     }
+
+    /// The editor command for the "open" action (config, else `$EDITOR`/`$VISUAL`).
+    pub fn editor_command(&self) -> Option<String> {
+        self.config.editor_command()
+    }
 }
 
 /// Map a [`Config`] (plus any `--root` overrides) to [`DiscoveryOptions`],

@@ -133,7 +133,7 @@ fn footer_hints(app: &App) -> String {
         Mode::Filter => " type to filter · ↑/↓ move · ⏎ apply · Esc clear ".to_string(),
         Mode::Help => " ? / Esc close ".to_string(),
         Mode::Normal => {
-            " j/k move · / filter · d dirty · s sort · r refresh · ? help · q quit ".to_string()
+            " j/k move · / filter · d dirty · s sort · ⏎ open · F fetch · p pull · L lazygit · ? help · q quit ".to_string()
         }
     }
 }
@@ -180,9 +180,14 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Them
         .style(Style::new().add_modifier(Modifier::BOLD));
 
     let view = app.view();
+    let spin = spinner_frame(app.spinner);
     let rows: Vec<Row> = view
         .iter()
-        .map(|vr| repo_row(&app.repos[vr.index], &vr.name_highlights, now, theme))
+        .map(|vr| {
+            let snap = &app.repos[vr.index];
+            let busy = app.busy.contains(&snap.id).then_some(spin);
+            repo_row(snap, &vr.name_highlights, now, theme, busy)
+        })
         .collect();
 
     let widths = [
@@ -207,7 +212,13 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Them
     frame.render_stateful_widget(table, area, &mut state);
 }
 
-fn repo_row<'a>(snap: &'a RepoSnapshot, highlights: &[u32], now: i64, theme: &Theme) -> Row<'a> {
+fn repo_row<'a>(
+    snap: &'a RepoSnapshot,
+    highlights: &[u32],
+    now: i64,
+    theme: &Theme,
+    busy: Option<&str>,
+) -> Row<'a> {
     if let Some(reason) = &snap.error {
         // Error repos show the reason in place of the normal columns.
         return Row::new(vec![
@@ -221,10 +232,15 @@ fn repo_row<'a>(snap: &'a RepoSnapshot, highlights: &[u32], now: i64, theme: &Th
     }
 
     let attention = snap.needs_attention();
+    // While an action runs, the ↑/↓ cell shows a spinner instead.
+    let arrows = match busy {
+        Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
+        None => arrows_cell(snap, theme),
+    };
     Row::new(vec![
         name_cell(&snap.name, highlights, attention, theme),
         branch_cell(snap, attention, theme),
-        arrows_cell(snap, theme),
+        arrows,
         dirty_cell(snap, theme),
         stash_cell(snap, theme),
         commit_cell(snap, attention, now, theme),
@@ -338,6 +354,14 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
         Line::from("  /               fuzzy filter (Esc clears)"),
         Line::from("  d               toggle dirty-only"),
         Line::from("  s               cycle sort mode"),
+        Line::from(""),
+        Line::from("Actions").bold(),
+        Line::from("  ⏎               open in editor"),
+        Line::from("  o               reveal in file manager"),
+        Line::from("  f / F           fetch selected / all"),
+        Line::from("  p               pull (fast-forward only)"),
+        Line::from("  L               open in lazygit"),
+        Line::from("  y               copy path to clipboard"),
         Line::from(""),
         Line::from("App").bold(),
         Line::from("  r               refresh (re-scan)"),
@@ -525,7 +549,7 @@ mod tests {
     fn snapshot_help() {
         let mut app = demo_app();
         app.mode = Mode::Help;
-        insta::assert_snapshot!(render_to_string(&app, 92, 18));
+        insta::assert_snapshot!(render_to_string(&app, 92, 28));
     }
 
     #[test]

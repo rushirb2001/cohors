@@ -1,22 +1,32 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 92, 18)"
+expression: "render_to_string(&app, 92, 28)"
 ---
 ┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
 │  Repo                 Branch             ↑/↓      Dirty        Stash Last commit         │
-│▌ web-app       ┌ Help ──────────────────────────────────────────────────┐ wip: cart drawe│
-│  payments      │Navigation                                              │fix: retry on 5x│
-│  infra         │  j / k, ↓ / ↑    move selection                        │build: pin ci im│
-│  auth-service  │  g / G           top / bottom                          │chore: bump deps│
-│  legacy-billing│                                                        │                │
+│▌ web-app              feat/checkout      ↓5       +7           ·     20m  wip: cart drawe│
+│  payments      ┌ Help ──────────────────────────────────────────────────┐fix: retry on 5x│
+│  infra         │Navigation                                              │build: pin ci im│
+│  auth-service  │  j / k, ↓ / ↑    move selection                        │chore: bump deps│
+│  legacy-billing│  g / G           top / bottom                          │                │
+│                │                                                        │                │
 │                │View                                                    │                │
 │                │  /               fuzzy filter (Esc clears)             │                │
 │                │  d               toggle dirty-only                     │                │
 │                │  s               cycle sort mode                       │                │
 │                │                                                        │                │
+│                │Actions                                                 │                │
+│                │  ⏎               open in editor                        │                │
+│                │  o               reveal in file manager                │                │
+│                │  f / F           fetch selected / all                  │                │
+│                │  p               pull (fast-forward only)              │                │
+│                │  L               open in lazygit                       │                │
+│                │  y               copy path to clipboard                │                │
+│                │                                                        │                │
 │                │App                                                     │                │
 │                │  r               refresh (re-scan)                     │                │
 │                │  ?               toggle this help                      │                │
 │                └────────────────────────────────────────────────────────┘                │
+│                                                                                          │
 │                                                                                          │
 └ ? / Esc close ───────────────────────────────────────────────────────────────────────────┘
