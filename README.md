@@ -1,12 +1,12 @@
 <div align="center">
 
-# 👁️ ephor
+# 🛰️ myriarch
 
 **Mission control for all your git repos.**
 
 A fast, beautiful terminal dashboard — and web app — that shows the live status of *every* git repository on your machine and lets you act on them in bulk. One Rust core, two front-ends.
 
-<sub><i>ephor</i> · Greek <b>ἔφορος</b>, "the overseer" — the magistrate who watched over the state. Now it watches over your repos.</sub>
+<sub><i>myriarch</i> · Greek <b>μυριάρχης</b>, "commander of ten thousand" — the officer who marshalled a <i>myriad</i>. Now it commands your myriad of repos.</sub>
 
 [![Status](https://img.shields.io/badge/status-pre--alpha%20(building%20in%20public)-orange)](docs/ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -28,9 +28,9 @@ Existing tools each solve one slice:
 - **mani / gita / meta** — run commands across repos, but no visual dashboard and no insight.
 - **git-scope** — a nice multi-repo status view, but *read-only*, *local-only*, with no remote/PR awareness.
 
-**ephor is the one that does all of it:** a single pane of glass across every repo, with the polish of lazygit, the breadth of mani, *and* the ability to act — plus remote/PR/CI health and an online dashboard you can share with your team.
+**myriarch is the one that does all of it:** a single pane of glass across every repo, with the polish of lazygit, the breadth of mani, *and* the ability to act — plus remote/PR/CI health and an online dashboard you can share with your team.
 
-## What ephor does
+## What myriarch does
 
 - 🛰️ **One screen, every repo.** Auto-discovers git repos under your project roots and shows branch, ahead/behind, dirty state, stashes, and last activity — sorted *dirty-first* so what needs you bubbles to the top.
 - ⚡ **Instant.** Parallel scanning + a warm cache. Launches in milliseconds even with 50+ repos.
@@ -42,18 +42,18 @@ Existing tools each solve one slice:
 
 ## Why it's built the way it is
 
-ephor is a Rust **workspace** with a pure, I/O-free **core** (`ephor-core`) that holds all the domain logic — and thin **adapters** around it:
+myriarch is a Rust **workspace** with a pure, I/O-free **core** (`myriarch-core`) that holds all the domain logic — and thin **adapters** around it:
 
-- a **local git** data source (`ephor-git`, via [gitoxide](https://github.com/GitoxideLabs/gitoxide)),
-- a **GitHub** data source (`ephor-github`),
-- a **TUI** front-end (`ephor-tui`, via [ratatui](https://ratatui.rs)),
-- and a **WASM web** front-end (`ephor-web`, via [Leptos](https://leptos.dev)).
+- a **local git** data source (`myriarch-git`, via [gitoxide](https://github.com/GitoxideLabs/gitoxide)),
+- a **GitHub** data source (`myriarch-github`),
+- a **TUI** front-end (`myriarch-tui`, via [ratatui](https://ratatui.rs)),
+- and a **WASM web** front-end (`myriarch-web`, via [Leptos](https://leptos.dev)).
 
 Because the core is data-source- and front-end-agnostic, the *exact same* analysis powers the terminal and the browser. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## How ephor compares
+## How myriarch compares
 
-| | ephor | git-scope | mani / gita | lazygit / gitui |
+| | myriarch | git-scope | mani / gita | lazygit / gitui |
 |---|:---:|:---:|:---:|:---:|
 | Multi-repo overview | ✅ | ✅ | ⚠️ text only | ❌ |
 | Beautiful TUI | ✅ | ✅ | ❌ | ✅ |
@@ -65,21 +65,21 @@ Because the core is data-source- and front-end-agnostic, the *exact same* analys
 
 ## Install
 
-> Coming with v0.1. Planned channels: `cargo install ephor`, `cargo binstall ephor`, Homebrew tap, Nix flake, and prebuilt binaries on every GitHub Release. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+> Coming with v0.1. Planned channels: `cargo install myriarch`, `cargo binstall myriarch`, Homebrew tap, Nix flake, and prebuilt binaries on every GitHub Release. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
 ```sh
 # (planned)
-cargo install ephor
-ephor            # launch the dashboard
-ephor init       # write a starter config
+cargo install myriarch
+myriarch            # launch the dashboard
+myriarch init       # write a starter config
 ```
 
 ## Quickstart (planned)
 
 ```sh
-ephor init                      # creates ~/.config/ephor/config.toml
+myriarch init                      # creates ~/.config/myriarch/config.toml
 # edit roots = ["~/projects", "~/work"]
-ephor                           # scan + launch the TUI
+myriarch                           # scan + launch the TUI
 ```
 
 Keys: `j/k` move · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Enter` open in editor · `F` fetch all · `?` help · `q` quit. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
@@ -94,13 +94,13 @@ Keys: `j/k` move · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Ent
 | [ROADMAP](docs/ROADMAP.md) | v0.1 → v0.4 milestones with acceptance criteria |
 | [MVP-SPEC](docs/MVP-SPEC.md) | The detailed spec for v0.1 (build this first) |
 | [TUI-DESIGN](docs/TUI-DESIGN.md) | Wireframes, keymap, states, theming |
-| [DISTRIBUTION](docs/DISTRIBUTION.md) | How we ship and how ephor gets discovered |
+| [DISTRIBUTION](docs/DISTRIBUTION.md) | How we ship and how myriarch gets discovered |
 | [DECISIONS](docs/DECISIONS.md) | Architecture decision records (ADRs) |
 
 ## Contributing
 
-ephor is open source (MIT) and built in public. Issues, ideas, and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+myriarch is open source (MIT) and built in public. Issues, ideas, and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © ephor contributors
+[MIT](LICENSE) © myriarch contributors
