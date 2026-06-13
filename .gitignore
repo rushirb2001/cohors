@@ -1,0 +1,23 @@
+# Rust
+/target
+**/target
+Cargo.lock        # keep for the binary crate; remove this line if you decide to commit it
+*.rs.bk
+*.pdb
+
+# WASM / web build output
+/crates/grove-web/dist
+/crates/grove-web/pkg
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# grove runtime artifacts (in case they ever land in-tree during dev)
+/.grove-cache
+*.log
+
+# Demo recording scratch
+*.gif.tmp
