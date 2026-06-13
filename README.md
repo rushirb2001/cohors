@@ -94,7 +94,7 @@ cohors                           # scan + launch the dashboard
 cohors scan                      # or: print snapshots as JSON (scriptable)
 ```
 
-Keys: `j`/`k` move · `g`/`G` top/bottom · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Enter` open in editor · `o` reveal in file manager · `f`/`F` fetch selected/all · `p` pull (fast-forward only) · `L` lazygit · `y` copy path · `r` refresh · `?` help · `q` quit. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
+Keys: `↑`/`↓` move · `Home`/`End` top/bottom · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Enter` open in editor · `o` reveal in file manager · `f`/`F` fetch selected/all · `p` pull (fast-forward only) · `L` lazygit · `y` copy path · `r` refresh · `?` help · `q` quit. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
 
 ## Documentation
 

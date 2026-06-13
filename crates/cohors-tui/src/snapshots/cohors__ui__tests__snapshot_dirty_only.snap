@@ -13,4 +13,4 @@ expression: "render_to_string(&app, 92, 12)"
 │                                                                                          │
 │                                                                                          │
 │                                                                                          │
-└ j/k move · / filter · d dirty · s sort · ⏎ open · F fetch · p pull · L lazygit · ? help ·┘
+└ ↑/↓ move · / filter · d dirty · s sort · ⏎ open · F fetch · p pull · L lazygit · ? help ·┘

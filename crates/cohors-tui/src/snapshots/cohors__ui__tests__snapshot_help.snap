@@ -7,8 +7,8 @@ expression: "render_to_string(&app, 92, 28)"
 │▌ web-app              feat/checkout      ↓5       +7           ·     20m  wip: cart drawe│
 │  payments      ┌ Help ──────────────────────────────────────────────────┐fix: retry on 5x│
 │  infra         │Navigation                                              │build: pin ci im│
-│  auth-service  │  j / k, ↓ / ↑    move selection                        │chore: bump deps│
-│  legacy-billing│  g / G           top / bottom                          │                │
+│  auth-service  │  ↑ / ↓           move selection                        │chore: bump deps│
+│  legacy-billing│  Home / End      top / bottom                          │                │
 │                │                                                        │                │
 │                │View                                                    │                │
 │                │  /               fuzzy filter (Esc clears)             │                │

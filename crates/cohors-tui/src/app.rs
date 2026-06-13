@@ -142,10 +142,11 @@ impl App {
     fn on_key_normal(&mut self, key: KeyEvent) -> Cmd {
         match key.code {
             KeyCode::Char('q') => return Cmd::Quit,
-            KeyCode::Char('j') | KeyCode::Down => self.move_down(),
-            KeyCode::Char('k') | KeyCode::Up => self.move_up(),
-            KeyCode::Char('g') => self.selected = 0,
-            KeyCode::Char('G') => self.select_last(),
+            // Movement is arrow-keys only (Home/End jump to top/bottom).
+            KeyCode::Down => self.move_down(),
+            KeyCode::Up => self.move_up(),
+            KeyCode::Home => self.selected = 0,
+            KeyCode::End => self.select_last(),
             KeyCode::Char('/') => self.mode = Mode::Filter,
             KeyCode::Char('d') => {
                 self.dirty_only = !self.dirty_only;
@@ -258,6 +259,10 @@ mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
     }
 
+    fn code(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
     fn app_with(names: &[(&str, bool)]) -> App {
         let mut app = App::new(vec![], String::new());
         app.set_repos(names.iter().map(|(n, d)| snap(n, *d)).collect());
@@ -268,15 +273,15 @@ mod tests {
     fn navigation_moves_and_clamps() {
         let mut app = app_with(&[("a", false), ("b", false), ("c", false)]);
         assert_eq!(app.selected, 0);
-        app.on_key(key('j'));
+        app.on_key(code(KeyCode::Down));
         assert_eq!(app.selected, 1);
-        app.on_key(key('G'));
+        app.on_key(code(KeyCode::End));
         assert_eq!(app.selected, 2);
-        app.on_key(key('j')); // clamp at bottom
+        app.on_key(code(KeyCode::Down)); // clamp at bottom
         assert_eq!(app.selected, 2);
-        app.on_key(key('g'));
+        app.on_key(code(KeyCode::Home));
         assert_eq!(app.selected, 0);
-        app.on_key(key('k')); // clamp at top
+        app.on_key(code(KeyCode::Up)); // clamp at top
         assert_eq!(app.selected, 0);
     }
 

@@ -133,7 +133,7 @@ fn footer_hints(app: &App) -> String {
         Mode::Filter => " type to filter · ↑/↓ move · ⏎ apply · Esc clear ".to_string(),
         Mode::Help => " ? / Esc close ".to_string(),
         Mode::Normal => {
-            " j/k move · / filter · d dirty · s sort · ⏎ open · F fetch · p pull · L lazygit · ? help · q quit ".to_string()
+            " ↑/↓ move · / filter · d dirty · s sort · ⏎ open · F fetch · p pull · L lazygit · ? help · q quit ".to_string()
         }
     }
 }
@@ -347,8 +347,8 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
     frame.render_widget(Clear, area);
     let lines = vec![
         Line::from("Navigation").bold(),
-        Line::from("  j / k, ↓ / ↑    move selection"),
-        Line::from("  g / G           top / bottom"),
+        Line::from("  ↑ / ↓           move selection"),
+        Line::from("  Home / End      top / bottom"),
         Line::from(""),
         Line::from("View").bold(),
         Line::from("  /               fuzzy filter (Esc clears)"),
