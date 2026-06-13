@@ -10,3 +10,23 @@ publish = false
 
 [dependencies]
 cohors-core = { workspace = true }
+gix = { workspace = true }
+ignore = { workspace = true }
+globset = { workspace = true }
+glob = { workspace = true }
+rayon = { workspace = true }
+camino = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+# Optional fallback to libgit2 for operations gix doesn't cover yet (ADR-004).
+git2 = { workspace = true, optional = true }
+
+[features]
+# v0.1 relies on libgit2 for worktree status, ahead/behind, and stash count
+# (gaps in gix 0.84's ergonomics — see ADR-004), so the fallback is on by
+# default. Turning it off compiles, but those fields degrade to empty.
+default = ["git2-fallback"]
+git2-fallback = ["dep:git2"]
+
+[dev-dependencies]
+tempfile = { workspace = true }

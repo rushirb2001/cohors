@@ -37,6 +37,19 @@ nucleo-matcher = "0.3"
 toml = "0.8"
 directories = "5"
 
+# Local git adapter (cohors-git).
+# gix is the primary, pure-Rust git implementation (ADR-004). Default features
+# stay on — they pull no network client or C zlib backend — and already include
+# `basic`/`revision` (merge-base, for ahead/behind). We add `status` for the
+# worktree status (staged/modified/untracked).
+gix = { version = "0.84", features = ["status"] }
+# git2 (libgit2) is the feature-gated fallback for gaps gix doesn't cover yet.
+git2 = { version = "0.21", default-features = false }
+ignore = "0.4"
+globset = "0.4"
+glob = "0.3"
+rayon = "1"
+
 # Dev/test helpers.
 tempfile = "3"
 
