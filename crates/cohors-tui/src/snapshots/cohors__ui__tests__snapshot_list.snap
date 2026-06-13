@@ -1,0 +1,16 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 92, 12)"
+---
+┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
+│  Repo                 Branch             ↑/↓      Dirty        Stash Last commit         │
+│▌ web-app              feat/checkout      ↓5       +7           ·     20m  wip: cart drawe│
+│  payments             main               ↑2       +3 ?1        1     2h  fix: retry on 5x│
+│  infra                @a1b2c3d (detached —        ?4           ·     1w  build: pin ci im│
+│  auth-service         main               —        ·            ·     3d  chore: bump deps│
+│  legacy-billing       ⚠ could not read .                                                 │
+│                                                                                          │
+│                                                                                          │
+│                                                                                          │
+│                                                                                          │
+└ j/k move · / filter · d dirty · s sort · r refresh · ? help · q quit ────────────────────┘

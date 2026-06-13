@@ -4,9 +4,13 @@
 //! dashboard when invoked bare).
 #![forbid(unsafe_code)]
 
+mod app;
 mod cli;
 mod commands;
 mod logging;
+mod scan;
+mod tui;
+mod ui;
 
 use clap::Parser;
 
