@@ -13,7 +13,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.96"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 authors = ["Rushir Bhavsar <rbhavsa4@asu.edu>"]
 
 # Shared dependencies: pinned once here, consumed in a crate with
@@ -68,3 +68,19 @@ insta = "1"
 cohors-core = { path = "crates/cohors-core" }
 cohors-config = { path = "crates/cohors-config" }
 cohors-git = { path = "crates/cohors-git" }
+
+# Release config for cargo-dist (the `dist` tool). This is a starting point —
+# run `dist init` to (re)generate the matching `.github/workflows/release.yml`
+# with installers; until then the hand-written release workflow ships binaries
+# on tag. `publish-jobs = []` means we do NOT publish to any registry.
+[workspace.metadata.dist]
+cargo-dist-version = "0.28.0"
+ci = "github"
+installers = ["shell"]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+]
+publish-jobs = []
+pr-run-mode = "plan"
