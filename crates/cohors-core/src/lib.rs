@@ -1,24 +1,33 @@
 //! `cohors-core` — the pure, I/O-free brain of cohors.
 //!
 //! All domain logic lives here so the TUI and the future web app share the
-//! *exact same* analysis: the data models, the [`RepoProvider`] trait, and the
-//! sort / filter / fuzzy-rank routines.
+//! *exact same* analysis:
 //!
-//! To keep the WebAssembly target viable, this crate must stay free of
-//! `std::fs`, `std::process`, `std::net`, thread spawning, and
-//! `std::time::Instant`. All I/O happens in adapter crates (`cohors-git`,
-//! later `cohors-github`) behind the provider trait.
+//! - [`model`] — the data types every front-end renders ([`RepoSnapshot`] & co).
+//! - [`provider`] — the [`RepoProvider`] trait that adapters implement.
+//! - [`sort`] / [`fuzzy`] / [`view`] — "what to show, and in what order".
+//! - [`time`] — clock-free relative-time formatting.
 //!
-//! This is the scaffold; the real models and logic land in the next milestone
-//! step.
+//! ## WASM safety (non-negotiable)
+//!
+//! To keep the WebAssembly target viable, this crate stays free of `std::fs`,
+//! `std::process`, `std::net`, thread spawning, and `std::time::Instant`. All
+//! I/O happens in adapter crates (`cohors-git`, later `cohors-github`) behind
+//! [`RepoProvider`], and the current time is *injected* into [`time::relative`]
+//! rather than read from the system clock. CI builds this crate for
+//! `wasm32-unknown-unknown` to catch any regression.
 #![forbid(unsafe_code)]
 
-#[cfg(test)]
-mod tests {
-    /// Smoke test confirming the workspace's test harness runs. Replaced by
-    /// real model and logic tests in the next step.
-    #[test]
-    fn scaffold_builds() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+pub mod fuzzy;
+pub mod model;
+pub mod provider;
+pub mod sort;
+pub mod time;
+pub mod view;
+
+// Re-export the most-used types at the crate root so adapters can write
+// `use cohors_core::RepoSnapshot;` instead of reaching into modules.
+pub use model::{Branch, CommitMeta, RepoId, RepoRef, RepoSnapshot, Upstream, WorktreeStatus};
+pub use provider::RepoProvider;
+pub use sort::SortMode;
+pub use view::{ViewParams, ViewRow, compute_view};

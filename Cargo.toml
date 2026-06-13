@@ -28,6 +28,11 @@ anyhow = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Fuzzy matching for the filter UI (ADR-005). Note: the low-level *matcher* only
+# — the high-level `nucleo` crate spawns worker threads, which would break the
+# WASM-safe core.
+nucleo-matcher = "0.3"
+
 # Internal crates referenced by path. Front-ends depend on these, never on the
 # concrete data source directly (everything funnels through cohors-core).
 cohors-core = { path = "crates/cohors-core" }

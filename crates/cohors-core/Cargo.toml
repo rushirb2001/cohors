@@ -10,3 +10,9 @@ publish = false
 
 [dependencies]
 serde = { workspace = true }
+camino = { workspace = true }
+nucleo-matcher = { workspace = true }
+
+[dev-dependencies]
+# Used only in tests, to assert snapshots round-trip through the cache format.
+serde_json = { workspace = true }
