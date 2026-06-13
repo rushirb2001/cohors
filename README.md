@@ -1,10 +1,12 @@
 <div align="center">
 
-# 🌳 grove
+# 👁️ ephor
 
 **Mission control for all your git repos.**
 
 A fast, beautiful terminal dashboard — and web app — that shows the live status of *every* git repository on your machine and lets you act on them in bulk. One Rust core, two front-ends.
+
+<sub><i>ephor</i> · Greek <b>ἔφορος</b>, "the overseer" — the magistrate who watched over the state. Now it watches over your repos.</sub>
 
 [![Status](https://img.shields.io/badge/status-pre--alpha%20(building%20in%20public)-orange)](docs/ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
@@ -26,9 +28,9 @@ Existing tools each solve one slice:
 - **mani / gita / meta** — run commands across repos, but no visual dashboard and no insight.
 - **git-scope** — a nice multi-repo status view, but *read-only*, *local-only*, with no remote/PR awareness.
 
-**grove is the one that does all of it:** a single pane of glass across every repo, with the polish of lazygit, the breadth of mani, *and* the ability to act — plus remote/PR/CI health and an online dashboard you can share with your team.
+**ephor is the one that does all of it:** a single pane of glass across every repo, with the polish of lazygit, the breadth of mani, *and* the ability to act — plus remote/PR/CI health and an online dashboard you can share with your team.
 
-## What grove does
+## What ephor does
 
 - 🛰️ **One screen, every repo.** Auto-discovers git repos under your project roots and shows branch, ahead/behind, dirty state, stashes, and last activity — sorted *dirty-first* so what needs you bubbles to the top.
 - ⚡ **Instant.** Parallel scanning + a warm cache. Launches in milliseconds even with 50+ repos.
@@ -40,18 +42,18 @@ Existing tools each solve one slice:
 
 ## Why it's built the way it is
 
-grove is a Rust **workspace** with a pure, I/O-free **core** (`grove-core`) that holds all the domain logic — and thin **adapters** around it:
+ephor is a Rust **workspace** with a pure, I/O-free **core** (`ephor-core`) that holds all the domain logic — and thin **adapters** around it:
 
-- a **local git** data source (`grove-git`, via [gitoxide](https://github.com/GitoxideLabs/gitoxide)),
-- a **GitHub** data source (`grove-github`),
-- a **TUI** front-end (`grove-tui`, via [ratatui](https://ratatui.rs)),
-- and a **WASM web** front-end (`grove-web`, via [Leptos](https://leptos.dev)).
+- a **local git** data source (`ephor-git`, via [gitoxide](https://github.com/GitoxideLabs/gitoxide)),
+- a **GitHub** data source (`ephor-github`),
+- a **TUI** front-end (`ephor-tui`, via [ratatui](https://ratatui.rs)),
+- and a **WASM web** front-end (`ephor-web`, via [Leptos](https://leptos.dev)).
 
 Because the core is data-source- and front-end-agnostic, the *exact same* analysis powers the terminal and the browser. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## How grove compares
+## How ephor compares
 
-| | grove | git-scope | mani / gita | lazygit / gitui |
+| | ephor | git-scope | mani / gita | lazygit / gitui |
 |---|:---:|:---:|:---:|:---:|
 | Multi-repo overview | ✅ | ✅ | ⚠️ text only | ❌ |
 | Beautiful TUI | ✅ | ✅ | ❌ | ✅ |
@@ -63,21 +65,21 @@ Because the core is data-source- and front-end-agnostic, the *exact same* analys
 
 ## Install
 
-> Coming with v0.1. Planned channels: `cargo install grove`, `cargo binstall grove`, Homebrew tap, Nix flake, and prebuilt binaries on every GitHub Release. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+> Coming with v0.1. Planned channels: `cargo install ephor`, `cargo binstall ephor`, Homebrew tap, Nix flake, and prebuilt binaries on every GitHub Release. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
 ```sh
 # (planned)
-cargo install grove
-grove            # launch the dashboard
-grove init       # write a starter config
+cargo install ephor
+ephor            # launch the dashboard
+ephor init       # write a starter config
 ```
 
 ## Quickstart (planned)
 
 ```sh
-grove init                      # creates ~/.config/grove/config.toml
+ephor init                      # creates ~/.config/ephor/config.toml
 # edit roots = ["~/projects", "~/work"]
-grove                           # scan + launch the TUI
+ephor                           # scan + launch the TUI
 ```
 
 Keys: `j/k` move · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Enter` open in editor · `F` fetch all · `?` help · `q` quit. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
@@ -92,13 +94,13 @@ Keys: `j/k` move · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Ent
 | [ROADMAP](docs/ROADMAP.md) | v0.1 → v0.4 milestones with acceptance criteria |
 | [MVP-SPEC](docs/MVP-SPEC.md) | The detailed spec for v0.1 (build this first) |
 | [TUI-DESIGN](docs/TUI-DESIGN.md) | Wireframes, keymap, states, theming |
-| [DISTRIBUTION](docs/DISTRIBUTION.md) | How we ship and how grove gets discovered |
+| [DISTRIBUTION](docs/DISTRIBUTION.md) | How we ship and how ephor gets discovered |
 | [DECISIONS](docs/DECISIONS.md) | Architecture decision records (ADRs) |
 
 ## Contributing
 
-grove is open source (MIT) and built in public. Issues, ideas, and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+ephor is open source (MIT) and built in public. Issues, ideas, and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE) © grove contributors
+[MIT](LICENSE) © ephor contributors
