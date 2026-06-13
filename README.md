@@ -8,13 +8,18 @@ A fast, beautiful terminal dashboard — and web app — that shows the live sta
 
 <sub><i>cohors</i> · Latin for "cohort" — a Roman legion's core battle unit of ~480. Every repo, marshalled into one cohort under your command.</sub>
 
-[![Status](https://img.shields.io/badge/status-pre--alpha%20(building%20in%20public)-orange)](docs/ROADMAP.md)
+[![CI](https://github.com/rushirbhavsar/cohors/actions/workflows/ci.yml/badge.svg)](https://github.com/rushirbhavsar/cohors/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-v0.1%20·%20local%20dashboard-brightgreen)](docs/ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
 
+![cohors dashboard demo](docs/demo.gif)
+
+<sub>Demo generated from <a href="docs/demo.tape"><code>docs/demo.tape</code></a> with <a href="https://github.com/charmbracelet/vhs">vhs</a> (<code>vhs docs/demo.tape</code>).</sub>
+
 </div>
 
-> 🚧 **Status: pre-0.1, in active development.** This README describes the product we're building. Code lands milestone by milestone — see the [Roadmap](docs/ROADMAP.md).
+> ✅ **v0.1 is here.** The local dashboard works: discover every repo under your roots, sorted dirty-first, with fuzzy filter, and fetch / pull / open actions. Remote/PR awareness (v0.2) and the web app (v0.4) are next — see the [Roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -65,24 +70,31 @@ Because the core is data-source- and front-end-agnostic, the *exact same* analys
 
 ## Install
 
-> Coming with v0.1. Planned channels: `cargo install cohors`, `cargo binstall cohors`, Homebrew tap, Nix flake, and prebuilt binaries on every GitHub Release. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+**v0.1 — from source.** Needs [Rust](https://rustup.rs) (the version is pinned in `rust-toolchain.toml`) and `git` on your `PATH`:
 
 ```sh
-# (planned)
-cargo install cohors
-cohors            # launch the dashboard
-cohors init       # write a starter config
+git clone https://github.com/rushirbhavsar/cohors && cd cohors
+cargo install --path crates/cohors-tui   # installs the `cohors` binary
 ```
 
-## Quickstart (planned)
+Or straight from git, without cloning:
 
 ```sh
-cohors init                      # creates ~/.config/cohors/config.toml
-# edit roots = ["~/projects", "~/work"]
-cohors                           # scan + launch the TUI
+cargo install --git https://github.com/rushirbhavsar/cohors cohors-tui
 ```
 
-Keys: `j/k` move · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Enter` open in editor · `F` fetch all · `?` help · `q` quit. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
+> Crates.io (`cargo install cohors`), `cargo binstall`, a Homebrew tap, and prebuilt binaries on every GitHub Release are planned — see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+
+## Quickstart
+
+```sh
+cohors init                      # writes ~/.config/cohors/config.toml
+# edit it: roots = ["~/projects", "~/work"]
+cohors                           # scan + launch the dashboard
+cohors scan                      # or: print snapshots as JSON (scriptable)
+```
+
+Keys: `j`/`k` move · `g`/`G` top/bottom · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Enter` open in editor · `o` reveal in file manager · `f`/`F` fetch selected/all · `p` pull (fast-forward only) · `L` lazygit · `y` copy path · `r` refresh · `?` help · `q` quit. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
 
 ## Documentation
 
