@@ -6,8 +6,8 @@ Cargo.lock        # keep for the binary crate; remove this line if you decide to
 *.pdb
 
 # WASM / web build output
-/crates/myriarch-web/dist
-/crates/myriarch-web/pkg
+/crates/cohors-web/dist
+/crates/cohors-web/pkg
 
 # Editors / OS
 .DS_Store
@@ -15,8 +15,8 @@ Cargo.lock        # keep for the binary crate; remove this line if you decide to
 .vscode/
 *.swp
 
-# myriarch runtime artifacts (in case they ever land in-tree during dev)
-/.myriarch-cache
+# cohors runtime artifacts (in case they ever land in-tree during dev)
+/.cohors-cache
 *.log
 
 # Demo recording scratch
