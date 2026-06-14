@@ -245,6 +245,7 @@ mod tests {
                 WorktreeStatus::default()
             },
             stash_count: 0,
+            stash_latest: None,
             last_commit: Some(CommitMeta {
                 short_id: "abc1234".to_string(),
                 author: "Dev".to_string(),

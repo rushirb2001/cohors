@@ -133,6 +133,10 @@ pub struct RepoSnapshot {
     pub worktree: WorktreeStatus,
     #[serde(default)]
     pub stash_count: u32,
+    /// Commit time (Unix seconds) of the newest stash, if any — lets the
+    /// attention layer flag a *stale* stash you've forgotten about.
+    #[serde(default)]
+    pub stash_latest: Option<i64>,
     pub last_commit: Option<CommitMeta>,
     /// Set when the repo couldn't be read; the other fields then hold
     /// best-effort defaults. One bad repo must never crash the dashboard, so
@@ -159,6 +163,7 @@ impl RepoSnapshot {
             upstream: None,
             worktree: WorktreeStatus::default(),
             stash_count: 0,
+            stash_latest: None,
             last_commit: None,
             error: Some(error.into()),
         }
@@ -236,6 +241,7 @@ pub(crate) fn sample(
             WorktreeStatus::default()
         },
         stash_count: stash,
+        stash_latest: None,
         last_commit: commit_ts.map(|t| CommitMeta {
             short_id: "abc1234".to_string(),
             author: "Dev".to_string(),

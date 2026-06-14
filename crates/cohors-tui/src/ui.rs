@@ -442,6 +442,7 @@ mod tests {
                 untracked: worktree.2,
             },
             stash_count: stash,
+            stash_latest: None,
             last_commit: commit.map(|(ts, summary)| CommitMeta {
                 short_id: "a1b2c3d".to_string(),
                 author: "Dev".to_string(),

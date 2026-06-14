@@ -52,6 +52,7 @@ pub fn snapshot_repo(repo_ref: &RepoRef) -> RepoSnapshot {
         upstream: extras.upstream,
         worktree: extras.worktree,
         stash_count: extras.stash_count,
+        stash_latest: extras.stash_latest,
         last_commit,
         error: None,
     }
@@ -116,6 +117,7 @@ struct Extras {
     worktree: WorktreeStatus,
     upstream: Option<Upstream>,
     stash_count: u32,
+    stash_latest: Option<i64>,
 }
 
 #[cfg(feature = "git2-fallback")]
@@ -133,12 +135,20 @@ fn git2_extras(path: &Utf8Path) -> Extras {
     extras.upstream = upstream_info(&repo);
 
     // `stash_foreach` needs `&mut`, so do it last after the shared borrows end.
+    // Index 0 is the most recent stash; capture its oid to time it afterward.
     let mut stash_count = 0u32;
-    let _ = repo.stash_foreach(|_, _, _| {
+    let mut newest_stash: Option<git2::Oid> = None;
+    let _ = repo.stash_foreach(|index, _, oid| {
         stash_count += 1;
+        if index == 0 {
+            newest_stash = Some(*oid);
+        }
         true
     });
     extras.stash_count = stash_count;
+    extras.stash_latest = newest_stash
+        .and_then(|oid| repo.find_commit(oid).ok())
+        .map(|commit| commit.time().seconds());
 
     extras
 }

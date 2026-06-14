@@ -4,11 +4,11 @@ expression: "render_to_string(&app, 92, 28)"
 ---
 ┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
 │  Repo                 Branch             ↑/↓      Dirty        Stash Last commit         │
-│▌ web-app              feat/checkout      ↓5       +7           ·     20m  wip: cart drawe│
+│▌ legacy-billing       ⚠ could not read .                                                 │
 │  payments      ┌ Help ──────────────────────────────────────────────────┐fix: retry on 5x│
-│  infra         │Navigation                                              │build: pin ci im│
-│  auth-service  │  ↑ / ↓           move selection                        │chore: bump deps│
-│  legacy-billing│  Home / End      top / bottom                          │                │
+│  web-app       │Navigation                                              │ wip: cart drawe│
+│  infra         │  ↑ / ↓           move selection                        │build: pin ci im│
+│  auth-service  │  Home / End      top / bottom                          │chore: bump deps│
 │                │                                                        │                │
 │                │View                                                    │                │
 │                │  /               fuzzy filter (Esc clears)             │                │

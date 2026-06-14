@@ -5,6 +5,7 @@
 //! with deterministic tiebreaks (name, then id) so the order is *total* —
 //! important for a non-jittery UI and stable snapshot tests.
 
+use crate::attention;
 use crate::model::RepoSnapshot;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -59,7 +60,7 @@ pub fn sort_indices(repos: &[RepoSnapshot], indices: &mut [usize], mode: SortMod
 /// (`Less` means `a` comes first).
 fn compare(a: &RepoSnapshot, b: &RepoSnapshot, mode: SortMode) -> Ordering {
     match mode {
-        SortMode::DirtyFirst => attention_first(a, b)
+        SortMode::DirtyFirst => by_rank(a, b)
             .then_with(|| recency(a, b))
             .then_with(|| by_name(a, b)),
         SortMode::Recent => recency(a, b).then_with(|| by_name(a, b)),
@@ -73,10 +74,10 @@ fn compare(a: &RepoSnapshot, b: &RepoSnapshot, mode: SortMode) -> Ordering {
     }
 }
 
-/// Repos that need attention sort before those that don't.
-fn attention_first(a: &RepoSnapshot, b: &RepoSnapshot) -> Ordering {
-    // `bool` orders `false < true`, so compare b-vs-a to put `true` first.
-    b.needs_attention().cmp(&a.needs_attention())
+/// Higher attention rank (more urgent) sorts first — a richer "dirty-first"
+/// than a plain bool: errors, then diverged/unpushed, then behind, dirty, etc.
+fn by_rank(a: &RepoSnapshot, b: &RepoSnapshot) -> Ordering {
+    attention::rank(b).cmp(&attention::rank(a))
 }
 
 /// Most-recent commit first; repos with no known commit sort last.
