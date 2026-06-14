@@ -329,6 +329,7 @@ fn render_group_box(
     let mut block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
+        .padding(Padding::horizontal(1))
         .title(Span::styled(format!(" {label} "), theme.dim()));
     if label == "act"
         && let Some((_, target)) = action_target_hint(app)
@@ -377,6 +378,7 @@ fn render_group_box(
             Constraint::Length(1),
             Constraint::Fill(1),
         ])
+        .spacing(1)
         .areas(grid_area);
         let half = short.len().div_ceil(2);
         let col = |chunk: &[&(&str, &str)]| {

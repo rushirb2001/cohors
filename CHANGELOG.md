@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.31] — 2026-06-14
+
+### Changed
+
+- Gave the footer hints **breathing room**: 1-column padding inside each group
+  box and spacing around the vertical column divider, so commands no longer
+  stick to the borders.
+
 ## [0.3.30] — 2026-06-14
 
 ### Changed
