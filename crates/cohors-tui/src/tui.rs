@@ -8,9 +8,10 @@
 //!
 //! A panic hook restores the terminal before the panic prints.
 
+use std::collections::VecDeque;
 use std::io::Stdout;
-use std::sync::Arc;
 use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -25,7 +26,7 @@ use ratatui::crossterm::terminal::{
 };
 
 use crate::action;
-use crate::app::{App, Cmd};
+use crate::app::{App, Cmd, CommandRun, Mode, RunResult, RunState};
 use crate::scan::Scanner;
 use crate::ui;
 
@@ -48,6 +49,15 @@ enum BgMsg {
     RemoteEnriched(Vec<RepoSnapshot>),
     /// The rendered standup markdown for the current window.
     StandupReady(String),
+    /// One repo in a command run finished (or failed to spawn). `run_id` lets
+    /// the loop discard a previous run's late results.
+    RunRepoDone {
+        run_id: u64,
+        id: RepoId,
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
     ActionDone {
         id: RepoId,
         message: String,
@@ -81,6 +91,9 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
 
     // The total of an in-flight `fetch all` batch (for aggregate progress).
     let mut fetch_all_total: Option<usize> = None;
+    // Monotonic id stamped on each command run, so a previous run's late
+    // results are ignored once a new run starts.
+    let mut run_seq: u64 = 0;
 
     loop {
         terminal.draw(|f| ui::render(f, &app, now_secs()))?;
@@ -103,10 +116,12 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                         spawn_standup(&mut app, &scanner, &tx)
                     }
                     Cmd::CopyStandup => copy_standup(&mut app),
+                    Cmd::RunCommand => start_command_run(&mut app, &tx, &mut run_seq),
+                    Cmd::CopyRunOutput => copy_run_output(&mut app),
                     Cmd::None => {}
                 }
             }
-        } else if app.scanning || !app.busy.is_empty() {
+        } else if app.scanning || !app.busy.is_empty() || run_in_progress(&app) {
             // Timed out with work in flight: animate the spinner.
             app.spinner = app.spinner.wrapping_add(1);
         }
@@ -160,6 +175,25 @@ fn drain_background(
             }
             BgMsg::StandupReady(markdown) => {
                 app.standup = Some(markdown);
+            }
+            BgMsg::RunRepoDone {
+                run_id,
+                id,
+                code,
+                stdout,
+                stderr,
+            } => {
+                // Ignore results from a superseded run.
+                if let Some(run) = &mut app.run
+                    && run.run_id == run_id
+                    && let Some(slot) = run.results.iter_mut().find(|r| r.id == id)
+                {
+                    slot.state = RunState::Done {
+                        code,
+                        stdout: cap_output(stdout),
+                        stderr: cap_output(stderr),
+                    };
+                }
             }
             BgMsg::ActionDone {
                 id,
@@ -362,6 +396,101 @@ fn copy_standup(app: &mut App) {
         Ok(()) => "copied standup to clipboard".to_string(),
         Err(e) => format!("copy failed: {e}"),
     });
+}
+
+/// How many command-run worker threads run at once — bounds process/fd/RAM
+/// pressure across a large fleet (ADR-020).
+const RUN_CONCURRENCY: usize = 8;
+/// Per-repo captured-output cap, so a noisy command can't balloon memory.
+const MAX_OUTPUT: usize = 64 * 1024;
+
+/// Dispatch the typed command across the action target set on a bounded pool of
+/// worker threads pulling from a shared queue; each repo reports back with
+/// `BgMsg::RunRepoDone` as its child exits (ADR-020).
+fn start_command_run(app: &mut App, tx: &Sender<BgMsg>, run_seq: &mut u64) {
+    let command = app.command_input.trim().to_string();
+    let targets: Vec<(RepoId, Utf8PathBuf, String)> = app
+        .action_targets()
+        .iter()
+        .filter_map(|id| app.repos.iter().find(|r| &r.id == id))
+        .filter(|r| !r.has_error())
+        .filter_map(|r| r.path.clone().map(|p| (r.id.clone(), p, r.name.clone())))
+        .collect();
+    if command.is_empty() || targets.is_empty() {
+        app.status = Some("nothing to run".to_string());
+        app.mode = Mode::Normal;
+        return;
+    }
+
+    *run_seq += 1;
+    let run_id = *run_seq;
+    let results = targets
+        .iter()
+        .map(|(id, _, name)| RunResult {
+            id: id.clone(),
+            name: name.clone(),
+            state: RunState::Running,
+        })
+        .collect();
+    app.run = Some(CommandRun::new(run_id, command.clone(), results));
+
+    let queue = Arc::new(Mutex::new(VecDeque::from(targets)));
+    let workers = RUN_CONCURRENCY.min(queue.lock().unwrap().len());
+    for _ in 0..workers {
+        let queue = Arc::clone(&queue);
+        let tx = tx.clone();
+        let command = command.clone();
+        std::thread::spawn(move || {
+            // Pull the next repo off the shared queue until it's drained — keeps
+            // all workers busy even when commands finish at different speeds.
+            loop {
+                let next = queue.lock().expect("run queue poisoned").pop_front();
+                let Some((id, path, _name)) = next else { break };
+                let (code, stdout, stderr) = action::run_command(&path, &command);
+                let _ = tx.send(BgMsg::RunRepoDone {
+                    run_id,
+                    id,
+                    code,
+                    stdout,
+                    stderr,
+                });
+            }
+        });
+    }
+}
+
+/// Copy the focused repo's command output to the clipboard.
+fn copy_run_output(app: &mut App) {
+    let Some(text) = app.run.as_ref().map(|r| r.focused_output()) else {
+        return;
+    };
+    app.status = Some(match action::copy_to_clipboard(&text) {
+        Ok(()) => "copied output to clipboard".to_string(),
+        Err(e) => format!("copy failed: {e}"),
+    });
+}
+
+/// Whether a command run still has repos in flight (drives the spinner).
+fn run_in_progress(app: &App) -> bool {
+    app.run.as_ref().is_some_and(|r| {
+        r.results
+            .iter()
+            .any(|x| matches!(x.state, RunState::Running))
+    })
+}
+
+/// Truncate captured output to `MAX_OUTPUT` bytes, on a char boundary.
+fn cap_output(s: String) -> String {
+    if s.len() <= MAX_OUTPUT {
+        return s;
+    }
+    let mut end = MAX_OUTPUT;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut out = s[..end].to_string();
+    out.push_str("\n… (truncated)");
+    out
 }
 
 /// Run a git action on a worker thread, then re-snapshot the repo so the row

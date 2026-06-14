@@ -45,6 +45,33 @@ pub fn pull_ff(path: &Utf8Path, name: &str) -> Result<String, String> {
     }
 }
 
+/// Run an arbitrary `cmd` via the user's shell inside `path`, capturing
+/// stdout/stderr and the exit code. Uses `sh -c` / `cmd /C` so the user can
+/// pipe and glob as in a terminal (consistent with ADR-013's shell-out model).
+/// The shell is non-interactive, so shell aliases/functions don't apply — use
+/// full commands. Returns `(code, stdout, stderr)`; `code` = -1 if the process
+/// could not be spawned.
+pub fn run_command(path: &Utf8Path, cmd: &str) -> (i32, String, String) {
+    let (shell, flag) = if cfg!(windows) {
+        ("cmd", "/C")
+    } else {
+        ("sh", "-c")
+    };
+    match Command::new(shell)
+        .arg(flag)
+        .arg(cmd)
+        .current_dir(path.as_str())
+        .output()
+    {
+        Ok(out) => (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        ),
+        Err(e) => (-1, String::new(), format!("could not run command: {e}")),
+    }
+}
+
 /// Reveal the repo in the OS file manager (spawned detached).
 pub fn reveal(path: &Utf8Path) -> Result<(), String> {
     let opener = if cfg!(target_os = "macos") {
@@ -101,5 +128,16 @@ mod tests {
     fn first_line_skips_blank_lines() {
         assert_eq!(first_line(b"\n  hello \nworld"), "hello");
         assert_eq!(first_line(b""), "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_captures_exit_and_output() {
+        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .expect("temp dir is valid UTF-8");
+        let (code, out, err) = run_command(&dir, "printf hi; printf oops 1>&2; exit 3");
+        assert_eq!(code, 3);
+        assert_eq!(out, "hi");
+        assert_eq!(err, "oops");
     }
 }

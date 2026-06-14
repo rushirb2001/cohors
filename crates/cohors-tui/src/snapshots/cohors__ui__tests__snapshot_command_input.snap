@@ -1,0 +1,24 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 100, 20)"
+---
+╭ cohors vX.Y.Z ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
+│ 4 of 5 repositories need attention:                                                              │
+│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Repositories (5) ────────────────────────────────────────────────────────────────────────────────╮
+│  Repo        ╭ Run command · 1 repos ─────────────────────────────────────────────╮              │
+│              │ $ git fetch --all▏                                                 │              │
+│▌   legacy-bil│                                                                    │ .git (permiss│
+│    payments  ╰────────────────────────────────────────────────────────────────────╯y on 5xx      │
+│    web-app           feat/checkout  ↓5       7        ·      ●       20m  wip: cart drawer       │
+│    infra             @a1b2c3d       —        4        ·      —        1w  build: pin ci image    │
+│    auth-service      main           —        ·        ·      ● 1pr    3d  chore: bump deps       │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+ type a command · ⏎ run · Esc cancel

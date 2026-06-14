@@ -8,11 +8,11 @@ use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, BorderType, Cell, Clear, Padding, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-    ScrollbarState, Table, TableState, Wrap,
+    Block, BorderType, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row, Scrollbar,
+    ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
 };
 
-use crate::app::{App, Mode};
+use crate::app::{App, Mode, RunState};
 
 /// Spinner frames (braille) for the scan indicator.
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -121,6 +121,12 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::Standup {
         render_standup(frame, area, app, &theme);
+    }
+    if app.mode == Mode::CommandInput {
+        render_command_input(frame, area, app, &theme);
+    }
+    if app.mode == Mode::CommandRun {
+        render_command_run(frame, area, app, &theme);
     }
 }
 
@@ -250,6 +256,8 @@ fn footer_hints(app: &App) -> String {
         Mode::Standup => {
             " ↑/↓ scroll · PgUp/PgDn · w window · y copy · Esc close ".to_string()
         }
+        Mode::CommandInput => " type a command · ⏎ run · Esc cancel ".to_string(),
+        Mode::CommandRun => " ↑/↓ repo · PgUp/PgDn scroll · y copy · Esc close ".to_string(),
         Mode::Normal => {
             " ↑/↓ move · Space mark · a all · / filter · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit ".to_string()
         }
@@ -710,6 +718,133 @@ fn commit_line(line: &str, theme: &Theme) -> Line<'static> {
     Line::from(line.to_string())
 }
 
+/// The command-input overlay: a small box to type the command to run, showing
+/// how many repos it will run across.
+fn render_command_input(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let area = centered_rect(70, 20, full);
+    frame.render_widget(Clear, area);
+    let n = app.action_targets().len();
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(format!(" Run command · {n} repos ")).bold())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let line = Line::from(vec![
+        Span::styled("$ ", theme.dim()),
+        Span::raw(app.command_input.clone()),
+        Span::raw("▏"),
+    ]);
+    frame.render_widget(Paragraph::new(line), inner);
+}
+
+/// The command-run overlay: a left list of repos (status glyph + name, the
+/// focused one highlighted) and the focused repo's scrollable output on the
+/// right, with a live combined pass/fail summary in the bottom border.
+fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let area = centered_rect(88, 85, full);
+    frame.render_widget(Clear, area);
+    let Some(run) = &app.run else {
+        return;
+    };
+    let (ok, fail, running) = run.summary();
+    let summary = if running > 0 {
+        format!(" {ok} ✓ · {fail} ✗ · {running} running ")
+    } else {
+        format!(" {ok} ✓ · {fail} ✗ ")
+    };
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(format!(" Run · {} ", run.command)).bold())
+        .title_bottom(Line::from(summary).right_aligned())
+        .padding(Padding::new(1, 0, 0, 0));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Left: the repo list (with focus highlight). Right: the focused output.
+    let [list_area, out_area] =
+        Layout::horizontal([Constraint::Length(26), Constraint::Min(0)]).areas(inner);
+
+    let spin = spinner_frame(app.spinner);
+    let items: Vec<ListItem> = run
+        .results
+        .iter()
+        .map(|r| {
+            let (glyph, style, note) = match &r.state {
+                RunState::Running => (spin.to_string(), theme.ahead(), String::new()),
+                RunState::Done { code: 0, .. } => ("✓".to_string(), theme.ok(), String::new()),
+                RunState::Done { code, .. } => ("✗".to_string(), theme.risk(), format!(" {code}")),
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(glyph, style),
+                Span::raw(" "),
+                Span::raw(ellipsize(&r.name, 18)),
+                Span::styled(note, theme.dim()),
+            ]))
+        })
+        .collect();
+    let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let mut list_state = ListState::default();
+    if !run.results.is_empty() {
+        list_state.select(Some(run.focus));
+    }
+    frame.render_stateful_widget(list, list_area, &mut list_state);
+
+    // Right: the focused repo's output (stdout, then a dim stderr divider).
+    let out_lines = run_output_lines(run, theme);
+    let total = out_lines.len() as u16;
+    let viewport = out_area.height;
+    let max_scroll = total.saturating_sub(viewport);
+    run.set_max_scroll(max_scroll);
+    let offset = run.scroll.min(max_scroll);
+
+    let [text_area, bar_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(out_area);
+    frame.render_widget(
+        Paragraph::new(Text::from(out_lines)).scroll((offset, 0)),
+        text_area,
+    );
+    if max_scroll > 0 {
+        let mut sb = ScrollbarState::new(total as usize)
+            .position(offset as usize)
+            .viewport_content_length(viewport as usize);
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight),
+            bar_area,
+            &mut sb,
+        );
+    }
+}
+
+/// The lines for the focused repo's output pane.
+fn run_output_lines(run: &crate::app::CommandRun, theme: &Theme) -> Vec<Line<'static>> {
+    match run.results.get(run.focus).map(|r| &r.state) {
+        Some(RunState::Done {
+            code,
+            stdout,
+            stderr,
+        }) => {
+            let exit_style = if *code == 0 { theme.ok() } else { theme.risk() };
+            let mut lines = vec![
+                Line::from(Span::styled(format!("exit {code}"), exit_style)),
+                Line::from(""),
+            ];
+            for l in stdout.lines() {
+                lines.push(Line::from(l.to_string()));
+            }
+            if !stderr.is_empty() {
+                lines.push(Line::from(Span::styled("── stderr ──", theme.dim())));
+                for l in stderr.lines() {
+                    lines.push(Line::from(Span::styled(l.to_string(), theme.warn())));
+                }
+            }
+            lines
+        }
+        Some(RunState::Running) => vec![Line::from(Span::styled("running…", theme.dim()))],
+        None => Vec::new(),
+    }
+}
+
 /// A rect centered within `area`, sized as a percentage of it.
 fn centered_rect(pct_x: u16, pct_y: u16, area: Rect) -> Rect {
     let [_, vmid, _] = Layout::vertical([
@@ -895,6 +1030,81 @@ mod tests {
         app.selection.insert(RepoId("payments".to_string()));
         app.selection.insert(RepoId("web-app".to_string()));
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    #[test]
+    fn snapshot_command_input() {
+        let mut app = demo_app();
+        app.mode = Mode::CommandInput;
+        app.command_input = "git fetch --all".to_string();
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    #[test]
+    fn snapshot_command_run_running() {
+        use crate::app::{CommandRun, RunResult};
+        let mut app = demo_app();
+        app.mode = Mode::CommandRun;
+        app.run = Some(CommandRun::new(
+            1,
+            "git status -s".to_string(),
+            vec![
+                RunResult {
+                    id: RepoId("payments".to_string()),
+                    name: "payments".to_string(),
+                    state: RunState::Done {
+                        code: 0,
+                        stdout: " M src/lib.rs\n?? notes.txt\n".to_string(),
+                        stderr: String::new(),
+                    },
+                },
+                RunResult {
+                    id: RepoId("web-app".to_string()),
+                    name: "web-app".to_string(),
+                    state: RunState::Running,
+                },
+                RunResult {
+                    id: RepoId("auth-service".to_string()),
+                    name: "auth-service".to_string(),
+                    state: RunState::Running,
+                },
+            ],
+        ));
+        insta::assert_snapshot!(render_to_string(&app, 100, 22));
+    }
+
+    #[test]
+    fn snapshot_command_run_finished() {
+        use crate::app::{CommandRun, RunResult};
+        let mut app = demo_app();
+        app.mode = Mode::CommandRun;
+        let mut run = CommandRun::new(
+            2,
+            "cargo test".to_string(),
+            vec![
+                RunResult {
+                    id: RepoId("payments".to_string()),
+                    name: "payments".to_string(),
+                    state: RunState::Done {
+                        code: 0,
+                        stdout: "test result: ok. 12 passed\n".to_string(),
+                        stderr: String::new(),
+                    },
+                },
+                RunResult {
+                    id: RepoId("web-app".to_string()),
+                    name: "web-app".to_string(),
+                    state: RunState::Done {
+                        code: 1,
+                        stdout: "running 3 tests\n".to_string(),
+                        stderr: "test cart::total failed\nerror: 1 test failed".to_string(),
+                    },
+                },
+            ],
+        );
+        run.focus = 1; // the failing repo, so its stderr shows
+        app.run = Some(run);
+        insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }
 
     #[test]

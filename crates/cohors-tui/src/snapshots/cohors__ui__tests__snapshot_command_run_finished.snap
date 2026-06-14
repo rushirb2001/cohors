@@ -1,0 +1,26 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 100, 22)"
+---
+╭ cohors vX.Y.Z ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰─────╭ Run · cargo test ────────────────────────────────────────────────────────────────────╮─────╯
+╭ Atte│ ✓ payments                exit 1                                                     │─────╮
+│ 4 of│ ✗ web-app 1                                                                          │     │
+│ 1 un│                           running 3 tests                                            │     │
+╰─────│                           ── stderr ──                                               │─────╯
+╭ Repo│                           test cart::total failed                                    │─────╮
+│  Rep│                           error: 1 test failed                                       │     │
+│     │                                                                                      │     │
+│▌   l│                                                                                      │rmiss│
+│    p│                                                                                      │     │
+│    w│                                                                                      │     │
+│    i│                                                                                      │e    │
+│    a│                                                                                      │     │
+│     │                                                                                      │     │
+│     │                                                                                      │     │
+│     │                                                                                      │     │
+│     │                                                                                      │     │
+│     ╰─────────────────────────────────────────────────────────────────────────── 1 ✓ · 1 ✗ ╯     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+ ↑/↓ repo · PgUp/PgDn scroll · y copy · Esc close

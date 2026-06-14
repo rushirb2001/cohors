@@ -23,6 +23,10 @@ pub enum Mode {
     Help,
     /// The weekly-standup view is open.
     Standup,
+    /// Typing the command to run across the target repos.
+    CommandInput,
+    /// The per-repo command-run results view.
+    CommandRun,
 }
 
 /// A side effect for the event loop to perform after a key is handled. Actions
@@ -53,6 +57,99 @@ pub enum Cmd {
     StandupNextWindow,
     /// Copy the standup markdown to the clipboard.
     CopyStandup,
+    /// Run the typed command across the target repos.
+    RunCommand,
+    /// Copy the focused repo's command output to the clipboard.
+    CopyRunOutput,
+}
+
+/// One repo's slot in a command run.
+#[derive(Debug, Clone)]
+pub struct RunResult {
+    pub id: RepoId,
+    pub name: String,
+    pub state: RunState,
+}
+
+/// Where a repo is in a command run.
+#[derive(Debug, Clone)]
+pub enum RunState {
+    Running,
+    /// Finished with this exit code and captured output (`code` = -1 if the
+    /// process couldn't even spawn).
+    Done {
+        code: i32,
+        stdout: String,
+        stderr: String,
+    },
+}
+
+/// The in-flight / last command run.
+pub struct CommandRun {
+    /// Monotonic id so the event loop can discard a previous run's late results.
+    pub run_id: u64,
+    /// The raw command line the user typed.
+    pub command: String,
+    /// One slot per target repo, in view order.
+    pub results: Vec<RunResult>,
+    /// Which repo's output is expanded in the right pane (index into `results`).
+    pub focus: usize,
+    /// Vertical scroll offset within the focused repo's output.
+    pub scroll: u16,
+    /// Max scroll, cached from the last render so key handling can clamp without
+    /// knowing the viewport (mirrors the standup overlay).
+    max_scroll: std::cell::Cell<u16>,
+}
+
+impl CommandRun {
+    /// A fresh run: all repos `Running`, focus/scroll at the top.
+    pub fn new(run_id: u64, command: String, results: Vec<RunResult>) -> Self {
+        Self {
+            run_id,
+            command,
+            results,
+            focus: 0,
+            scroll: 0,
+            max_scroll: std::cell::Cell::new(0),
+        }
+    }
+
+    /// Tally of `(passed, failed, still running)` for the summary line.
+    pub fn summary(&self) -> (usize, usize, usize) {
+        let mut ok = 0;
+        let mut fail = 0;
+        let mut running = 0;
+        for r in &self.results {
+            match &r.state {
+                RunState::Running => running += 1,
+                RunState::Done { code: 0, .. } => ok += 1,
+                RunState::Done { .. } => fail += 1,
+            }
+        }
+        (ok, fail, running)
+    }
+
+    /// The focused repo's combined output (stdout, then stderr), for copy.
+    pub fn focused_output(&self) -> String {
+        match self.results.get(self.focus).map(|r| &r.state) {
+            Some(RunState::Done { stdout, stderr, .. }) => {
+                let mut out = stdout.clone();
+                if !stderr.is_empty() {
+                    if !out.is_empty() && !out.ends_with('\n') {
+                        out.push('\n');
+                    }
+                    out.push_str(stderr);
+                }
+                out
+            }
+            _ => String::new(),
+        }
+    }
+
+    /// Cache the focused output's max scroll (the view calls this each frame).
+    pub fn set_max_scroll(&self, max: u16) {
+        self.max_scroll.set(max);
+    }
 }
 
 /// All dashboard state.
@@ -89,6 +186,10 @@ pub struct App {
     /// without knowing the viewport. Interior-mutable: the view writes it each
     /// frame, the controller reads it.
     standup_max_scroll: std::cell::Cell<u16>,
+    /// The command being typed in `CommandInput` mode (mirrors `filter`).
+    pub command_input: String,
+    /// The in-flight / last command run, shown in `CommandRun` mode.
+    pub run: Option<CommandRun>,
 }
 
 impl App {
@@ -111,6 +212,8 @@ impl App {
             standup_window: StandupWindow::Week,
             standup_scroll: 0,
             standup_max_scroll: std::cell::Cell::new(0),
+            command_input: String::new(),
+            run: None,
         }
     }
 
@@ -148,8 +251,6 @@ impl App {
     /// with what's currently visible, in view order) if any are marked, else the
     /// repo under the cursor. Callers still drop error/path-less repos, exactly
     /// as the single-repo action paths already do.
-    // Consumed by the command runner and bulk actions in the following chunks.
-    #[allow(dead_code)]
     pub fn action_targets(&self) -> Vec<RepoId> {
         if self.selection.is_empty() {
             return self
@@ -225,6 +326,8 @@ impl App {
                 Cmd::None
             }
             Mode::Standup => self.on_key_standup(key),
+            Mode::CommandInput => self.on_key_command_input(key),
+            Mode::CommandRun => self.on_key_command_run(key),
         }
     }
 
@@ -255,6 +358,14 @@ impl App {
             KeyCode::Char('f') => return Cmd::FetchSelected,
             KeyCode::Char('F') => return Cmd::FetchAll,
             KeyCode::Char('p') => return Cmd::PullSelected,
+            KeyCode::Char('!') => {
+                if self.action_targets().is_empty() {
+                    self.status = Some("no repos selected".to_string());
+                } else {
+                    self.mode = Mode::CommandInput;
+                    self.command_input.clear();
+                }
+            }
             KeyCode::Enter => return Cmd::OpenEditor,
             KeyCode::Char('o') => return Cmd::RevealFileManager,
             KeyCode::Char('L') => return Cmd::Lazygit,
@@ -345,6 +456,73 @@ impl App {
                 Cmd::None
             }
             _ => Cmd::None,
+        }
+    }
+
+    fn on_key_command_input(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Esc => {
+                self.mode = Mode::Normal;
+                self.command_input.clear();
+            }
+            KeyCode::Enter => {
+                if !self.command_input.trim().is_empty() {
+                    self.mode = Mode::CommandRun;
+                    return Cmd::RunCommand;
+                }
+            }
+            KeyCode::Backspace => {
+                self.command_input.pop();
+            }
+            KeyCode::Char(c) => self.command_input.push(c),
+            _ => {}
+        }
+        Cmd::None
+    }
+
+    fn on_key_command_run(&mut self, key: KeyEvent) -> Cmd {
+        let max = self.run.as_ref().map_or(0, |r| r.max_scroll.get());
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => self.mode = Mode::Normal,
+            KeyCode::Down | KeyCode::Char('j') => self.run_focus_step(1),
+            KeyCode::Up | KeyCode::Char('k') => self.run_focus_step(-1),
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                if let Some(run) = &mut self.run {
+                    run.scroll = run.scroll.saturating_add(10).min(max);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(run) = &mut self.run {
+                    run.scroll = run.scroll.saturating_sub(10);
+                }
+            }
+            KeyCode::Home | KeyCode::Char('g') => {
+                if let Some(run) = &mut self.run {
+                    run.scroll = 0;
+                }
+            }
+            KeyCode::End | KeyCode::Char('G') => {
+                if let Some(run) = &mut self.run {
+                    run.scroll = max;
+                }
+            }
+            KeyCode::Char('y') => return Cmd::CopyRunOutput,
+            _ => {}
+        }
+        Cmd::None
+    }
+
+    /// Move the run-view focus by `delta` repos, clamped, resetting the output
+    /// scroll to the top of the newly-focused repo.
+    fn run_focus_step(&mut self, delta: isize) {
+        if let Some(run) = &mut self.run {
+            if run.results.is_empty() {
+                return;
+            }
+            let last = run.results.len() - 1;
+            let next = (run.focus as isize + delta).clamp(0, last as isize) as usize;
+            run.focus = next;
+            run.scroll = 0;
         }
     }
 
@@ -511,6 +689,82 @@ mod tests {
         // Re-scan dropping "a": it's no longer a target (intersect with view).
         app.set_repos(vec![snap("b", false)]);
         assert!(app.action_targets().is_empty());
+    }
+
+    #[test]
+    fn bang_enters_command_input_with_targets() {
+        let mut app = app_with(&[("a", false)]);
+        app.on_key(key('!'));
+        assert_eq!(app.mode, Mode::CommandInput);
+    }
+
+    #[test]
+    fn command_input_enter_runs_nonempty() {
+        let mut app = app_with(&[("a", false)]);
+        app.on_key(key('!'));
+        for c in "git status".chars() {
+            app.on_key(key(c));
+        }
+        let cmd = app.on_key(code(KeyCode::Enter));
+        assert_eq!(cmd, Cmd::RunCommand);
+        assert_eq!(app.mode, Mode::CommandRun);
+        assert_eq!(app.command_input, "git status");
+    }
+
+    #[test]
+    fn command_input_empty_enter_is_noop() {
+        let mut app = app_with(&[("a", false)]);
+        app.on_key(key('!'));
+        let cmd = app.on_key(code(KeyCode::Enter));
+        assert_eq!(cmd, Cmd::None);
+        assert_eq!(app.mode, Mode::CommandInput);
+    }
+
+    fn run_result(name: &str, state: RunState) -> RunResult {
+        RunResult {
+            id: RepoId(name.to_string()),
+            name: name.to_string(),
+            state,
+        }
+    }
+
+    #[test]
+    fn command_run_summary_counts() {
+        let done = |code| RunState::Done {
+            code,
+            stdout: String::new(),
+            stderr: String::new(),
+        };
+        let run = CommandRun::new(
+            1,
+            "x".to_string(),
+            vec![
+                run_result("a", done(0)),
+                run_result("b", done(1)),
+                run_result("c", RunState::Running),
+            ],
+        );
+        assert_eq!(run.summary(), (1, 1, 1));
+    }
+
+    #[test]
+    fn run_focus_step_moves_and_clamps() {
+        let mut app = app_with(&[("a", false)]);
+        app.run = Some(CommandRun::new(
+            1,
+            "x".to_string(),
+            vec![
+                run_result("a", RunState::Running),
+                run_result("b", RunState::Running),
+            ],
+        ));
+        app.mode = Mode::CommandRun;
+        app.on_key(code(KeyCode::Up)); // already at top → clamp
+        assert_eq!(app.run.as_ref().unwrap().focus, 0);
+        app.on_key(code(KeyCode::Down));
+        assert_eq!(app.run.as_ref().unwrap().focus, 1);
+        app.on_key(code(KeyCode::Down)); // at bottom → clamp
+        assert_eq!(app.run.as_ref().unwrap().focus, 1);
     }
 
     #[test]
