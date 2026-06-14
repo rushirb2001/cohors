@@ -512,7 +512,7 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         .map(|vr| line_width(&sync_spans(&app.repos[vr.index], theme)))
         .max()
         .unwrap_or(0)
-        .clamp(4, 10);
+        .clamp(4, 12);
     let changes_w = view
         .iter()
         .map(|vr| line_width(&changes_spans(&app.repos[vr.index], theme)))
@@ -1387,6 +1387,14 @@ mod tests {
     fn snapshot_list() {
         let app = demo_app();
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    /// The `cohors demo` fleet renders end-to-end (validates the demo data path).
+    #[test]
+    fn snapshot_demo_fleet() {
+        let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
+        app.set_repos(cohors_core::demo::fleet(NOW));
+        insta::assert_snapshot!(render_to_string(&app, 100, 26));
     }
 
     #[test]

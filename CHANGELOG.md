@@ -21,6 +21,20 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.13] — 2026-06-14
+
+Try cohors in five seconds.
+
+### Added
+
+- **`cohors demo`** — launches the dashboard on a built-in, privacy-safe sample
+  fleet with **no config, no scanning, and no disk/network access**. Every column
+  and view is populated (ahead/behind, dirty, stashed, CI pass/fail/pending, open
+  PRs, a detached HEAD, an off-remote repo, an unreadable repo); the standup is
+  seeded from demo commits and the command runner is simulated. Real actions are
+  friendly no-ops. The generator lives in the pure core (`cohors_core::demo`) so
+  the future web playground reuses the exact same data. See ADR-022.
+
 ## [0.3.12] — 2026-06-14
 
 Making the dashboard explain itself.

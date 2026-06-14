@@ -25,6 +25,7 @@ fn main() -> anyhow::Result<()> {
     match &cli.command {
         Some(Command::Init { force }) => commands::init(&cli, *force),
         Some(Command::Scan) => commands::scan(&cli),
+        Some(Command::Demo) => commands::run_demo(),
         None => commands::run_tui(&cli),
     }
 }

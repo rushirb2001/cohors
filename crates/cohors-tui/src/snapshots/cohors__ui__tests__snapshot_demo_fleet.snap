@@ -1,0 +1,30 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 100, 26)"
+---
+╭ cohors vX.Y.Z ─────────────────────────────────────────────────────12 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
+│ 10 of 12 repositories need attention:                                                            │
+│ 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Repositories (12) ───────────────────────────────────────────────────────────────────────────────╮
+│    Repo              Branch         Sync         Changes  Last commit                            │
+│                                                                                                  │
+│▌   legacy-billing    error          ·            ·        could not read .git (permission denied)│
+│    mobile-app        release/2.0    ↑4 ↓1 ● 3pr  4         9h  feat: biometric unlock            │
+│    payments          main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from proc│
+│    analytics         main           ↑1 ●         · s2      4d  perf: precompute funnel rollups   │
+│    design-system     main           ↑1 ● 1pr     · s1      6h  feat: dark-mode tokens            │
+│    web-app           feat/checkout  ↓5 ● 1pr     7        20m  wip: cart drawer animation        │
+│    data-pipeline     main           ↓3 ●         ·         5h  fix: backfill job off-by-one windo│
+│    experiments       @9f8e7d6       —            7         1y  spike: try wgpu for the renderer  │
+│    infra             @a1b2c3d       —            4         1w  build: pin terraform provider vers│
+│    cli-tools         main           ●            1        12h  docs: add shell-completion install│
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ select Space mark repo · a mark all · / filter · Esc clear                                       │
+│ act    ⏎ open · f fetch · p pull · ! run command · S stash   → acts on legacy-billing            │
+│ view   ↑/↓ move · s sort · d dirty-only · Tab standup · ? help · q quit                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

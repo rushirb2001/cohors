@@ -85,6 +85,20 @@ cargo install --git https://github.com/rushirbhavsar/cohors cohors-tui
 
 > Crates.io (`cargo install cohors`), `cargo binstall`, a Homebrew tap, and prebuilt binaries on every GitHub Release are planned — see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
+## Try it in 5 seconds
+
+No config, no scanning, nothing touched on disk — just the full dashboard on a
+built-in sample fleet:
+
+```sh
+cohors demo
+```
+
+Every column and view is populated with privacy-safe demo data (ahead/behind,
+dirty, stashed, CI/PRs, a detached HEAD, an unreadable repo). Press `?` for the
+legend, `Tab` for the standup, `!` to see the command runner. It's the fastest
+way to see what cohors is before you point it at your own repos.
+
 ## Quickstart
 
 ```sh

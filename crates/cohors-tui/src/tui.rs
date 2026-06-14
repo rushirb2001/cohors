@@ -86,6 +86,111 @@ pub fn run(scanner: Arc<Scanner>, use_cache: bool) -> Result<()> {
     result
 }
 
+/// Launch the dashboard on the built-in demo fleet. Mirrors [`run`] but seeds
+/// the app from `cohors_core::demo` and stubs every action, so nothing touches
+/// the disk or network — a zero-config way to try cohors.
+pub fn run_demo() -> Result<()> {
+    let mut terminal = setup_terminal().context("setting up the terminal")?;
+    let result = run_demo_loop(&mut terminal);
+    let _ = restore_terminal(&mut terminal);
+    result
+}
+
+fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
+    // A fixed "now" so the sample commit ages stay exactly as designed for the
+    // length of the session.
+    let now = now_secs();
+    let mut app = App::new(vec!["(demo)".to_string()], "(demo — no config)".to_string());
+    app.set_repos(cohors_core::demo::fleet(now));
+    app.status = Some("demo mode — sample data; actions are stubbed".to_string());
+
+    let mut toast_seen: Option<String> = app.status.clone();
+    let mut toast_since = Instant::now();
+    const TOAST_TTL: Duration = Duration::from_secs(6);
+
+    loop {
+        terminal.draw(|f| ui::render(f, &app, now))?;
+
+        if event::poll(POLL)? {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
+                    Cmd::Quit => break,
+                    // The standup works for real — seeded from demo commits.
+                    Cmd::OpenStandup | Cmd::StandupNextWindow => {
+                        app.standup = Some(StandupView::new(cohors_core::demo::standup(now)));
+                    }
+                    Cmd::CopyStandup => copy_standup(&mut app),
+                    // The command runner is simulated so its UI can be shown off.
+                    Cmd::RunCommand => simulate_demo_run(&mut app),
+                    Cmd::CopyRunOutput => copy_run_output(&mut app),
+                    Cmd::CopyPath => copy_selected(&mut app),
+                    // Everything that would touch real repos is a friendly no-op.
+                    Cmd::Refresh
+                    | Cmd::FetchSelected
+                    | Cmd::FetchAll
+                    | Cmd::PullSelected
+                    | Cmd::OpenEditor
+                    | Cmd::RevealFileManager
+                    | Cmd::Lazygit
+                    | Cmd::ConfirmAccept => {
+                        app.status =
+                            Some("demo mode — install cohors to act on real repos".to_string());
+                    }
+                    Cmd::None => {}
+                },
+                Event::Mouse(m) => match m.kind {
+                    MouseEventKind::ScrollUp => app.on_mouse_scroll(true),
+                    MouseEventKind::ScrollDown => app.on_mouse_scroll(false),
+                    _ => {}
+                },
+                _ => {}
+            }
+        } else {
+            app.spinner = app.spinner.wrapping_add(1);
+        }
+
+        // Same auto-expiring toast behaviour as the live loop.
+        if app.status != toast_seen {
+            toast_seen = app.status.clone();
+            toast_since = Instant::now();
+        }
+        if app.status.is_some() && toast_since.elapsed() >= TOAST_TTL {
+            app.status = None;
+            toast_seen = None;
+        }
+    }
+    Ok(())
+}
+
+/// Populate the command-run view with a fake successful run, so `cohors demo`
+/// can show off the runner without executing anything.
+fn simulate_demo_run(app: &mut App) {
+    let cmd = app.command_input.trim().to_string();
+    let results: Vec<RunResult> = app
+        .action_targets()
+        .into_iter()
+        .map(|id| {
+            let name = app
+                .repos
+                .iter()
+                .find(|r| r.id == id)
+                .map(|r| r.name.clone())
+                .unwrap_or_default();
+            RunResult {
+                id,
+                name,
+                state: RunState::Done {
+                    code: 0,
+                    stdout: format!("$ {cmd}\n(demo) ok — no command was actually run\n"),
+                    stderr: String::new(),
+                },
+            }
+        })
+        .collect();
+    app.run = Some(CommandRun::new(0, cmd, results));
+    app.command_input.clear();
+}
+
 fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Result<()> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
 

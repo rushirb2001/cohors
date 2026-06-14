@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 pub mod attention;
+pub mod demo;
 pub mod fuzzy;
 pub mod model;
 pub mod provider;

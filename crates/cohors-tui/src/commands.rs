@@ -35,3 +35,9 @@ pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = Arc::new(Scanner::from_cli(cli)?);
     crate::tui::run(scanner, !cli.no_cache)
 }
+
+/// `cohors demo` — launch the dashboard on a built-in sample fleet. No config,
+/// no scanning, no disk access; a zero-setup way to try the tool.
+pub fn run_demo() -> Result<()> {
+    crate::tui::run_demo()
+}

@@ -32,4 +32,9 @@ pub enum Command {
     },
     /// Discover and snapshot all repos, printing JSON to stdout (no TUI).
     Scan,
+    /// Launch the dashboard on a built-in sample fleet — no config, no scanning.
+    ///
+    /// A zero-setup way to try cohors: every column and view is populated with
+    /// privacy-safe demo data. Actions are stubbed (nothing touches your disk).
+    Demo,
 }
