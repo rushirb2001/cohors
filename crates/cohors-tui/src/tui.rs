@@ -115,9 +115,13 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                 match app.on_key(key) {
                     Cmd::Quit => break,
                     Cmd::Refresh => start_refresh(&mut app, &scanner, &tx),
-                    Cmd::FetchSelected => start_action_selected(&mut app, &tx, ActionKind::Fetch),
+                    Cmd::FetchSelected => {
+                        start_action_targets(&mut app, &tx, ActionKind::Fetch, &mut batch)
+                    }
                     Cmd::FetchAll => start_fetch_all(&mut app, &tx, &mut batch),
-                    Cmd::PullSelected => start_action_selected(&mut app, &tx, ActionKind::Pull),
+                    Cmd::PullSelected => {
+                        start_action_targets(&mut app, &tx, ActionKind::Pull, &mut batch)
+                    }
                     Cmd::CopyPath => copy_selected(&mut app),
                     Cmd::RevealFileManager => reveal_selected(&mut app),
                     Cmd::OpenEditor => open_editor(terminal, &mut app, &scanner, &tx)?,
@@ -248,21 +252,47 @@ fn start_refresh(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
 }
 
 /// Start a fetch/pull on the selected repo.
-fn start_action_selected(app: &mut App, tx: &Sender<BgMsg>, kind: ActionKind) {
-    let Some((id, path, name)) = selected_target(app) else {
+/// Run `kind` across the action target set (the marked selection, or the repo
+/// under the cursor when nothing is marked) — so `f`/`p` act on the whole
+/// selection. With a single target it keeps the per-repo status; with several it
+/// shows an aggregate count.
+fn start_action_targets(
+    app: &mut App,
+    tx: &Sender<BgMsg>,
+    kind: ActionKind,
+    batch: &mut Option<Batch>,
+) {
+    let targets: Vec<(RepoId, Utf8PathBuf, String)> = app
+        .action_targets()
+        .iter()
+        .filter_map(|id| app.repos.iter().find(|r| &r.id == id))
+        .filter(|r| !r.has_error())
+        .filter_map(|r| r.path.clone().map(|p| (r.id.clone(), p, r.name.clone())))
+        .filter(|(id, _, _)| !app.busy.contains(id))
+        .collect();
+    if targets.is_empty() {
         app.status = Some("no repo selected".to_string());
         return;
-    };
-    if app.busy.contains(&id) {
-        return;
     }
-    app.status = Some(match kind {
-        ActionKind::Fetch => format!("fetching {name}…"),
-        ActionKind::Pull => format!("pulling {name}…"),
-        ActionKind::Stash => format!("stashing {name}…"),
-    });
-    app.busy.insert(id.clone());
-    spawn_action(tx.clone(), kind, id, path, name);
+    let (doing, done) = match kind {
+        ActionKind::Fetch => ("fetching", "fetched"),
+        ActionKind::Pull => ("pulling", "pulled"),
+        ActionKind::Stash => ("stashing", "stashed"),
+    };
+    if targets.len() > 1 {
+        *batch = Some(Batch {
+            total: targets.len(),
+            doing,
+            done,
+        });
+        app.status = Some(format!("{doing} {} repos…", targets.len()));
+    } else {
+        app.status = Some(format!("{doing} {}…", targets[0].2));
+    }
+    for (id, path, name) in targets {
+        app.busy.insert(id.clone());
+        spawn_action(tx.clone(), kind, id, path, name);
+    }
 }
 
 /// Start a fetch on every (readable) repo.
@@ -578,12 +608,6 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
 // ----- selection helpers ----------------------------------------------------
 
 /// (id, path, name) of the selected repo, if it has a path.
-fn selected_target(app: &App) -> Option<(RepoId, Utf8PathBuf, String)> {
-    let repo = app.selected_repo()?;
-    let path = repo.path.clone()?;
-    Some((repo.id.clone(), path, repo.name.clone()))
-}
-
 fn selected_path(app: &App) -> Option<Utf8PathBuf> {
     app.selected_repo().and_then(|r| r.path.clone())
 }
