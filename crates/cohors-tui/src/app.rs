@@ -184,6 +184,10 @@ pub struct StandupView {
     pub focus: usize,
     /// Vertical scroll offset within the focused repo's commit list.
     pub scroll: u16,
+    /// Which pane the keys drive: `false` = the repo list (↑/↓ switch repos),
+    /// `true` = the commits (↑/↓ scroll them). Lets arrow-key-only users read
+    /// the full history without PgUp/PgDn.
+    pub commits_focused: bool,
     /// Max scroll, cached from the last render for clamp-without-viewport.
     max_scroll: std::cell::Cell<u16>,
 }
@@ -196,6 +200,7 @@ impl StandupView {
             groups,
             focus: 0,
             scroll: 0,
+            commits_focused: false,
             max_scroll: std::cell::Cell::new(0),
         }
     }
@@ -463,17 +468,63 @@ impl App {
 
     fn on_key_standup(&mut self, key: KeyEvent) -> Cmd {
         let max = self.standup.as_ref().map_or(0, |s| s.max_scroll.get());
+        let focused = self.standup.as_ref().is_some_and(|s| s.commits_focused);
         match key.code {
-            KeyCode::Tab | KeyCode::Esc | KeyCode::Char('q') => self.mode = Mode::Normal,
+            KeyCode::Char('q') => self.mode = Mode::Normal,
+            // Esc steps out of the commits pane first, then closes.
+            KeyCode::Esc => {
+                if focused {
+                    if let Some(s) = &mut self.standup {
+                        s.commits_focused = false;
+                    }
+                } else {
+                    self.mode = Mode::Normal;
+                }
+            }
             KeyCode::Char('w') => {
                 self.standup_window = self.standup_window.next();
                 self.standup = None;
                 return Cmd::StandupNextWindow;
             }
             KeyCode::Char('y') => return Cmd::CopyStandup,
-            // ↑/↓ move between repos; PgUp/PgDn scroll the focused repo's commits.
-            KeyCode::Down | KeyCode::Char('j') => self.standup_focus_step(1),
-            KeyCode::Up | KeyCode::Char('k') => self.standup_focus_step(-1),
+            // Tab toggles which pane the keys drive; →/⏎ enter commits, ← goes back.
+            KeyCode::Tab => {
+                if let Some(s) = &mut self.standup {
+                    s.commits_focused = !s.commits_focused;
+                }
+            }
+            KeyCode::Right | KeyCode::Enter => {
+                if let Some(s) = &mut self.standup
+                    && !s.groups.is_empty()
+                {
+                    s.commits_focused = true;
+                }
+            }
+            KeyCode::Left => {
+                if let Some(s) = &mut self.standup {
+                    s.commits_focused = false;
+                }
+            }
+            // ↑/↓ act on the focused pane: scroll commits, or switch repos.
+            KeyCode::Down | KeyCode::Char('j') => {
+                if focused {
+                    if let Some(s) = &mut self.standup {
+                        s.scroll = s.scroll.saturating_add(1).min(max);
+                    }
+                } else {
+                    self.standup_focus_step(1);
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if focused {
+                    if let Some(s) = &mut self.standup {
+                        s.scroll = s.scroll.saturating_sub(1);
+                    }
+                } else {
+                    self.standup_focus_step(-1);
+                }
+            }
+            // PgUp/PgDn/g/G always scroll the commits (a bonus for those keys).
             KeyCode::PageDown | KeyCode::Char(' ') => {
                 if let Some(s) = &mut self.standup {
                     s.scroll = s.scroll.saturating_add(10).min(max);
@@ -484,12 +535,12 @@ impl App {
                     s.scroll = s.scroll.saturating_sub(10);
                 }
             }
-            KeyCode::Home | KeyCode::Char('g') => {
+            KeyCode::Char('g') => {
                 if let Some(s) = &mut self.standup {
                     s.scroll = 0;
                 }
             }
-            KeyCode::End | KeyCode::Char('G') => {
+            KeyCode::Char('G') => {
                 if let Some(s) = &mut self.standup {
                     s.scroll = max;
                 }

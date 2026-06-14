@@ -302,16 +302,31 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
             vec![("type", "to filter"), ("⏎", "apply"), ("Esc", "clear")],
         )],
         Mode::Help => vec![("", vec![("? / Esc", "close")])],
-        Mode::Standup => vec![(
-            "",
-            vec![
-                ("↑/↓", "repo"),
-                ("PgUp/PgDn", "scroll"),
-                ("w", "window"),
-                ("y", "copy"),
-                ("Esc", "close"),
-            ],
-        )],
+        Mode::Standup => {
+            if app.standup.as_ref().is_some_and(|s| s.commits_focused) {
+                vec![(
+                    "",
+                    vec![
+                        ("↑/↓", "scroll commits"),
+                        ("←", "back to repos"),
+                        ("w", "window"),
+                        ("y", "copy"),
+                        ("q", "close"),
+                    ],
+                )]
+            } else {
+                vec![(
+                    "",
+                    vec![
+                        ("↑/↓", "repo"),
+                        ("→/⏎", "view commits"),
+                        ("w", "window"),
+                        ("y", "copy"),
+                        ("q", "close"),
+                    ],
+                )]
+            }
+        }
         Mode::CommandInput => vec![(
             "",
             vec![("type", "a command"), ("⏎", "run it"), ("Esc", "cancel")],
@@ -730,24 +745,24 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
     frame.render_widget(para, area);
 }
 
-/// The standup overlay: the user's commits as a repo list (with per-repo
-/// counts) on the left and the focused repo's scrollable commits on the right —
-/// the same two-pane shape as the command runner. `None` shows a "collecting"
-/// placeholder.
+/// The standup overlay: a "Repos" box (per-repo commit counts) beside a box of
+/// the focused repo's commits, scrollable. The active pane's title is bold; the
+/// other is dim. `None` shows a "collecting" placeholder.
 fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let area = centered_rect(82, 85, full);
+    let area = centered_rect(84, 86, full);
     frame.render_widget(Clear, area);
 
     let window = app.standup_window.label();
-    let block = Block::bordered()
+    // The outer frame, padded so the inner boxes breathe.
+    let outer = Block::bordered()
         .border_type(BorderType::Rounded)
         .title(Line::from(format!(" Standup · {window} ")).bold())
-        .padding(Padding::new(1, 0, 0, 0));
+        .padding(Padding::new(1, 1, 1, 0));
 
     // Still walking the commits: a placeholder.
     let Some(view) = &app.standup else {
-        let inner = block.inner(area);
-        frame.render_widget(block, area);
+        let inner = outer.inner(area);
+        frame.render_widget(outer, area);
         frame.render_widget(
             Paragraph::new(Span::styled(
                 format!("Collecting your commits for {window}…"),
@@ -765,9 +780,9 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         if total == 1 { "" } else { "s" },
         if repos == 1 { "" } else { "s" },
     );
-    let block = block.title_bottom(Line::from(summary).right_aligned());
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let outer = outer.title_bottom(Line::from(summary).right_aligned());
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
 
     if view.groups.is_empty() {
         frame.render_widget(
@@ -777,17 +792,33 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         return;
     }
 
-    // Left: repos with commit counts (focused highlighted). Right: that repo's
-    // commits, scrollable.
-    let [list_area, detail_area] =
-        Layout::horizontal([Constraint::Length(22), Constraint::Min(0)]).areas(inner);
+    // A "Repos" box and a "{repo}" commits box, with a gap between them.
+    let [left_area, right_area] = Layout::horizontal([Constraint::Length(26), Constraint::Min(0)])
+        .spacing(2)
+        .areas(inner);
 
+    // Highlight the active pane's title (bold) and dim the inactive one.
+    let active = |on: bool| {
+        if on {
+            Style::new().add_modifier(Modifier::BOLD)
+        } else {
+            theme.dim()
+        }
+    };
+
+    // Left: the repos with commit counts.
+    let repos_block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(" Repos ").style(active(!view.commits_focused)))
+        .padding(Padding::horizontal(1));
+    let repos_inner = repos_block.inner(left_area);
+    frame.render_widget(repos_block, left_area);
     let items: Vec<ListItem> = view
         .groups
         .iter()
         .map(|(repo, commits)| {
             ListItem::new(Line::from(vec![
-                Span::raw(ellipsize(repo, 15)),
+                Span::raw(ellipsize(repo, 16)),
                 Span::styled(format!("  {}", commits.len()), theme.dim()),
             ]))
         })
@@ -795,7 +826,20 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
     let mut list_state = ListState::default();
     list_state.select(Some(view.focus));
-    frame.render_stateful_widget(list, list_area, &mut list_state);
+    frame.render_stateful_widget(list, repos_inner, &mut list_state);
+
+    // Right: the focused repo's commits, scrollable.
+    let repo_name = view
+        .groups
+        .get(view.focus)
+        .map(|(r, _)| r.as_str())
+        .unwrap_or("");
+    let commits_block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(format!(" {repo_name} ")).style(active(view.commits_focused)))
+        .padding(Padding::new(1, 0, 0, 0));
+    let commits_inner = commits_block.inner(right_area);
+    frame.render_widget(commits_block, right_area);
 
     let lines: Vec<Line> = view
         .groups
@@ -814,13 +858,13 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         })
         .unwrap_or_default();
     let total_lines = lines.len() as u16;
-    let viewport = detail_area.height;
+    let viewport = commits_inner.height;
     let max_scroll = total_lines.saturating_sub(viewport);
     view.set_max_scroll(max_scroll);
     let offset = view.scroll.min(max_scroll);
 
     let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(detail_area);
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(commits_inner);
     frame.render_widget(
         Paragraph::new(Text::from(lines)).scroll((offset, 0)),
         text_area,
@@ -830,7 +874,9 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
             .position(offset as usize)
             .viewport_content_length(viewport as usize);
         frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::VerticalRight),
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
             bar_area,
             &mut sb,
         );
@@ -1319,9 +1365,10 @@ mod tests {
         let mut app = demo_app();
         app.mode = Mode::Standup;
         app.standup_window = StandupWindow::Week;
-        // payments (most active) sorts first; its commits overflow the pane.
+        // payments (most active) sorts first; its commits overflow the pane,
+        // so the scrollbar renders.
         let mut commits = Vec::new();
-        for i in 0..12 {
+        for i in 0..24 {
             commits.push(StandupCommit {
                 repo: "payments".into(),
                 short_id: format!("aa{i:05}"),

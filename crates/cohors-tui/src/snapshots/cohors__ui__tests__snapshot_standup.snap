@@ -4,23 +4,23 @@ expression: "render_to_string(&app, 100, 22)"
 ---
 ╭ cohors vX.Y.Z ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
-╰────────╭ Standup · this week ───────────────────────────────────────────────────────────╮────────╯
-╭ Attenti│ payments  12          aa00000  feat: payments work item 0                      │────────╮
-│ 4 of 5 │ web-app  5            aa00001  feat: payments work item 1                      │        │
-│ 1 unpus│                       aa00002  feat: payments work item 2                      │        │
-╰────────│                       aa00003  feat: payments work item 3                      │────────╯
-╭ Reposit│                       aa00004  feat: payments work item 4                      │────────╮
-│  Repo  │                       aa00005  feat: payments work item 5                      │        │
-│        │                       aa00006  feat: payments work item 6                      │        │
-│▌   lega│                       aa00007  feat: payments work item 7                      │(permiss│
-│    paym│                       aa00008  feat: payments work item 8                      │xx      │
-│    web-│                       aa00009  feat: payments work item 9                      │r       │
-│    infr│                       aa00010  feat: payments work item 10                     │mage    │
-│    auth│                       aa00011  feat: payments work item 11                     │s       │
-│        │                                                                                │        │
-│        │                                                                                │        │
-│        │                                                                                │        │
-╰────────│                                                                                │────────╯
-╭────────╰────────────────────────────────────────────────────────── 17 commits · 2 repos ╯────────╮
-│ ↑/↓ repo · PgUp/PgDn scroll · w window · y copy · Esc close                                      │
+╰───────╭ Standup · this week ─────────────────────────────────────────────────────────────╮───────╯
+╭ Attent│                                                                                  │───────╮
+│ 4 of 5│ ╭ Repos ─────────────────╮  ╭ payments ────────────────────────────────────────╮ │       │
+│ 1 unpu│ │ payments  24           │  │ aa00000  feat: payments work item 0             █│ │       │
+╰───────│ │ web-app  5             │  │ aa00001  feat: payments work item 1             █│ │───────╯
+╭ Reposi│ │                        │  │ aa00002  feat: payments work item 2             █│ │───────╮
+│  Repo │ │                        │  │ aa00003  feat: payments work item 3             █│ │       │
+│       │ │                        │  │ aa00004  feat: payments work item 4             █│ │       │
+│▌   leg│ │                        │  │ aa00005  feat: payments work item 5             ║│ │permiss│
+│    pay│ │                        │  │ aa00006  feat: payments work item 6             ║│ │x      │
+│    web│ │                        │  │ aa00007  feat: payments work item 7             ║│ │       │
+│    inf│ │                        │  │ aa00008  feat: payments work item 8             ║│ │age    │
+│    aut│ │                        │  │ aa00009  feat: payments work item 9             ║│ │       │
+│       │ │                        │  │ aa00010  feat: payments work item 10            ║│ │       │
+│       │ │                        │  │ aa00011  feat: payments work item 11            ║│ │       │
+│       │ │                        │  │ aa00012  feat: payments work item 12            ║│ │       │
+╰───────│ ╰────────────────────────╯  ╰──────────────────────────────────────────────────╯ │───────╯
+╭───────╰──────────────────────────────────────────────────────────── 29 commits · 2 repos ╯───────╮
+│ ↑/↓ repo · →/⏎ view commits · w window · y copy · q close                                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
