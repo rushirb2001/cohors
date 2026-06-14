@@ -5,8 +5,8 @@ expression: "render_to_string(&app, 100, 40)"
 ╭ cohors vX.Y.Z ──────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────╭ Help ──────────────────────────────────────────────────────────────╮──────────────╯
-╭ Attention ───│                                                                    │──────────────╮
-│ 4 of 5 need a│  Legend — what each column shows                                   │              │
+╭ Attention (4 │                                                                    │──────────────╮
+│ 1 unpushed · │  Legend — what each column shows                                   │              │
 ╰──────────────│    ↑2              commits ahead of upstream                       │──────────────╯
 ╭ Repositories │    ↓5              commits behind upstream                         │──────────────╮
 │    Repo      │    ·               even with upstream                              │              │

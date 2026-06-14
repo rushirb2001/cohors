@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.19] — 2026-06-14
+
+### Changed
+
+- The Attention count moved into the **box title** — `Attention (13 of 18
+  repositories)` — so the body is just the category pills. Removes the separate
+  summary sentence entirely.
+
 ## [0.3.18] — 2026-06-14
 
 ### Changed

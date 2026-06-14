@@ -5,8 +5,8 @@ expression: "render_to_string(&app, 100, 26)"
 ╭ cohors vX.Y.Z ─────────────────────────────────────────────────────12 repos · sort: dirty-first ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
-│ 10 of 12 need attention:  4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable   │
+╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
+│ 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) ───────────────────────────────────────────────────────────────────────────────╮
 │    Repo              Branch         Sync         Changes  Last commit                            │

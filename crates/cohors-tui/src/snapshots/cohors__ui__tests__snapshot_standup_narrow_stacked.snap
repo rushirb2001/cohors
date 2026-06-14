@@ -6,7 +6,7 @@ expression: "render_to_string(&app, 50, 24)"
 │ All your git repositories at a glance — status │
 ╰───╭ Standup · this week ───────────────────╮───╯
 ╭ At│                                        │───╮
-│ 4 │ ╭ Repos ─────────────────────────────╮ │d  │
+│ 1 │ ╭ Repos ─────────────────────────────╮ │·  │
 ╰───│ │ payments  8                        │ │───╯
 ╭ Re│ │ web-app  3                         │ │───╮
 │   │ │                                    │ │s  │

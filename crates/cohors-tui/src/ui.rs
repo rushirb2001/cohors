@@ -366,9 +366,22 @@ fn render_group_box(
 /// plain words ("3 dirty · 1 behind") rather than terse glyphs.
 fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
     let s = fleet_summary(&app.repos, now);
+
+    // The "N of M repositories" count lives in the box title; the body is just
+    // the category pills (or an all-clear message).
+    let mut title = vec![Span::styled(
+        " Attention ",
+        Style::new().add_modifier(Modifier::BOLD),
+    )];
+    if s.needs_attention > 0 {
+        title.push(Span::styled(
+            format!("({} of {} repositories) ", s.needs_attention, s.total),
+            theme.dim(),
+        ));
+    }
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(" Attention ").bold())
+        .title(Line::from(title))
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -379,15 +392,7 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
             theme.ok(),
         ))
     } else {
-        // The summary and its category pills share one line: a bold lead-in,
-        // then the word-labeled chips right after the colon.
-        let mut spans = vec![
-            Span::styled(
-                format!("{} of {} need attention:", s.needs_attention, s.total),
-                Style::new().add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  "),
-        ];
+        let mut spans: Vec<Span> = Vec::new();
 
         // Readable, word-labeled chips; skip any category with a zero count.
         let mut items: Vec<(String, Style)> = Vec::new();
