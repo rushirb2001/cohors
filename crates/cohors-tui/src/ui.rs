@@ -444,12 +444,13 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    // "Repo" is padded by 2 so it lines up with the names, which carry a 2-col
+    // selection gutter (`● ` / `  `) inside their cell.
     let header = Row::new([
-        "Repo",
+        "  Repo",
         "Branch",
         "Sync",
         "Changes",
-        "Stash",
         "Remote",
         "Last commit",
     ])
@@ -469,11 +470,10 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         .collect();
 
     let widths = [
-        Constraint::Length(18), // Repo
+        Constraint::Length(18), // Repo (incl. 2-col selection gutter)
         Constraint::Length(13), // Branch
         Constraint::Length(7),  // Sync (ahead/behind)
-        Constraint::Length(7),  // Changes (file count)
-        Constraint::Length(5),  // Stash
+        Constraint::Length(10), // Changes (working tree + stash)
         Constraint::Length(6),  // Remote (CI + PRs)
         Constraint::Fill(1),    // Last commit takes the remaining width
     ];
@@ -514,7 +514,6 @@ fn repo_row<'a>(
             dot(),
             dot(),
             dot(),
-            dot(),
             Cell::from(Span::styled(reason.clone(), theme.dim())),
         ]);
     }
@@ -530,7 +529,6 @@ fn repo_row<'a>(
         branch_cell(snap, severity, theme),
         sync,
         changes_cell(snap, theme),
-        stash_cell(snap, theme),
         remote_cell(snap, theme),
         last_commit_cell(snap, now, theme),
     ])
@@ -643,29 +641,27 @@ fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     }
 }
 
-/// The Changes column: a count of changed files, green when everything is
-/// staged and yellow when there's still unstaged work. "·" when clean.
+/// The Changes column: changed-file count (green when all staged, yellow when
+/// there's unstaged work), plus the stash folded in as a dim `s{n}` when there
+/// are stashes. "·" when the tree is clean and nothing is stashed.
 fn changes_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     let w = &snap.worktree;
     let total = w.staged + w.modified + w.untracked;
+    let mut spans: Vec<Span> = Vec::new();
     if total == 0 {
-        return Cell::from(Span::styled("·", theme.dim()));
-    }
-    let style = if w.modified > 0 || w.untracked > 0 {
-        theme.modified()
+        spans.push(Span::styled("·", theme.dim()));
     } else {
-        theme.staged()
-    };
-    Cell::from(Span::styled(total.to_string(), style))
-}
-
-/// The Stash column: how many stashed entries, or "·" when there are none.
-fn stash_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+        let style = if w.modified > 0 || w.untracked > 0 {
+            theme.modified()
+        } else {
+            theme.staged()
+        };
+        spans.push(Span::styled(total.to_string(), style));
+    }
     if snap.stash_count > 0 {
-        Cell::from(snap.stash_count.to_string())
-    } else {
-        Cell::from(Span::styled("·", theme.dim()))
+        spans.push(Span::styled(format!(" s{}", snap.stash_count), theme.dim()));
     }
+    Cell::from(Line::from(spans))
 }
 
 /// The Last commit column: the commit's age and subject. Why a repo needs the

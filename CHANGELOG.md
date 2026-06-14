@@ -21,6 +21,21 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.7] — 2026-06-14
+
+### Changed
+
+- **Repository table columns reworked for a more compact, aligned read.** The
+  separate **Stash** column is gone — stash count is now folded into **Changes**
+  as a dim `s{n}` suffix (e.g. `4 s1` = 4 changed files, 1 stash), freeing width
+  for the commit subject.
+
+### Fixed
+
+- The **Repo** header now lines up with the repository names: it accounts for the
+  two-column selection gutter (`●`/blank) that prefixes each name, instead of
+  sitting two columns to its left.
+
 ## [0.3.6] — 2026-06-14
 
 ### Changed

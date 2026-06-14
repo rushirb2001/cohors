@@ -7,10 +7,10 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 / pay▏                                                                                              
 ╭ Repositories (2) ────────────────────────────────────────────────────────────────────────────────╮
-│  Repo                Branch         Sync     Changes  Stash  Remote  Last commit                 │
+│    Repo              Branch         Sync     Changes     Remote  Last commit                     │
 │                                                                                                  │
-│▌   payments          main           ↑2       4        1      ● 2pr    2h  fix: retry on 5xx      │
-│    legacy-billing    error          ·        ·        ·      ·       could not read .git (permiss│
+│▌   payments          main           ↑2       4 s1        ● 2pr    2h  fix: retry on 5xx          │
+│    legacy-billing    error          ·        ·           ·       could not read .git (permission │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

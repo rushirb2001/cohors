@@ -10,13 +10,13 @@ expression: "render_to_string(&app, 100, 40)"
 │ 1 unpushed · 1 be│ Navigation                                                 │                  │
 ╰──────────────────│   ↑ / ↓           move cursor                              │──────────────────╯
 ╭ Repositories (5) │   Home / End      top / bottom                             │──────────────────╮
-│  Repo            │                                                            │t                 │
+│    Repo          │                                                            │                  │
 │                  │ Select                                                     │                  │
-│▌   legacy-billing│   Space           mark / unmark the repo                   │read .git (permiss│
-│    payments      │   a               mark all (again to clear)                │retry on 5xx      │
-│    web-app       │   Esc             clear the selection                      │cart drawer       │
-│    infra         │                                                            │: pin ci image    │
-│    auth-service  │ View                                                       │: bump deps       │
+│▌   legacy-billing│   Space           mark / unmark the repo                   │ .git (permission │
+│    payments      │   a               mark all (again to clear)                │y on 5xx          │
+│    web-app       │   Esc             clear the selection                      │ drawer           │
+│    infra         │                                                            │n ci image        │
+│    auth-service  │ View                                                       │mp deps           │
 │                  │   /               fuzzy filter (Esc clears)                │                  │
 │                  │   d               toggle dirty-only                        │                  │
 │                  │   s               cycle sort mode                          │                  │
