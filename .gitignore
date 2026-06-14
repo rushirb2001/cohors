@@ -20,5 +20,8 @@
 /.cohors-cache
 *.log
 
+# In-repo binary install (cargo install --root .local), for local testing
+/.local
+
 # Demo recording scratch
 *.gif.tmp
