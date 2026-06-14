@@ -12,13 +12,13 @@ expression: "render_to_string(&app, 100, 20)"
 │    Repo              Branch         Sync      Changes  Last commit                               │
 │                                                                                                  │
 │▌   payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
-│    web-app           feat/checkout  ↓5 ●      7        20m  wip: cart drawer                     │
-│    infra             @a1b2c3d       —         4         1w  build: pin ci image                  │
+│                                            … 2 more ↓                                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
 │a mark all     │Esc clear      │ │⏎ open         │P push        │ │↑/↓ move       │? help         │
 │/ filter       │               │ │f fetch        │S stash       │ │s sort         │q quit         │
-│Space mark repo                │ │p pull         │              │ │d dirty-only                   │
+│───────────────────────────────│ │p pull         │              │ │───────────────────────────────│
+│Space mark repo                │ │──────────────────────────────│ │d dirty-only                   │
 │                               │ │! run command                 │ │Tab standup                    │
 ╰───────────────────────────────╯ ╰────────────────── → payments ╯ ╰───────────────────────────────╯

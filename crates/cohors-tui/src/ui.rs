@@ -210,11 +210,16 @@ fn footer_partition<'a>(items: &'a [(&'a str, &'a str)]) -> (Vec<Hint<'a>>, Vec<
         .partition(|(k, d)| footer_item_w(k, d) <= FOOTER_GRID_MAX)
 }
 
-/// A group box's content height: the two-column grid rows plus the full-width
-/// long rows.
+/// A group box's content height: the two-column grid rows, the full-width long
+/// rows, and a 1-row horizontal divider between them when both are present.
 fn footer_group_rows(items: &[(&str, &str)]) -> u16 {
     let (short, long) = footer_partition(items);
-    (short.len().div_ceil(2) + long.len()) as u16
+    let hr = if !short.is_empty() && !long.is_empty() {
+        1
+    } else {
+        0
+    };
+    (short.len().div_ceil(2) + hr + long.len()) as u16
 }
 
 /// The footer's total height (including borders). In Normal mode it's the three
@@ -345,8 +350,25 @@ fn render_group_box(
 
     let (short, long) = footer_partition(items);
     let grid_rows = short.len().div_ceil(2) as u16;
-    let [grid_area, long_area] =
-        Layout::vertical([Constraint::Length(grid_rows), Constraint::Min(0)]).areas(inner);
+    // A horizontal rule separates the grid from the full-width rows when both
+    // are present.
+    let need_hr = !short.is_empty() && !long.is_empty();
+    let chunks = if need_hr {
+        Layout::vertical([
+            Constraint::Length(grid_rows),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .split(inner)
+    } else {
+        Layout::vertical([Constraint::Length(grid_rows), Constraint::Min(0)]).split(inner)
+    };
+    let grid_area = chunks[0];
+    let (hr_area, long_area) = if need_hr {
+        (Some(chunks[1]), chunks[2])
+    } else {
+        (None, chunks[1])
+    };
 
     // Two columns with a 1-col `│` divider between them.
     if !short.is_empty() {
@@ -366,6 +388,18 @@ fn render_group_box(
             .map(|_| Line::from(Span::styled("│", theme.dim())))
             .collect();
         frame.render_widget(Paragraph::new(Text::from(bar)), divider);
+    }
+
+    // The horizontal rule, edge to edge (touches both borders since there's no
+    // inner padding).
+    if let Some(hr) = hr_area {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "─".repeat(hr.width as usize),
+                theme.dim(),
+            ))),
+            hr,
+        );
     }
 
     // Multi-word hints, full-width below the grid.

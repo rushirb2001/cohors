@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.30] — 2026-06-14
+
+### Changed
+
+- Added a **horizontal divider** inside each footer group box, separating the
+  two-column hint grid from the full-width multi-word commands below it (edge to
+  edge, touching the box borders).
+
 ## [0.3.29] — 2026-06-14
 
 ### Changed

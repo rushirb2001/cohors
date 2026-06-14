@@ -18,13 +18,13 @@ expression: "render_to_string(&app, 100, 26)"
 │    design-system     main           ↑1 ● 1pr     · s1      6h  feat: dark-mode tokens            │
 │    web-app           feat/checkout  ↓5 ● 1pr     7        20m  wip: cart drawer animation        │
 │    data-pipeline     main           ↓3 ●         ·         5h  fix: backfill job off-by-one windo│
-│    experiments       @9f8e7d6       —            7         1y  spike: try wgpu for the renderer  │
-│                                            … 4 more ↓                                            │
+│                                            … 5 more ↓                                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
 │a mark all     │Esc clear      │ │⏎ open         │P push        │ │↑/↓ move       │? help         │
 │/ filter       │               │ │f fetch        │S stash       │ │s sort         │q quit         │
-│Space mark repo                │ │p pull         │              │ │d dirty-only                   │
+│───────────────────────────────│ │p pull         │              │ │───────────────────────────────│
+│Space mark repo                │ │──────────────────────────────│ │d dirty-only                   │
 │                               │ │! run command                 │ │Tab standup                    │
 ╰───────────────────────────────╯ ╰──────────── → legacy-billing ╯ ╰───────────────────────────────╯
