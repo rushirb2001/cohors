@@ -18,5 +18,5 @@ expression: "render_to_string(&app, 100, 18)"
 │    design-system     main           ↑1 ● 1pr     · s1      6h  feat: dark-mode tokens            │
 │    web-app           feat/checkout  ↓5 ● 1pr     7        20m  wip: cart drawer animation        │
 │    data-pipeline     main           ↓3 ●         ·         5h  fix: backfill job off-by-one windo│
-╰────────────────────────────────────────────────────────────────────────────────────── … 5 more ↓ ╯
+╰─────────────────────────────────────────── … 5 more ↓ ───────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

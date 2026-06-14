@@ -691,7 +691,11 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     // dim "… N more ↓" on the bottom border. Hidden once everything fits.
     let block = if below > 0 {
         block.title_bottom(
-            Line::from(Span::styled(format!(" … {below} more ↓ "), theme.dim())).right_aligned(),
+            Line::from(Span::styled(
+                format!(" … {below} more ↓ "),
+                theme.ahead().add_modifier(Modifier::BOLD),
+            ))
+            .centered(),
         )
     } else {
         block

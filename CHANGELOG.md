@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.24] — 2026-06-14
+
+### Changed
+
+- The repo list's `… N more ↓` overflow hint is now **centered on the bottom
+  border and rendered in bold accent** (was dim and right-aligned), so it's
+  clearly visible instead of tucked into the corner.
+
 ## [0.3.23] — 2026-06-14
 
 ### Added
