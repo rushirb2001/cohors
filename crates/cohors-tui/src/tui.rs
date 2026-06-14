@@ -19,7 +19,9 @@ use camino::Utf8PathBuf;
 use cohors_core::{RepoId, RepoRef, RepoSnapshot};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
-use ratatui::crossterm::event::{self, Event, KeyEventKind};
+use ratatui::crossterm::event::{
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind,
+};
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -109,10 +111,8 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
         terminal.draw(|f| ui::render(f, &app, now_secs()))?;
 
         if event::poll(POLL)? {
-            if let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press
-            {
-                match app.on_key(key) {
+            match event::read()? {
+                Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
                     Cmd::Quit => break,
                     Cmd::Refresh => start_refresh(&mut app, &scanner, &tx),
                     Cmd::FetchSelected => {
@@ -142,7 +142,14 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                         }
                     }
                     Cmd::None => {}
-                }
+                },
+                // Mouse wheel / trackpad scroll (we capture the mouse).
+                Event::Mouse(m) => match m.kind {
+                    MouseEventKind::ScrollUp => app.on_mouse_scroll(true),
+                    MouseEventKind::ScrollDown => app.on_mouse_scroll(false),
+                    _ => {}
+                },
+                _ => {}
             }
         } else if app.scanning || !app.busy.is_empty() || run_in_progress(&app) {
             // Timed out with work in flight: animate the spinner.
@@ -549,7 +556,7 @@ fn start_command_run(app: &mut App, tx: &Sender<BgMsg>, run_seq: &mut u64) {
 
 /// Copy the focused repo's command output to the clipboard.
 fn copy_run_output(app: &mut App) {
-    let Some(text) = app.run.as_ref().map(|r| r.focused_output()) else {
+    let Some(text) = app.run.as_ref().map(|r| r.copy_text()) else {
         return;
     };
     app.status = Some(match action::copy_to_clipboard(&text) {
@@ -633,14 +640,20 @@ fn setup_terminal() -> Result<Tui> {
     install_panic_hook();
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
-    execute!(stdout, EnterAlternateScreen)?;
+    // Capture the mouse so we handle scroll ourselves (the terminal otherwise
+    // translates trackpad scroll into arrow keys, which we can't reverse).
+    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
     let terminal = Terminal::new(CrosstermBackend::new(stdout))?;
     Ok(terminal)
 }
 
 fn restore_terminal(terminal: &mut Tui) -> Result<()> {
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        DisableMouseCapture,
+        LeaveAlternateScreen
+    )?;
     terminal.show_cursor()?;
     Ok(())
 }
@@ -648,14 +661,22 @@ fn restore_terminal(terminal: &mut Tui) -> Result<()> {
 /// Hand the terminal back to the shell so a child process can use it.
 fn suspend_terminal(terminal: &mut Tui) -> Result<()> {
     disable_raw_mode()?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        DisableMouseCapture,
+        LeaveAlternateScreen
+    )?;
     Ok(())
 }
 
 /// Re-take the terminal after a child exits, forcing a full repaint.
 fn resume_terminal(terminal: &mut Tui) -> Result<()> {
     enable_raw_mode()?;
-    execute!(terminal.backend_mut(), EnterAlternateScreen)?;
+    execute!(
+        terminal.backend_mut(),
+        EnterAlternateScreen,
+        EnableMouseCapture
+    )?;
     terminal.clear()?;
     Ok(())
 }
@@ -665,7 +686,7 @@ fn install_panic_hook() {
     let original = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let _ = disable_raw_mode();
-        let _ = execute!(std::io::stdout(), LeaveAlternateScreen);
+        let _ = execute!(std::io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
         original(info);
     }));
 }

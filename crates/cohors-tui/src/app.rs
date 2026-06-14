@@ -111,9 +111,7 @@ pub struct CommandRun {
     pub command: String,
     /// One slot per target repo, in view order.
     pub results: Vec<RunResult>,
-    /// Which repo's output is expanded in the right pane (index into `results`).
-    pub focus: usize,
-    /// Vertical scroll offset within the focused repo's output.
+    /// Vertical scroll offset (in rendered lines) within the results column.
     pub scroll: u16,
     /// Max scroll, cached from the last render so key handling can clamp without
     /// knowing the viewport (mirrors the standup overlay).
@@ -121,13 +119,12 @@ pub struct CommandRun {
 }
 
 impl CommandRun {
-    /// A fresh run: all repos `Running`, focus/scroll at the top.
+    /// A fresh run: all repos `Running`, scrolled to the top.
     pub fn new(run_id: u64, command: String, results: Vec<RunResult>) -> Self {
         Self {
             run_id,
             command,
             results,
-            focus: 0,
             scroll: 0,
             max_scroll: std::cell::Cell::new(0),
         }
@@ -148,24 +145,37 @@ impl CommandRun {
         (ok, fail, running)
     }
 
-    /// The focused repo's combined output (stdout, then stderr), for copy.
-    pub fn focused_output(&self) -> String {
-        match self.results.get(self.focus).map(|r| &r.state) {
-            Some(RunState::Done { stdout, stderr, .. }) => {
-                let mut out = stdout.clone();
-                if !stderr.is_empty() {
-                    if !out.is_empty() && !out.ends_with('\n') {
+    /// All repos' output as a copyable digest (one `# repo (exit N)` block each).
+    pub fn copy_text(&self) -> String {
+        use std::fmt::Write;
+        let mut out = String::new();
+        for r in &self.results {
+            match &r.state {
+                RunState::Done {
+                    code,
+                    stdout,
+                    stderr,
+                } => {
+                    let _ = writeln!(out, "# {} (exit {code})", r.name);
+                    out.push_str(stdout);
+                    if !stdout.ends_with('\n') {
                         out.push('\n');
                     }
                     out.push_str(stderr);
+                    if !stderr.is_empty() && !stderr.ends_with('\n') {
+                        out.push('\n');
+                    }
                 }
-                out
+                RunState::Running => {
+                    let _ = writeln!(out, "# {} (running)", r.name);
+                }
             }
-            _ => String::new(),
+            out.push('\n');
         }
+        out
     }
 
-    /// Cache the focused output's max scroll (the view calls this each frame).
+    /// Cache the column's max scroll (the view calls this each frame).
     pub fn set_max_scroll(&self, max: u16) {
         self.max_scroll.set(max);
     }
@@ -506,34 +516,60 @@ impl App {
 
     fn on_key_command_run(&mut self, key: KeyEvent) -> Cmd {
         let max = self.run.as_ref().map_or(0, |r| r.max_scroll.get());
+        let Some(run) = &mut self.run else {
+            return Cmd::None;
+        };
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => self.mode = Mode::Normal,
-            KeyCode::Down | KeyCode::Char('j') => self.run_focus_step(1),
-            KeyCode::Up | KeyCode::Char('k') => self.run_focus_step(-1),
+            KeyCode::Down | KeyCode::Char('j') => {
+                run.scroll = run.scroll.saturating_add(1).min(max)
+            }
+            KeyCode::Up | KeyCode::Char('k') => run.scroll = run.scroll.saturating_sub(1),
             KeyCode::PageDown | KeyCode::Char(' ') => {
-                if let Some(run) = &mut self.run {
-                    run.scroll = run.scroll.saturating_add(10).min(max);
-                }
+                run.scroll = run.scroll.saturating_add(10).min(max)
             }
-            KeyCode::PageUp => {
-                if let Some(run) = &mut self.run {
-                    run.scroll = run.scroll.saturating_sub(10);
-                }
-            }
-            KeyCode::Home | KeyCode::Char('g') => {
-                if let Some(run) = &mut self.run {
-                    run.scroll = 0;
-                }
-            }
-            KeyCode::End | KeyCode::Char('G') => {
-                if let Some(run) = &mut self.run {
-                    run.scroll = max;
-                }
-            }
+            KeyCode::PageUp => run.scroll = run.scroll.saturating_sub(10),
+            KeyCode::Home | KeyCode::Char('g') => run.scroll = 0,
+            KeyCode::End | KeyCode::Char('G') => run.scroll = max,
             KeyCode::Char('y') => return Cmd::CopyRunOutput,
             _ => {}
         }
         Cmd::None
+    }
+
+    /// Handle a mouse-wheel / trackpad scroll. Reversed to match the user's
+    /// trackpad direction: a `ScrollUp` event moves toward the bottom, a
+    /// `ScrollDown` event toward the top.
+    pub fn on_mouse_scroll(&mut self, scroll_up: bool) {
+        let toward_top = !scroll_up;
+        match self.mode {
+            Mode::Normal | Mode::Filter => {
+                if toward_top {
+                    self.move_up();
+                } else {
+                    self.move_down();
+                }
+            }
+            Mode::Standup => {
+                let max = self.standup_max_scroll.get();
+                self.standup_scroll = if toward_top {
+                    self.standup_scroll.saturating_sub(3)
+                } else {
+                    self.standup_scroll.saturating_add(3).min(max)
+                };
+            }
+            Mode::CommandRun => {
+                if let Some(run) = &mut self.run {
+                    let max = run.max_scroll.get();
+                    run.scroll = if toward_top {
+                        run.scroll.saturating_sub(3)
+                    } else {
+                        run.scroll.saturating_add(3).min(max)
+                    };
+                }
+            }
+            _ => {}
+        }
     }
 
     fn on_key_confirm(&mut self, key: KeyEvent) -> Cmd {
@@ -569,20 +605,6 @@ impl App {
             action: ConfirmAction::BulkStash(ids),
         });
         self.mode = Mode::Confirm;
-    }
-
-    /// Move the run-view focus by `delta` repos, clamped, resetting the output
-    /// scroll to the top of the newly-focused repo.
-    fn run_focus_step(&mut self, delta: isize) {
-        if let Some(run) = &mut self.run {
-            if run.results.is_empty() {
-                return;
-            }
-            let last = run.results.len() - 1;
-            let next = (run.focus as isize + delta).clamp(0, last as isize) as usize;
-            run.focus = next;
-            run.scroll = 0;
-        }
     }
 
     fn move_down(&mut self) {
@@ -807,23 +829,33 @@ mod tests {
     }
 
     #[test]
-    fn run_focus_step_moves_and_clamps() {
+    fn run_view_scrolls_and_clamps() {
         let mut app = app_with(&[("a", false)]);
         app.run = Some(CommandRun::new(
             1,
             "x".to_string(),
-            vec![
-                run_result("a", RunState::Running),
-                run_result("b", RunState::Running),
-            ],
+            vec![run_result("a", RunState::Running)],
         ));
+        app.run.as_ref().unwrap().set_max_scroll(5);
         app.mode = Mode::CommandRun;
-        app.on_key(code(KeyCode::Up)); // already at top → clamp
-        assert_eq!(app.run.as_ref().unwrap().focus, 0);
+        app.on_key(code(KeyCode::Up)); // at top → clamp
+        assert_eq!(app.run.as_ref().unwrap().scroll, 0);
         app.on_key(code(KeyCode::Down));
-        assert_eq!(app.run.as_ref().unwrap().focus, 1);
-        app.on_key(code(KeyCode::Down)); // at bottom → clamp
-        assert_eq!(app.run.as_ref().unwrap().focus, 1);
+        assert_eq!(app.run.as_ref().unwrap().scroll, 1);
+        app.on_key(code(KeyCode::End)); // jump to max
+        assert_eq!(app.run.as_ref().unwrap().scroll, 5);
+    }
+
+    #[test]
+    fn mouse_scroll_is_reversed() {
+        // ScrollDown moves toward the top, ScrollUp toward the bottom.
+        let mut app = app_with(&[("a", false), ("b", false), ("c", false)]);
+        app.on_key(code(KeyCode::End)); // cursor at bottom
+        let bottom = app.selected;
+        app.on_mouse_scroll(false); // ScrollDown → up
+        assert!(app.selected < bottom);
+        app.on_mouse_scroll(true); // ScrollUp → down
+        assert_eq!(app.selected, bottom);
     }
 
     #[test]
