@@ -3,11 +3,11 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 92, 12)"
 ---
 ┌ cohors ───────────────────────────────────────3/5 repos · sort: dirty-first · dirty-only ┐
+│⚠ 4 need attention  ·  ↑1 unpushed  ·  ↓1 behind  ·  ✎3 dirty  ·  ⚑1 stash  ·  ⚠1 error   │
 │  Repo                 Branch             ↑/↓      Dirty        Stash Last commit         │
-│▌ payments             main               ↑2       +3 ?1        1     2h  fix: retry on 5x│
-│  web-app              feat/checkout      ↓5       +7           ·     20m  wip: cart drawe│
-│  infra                @a1b2c3d (detached —        ?4           ·     1w  build: pin ci im│
-│                                                                                          │
+│▌ payments             main               ↑2       +3 ?1        1     2h  ↑2 unpushed     │
+│  web-app              feat/checkout      ↓5       +7           ·     20m  ↓5 behind — pul│
+│  infra                @a1b2c3d (detached —        ?4           ·     1w  4 uncommitted ch│
 │                                                                                          │
 │                                                                                          │
 │                                                                                          │

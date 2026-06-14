@@ -2,7 +2,7 @@
 //! from [`App::view`] (i.e. `cohors-core`) and maps them onto ratatui widgets.
 //! No state is mutated here.
 
-use cohors_core::{Branch, RepoSnapshot, time};
+use cohors_core::{Assessment, Branch, RepoSnapshot, Severity, assess, fleet_summary, time};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
@@ -66,6 +66,24 @@ impl Theme {
     fn highlight(&self) -> Style {
         self.fg(Color::Yellow).add_modifier(Modifier::BOLD)
     }
+    fn warn(&self) -> Style {
+        self.fg(Color::Yellow)
+    }
+    fn risk(&self) -> Style {
+        self.fg(Color::Red)
+    }
+    fn ok(&self) -> Style {
+        self.fg(Color::Green)
+    }
+    /// Color for an attention severity (the per-row reason + the summary).
+    fn severity_style(&self, severity: Severity) -> Style {
+        match severity {
+            Severity::Risk => self.risk(),
+            Severity::Warn => self.warn(),
+            Severity::Notice => Style::new(),
+            Severity::Info | Severity::Ok => self.dim(),
+        }
+    }
 }
 
 /// Render the whole dashboard for one frame. `now` (Unix seconds) is injected
@@ -81,18 +99,77 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    if app.mode == Mode::Filter {
-        let [filter_area, body_area] =
+    // A 1-line strip above the table: the fuzzy input while filtering, otherwise
+    // the fleet triage summary (when there are repos to summarize).
+    let body_area = if app.mode == Mode::Filter {
+        let [strip, body] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
-        render_filter_input(frame, filter_area, app);
-        render_body(frame, body_area, app, now, &theme);
+        render_filter_input(frame, strip, app);
+        body
+    } else if app.repos.is_empty() {
+        inner
     } else {
-        render_body(frame, inner, app, now, &theme);
-    }
+        let [strip, body] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
+        render_summary_strip(frame, strip, app, now, &theme);
+        body
+    };
+    render_body(frame, body_area, app, now, &theme);
 
     if app.mode == Mode::Help {
         render_help(frame, area, app);
     }
+}
+
+/// The fleet triage summary: "N need attention" plus a chip per category.
+fn render_summary_strip(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+    let s = fleet_summary(&app.repos, now);
+    let mut spans: Vec<Span> = Vec::new();
+
+    if s.needs_attention == 0 {
+        spans.push(Span::styled("✓ all clear", theme.ok()));
+    } else {
+        spans.push(Span::styled(
+            format!("⚠ {} need attention", s.needs_attention),
+            Style::new().add_modifier(Modifier::BOLD),
+        ));
+
+        let mut chips: Vec<Span> = Vec::new();
+        if s.unpushed > 0 {
+            let mut label = format!("↑{} unpushed", s.unpushed);
+            let style = if s.unpushed_aging > 0 {
+                label.push_str(&format!(" ({} aging)", s.unpushed_aging));
+                theme.risk()
+            } else {
+                theme.ahead()
+            };
+            chips.push(Span::styled(label, style));
+        }
+        if s.behind > 0 {
+            chips.push(Span::styled(
+                format!("↓{} behind", s.behind),
+                theme.behind(),
+            ));
+        }
+        if s.dirty > 0 {
+            chips.push(Span::styled(
+                format!("✎{} dirty", s.dirty),
+                theme.modified(),
+            ));
+        }
+        if s.stash > 0 {
+            chips.push(Span::styled(format!("⚑{} stash", s.stash), theme.dim()));
+        }
+        if s.errors > 0 {
+            chips.push(Span::styled(format!("⚠{} error", s.errors), theme.risk()));
+        }
+        for chip in chips {
+            spans.push(Span::styled("  ·  ", theme.dim()));
+            spans.push(chip);
+        }
+    }
+
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn render_body(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
@@ -231,7 +308,8 @@ fn repo_row<'a>(
         ]);
     }
 
-    let attention = snap.needs_attention();
+    let assessment = assess(snap, now);
+    let attention = assessment.needs_attention();
     // While an action runs, the ↑/↓ cell shows a spinner instead.
     let arrows = match busy {
         Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
@@ -243,7 +321,7 @@ fn repo_row<'a>(
         arrows,
         dirty_cell(snap, theme),
         stash_cell(snap, theme),
-        commit_cell(snap, attention, now, theme),
+        status_cell(snap, &assessment, now, theme),
     ])
 }
 
@@ -330,15 +408,32 @@ fn stash_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     }
 }
 
-fn commit_cell<'a>(snap: &RepoSnapshot, attention: bool, now: i64, theme: &Theme) -> Cell<'a> {
-    match &snap.last_commit {
-        None => Cell::from(Span::styled("—", theme.dim())),
-        Some(commit) => {
-            let age = time::relative(commit.timestamp, now);
-            let text = format!("{age}  {}", commit.summary);
-            let style = if attention { Style::new() } else { theme.dim() };
-            Cell::from(Span::styled(text, style))
-        }
+/// The rightmost column: for a repo needing attention, its primary reason
+/// (colored by severity); otherwise the last commit's age + subject.
+fn status_cell<'a>(
+    snap: &RepoSnapshot,
+    assessment: &Assessment,
+    now: i64,
+    theme: &Theme,
+) -> Cell<'a> {
+    let age = snap
+        .last_commit
+        .as_ref()
+        .map(|c| time::relative(c.timestamp, now));
+    let age = age.as_deref().unwrap_or("—");
+
+    if let Some(primary) = &assessment.primary {
+        Cell::from(Line::from(vec![
+            Span::styled(format!("{age}  "), theme.dim()),
+            Span::styled(primary.label(), theme.severity_style(assessment.severity)),
+        ]))
+    } else if let Some(commit) = &snap.last_commit {
+        Cell::from(Span::styled(
+            format!("{age}  {}", commit.summary),
+            theme.dim(),
+        ))
+    } else {
+        Cell::from(Span::styled("—", theme.dim()))
     }
 }
 

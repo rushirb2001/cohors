@@ -3,13 +3,13 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 92, 28)"
 ---
 ┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
+│⚠ 4 need attention  ·  ↑1 unpushed  ·  ↓1 behind  ·  ✎3 dirty  ·  ⚑1 stash  ·  ⚠1 error   │
 │  Repo                 Branch             ↑/↓      Dirty        Stash Last commit         │
-│▌ legacy-billing       ⚠ could not read .                                                 │
-│  payments      ┌ Help ──────────────────────────────────────────────────┐fix: retry on 5x│
-│  web-app       │Navigation                                              │ wip: cart drawe│
-│  infra         │  ↑ / ↓           move selection                        │build: pin ci im│
-│  auth-service  │  Home / End      top / bottom                          │chore: bump deps│
-│                │                                                        │                │
+│▌ legacy-billing┌ Help ──────────────────────────────────────────────────┐                │
+│  payments      │Navigation                                              │↑2 unpushed     │
+│  web-app       │  ↑ / ↓           move selection                        │ ↓5 behind — pul│
+│  infra         │  Home / End      top / bottom                          │4 uncommitted ch│
+│  auth-service  │                                                        │chore: bump deps│
 │                │View                                                    │                │
 │                │  /               fuzzy filter (Esc clears)             │                │
 │                │  d               toggle dirty-only                     │                │

@@ -5,7 +5,7 @@ expression: "render_to_string(&app, 92, 12)"
 ┌ cohors ────────────────────────────────────────────────────2/5 repos · sort: dirty-first ┐
 │/ pay▏                                                                                    │
 │  Repo                 Branch             ↑/↓      Dirty        Stash Last commit         │
-│▌ payments             main               ↑2       +3 ?1        1     2h  fix: retry on 5x│
+│▌ payments             main               ↑2       +3 ?1        1     2h  ↑2 unpushed     │
 │  legacy-billing       ⚠ could not read .                                                 │
 │                                                                                          │
 │                                                                                          │
