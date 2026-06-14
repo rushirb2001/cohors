@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.14] — 2026-06-14
+
+### Changed
+
+- **Redesigned the `?` help into a single aligned grid.** The legend was a
+  run-on paragraph that wrapped mid-phrase; it's now one short, non-wrapping
+  `glyph → meaning` row per symbol, and the keymap shares the exact same
+  two-column layout, so every description lines up in one column. The overlay is
+  a touch wider with proper inner padding so it reads as a structured reference.
+
 ## [0.3.13] — 2026-06-14
 
 Try cohors in five seconds.

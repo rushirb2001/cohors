@@ -786,91 +786,99 @@ fn ellipsize(s: &str, max: usize) -> String {
 }
 
 fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let area = centered_rect(66, 88, full);
+    let area = centered_rect(70, 90, full);
     frame.render_widget(Clear, area);
 
-    // A small helper: a styled span, so the legend can show the *real* colored
-    // glyphs next to their meaning rather than describing them in words.
+    let bold = Style::new().add_modifier(Modifier::BOLD);
     let s = |t: &str, st: Style| Span::styled(t.to_string(), st);
-    let dim = |t: &str| s(t, theme.dim());
+
+    // One shared two-column grid for the whole overlay: a 2-space-indented left
+    // cell (a colored glyph example, or a key) is padded so *every* description
+    // starts in the same column — so the legend and the keymap read as one
+    // aligned table instead of a wrapping paragraph.
+    let desc_col = 16usize;
+    let row = |left: Vec<Span<'static>>, desc: &str| -> Line<'static> {
+        let used: usize = left.iter().map(|sp| sp.content.chars().count()).sum();
+        let pad = desc_col.saturating_sub(used).max(2);
+        let mut spans = vec![Span::raw("  ")];
+        spans.extend(left);
+        spans.push(Span::raw(" ".repeat(pad)));
+        spans.push(Span::styled(desc.to_string(), theme.dim()));
+        Line::from(spans)
+    };
+    let head = |t: &str| Line::from(Span::styled(t.to_string(), bold));
+    let key = |t: &str| vec![Span::styled(t.to_string(), bold)];
 
     let lines = vec![
-        // The legend goes first: it answers "what am I looking at?", which is the
+        // The legend first: it answers "what am I looking at?", which is the
         // question a new user has before they care about keybindings.
-        Line::from("Legend  —  what the columns show").bold(),
-        Line::from(vec![
-            dim("  Sync     "),
-            s("↑2", theme.ahead()),
-            dim(" ahead  "),
-            s("↓5", theme.behind()),
-            dim(" behind  "),
-            dim("· even  — local"),
-        ]),
-        Line::from(vec![
-            dim("           "),
-            s("●", theme.ok()),
-            s("●", theme.risk()),
-            s("●", theme.warn()),
-            dim(" CI passing/failing/pending  "),
-            dim("2pr"),
-            dim(" open PRs"),
-        ]),
-        Line::from(vec![
-            dim("  Changes  "),
-            s("3", theme.staged()),
-            dim(" all staged  "),
-            s("3", theme.modified()),
-            dim(" unstaged work  "),
-            dim("s1"),
-            dim(" one stash"),
-        ]),
-        Line::from(vec![
-            dim("  Rows     "),
-            s("name", theme.dim()),
-            dim(" clean  "),
-            s("name", theme.risk()),
-            dim(" needs attention  "),
-            s("●", theme.ahead()),
-            dim(" marked for an action"),
-        ]),
+        head("Legend — what each column shows"),
+        row(vec![s("↑2", theme.ahead())], "commits ahead of upstream"),
+        row(vec![s("↓5", theme.behind())], "commits behind upstream"),
+        row(vec![s("·", theme.dim())], "even with upstream"),
+        row(vec![s("—", theme.dim())], "no upstream (local only)"),
+        row(
+            vec![
+                s("●", theme.ok()),
+                s(" ●", theme.risk()),
+                s(" ●", theme.warn()),
+            ],
+            "CI: pass / fail / pending",
+        ),
+        row(vec![s("2pr", theme.dim())], "open pull requests"),
+        row(vec![s("3", theme.staged())], "changed files, all staged"),
+        row(
+            vec![s("3", theme.modified())],
+            "changed files, some unstaged",
+        ),
+        row(vec![s("s1", theme.dim())], "stash entries"),
+        row(vec![s("name", theme.dim())], "row: clean"),
+        row(vec![s("name", theme.risk())], "row: needs attention"),
+        row(vec![s("●", theme.ahead())], "row: marked for a bulk action"),
         Line::from(""),
-        Line::from("Navigation").bold(),
-        Line::from("  ↑ / ↓           move cursor"),
-        Line::from("  Home / End      top / bottom"),
+        head("Navigation"),
+        row(key("↑ / ↓"), "move cursor"),
+        row(key("Home / End"), "top / bottom"),
         Line::from(""),
-        Line::from("Select  &  filter").bold(),
-        Line::from("  Space           mark / unmark the repo"),
-        Line::from("  a               mark all (again to clear)"),
-        Line::from("  Esc             clear the selection"),
-        Line::from("  /               fuzzy filter (Esc clears)"),
-        Line::from("  d               toggle dirty-only"),
-        Line::from("  s               cycle sort mode"),
-        Line::from("  Tab             weekly standup"),
+        head("Select & filter"),
+        row(key("Space"), "mark / unmark the repo"),
+        row(key("a"), "mark all (again to clear)"),
+        row(key("Esc"), "clear the selection"),
+        row(key("/"), "fuzzy filter (Esc clears)"),
+        row(key("d"), "toggle dirty-only"),
+        row(key("s"), "cycle sort mode"),
+        row(key("Tab"), "weekly standup"),
         Line::from(""),
-        Line::from("Actions  (on the marked repos, or the current one)").bold(),
-        Line::from("  ⏎               open in editor"),
-        Line::from("  o               reveal in file manager"),
-        Line::from("  f / F           fetch selection / all"),
-        Line::from("  p               pull (fast-forward only)"),
-        Line::from("  !               run a command across them"),
-        Line::from("  S               stash (asks to confirm)"),
-        Line::from("  L               open in lazygit"),
-        Line::from("  y               copy path to clipboard"),
+        head("Act — on the marked repos, else the current one"),
+        row(key("⏎"), "open in editor"),
+        row(key("o"), "reveal in file manager"),
+        row(key("f / F"), "fetch selection / all"),
+        row(key("p"), "pull (fast-forward only)"),
+        row(key("!"), "run a command across them"),
+        row(key("S"), "stash (asks to confirm)"),
+        row(key("L"), "open in lazygit"),
+        row(key("y"), "copy path to clipboard"),
         Line::from(""),
-        Line::from("App").bold(),
-        Line::from("  r               refresh (re-scan)"),
-        Line::from("  ?               toggle this help"),
-        Line::from("  q / Ctrl-C      quit"),
+        head("App"),
+        row(key("r"), "refresh (re-scan)"),
+        row(key("?"), "toggle this help"),
+        row(key("q / Ctrl-C"), "quit"),
         Line::from(""),
-        Line::from(format!("cohors v{}", env!("CARGO_PKG_VERSION"))),
-        Line::from(format!("config: {}", app.config_path)),
+        Line::from(Span::styled(
+            format!("cohors v{}", env!("CARGO_PKG_VERSION")),
+            theme.dim(),
+        )),
+        Line::from(Span::styled(
+            format!("config: {}", app.config_path),
+            theme.dim(),
+        )),
     ];
     let para = Paragraph::new(Text::from(lines))
         .block(
             Block::bordered()
                 .border_type(BorderType::Rounded)
                 .title(" Help ")
-                .padding(Padding::horizontal(1)),
+                .padding(Padding::new(2, 2, 1, 1)),
         )
         .wrap(Wrap { trim: false });
     frame.render_widget(para, area);
