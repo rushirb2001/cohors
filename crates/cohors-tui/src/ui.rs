@@ -386,9 +386,14 @@ fn repo_row<'a>(
     ])
 }
 
-/// The Remote column: a cloud (the repo is on GitHub) colored by CI health —
-/// green passing, red failing, yellow pending, dim when there's no CI signal —
-/// plus the open-PR count. "—" when the repo isn't on a remote.
+/// The Remote column: a status dot colored by CI health — green passing, red
+/// failing, yellow pending, dim when there's no CI signal — plus the open-PR
+/// count. "—" when the repo isn't on a remote.
+///
+/// We use `●` (a basic geometric glyph present in every monospace font, colored
+/// via ANSI like the rest of the UI) rather than a cloud emoji: emoji are
+/// double-width, can't be themed/`NO_COLOR`'d, and — as with `☁` (U+2601) — may
+/// have no text glyph in the user's font and render invisibly.
 fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     match &snap.remote {
         None => Cell::from(Span::styled("—", theme.dim())),
@@ -399,7 +404,7 @@ fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
                 CiStatus::Pending => theme.warn(),
                 CiStatus::None => theme.dim(),
             };
-            let mut spans = vec![Span::styled("☁", style)];
+            let mut spans = vec![Span::styled("●", style)];
             if r.open_prs > 0 {
                 spans.push(Span::styled(format!(" {}pr", r.open_prs), theme.dim()));
             }

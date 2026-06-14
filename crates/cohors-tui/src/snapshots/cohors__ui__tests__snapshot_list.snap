@@ -13,10 +13,10 @@ expression: "render_to_string(&app, 100, 20)"
 │  Repo                Branch         Sync     Changes  Stash  Remote  Last commit                 │
 │                                                                                                  │
 │▌ legacy-billing      error          ·        ·        ·      ·       could not read .git (permiss│
-│  payments            main           ↑2       4        1      ☁ 2pr    2h  fix: retry on 5xx      │
-│  web-app             feat/checkout  ↓5       7        ·      ☁       20m  wip: cart drawer       │
+│  payments            main           ↑2       4        1      ● 2pr    2h  fix: retry on 5xx      │
+│  web-app             feat/checkout  ↓5       7        ·      ●       20m  wip: cart drawer       │
 │  infra               @a1b2c3d       —        4        ·      —        1w  build: pin ci image    │
-│  auth-service        main           —        ·        ·      ☁ 1pr    3d  chore: bump deps       │
+│  auth-service        main           —        ·        ·      ● 1pr    3d  chore: bump deps       │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

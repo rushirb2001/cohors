@@ -21,6 +21,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.2.2] — 2026-06-13
+
+### Fixed
+
+- The **Remote** indicator was invisible in terminals whose font lacks a text
+  glyph for the cloud character (`☁`, U+2601). Replaced it with a colored status
+  dot (`●`) — a basic glyph present in every monospace font, colored via ANSI
+  like the rest of the UI (green passing, red failing, yellow pending). Follows
+  the same monochrome-glyph-plus-color approach Claude Code's TUI uses; emoji are
+  avoided because they're double-width and can't be themed or `NO_COLOR`'d.
+
 ## [0.2.1] — 2026-06-13
 
 ### Changed
