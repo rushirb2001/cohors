@@ -556,7 +556,7 @@ fn start_command_run(app: &mut App, tx: &Sender<BgMsg>, run_seq: &mut u64) {
 
 /// Copy the focused repo's command output to the clipboard.
 fn copy_run_output(app: &mut App) {
-    let Some(text) = app.run.as_ref().map(|r| r.copy_text()) else {
+    let Some(text) = app.run.as_ref().map(|r| r.focused_output()) else {
         return;
     };
     app.status = Some(match action::copy_to_clipboard(&text) {

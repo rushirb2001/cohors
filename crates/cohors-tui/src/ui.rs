@@ -8,8 +8,8 @@ use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, BorderType, Cell, Clear, Padding, Paragraph, Row, Scrollbar, ScrollbarOrientation,
-    ScrollbarState, Table, TableState, Wrap,
+    Block, BorderType, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row, Scrollbar,
+    ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
 };
 
 use crate::app::{App, ConfirmAction, Mode, RunState};
@@ -83,13 +83,15 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     let theme = Theme::from_env();
     let area = frame.area();
 
-    // Top-level layout: a title line, the body, and a footer hint line. There's
-    // no outer frame, so the inner panels read as the app's "windows" and we
-    // don't waste columns on nested borders.
+    // Top-level layout: the branded header box, the body, and a boxed key-hint
+    // footer that grows to wrap its commands on a narrow ("compact") terminal.
+    let hint_len = footer_hints(app).trim().chars().count() as u16;
+    let footer_inner = area.width.saturating_sub(4).max(1); // 2 border + 2 padding
+    let footer_height = hint_len.div_ceil(footer_inner).clamp(1, 3) + 2;
     let [header_area, body_area, footer_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(0),
-        Constraint::Length(1),
+        Constraint::Length(footer_height),
     ])
     .areas(area);
     render_header(frame, header_area, app, &theme);
@@ -156,11 +158,22 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     );
 }
 
-/// The bottom line: context-sensitive key hints, dimmed.
+/// The footer: context-sensitive key hints in a box, wrapping to more lines on
+/// a narrow terminal so no command is ever truncated.
 fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
     frame.render_widget(
-        Paragraph::new(Span::styled(footer_hints(app), theme.dim())),
-        area,
+        Paragraph::new(Span::styled(
+            footer_hints(app).trim().to_string(),
+            theme.dim(),
+        ))
+        .wrap(Wrap { trim: true }),
+        inner,
     );
 }
 
@@ -260,7 +273,7 @@ fn footer_hints(app: &App) -> String {
             " ↑/↓ scroll · PgUp/PgDn · w window · y copy · Esc close ".to_string()
         }
         Mode::CommandInput => " type a command · ⏎ run · Esc cancel ".to_string(),
-        Mode::CommandRun => " ↑/↓ scroll · PgUp/PgDn · y copy · Esc close ".to_string(),
+        Mode::CommandRun => " ↑/↓ repo · PgUp/PgDn scroll · y copy · Esc close ".to_string(),
         Mode::Confirm => " y confirm · N / Esc cancel ".to_string(),
         Mode::Normal => {
             " ↑/↓ move · Space mark · a all · / filter · ⏎ open · p pull · ! run · S stash · Tab standup · ? help · q quit ".to_string()
@@ -749,10 +762,9 @@ fn render_command_input(frame: &mut Frame, full: Rect, app: &App, theme: &Theme)
     frame.render_widget(Paragraph::new(line), inner);
 }
 
-/// The command-run overlay: one boxed section per repo (a header rule with the
-/// repo name + status, then its output) stacked in a single scrollable column.
-/// Output wraps, so it stays readable in a narrow/compact terminal. A live
-/// combined pass/fail summary sits in the bottom border.
+/// The command-run overlay: a left list of repos (status glyph + name, the
+/// focused one highlighted) and the focused repo's scrollable output on the
+/// right, with a live combined pass/fail summary in the bottom border.
 fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let area = centered_rect(88, 85, full);
     frame.render_widget(Clear, area);
@@ -773,22 +785,47 @@ fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Reserve a column for the scrollbar; the rest holds the wrapping text.
-    let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+    // Left: the repo list (with focus highlight). Right: the focused output.
+    let [list_area, out_area] =
+        Layout::horizontal([Constraint::Length(26), Constraint::Min(0)]).areas(inner);
 
     let spin = spinner_frame(app.spinner);
-    let lines = run_lines(run, text_area.width, spin, theme);
-    let total = wrapped_height(&lines, text_area.width);
-    let viewport = text_area.height;
+    let items: Vec<ListItem> = run
+        .results
+        .iter()
+        .map(|r| {
+            let (glyph, style, note) = match &r.state {
+                RunState::Running => (spin.to_string(), theme.ahead(), String::new()),
+                RunState::Done { code: 0, .. } => ("✓".to_string(), theme.ok(), String::new()),
+                RunState::Done { code, .. } => ("✗".to_string(), theme.risk(), format!(" {code}")),
+            };
+            ListItem::new(Line::from(vec![
+                Span::styled(glyph, style),
+                Span::raw(" "),
+                Span::raw(ellipsize(&r.name, 18)),
+                Span::styled(note, theme.dim()),
+            ]))
+        })
+        .collect();
+    let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let mut list_state = ListState::default();
+    if !run.results.is_empty() {
+        list_state.select(Some(run.focus));
+    }
+    frame.render_stateful_widget(list, list_area, &mut list_state);
+
+    // Right: the focused repo's output (stdout, then a dim stderr divider).
+    let out_lines = run_output_lines(run, theme);
+    let total = out_lines.len() as u16;
+    let viewport = out_area.height;
     let max_scroll = total.saturating_sub(viewport);
     run.set_max_scroll(max_scroll);
     let offset = run.scroll.min(max_scroll);
 
+    let [text_area, bar_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(out_area);
     frame.render_widget(
-        Paragraph::new(Text::from(lines))
-            .wrap(Wrap { trim: false })
-            .scroll((offset, 0)),
+        Paragraph::new(Text::from(out_lines)).scroll((offset, 0)),
         text_area,
     );
     if max_scroll > 0 {
@@ -803,72 +840,33 @@ fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     }
 }
 
-/// Build the run column: each repo is a `╭─ name · status ─…` header rule
-/// followed by its indented output (stdout, then a dim stderr divider). Lines
-/// are not pre-wrapped — the Paragraph wraps them to the pane width.
-fn run_lines(
-    run: &crate::app::CommandRun,
-    width: u16,
-    spin: &str,
-    theme: &Theme,
-) -> Vec<Line<'static>> {
-    let mut lines: Vec<Line> = Vec::new();
-    for r in &run.results {
-        let (glyph, gstyle, note): (String, Style, String) = match &r.state {
-            RunState::Running => (spin.to_string(), theme.ahead(), String::new()),
-            RunState::Done { code: 0, .. } => ("✓".to_string(), theme.ok(), String::new()),
-            RunState::Done { code, .. } => ("✗".to_string(), theme.risk(), format!(" exit {code}")),
-        };
-        // Header rule, padded to the pane width: "╭─ name · ✓ ────────".
-        let used = 3 + r.name.chars().count() + 3 + 1 + note.chars().count() + 1;
-        let fill = (width as usize).saturating_sub(used);
-        lines.push(Line::from(vec![
-            Span::styled("╭─ ".to_string(), theme.dim()),
-            Span::styled(r.name.clone(), Style::new().add_modifier(Modifier::BOLD)),
-            Span::styled(" · ".to_string(), theme.dim()),
-            Span::styled(glyph, gstyle),
-            Span::styled(note, gstyle),
-            Span::styled(format!(" {}", "─".repeat(fill)), theme.dim()),
-        ]));
-
-        match &r.state {
-            RunState::Running => {
-                lines.push(Line::from(Span::styled(
-                    "  running…".to_string(),
-                    theme.dim(),
-                )));
+/// The lines for the focused repo's output pane.
+fn run_output_lines(run: &crate::app::CommandRun, theme: &Theme) -> Vec<Line<'static>> {
+    match run.results.get(run.focus).map(|r| &r.state) {
+        Some(RunState::Done {
+            code,
+            stdout,
+            stderr,
+        }) => {
+            let exit_style = if *code == 0 { theme.ok() } else { theme.risk() };
+            let mut lines = vec![
+                Line::from(Span::styled(format!("exit {code}"), exit_style)),
+                Line::from(""),
+            ];
+            for l in stdout.lines() {
+                lines.push(Line::from(l.to_string()));
             }
-            RunState::Done { stdout, stderr, .. } => {
-                for l in stdout.lines() {
-                    lines.push(Line::from(Span::styled(format!("  {l}"), theme.dim())));
-                }
-                if !stderr.is_empty() {
-                    lines.push(Line::from(Span::styled(
-                        "  ── stderr ──".to_string(),
-                        theme.dim(),
-                    )));
-                    for l in stderr.lines() {
-                        lines.push(Line::from(Span::styled(format!("  {l}"), theme.warn())));
-                    }
+            if !stderr.is_empty() {
+                lines.push(Line::from(Span::styled("── stderr ──", theme.dim())));
+                for l in stderr.lines() {
+                    lines.push(Line::from(Span::styled(l.to_string(), theme.warn())));
                 }
             }
+            lines
         }
-        lines.push(Line::from(""));
+        Some(RunState::Running) => vec![Line::from(Span::styled("running…", theme.dim()))],
+        None => Vec::new(),
     }
-    lines
-}
-
-/// Approximate rendered height of `lines` once wrapped to `width` (char-ceil per
-/// line) — used to clamp the scroll offset.
-fn wrapped_height(lines: &[Line], width: u16) -> u16 {
-    if width == 0 {
-        return lines.len() as u16;
-    }
-    let w = width as usize;
-    lines
-        .iter()
-        .map(|l| l.width().max(1).div_ceil(w) as u16)
-        .sum()
 }
 
 /// The confirmation modal: the prompt, the affected repos, and y/N choices with
@@ -1168,7 +1166,7 @@ mod tests {
         use crate::app::{CommandRun, RunResult};
         let mut app = demo_app();
         app.mode = Mode::CommandRun;
-        let run = CommandRun::new(
+        let mut run = CommandRun::new(
             2,
             "cargo test".to_string(),
             vec![
@@ -1192,6 +1190,7 @@ mod tests {
                 },
             ],
         );
+        run.focus = 1; // the failing repo, so its stderr shows
         app.run = Some(run);
         insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }

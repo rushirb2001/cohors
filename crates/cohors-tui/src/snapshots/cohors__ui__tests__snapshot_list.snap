@@ -17,8 +17,8 @@ expression: "render_to_string(&app, 100, 20)"
 │    web-app           feat/checkout  ↓5       7        ·      ●       20m  wip: cart drawer       │
 │    infra             @a1b2c3d       —        4        ·      —        1w  build: pin ci image    │
 │    auth-service      main           —        ·        ·      ● 1pr    3d  chore: bump deps       │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑/↓ move · Space mark · a all · / filter · ⏎ open · p pull · ! run · S stash · Tab standup · ? help
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ↑/↓ move · Space mark · a all · / filter · ⏎ open · p pull · ! run · S stash · Tab standup · ?   │
+│ help · q quit                                                                                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
