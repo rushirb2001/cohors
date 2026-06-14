@@ -1190,7 +1190,27 @@ fn two_pane(inner: Rect, list_w: u16, stacked_list_h: u16) -> (Rect, Rect) {
 }
 
 fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let area = centered_rect(84, 86, full);
+    // Size the modal to its content (capped) so it doesn't dominate the screen:
+    // the panes are as tall as the busiest repo's commit list, up to a cap, and
+    // anything past that scrolls.
+    let body = app
+        .standup
+        .as_ref()
+        .map(|v| {
+            let max_c = v.groups.iter().map(|(_, c)| c.len()).max().unwrap_or(1);
+            v.groups.len().max(max_c)
+        })
+        .unwrap_or(3)
+        .clamp(6, 16) as u16;
+    // body + description(2) + pane border(2) + outer border(2) + top padding(1).
+    let h = (body + 7).min(full.height.saturating_sub(2)).max(10);
+    let w = (full.width as u32 * 84 / 100) as u16;
+    let area = Rect {
+        x: full.x + full.width.saturating_sub(w) / 2,
+        y: full.y + full.height.saturating_sub(h) / 2,
+        width: w,
+        height: h,
+    };
     frame.render_widget(Clear, area);
 
     let window = app.standup_window.label();
@@ -1233,9 +1253,30 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         return;
     }
 
+    // A dynamic, one-line description above the panes so the view explains
+    // itself: which window, and what each column is.
+    let repo_name = view
+        .groups
+        .get(view.focus)
+        .map(|(r, _)| r.as_str())
+        .unwrap_or("");
+    let [desc_area, panes_area] =
+        Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(inner);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled("Your commits ", theme.dim()),
+            Span::styled(window, theme.ahead().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "  ·  pick a repo (left) to read its commits (right)",
+                theme.dim(),
+            ),
+        ])),
+        desc_area,
+    );
+
     // A "Repos" box and a "{repo}" commits box: side-by-side when there's room,
     // stacked (repos on top) on a narrow terminal.
-    let (left_area, right_area) = two_pane(inner, 26, 8);
+    let (left_area, right_area) = two_pane(panes_area, 26, 8);
 
     // Highlight the active pane's title (bold) and dim the inactive one.
     let active = |on: bool| {
@@ -1269,11 +1310,6 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     frame.render_stateful_widget(list, repos_inner, &mut list_state);
 
     // Right: the focused repo's commits, scrollable.
-    let repo_name = view
-        .groups
-        .get(view.focus)
-        .map(|(r, _)| r.as_str())
-        .unwrap_or("");
     let commits_block = Block::bordered()
         .border_type(BorderType::Rounded)
         .title(Line::from(format!(" {repo_name} ")).style(active(view.commits_focused)))

@@ -4,25 +4,25 @@ expression: "render_to_string(&app, 50, 24)"
 ---
 ╭ cohors vX.Y.Z ────────────────────────────────╮
 │ All your git repositories at a glance — status │
-╰───╭ Standup · this week ───────────────────╮───╯
-╭ At│                                        │───╮
-│ 1 │ ╭ Repos ─────────────────────────────╮ │·  │
-╰───│ │ payments  8                        │ │───╯
-╭ Re│ │ web-app  3                         │ │───╮
-│   │ │                                    │ │s  │
+╰────────────────────────────────────────────────╯
+╭ Attention (4 of 5 repositories) ───────────────╮
+│ 1 ╭ Standup · this week ───────────────────╮·  │
+╰───│                                        │───╯
+╭ Re│ Your commits this week  ·  pick a repo │───╮
+│   │                                        │s  │
+│   │ ╭ Repos ─────────────────────────────╮ │   │
+│▌  │ │ payments  8                        │ │   │
+│   │ │ web-app  3                         │ │   │
 │   │ │                                    │ │   │
-│▌  │ │                                    │ │   │
+│   │ │                                    │ │   │
+│   │ │                                    │ │   │
 │   │ │                                    │ │   │
 │   │ ╰────────────────────────────────────╯ │   │
 │   │                                        │   │
 │   │ ╭ payments ──────────────────────────╮ │   │
-│   │ │ aa00000  feat: payments work item █│ │   │
-│   │ │ aa00001  feat: payments work item █│ │   │
-│   │ │ aa00002  feat: payments work item █│ │   │
-│   │ │ aa00003  feat: payments work item ║│ │   │
-│   │ │ aa00004  feat: payments work item ║│ │   │
-╰───│ │ aa00005  feat: payments work item ║│ │───╯
-╭───│ ╰────────────────────────────────────╯ │───╮
-│ ↑/╰────────────────── 11 commits · 2 repos ╯   │
+│   ╰────────────────── 11 commits · 2 repos ╯   │
+╰────────────────────────────────────────────────╯
+╭────────────────────────────────────────────────╮
+│ ↑/↓ repo · →/⏎ view commits · w window · y     │
 │ copy · q close                                 │
 ╰────────────────────────────────────────────────╯

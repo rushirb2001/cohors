@@ -21,6 +21,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.32] — 2026-06-14
+
+### Changed
+
+- The **standup view is shorter** — it's now sized to its content (the busiest
+  repo's commit count, capped) and scrolls past that, instead of always taking
+  86% of the screen and leaving a lot of empty space.
+- Added a **dynamic description line above the two panes** — `Your commits <this
+  week> · pick a repo (left) to read its commits (right)` — so the view explains
+  what each column is and which window it covers.
+
 ## [0.3.31] — 2026-06-14
 
 ### Changed
