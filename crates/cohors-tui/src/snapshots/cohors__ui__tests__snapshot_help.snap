@@ -1,26 +1,34 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 30)"
+expression: "render_to_string(&app, 100, 40)"
 ---
 ╭ cohors vX.Y.Z ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention ───────╭ Help ──────────────────────────────────────────────────────╮──────────────────╮
-│ 4 of 5 repositori│ Navigation                                                 │                  │
-│ 1 unpushed · 1 be│   ↑ / ↓           move selection                           │                  │
-╰──────────────────│   Home / End      top / bottom                             │──────────────────╯
-╭ Repositories (5) │                                                            │──────────────────╮
-│  Repo            │ View                                                       │t                 │
-│                  │   /               fuzzy filter (Esc clears)                │                  │
-│▌   legacy-billing│   d               toggle dirty-only                        │read .git (permiss│
-│    payments      │   s               cycle sort mode                          │retry on 5xx      │
-│    web-app       │   Tab             weekly standup                           │cart drawer       │
+╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
+│ 4 of 5 repositori╭ Help ──────────────────────────────────────────────────────╮                  │
+│ 1 unpushed · 1 be│ Navigation                                                 │                  │
+╰──────────────────│   ↑ / ↓           move cursor                              │──────────────────╯
+╭ Repositories (5) │   Home / End      top / bottom                             │──────────────────╮
+│  Repo            │                                                            │t                 │
+│                  │ Select                                                     │                  │
+│▌   legacy-billing│   Space           mark / unmark the repo                   │read .git (permiss│
+│    payments      │   a               mark all (again to clear)                │retry on 5xx      │
+│    web-app       │   Esc             clear the selection                      │cart drawer       │
 │    infra         │                                                            │: pin ci image    │
-│    auth-service  │ Actions                                                    │: bump deps       │
+│    auth-service  │ View                                                       │: bump deps       │
+│                  │   /               fuzzy filter (Esc clears)                │                  │
+│                  │   d               toggle dirty-only                        │                  │
+│                  │   s               cycle sort mode                          │                  │
+│                  │   Tab             weekly standup                           │                  │
+│                  │                                                            │                  │
+│                  │ Actions  (on the selection, or the current repo)           │                  │
 │                  │   ⏎               open in editor                           │                  │
 │                  │   o               reveal in file manager                   │                  │
-│                  │   f / F           fetch selected / all                     │                  │
+│                  │   f / F           fetch selection / all                    │                  │
 │                  │   p               pull (fast-forward only)                 │                  │
+│                  │   !               run a command across them                │                  │
+│                  │   S               stash (asks to confirm)                  │                  │
 │                  │   L               open in lazygit                          │                  │
 │                  │   y               copy path to clipboard                   │                  │
 │                  │                                                            │                  │
@@ -28,7 +36,9 @@ expression: "render_to_string(&app, 100, 30)"
 │                  │   r               refresh (re-scan)                        │                  │
 │                  │   ?               toggle this help                         │                  │
 │                  │   q / Ctrl-C      quit                                     │                  │
+│                  │                                                            │                  │
 │                  ╰────────────────────────────────────────────────────────────╯                  │
+│                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ? / Esc close

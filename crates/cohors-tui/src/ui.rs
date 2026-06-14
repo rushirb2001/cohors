@@ -573,8 +573,13 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
     frame.render_widget(Clear, area);
     let lines = vec![
         Line::from("Navigation").bold(),
-        Line::from("  ↑ / ↓           move selection"),
+        Line::from("  ↑ / ↓           move cursor"),
         Line::from("  Home / End      top / bottom"),
+        Line::from(""),
+        Line::from("Select").bold(),
+        Line::from("  Space           mark / unmark the repo"),
+        Line::from("  a               mark all (again to clear)"),
+        Line::from("  Esc             clear the selection"),
         Line::from(""),
         Line::from("View").bold(),
         Line::from("  /               fuzzy filter (Esc clears)"),
@@ -582,11 +587,13 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
         Line::from("  s               cycle sort mode"),
         Line::from("  Tab             weekly standup"),
         Line::from(""),
-        Line::from("Actions").bold(),
+        Line::from("Actions  (on the selection, or the current repo)").bold(),
         Line::from("  ⏎               open in editor"),
         Line::from("  o               reveal in file manager"),
-        Line::from("  f / F           fetch selected / all"),
+        Line::from("  f / F           fetch selection / all"),
         Line::from("  p               pull (fast-forward only)"),
+        Line::from("  !               run a command across them"),
+        Line::from("  S               stash (asks to confirm)"),
         Line::from("  L               open in lazygit"),
         Line::from("  y               copy path to clipboard"),
         Line::from(""),
@@ -1194,7 +1201,7 @@ mod tests {
     fn snapshot_help() {
         let mut app = demo_app();
         app.mode = Mode::Help;
-        insta::assert_snapshot!(render_to_string(&app, 100, 30));
+        insta::assert_snapshot!(render_to_string(&app, 100, 40));
     }
 
     #[test]
