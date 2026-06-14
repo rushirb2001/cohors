@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.11] — 2026-06-14
+
+### Changed
+
+- The **Sync** and **Changes** columns are now sized to their actual content
+  instead of a fixed width, so they stay tight. A fleet with no open PRs gets a
+  narrow Sync column (just the dot/arrows) rather than always reserving room for
+  a `● Npr`; the column grows only when some repo needs it (clamped to a sane
+  max). Sync floors at its header width, Changes at `"Changes"` (7).
+
 ## [0.3.10] — 2026-06-14
 
 ### Fixed

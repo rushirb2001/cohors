@@ -2,7 +2,7 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 40)"
 ---
-╭ cohors vX.Y.Z ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
+╭ cohors vX.Y.Z ──────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
@@ -12,11 +12,11 @@ expression: "render_to_string(&app, 100, 40)"
 ╭ Repositories (5) │   Home / End      top / bottom                             │──────────────────╮
 │    Repo          │                                                            │                  │
 │                  │ Select                                                     │                  │
-│▌   legacy-billing│   Space           mark / unmark the repo                   │ (permission denie│
-│    payments      │   a               mark all (again to clear)                │5xx               │
-│    web-app       │   Esc             clear the selection                      │er                │
-│    infra         │                                                            │image             │
-│    auth-service  │ View                                                       │ps                │
+│▌   legacy-billing│   Space           mark / unmark the repo                   │mission denied)   │
+│    payments      │   a               mark all (again to clear)                │                  │
+│    web-app       │   Esc             clear the selection                      │                  │
+│    infra         │                                                            │                  │
+│    auth-service  │ View                                                       │                  │
 │                  │   /               fuzzy filter (Esc clears)                │                  │
 │                  │   d               toggle dirty-only                        │                  │
 │                  │   s               cycle sort mode                          │                  │

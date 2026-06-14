@@ -462,12 +462,30 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         })
         .collect();
 
+    // Size the Sync and Changes columns to their actual content so they stay
+    // tight (a fleet with no PRs gets a narrow Sync, etc.) rather than always
+    // reserving room for the widest possible case. The floor is the header label
+    // width ("Sync" = 4, "Changes" = 7); the ceiling guards against one outlier
+    // repo stretching the whole column.
+    let sync_w = view
+        .iter()
+        .map(|vr| line_width(&sync_spans(&app.repos[vr.index], theme)))
+        .max()
+        .unwrap_or(0)
+        .clamp(4, 10);
+    let changes_w = view
+        .iter()
+        .map(|vr| line_width(&changes_spans(&app.repos[vr.index], theme)))
+        .max()
+        .unwrap_or(0)
+        .clamp(7, 12);
+
     let widths = [
-        Constraint::Length(18), // Repo (incl. 2-col selection gutter)
-        Constraint::Length(13), // Branch
-        Constraint::Length(10), // Sync (ahead/behind + remote CI/PRs)
-        Constraint::Length(10), // Changes (working tree + stash)
-        Constraint::Fill(1),    // Last commit takes the remaining width
+        Constraint::Length(18),        // Repo (incl. 2-col selection gutter)
+        Constraint::Length(13),        // Branch
+        Constraint::Length(sync_w),    // Sync (ahead/behind + remote CI/PRs)
+        Constraint::Length(changes_w), // Changes (working tree + stash)
+        Constraint::Fill(1),           // Last commit takes the remaining width
     ];
 
     let table = Table::new(rows, widths)
@@ -614,6 +632,12 @@ fn branch_cell<'a>(snap: &RepoSnapshot, severity: Severity, theme: &Theme) -> Ce
 /// remote dot + open-PR count (`●`, `● 2pr`). Examples: `↑2 ● 2pr`, `↓5 ●`,
 /// `· ●`. "—" when the repo has neither an upstream nor a remote (purely local).
 fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+    Cell::from(Line::from(sync_spans(snap, theme)))
+}
+
+/// The styled segments of the Sync cell. Exposed (rather than built inline) so
+/// the column can be sized to its widest content — see [`line_width`].
+fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     let remote = remote_spans(snap, theme);
 
     // The upstream sub-part: ahead/behind arrows when the branch has diverged.
@@ -653,13 +677,19 @@ fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     if spans.is_empty() {
         spans.push(Span::styled("—", theme.dim()));
     }
-    Cell::from(Line::from(spans))
+    spans
 }
 
 /// The Changes column: changed-file count (green when all staged, yellow when
 /// there's unstaged work), plus the stash folded in as a dim `s{n}` when there
 /// are stashes. "·" when the tree is clean and nothing is stashed.
 fn changes_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+    Cell::from(Line::from(changes_spans(snap, theme)))
+}
+
+/// The styled segments of the Changes cell. Exposed (rather than built inline)
+/// so the column can be sized to its widest content — see [`line_width`].
+fn changes_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     let w = &snap.worktree;
     let total = w.staged + w.modified + w.untracked;
     let mut spans: Vec<Span> = Vec::new();
@@ -676,7 +706,14 @@ fn changes_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     if snap.stash_count > 0 {
         spans.push(Span::styled(format!(" s{}", snap.stash_count), theme.dim()));
     }
-    Cell::from(Line::from(spans))
+    spans
+}
+
+/// The display width (in terminal columns) of a run of spans — all of cohors's
+/// glyphs are single-width, so a `char` count is exact. Used to size data
+/// columns to their actual content rather than a fixed guess.
+fn line_width(spans: &[Span]) -> u16 {
+    spans.iter().map(|s| s.content.chars().count() as u16).sum()
 }
 
 /// The Last commit column: the commit's age and subject. Why a repo needs the
