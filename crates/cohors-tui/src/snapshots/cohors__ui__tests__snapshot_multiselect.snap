@@ -13,12 +13,12 @@ expression: "render_to_string(&app, 100, 20)"
 │    Repo              Branch         Sync      Changes  Last commit                               │
 │                                                                                                  │
 │▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
-│  ● payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
-│  ● web-app           feat/checkout  ↓5 ●      7        20m  wip: cart drawer                     │
-│    infra             @a1b2c3d       —         4         1w  build: pin ci image                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ select Space mark repo · a mark all · / filter · Esc clear                                       │
-│ act    ⏎ open · f fetch · p pull · ! run command · S stash   → acts on 2 selected                │
-│ view   ↑/↓ move · s sort · d dirty-only · Tab standup · ? help · q quit                          │
+│╭ select ──────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ────────────────────────╮│
+││Space mark repo               │ │⏎ open          ! run command │ │↑/↓ move        Tab standup   ││
+││a mark all                    │ │f fetch         S stash       │ │s sort          ? help        ││
+││/ filter                      │ │p pull                        │ │d dirty-only    q quit        ││
+││Esc clear                     │ │                              │ │                              ││
+│╰──────────────────────────────╯ ╰──────────────── → 2 selected ╯ ╰──────────────────────────────╯│
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -21,6 +21,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.15] — 2026-06-14
+
+### Changed
+
+- **The footer is now a box-of-boxes.** Instead of three stacked, wrapping rows,
+  Normal mode shows one outer box holding three titled group boxes —
+  **`select`**, **`act`**, **`view`** — side by side. The busier `act` and `view`
+  groups lay their keys out in two internal columns (so no group runs more than a
+  few rows), and the live action target rides the `act` box's bottom edge
+  (`→ <repo>` / `→ N selected`). On a narrow terminal it falls back to the
+  previous stacked-rows footer so the keys never get squeezed.
+
 ## [0.3.14] — 2026-06-14
 
 ### Changed

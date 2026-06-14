@@ -87,21 +87,15 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     // Top-level layout: the branded header box, the body, and a boxed key-hint
     // footer — one labelled group per row, each wrapping if the terminal is
     // narrow, so no command is ever truncated.
-    let footer = footer_lines(app, &theme);
-    let footer_inner = area.width.saturating_sub(4).max(1); // 2 border + 2 padding
-    let footer_rows: u16 = footer
-        .iter()
-        .map(|l| (l.width() as u16).max(1).div_ceil(footer_inner))
-        .sum::<u16>()
-        .clamp(1, 6);
+    let footer_h = footer_height(app, area.width, &theme);
     let [header_area, body_area, footer_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(0),
-        Constraint::Length(footer_rows + 2),
+        Constraint::Length(footer_h),
     ])
     .areas(area);
     render_header(frame, header_area, app, &theme);
-    render_footer(frame, footer_area, footer, &theme);
+    render_footer(frame, footer_area, app, &theme);
 
     if app.repos.is_empty() {
         if app.scanning {
@@ -188,9 +182,60 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     );
 }
 
-/// The footer: context-sensitive key hints in a box, one labelled group per row,
-/// wrapping on a narrow terminal so no command is ever truncated.
-fn render_footer(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, theme: &Theme) {
+/// Below this width the three side-by-side group boxes get too narrow to hold
+/// their keys, so the footer falls back to the simple stacked-rows layout.
+const FOOTER_BOXED_MIN_WIDTH: u16 = 80;
+
+/// Whether the footer uses the three-box (`select`/`act`/`view`) layout: only in
+/// Normal mode and only when the terminal is wide enough to hold the boxes.
+fn footer_boxed(app: &App, width: u16) -> bool {
+    app.mode == Mode::Normal && width >= FOOTER_BOXED_MIN_WIDTH
+}
+
+/// How many internal columns a group box uses. `select` is a single column;
+/// the busier `act`/`view` groups split into two so neither runs tall.
+fn group_cols(label: &str) -> u16 {
+    if label == "act" || label == "view" {
+        2
+    } else {
+        1
+    }
+}
+
+/// The footer's total height (including borders). The boxed layout is sized to
+/// the tallest group; the simple layout to its wrapped line count.
+fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
+    if footer_boxed(app, width) {
+        let rows = footer_groups(app)
+            .iter()
+            .map(|(label, items)| (items.len() as u16).div_ceil(group_cols(label)))
+            .max()
+            .unwrap_or(1);
+        rows + 4 // 2 outer border + 2 inner border
+    } else {
+        let lines = footer_lines(app, theme);
+        let inner = width.saturating_sub(4).max(1);
+        let rows: u16 = lines
+            .iter()
+            .map(|l| (l.width() as u16).max(1).div_ceil(inner))
+            .sum::<u16>()
+            .clamp(1, 6);
+        rows + 2
+    }
+}
+
+/// The footer: context-sensitive key hints. In Normal mode on a wide terminal
+/// it's one outer box wrapping three titled group boxes (`select`/`act`/`view`);
+/// otherwise it's a single box of stacked, wrapping hint rows.
+fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    if footer_boxed(app, area.width) {
+        render_footer_boxed(frame, area, app, theme);
+    } else {
+        render_footer_simple(frame, area, footer_lines(app, theme), theme);
+    }
+}
+
+fn render_footer_simple(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, theme: &Theme) {
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
@@ -201,6 +246,70 @@ fn render_footer(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, theme
         Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
         inner,
     );
+}
+
+/// One outer box holding three titled group boxes side by side.
+fn render_footer_boxed(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let outer = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim());
+    let inner = outer.inner(area);
+    frame.render_widget(outer, area);
+
+    let groups = footer_groups(app);
+    let cols = Layout::horizontal(vec![Constraint::Fill(1); groups.len()])
+        .spacing(1)
+        .split(inner);
+    for (i, (label, items)) in groups.iter().enumerate() {
+        render_group_box(frame, cols[i], label, items, app, theme);
+    }
+}
+
+/// A single titled group box. Items flow column-major into `group_cols(label)`
+/// internal columns; the `act` box carries the live action-target on its bottom
+/// edge so you can see what an action will hit without leaving the box.
+fn render_group_box(
+    frame: &mut Frame,
+    area: Rect,
+    label: &str,
+    items: &[(&'static str, &'static str)],
+    app: &App,
+    theme: &Theme,
+) {
+    let mut block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .title(Span::styled(format!(" {label} "), theme.dim()));
+    if label == "act"
+        && let Some((_, target)) = action_target_hint(app)
+    {
+        block = block.title_bottom(
+            Line::from(Span::styled(format!(" → {target} "), theme.highlight())).right_aligned(),
+        );
+    }
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
+    let ncols = group_cols(label) as usize;
+    let per = items.len().div_ceil(ncols);
+    let subcols = Layout::horizontal(vec![Constraint::Fill(1); ncols])
+        .spacing(1)
+        .split(inner);
+    for (c, sub) in subcols.iter().enumerate() {
+        let start = c * per;
+        let chunk = &items[start..(start + per).min(items.len())];
+        let lines: Vec<Line> = chunk
+            .iter()
+            .map(|(key, desc)| {
+                Line::from(vec![
+                    Span::styled(*key, key_style),
+                    Span::styled(format!(" {desc}"), theme.dim()),
+                ])
+            })
+            .collect();
+        frame.render_widget(Paragraph::new(Text::from(lines)), *sub);
+    }
 }
 
 /// The "Attention" panel: a titled box summarizing what needs the user, in
