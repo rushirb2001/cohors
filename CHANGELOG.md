@@ -21,6 +21,21 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.1] — 2026-06-13
+
+### Changed
+
+- The command-run view now shows **one boxed section per repo** (a `╭─ name · ✓`
+  header rule + its output) in a single scrollable column, and the output
+  **wraps** so it stays readable in a narrow/compact terminal (was a fixed
+  two-pane list + detail that clipped long lines).
+
+### Fixed
+
+- **Reversed the scroll direction.** cohors now captures the mouse and handles
+  wheel/trackpad scroll itself (the terminal was translating it to arrow keys),
+  so a scroll-up gesture moves the list/content up instead of down.
+
 ## [0.3.0] — 2026-06-13
 
 Bulk actions across the fleet — select repos and act on all of them.
