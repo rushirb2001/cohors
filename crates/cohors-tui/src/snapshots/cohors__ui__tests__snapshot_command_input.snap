@@ -12,11 +12,11 @@ expression: "render_to_string(&app, 100, 20)"
 ╭ Repositories (5) ────────────────────────────────────────────────────────────────────────────────╮
 │    Repo      ╭ Run command · 1 repos ─────────────────────────────────────────────╮              │
 │              │ $ git fetch --all▏                                                 │              │
-│▌   legacy-bil│                                                                    │t (permission │
-│    payments  ╰────────────────────────────────────────────────────────────────────╯ 5xx          │
-│    web-app           feat/checkout  ↓5       7           ●       20m  wip: cart drawer           │
-│    infra             @a1b2c3d       —        4           —        1w  build: pin ci image        │
-│    auth-service      main           —        ·           ● 1pr    3d  chore: bump deps           │
+│▌   legacy-bil│                                                                    │(permission de│
+│    payments  ╰────────────────────────────────────────────────────────────────────╯xx            │
+│    web-app           feat/checkout  ↓5 ●           7           20m  wip: cart drawer             │
+│    infra             @a1b2c3d       —              4            1w  build: pin ci image          │
+│    auth-service      main           ● 1pr          ·            3d  chore: bump deps             │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮

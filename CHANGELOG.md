@@ -21,7 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
-## [0.3.8] — 2026-06-14
+## [0.3.9] — 2026-06-14
+
+### Changed
+
+- **Sync and Remote columns fused into one `Sync` column.** It now shows the
+  upstream delta and the remote health side-by-side — e.g. `↑2 ● 2pr` (2 ahead,
+  CI passing, 2 open PRs), `↓5 ●` (5 behind), `· ●` (even), or `—` for a purely
+  local repo. Five data columns become four, leaving more room for the commit
+  subject while keeping all the signal.
 
 ### Added
 

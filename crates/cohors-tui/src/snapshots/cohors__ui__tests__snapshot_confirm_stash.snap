@@ -10,13 +10,13 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) ────╭ Confirm ───────────────────────────────────────────╮──────────────────────╮
-│    Repo              │ Stash changes in 2 repos?                          │t                     │
+│    Repo              │ Stash changes in 2 repos?                          │                      │
 │                      │                                                    │                      │
-│▌   legacy-billing    │ payments, web-app                                  │read .git (permission │
-│  ● payments          │                                                    │retry on 5xx          │
-│  ● web-app           ╰────────────────────────────────────────────────────╯cart drawer           │
-│    infra             @a1b2c3d       —        4           —        1w  build: pin ci image        │
-│    auth-service      main           —        ·           ● 1pr    3d  chore: bump deps           │
+│▌   legacy-billing    │ payments, web-app                                  │ad .git (permission de│
+│  ● payments          │                                                    │try on 5xx            │
+│  ● web-app           ╰────────────────────────────────────────────────────╯rt drawer             │
+│    infra             @a1b2c3d       —              4            1w  build: pin ci image          │
+│    auth-service      main           ● 1pr          ·            3d  chore: bump deps             │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮

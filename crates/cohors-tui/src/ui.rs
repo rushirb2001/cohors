@@ -446,16 +446,9 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
 
     // "Repo" is padded by 2 so it lines up with the names, which carry a 2-col
     // selection gutter (`● ` / `  `) inside their cell.
-    let header = Row::new([
-        "  Repo",
-        "Branch",
-        "Sync",
-        "Changes",
-        "Remote",
-        "Last commit",
-    ])
-    .style(Style::new().add_modifier(Modifier::BOLD))
-    .bottom_margin(1);
+    let header = Row::new(["  Repo", "Branch", "Sync", "Changes", "Last commit"])
+        .style(Style::new().add_modifier(Modifier::BOLD))
+        .bottom_margin(1);
 
     let view = app.view();
     let spin = spinner_frame(app.spinner);
@@ -472,9 +465,8 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     let widths = [
         Constraint::Length(18), // Repo (incl. 2-col selection gutter)
         Constraint::Length(13), // Branch
-        Constraint::Length(7),  // Sync (ahead/behind)
+        Constraint::Length(13), // Sync (ahead/behind + remote CI/PRs)
         Constraint::Length(10), // Changes (working tree + stash)
-        Constraint::Length(6),  // Remote (CI + PRs)
         Constraint::Fill(1),    // Last commit takes the remaining width
     ];
 
@@ -513,7 +505,6 @@ fn repo_row<'a>(
             Cell::from(Span::styled("error", theme.risk())),
             dot(),
             dot(),
-            dot(),
             Cell::from(Span::styled(reason.clone(), theme.dim())),
         ]);
     }
@@ -529,22 +520,21 @@ fn repo_row<'a>(
         branch_cell(snap, severity, theme),
         sync,
         changes_cell(snap, theme),
-        remote_cell(snap, theme),
         last_commit_cell(snap, now, theme),
     ])
 }
 
-/// The Remote column: a status dot colored by CI health — green passing, red
-/// failing, yellow pending, dim when there's no CI signal — plus the open-PR
-/// count. "—" when the repo isn't on a remote.
+/// The remote sub-part of the Sync column: a status dot colored by CI health —
+/// green passing, red failing, yellow pending, dim when there's no CI signal —
+/// plus the open-PR count. Empty when the repo isn't on a remote.
 ///
 /// We use `●` (a basic geometric glyph present in every monospace font, colored
 /// via ANSI like the rest of the UI) rather than a cloud emoji: emoji are
 /// double-width, can't be themed/`NO_COLOR`'d, and — as with `☁` (U+2601) — may
 /// have no text glyph in the user's font and render invisibly.
-fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+fn remote_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.remote {
-        None => Cell::from(Span::styled("—", theme.dim())),
+        None => Vec::new(),
         Some(r) => {
             let style = match r.ci {
                 CiStatus::Passing => theme.ok(),
@@ -556,7 +546,7 @@ fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
             if r.open_prs > 0 {
                 spans.push(Span::styled(format!(" {}pr", r.open_prs), theme.dim()));
             }
-            Cell::from(Line::from(spans))
+            spans
         }
     }
 }
@@ -619,12 +609,16 @@ fn branch_cell<'a>(snap: &RepoSnapshot, severity: Severity, theme: &Theme) -> Ce
     }
 }
 
-/// The Sync column: how far ahead/behind upstream, e.g. "↑2", "↓5", "↑2 ↓5".
-/// "·" means even with upstream; "—" means no upstream is configured.
+/// The Sync column: the local-vs-upstream state *and* the remote health, fused.
+/// First the upstream delta (`↑2`, `↓5`, `↑2 ↓5`, or `·` when even), then the
+/// remote dot + open-PR count (`●`, `● 2pr`). Examples: `↑2 ● 2pr`, `↓5 ●`,
+/// `· ●`. "—" when the repo has neither an upstream nor a remote (purely local).
 fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
-    match &snap.upstream {
-        None => Cell::from(Span::styled("—", theme.dim())),
-        Some(up) if up.ahead == 0 && up.behind == 0 => Cell::from(Span::styled("·", theme.dim())),
+    // The upstream sub-part: ahead/behind arrows, or "·" when even. Empty (not
+    // "—") when there's no upstream, so it can sit beside the remote dot.
+    let upstream: Vec<Span> = match &snap.upstream {
+        None => Vec::new(),
+        Some(up) if up.ahead == 0 && up.behind == 0 => vec![Span::styled("·", theme.dim())],
         Some(up) => {
             let mut spans = Vec::new();
             if up.ahead > 0 {
@@ -636,9 +630,21 @@ fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
             if up.behind > 0 {
                 spans.push(Span::styled(format!("↓{}", up.behind), theme.behind()));
             }
-            Cell::from(Line::from(spans))
+            spans
         }
+    };
+    let remote = remote_spans(snap, theme);
+
+    // Join the two sub-parts with a space; fall back to "—" when both are empty.
+    let mut spans = upstream;
+    if !spans.is_empty() && !remote.is_empty() {
+        spans.push(Span::raw(" "));
     }
+    spans.extend(remote);
+    if spans.is_empty() {
+        spans.push(Span::styled("—", theme.dim()));
+    }
+    Cell::from(Line::from(spans))
 }
 
 /// The Changes column: changed-file count (green when all staged, yellow when
