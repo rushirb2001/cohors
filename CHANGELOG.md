@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.5] — 2026-06-14
+
+### Changed
+
+- The **standup** view now uses the command-runner's two-pane layout: a repo
+  list with per-repo commit counts on the left, and the focused repo's commits
+  scrollable on the right (`↑/↓` switch repo, `PgUp/PgDn` scroll). `y` still
+  copies the full Markdown digest. Repo grouping/ordering is shared with the
+  digest via a new `cohors_core::group_commits`.
+
 ## [0.3.4] — 2026-06-14
 
 ### Added
