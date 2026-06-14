@@ -14,6 +14,7 @@ expression: "render_to_string(&app, 92, 28)"
 │                │  /               fuzzy filter (Esc clears)             │                │
 │                │  d               toggle dirty-only                     │                │
 │                │  s               cycle sort mode                       │                │
+│                │  Tab             weekly standup                        │                │
 │                │                                                        │                │
 │                │Actions                                                 │                │
 │                │  ⏎               open in editor                        │                │
@@ -25,7 +26,6 @@ expression: "render_to_string(&app, 92, 28)"
 │                │                                                        │                │
 │                │App                                                     │                │
 │                │  r               refresh (re-scan)                     │                │
-│                │  ?               toggle this help                      │                │
 │                └────────────────────────────────────────────────────────┘                │
 │                                                                                          │
 │                                                                                          │

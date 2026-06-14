@@ -46,6 +46,14 @@ impl StandupWindow {
             StandupWindow::Custom { .. } => "custom range",
         }
     }
+
+    /// Cycle through the preset windows (today ↔ this week).
+    pub fn next(self) -> Self {
+        match self {
+            StandupWindow::Today => StandupWindow::Week,
+            _ => StandupWindow::Today,
+        }
+    }
 }
 
 /// Render the commits as markdown grouped by repo (alphabetical), newest commit

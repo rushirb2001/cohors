@@ -46,6 +46,8 @@ enum BgMsg {
     Scanned(Vec<RepoSnapshot>),
     /// Snapshots with GitHub `remote` info filled in (v0.2). Merged by id.
     RemoteEnriched(Vec<RepoSnapshot>),
+    /// The rendered standup markdown for the current window.
+    StandupReady(String),
     ActionDone {
         id: RepoId,
         message: String,
@@ -97,6 +99,10 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                     Cmd::RevealFileManager => reveal_selected(&mut app),
                     Cmd::OpenEditor => open_editor(terminal, &mut app, &scanner, &tx)?,
                     Cmd::Lazygit => open_lazygit(terminal, &mut app, &scanner, &tx)?,
+                    Cmd::OpenStandup | Cmd::StandupNextWindow => {
+                        spawn_standup(&mut app, &scanner, &tx)
+                    }
+                    Cmd::CopyStandup => copy_standup(&mut app),
                     Cmd::None => {}
                 }
             }
@@ -138,6 +144,9 @@ fn drain_background(
                         local.remote = snap.remote;
                     }
                 }
+            }
+            BgMsg::StandupReady(markdown) => {
+                app.standup = Some(markdown);
             }
             BgMsg::ActionDone {
                 id,
@@ -308,6 +317,37 @@ fn spawn_enrich(mut repos: Vec<RepoSnapshot>, token: String, tx: Sender<BgMsg>) 
     std::thread::spawn(move || {
         cohors_github::enrich(&mut repos, Some(&token));
         let _ = tx.send(BgMsg::RemoteEnriched(repos));
+    });
+}
+
+/// Collect the user's commits across all repos for the current window on a
+/// worker thread, render them to markdown, and deliver the result.
+fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
+    let Some(email) = scanner.author_email() else {
+        app.standup = Some("Set `git config user.email` to generate a standup.".to_string());
+        return;
+    };
+    let window = app.standup_window;
+    let (since, until) = window.range(now_secs());
+    let paths: Vec<Utf8PathBuf> = app.repos.iter().filter_map(|r| r.path.clone()).collect();
+    let tx = tx.clone();
+    std::thread::spawn(move || {
+        let mut commits = Vec::new();
+        for path in &paths {
+            commits.extend(cohors_git::collect_commits(path, &email, since, until));
+        }
+        let markdown = cohors_core::to_markdown(&commits, window);
+        let _ = tx.send(BgMsg::StandupReady(markdown));
+    });
+}
+
+fn copy_standup(app: &mut App) {
+    let Some(markdown) = app.standup.clone() else {
+        return;
+    };
+    app.status = Some(match action::copy_to_clipboard(&markdown) {
+        Ok(()) => "copied standup to clipboard".to_string(),
+        Err(e) => format!("copy failed: {e}"),
     });
 }
 

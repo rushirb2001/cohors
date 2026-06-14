@@ -20,6 +20,8 @@ pub struct Scanner {
     config_path: String,
     /// GitHub token (v0.2): `gh auth token` / `$GITHUB_TOKEN`, discovered once.
     token: Option<String>,
+    /// The user's git email, for the standup (commits they authored).
+    author_email: Option<String>,
 }
 
 impl Scanner {
@@ -42,12 +44,18 @@ impl Scanner {
             home,
             config_path,
             token: cohors_github::discover_token(),
+            author_email: git_user_email(),
         })
     }
 
     /// The GitHub token, if one was found (enables remote PR/CI enrichment).
     pub fn github_token(&self) -> Option<String> {
         self.token.clone()
+    }
+
+    /// The user's git email, for the standup.
+    pub fn author_email(&self) -> Option<String> {
+        self.author_email.clone()
     }
 
     /// Discover and snapshot every repo (in parallel), applying aliases.
@@ -80,6 +88,19 @@ impl Scanner {
     pub fn editor_command(&self) -> Option<String> {
         self.config.editor_command()
     }
+}
+
+/// The user's configured git email (`git config user.email`), for the standup.
+fn git_user_email() -> Option<String> {
+    let output = std::process::Command::new("git")
+        .args(["config", "user.email"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let email = String::from_utf8(output.stdout).ok()?.trim().to_string();
+    if email.is_empty() { None } else { Some(email) }
 }
 
 /// Map a [`Config`] (plus any `--root` overrides) to [`DiscoveryOptions`],

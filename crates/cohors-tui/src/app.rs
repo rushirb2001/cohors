@@ -8,7 +8,9 @@
 
 use std::collections::HashSet;
 
-use cohors_core::{RepoId, RepoSnapshot, SortMode, ViewParams, ViewRow, compute_view};
+use cohors_core::{
+    RepoId, RepoSnapshot, SortMode, StandupWindow, ViewParams, ViewRow, compute_view,
+};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Which input mode the dashboard is in.
@@ -19,6 +21,8 @@ pub enum Mode {
     Filter,
     /// The help overlay is open.
     Help,
+    /// The weekly-standup view is open.
+    Standup,
 }
 
 /// A side effect for the event loop to perform after a key is handled. Actions
@@ -43,6 +47,12 @@ pub enum Cmd {
     Lazygit,
     /// Copy the selected repo's path to the clipboard.
     CopyPath,
+    /// Open the weekly-standup view (collect commits).
+    OpenStandup,
+    /// Cycle the standup window (today ↔ this week) and re-collect.
+    StandupNextWindow,
+    /// Copy the standup markdown to the clipboard.
+    CopyStandup,
 }
 
 /// All dashboard state.
@@ -66,6 +76,10 @@ pub struct App {
     pub roots: Vec<String>,
     /// Config file path, for the help overlay.
     pub config_path: String,
+    /// The rendered standup markdown (`None` while collecting, or not opened).
+    pub standup: Option<String>,
+    /// The standup time window.
+    pub standup_window: StandupWindow,
 }
 
 impl App {
@@ -83,6 +97,8 @@ impl App {
             busy: HashSet::new(),
             roots,
             config_path,
+            standup: None,
+            standup_window: StandupWindow::Week,
         }
     }
 
@@ -136,6 +152,7 @@ impl App {
                 self.on_key_help(key);
                 Cmd::None
             }
+            Mode::Standup => self.on_key_standup(key),
         }
     }
 
@@ -166,6 +183,11 @@ impl App {
             KeyCode::Char('o') => return Cmd::RevealFileManager,
             KeyCode::Char('L') => return Cmd::Lazygit,
             KeyCode::Char('y') => return Cmd::CopyPath,
+            KeyCode::Tab => {
+                self.mode = Mode::Standup;
+                self.standup = None;
+                return Cmd::OpenStandup;
+            }
             _ => {}
         }
         Cmd::None
@@ -204,6 +226,22 @@ impl App {
             KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q')
         ) {
             self.mode = Mode::Normal;
+        }
+    }
+
+    fn on_key_standup(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Tab | KeyCode::Esc | KeyCode::Char('q') => {
+                self.mode = Mode::Normal;
+                Cmd::None
+            }
+            KeyCode::Char('w') => {
+                self.standup_window = self.standup_window.next();
+                self.standup = None;
+                Cmd::StandupNextWindow
+            }
+            KeyCode::Char('y') => Cmd::CopyStandup,
+            _ => Cmd::None,
         }
     }
 

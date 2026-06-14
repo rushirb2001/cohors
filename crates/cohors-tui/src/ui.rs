@@ -121,6 +121,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     if app.mode == Mode::Help {
         render_help(frame, area, app);
     }
+    if app.mode == Mode::Standup {
+        render_standup(frame, area, app);
+    }
 }
 
 /// The fleet triage summary: "N need attention" plus a chip per category.
@@ -211,8 +214,9 @@ fn footer_hints(app: &App) -> String {
     match app.mode {
         Mode::Filter => " type to filter · ↑/↓ move · ⏎ apply · Esc clear ".to_string(),
         Mode::Help => " ? / Esc close ".to_string(),
+        Mode::Standup => " w window · y copy · Tab/Esc close ".to_string(),
         Mode::Normal => {
-            " ↑/↓ move · / filter · d dirty · s sort · ⏎ open · F fetch · p pull · L lazygit · ? help · q quit ".to_string()
+            " ↑/↓ move · / filter · d dirty · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit ".to_string()
         }
     }
 }
@@ -483,6 +487,7 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
         Line::from("  /               fuzzy filter (Esc clears)"),
         Line::from("  d               toggle dirty-only"),
         Line::from("  s               cycle sort mode"),
+        Line::from("  Tab             weekly standup"),
         Line::from(""),
         Line::from("Actions").bold(),
         Line::from("  ⏎               open in editor"),
@@ -504,6 +509,51 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
         .block(Block::bordered().title(" Help "))
         .wrap(Wrap { trim: false });
     frame.render_widget(para, area);
+}
+
+/// The standup overlay: the rendered markdown digest for the current window,
+/// or a "collecting" placeholder while the worker thread walks the commits.
+fn render_standup(frame: &mut Frame, full: Rect, app: &App) {
+    let area = centered_rect(70, 80, full);
+    frame.render_widget(Clear, area);
+    let text = match &app.standup {
+        Some(md) => Text::from(standup_lines(md)),
+        None => Text::from(Line::from(Span::styled(
+            format!("Collecting commits for {}…", app.standup_window.label()),
+            Style::new().add_modifier(Modifier::DIM),
+        ))),
+    };
+    let para = Paragraph::new(text)
+        .block(Block::bordered().title(" Standup "))
+        .wrap(Wrap { trim: false });
+    frame.render_widget(para, area);
+}
+
+/// Lightly style the standup markdown for the terminal: headings bold, the
+/// summary line dim, commit bullets as-is.
+fn standup_lines(md: &str) -> Vec<Line<'static>> {
+    md.lines()
+        .map(|line| {
+            if let Some(rest) = line.strip_prefix("### ") {
+                Line::from(Span::styled(
+                    rest.to_string(),
+                    Style::new().add_modifier(Modifier::BOLD),
+                ))
+            } else if let Some(rest) = line.strip_prefix("## ") {
+                Line::from(Span::styled(
+                    rest.to_string(),
+                    Style::new().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+                ))
+            } else if line.len() > 1 && line.starts_with('_') && line.ends_with('_') {
+                Line::from(Span::styled(
+                    line.trim_matches('_').to_string(),
+                    Style::new().add_modifier(Modifier::DIM),
+                ))
+            } else {
+                Line::from(line.to_string())
+            }
+        })
+        .collect()
 }
 
 /// A rect centered within `area`, sized as a percentage of it.
@@ -682,6 +732,44 @@ mod tests {
         let mut app = demo_app();
         app.mode = Mode::Help;
         insta::assert_snapshot!(render_to_string(&app, 92, 28));
+    }
+
+    #[test]
+    fn snapshot_standup() {
+        use cohors_core::{StandupCommit, StandupWindow, to_markdown};
+        let mut app = demo_app();
+        app.mode = Mode::Standup;
+        app.standup_window = StandupWindow::Week;
+        let commits = vec![
+            StandupCommit {
+                repo: "payments".into(),
+                short_id: "a1b2c3d".into(),
+                summary: "fix: retry on 5xx".into(),
+                timestamp: NOW - 7200,
+            },
+            StandupCommit {
+                repo: "web-app".into(),
+                short_id: "e4f5a6b".into(),
+                summary: "wip: cart drawer".into(),
+                timestamp: NOW - 1200,
+            },
+            StandupCommit {
+                repo: "payments".into(),
+                short_id: "c7d8e9f".into(),
+                summary: "test: add retry coverage".into(),
+                timestamp: NOW - 90_000,
+            },
+        ];
+        app.standup = Some(to_markdown(&commits, StandupWindow::Week));
+        insta::assert_snapshot!(render_to_string(&app, 92, 20));
+    }
+
+    #[test]
+    fn snapshot_standup_collecting() {
+        let mut app = demo_app();
+        app.mode = Mode::Standup;
+        app.standup = None;
+        insta::assert_snapshot!(render_to_string(&app, 92, 16));
     }
 
     #[test]

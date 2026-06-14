@@ -1,0 +1,24 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 92, 20)"
+---
+┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
+│⚠ 4 need attention  ·  ↑1 unpushed  ·  ↓1 behind  ·  ✎3 dirty  ·  ⚑1 stash  ·  ⚠1 error   │
+│  Repo       ┌ Standup ─────────────────────────────────────────────────────┐ commit      │
+│▌ legacy-bill│Standup — this week                                           │             │
+│  payments   │                                                              │↑2 unpushed  │
+│  web-app    │3 commits across 2 repos                                      │ ↓5 behind — │
+│  infra      │                                                              │4 uncommitted│
+│  auth-servic│payments                                                      │chore: bump d│
+│             │- `a1b2c3d` fix: retry on 5xx                                 │             │
+│             │- `c7d8e9f` test: add retry coverage                          │             │
+│             │                                                              │             │
+│             │web-app                                                       │             │
+│             │- `e4f5a6b` wip: cart drawer                                  │             │
+│             │                                                              │             │
+│             │                                                              │             │
+│             │                                                              │             │
+│             │                                                              │             │
+│             └──────────────────────────────────────────────────────────────┘             │
+│                                                                                          │
+└ w window · y copy · Tab/Esc close ───────────────────────────────────────────────────────┘
