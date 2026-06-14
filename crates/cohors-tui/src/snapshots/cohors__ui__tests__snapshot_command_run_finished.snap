@@ -7,16 +7,16 @@ expression: "render_to_string(&app, 100, 22)"
 ╰─────╭ Run · cargo test ────────────────────────────────────────────────────────────────────╮─────╯
 ╭ Atte│ ✓ payments                  exit 1                                                   │─────╮
 │ 4 of│ ✗ web-app 1                                                                          │     │
-│ 1 un│                             running 3 tests                                          │     │
-╰─────│                             ── stderr ──                                             │─────╯
-╭ Repo│                             test cart::total failed                                  │─────╮
-│    R│                             error: 1 test failed                                     │     │
-│     │                                                                                      │     │
+╰─────│                             running 3 tests                                          │─────╯
+╭ Repo│                             ── stderr ──                                             │─────╮
+│    R│                             test cart::total failed                                  │     │
+│     │                             error: 1 test failed                                     │     │
 │▌   l│                                                                                      │d)   │
 │    p│                                                                                      │     │
 │    w│                                                                                      │     │
 │    i│                                                                                      │     │
 │    a│                                                                                      │     │
+│     │                                                                                      │     │
 │     │                                                                                      │     │
 │     │                                                                                      │     │
 │     │                                                                                      │     │

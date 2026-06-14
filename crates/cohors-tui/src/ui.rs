@@ -106,7 +106,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     } else {
         // A strip on top — the fuzzy input while filtering, otherwise the
         // Attention panel — then the Repositories panel fills the rest.
-        let strip_height = if app.mode == Mode::Filter { 1 } else { 4 };
+        let strip_height = if app.mode == Mode::Filter { 1 } else { 3 };
         let [strip, list] =
             Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
                 .areas(body_area);
@@ -373,20 +373,21 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    let mut lines: Vec<Line> = Vec::new();
-    if s.needs_attention == 0 {
-        lines.push(Line::from(Span::styled(
+    let line = if s.needs_attention == 0 {
+        Line::from(Span::styled(
             format!("All {} repositories are up to date.", s.total),
             theme.ok(),
-        )));
+        ))
     } else {
-        lines.push(Line::from(Span::styled(
-            format!(
-                "{} of {} repositories need attention:",
-                s.needs_attention, s.total
+        // The summary and its category pills share one line: a bold lead-in,
+        // then the word-labeled chips right after the colon.
+        let mut spans = vec![
+            Span::styled(
+                format!("{} of {} need attention:", s.needs_attention, s.total),
+                Style::new().add_modifier(Modifier::BOLD),
             ),
-            Style::new().add_modifier(Modifier::BOLD),
-        )));
+            Span::raw("  "),
+        ];
 
         // Readable, word-labeled chips; skip any category with a zero count.
         let mut items: Vec<(String, Style)> = Vec::new();
@@ -413,17 +414,16 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
             items.push((format!("{} unreadable", s.errors), theme.risk()));
         }
 
-        let mut chips: Vec<Span> = Vec::new();
         for (i, (text, style)) in items.into_iter().enumerate() {
             if i > 0 {
-                chips.push(Span::styled(" · ", theme.dim()));
+                spans.push(Span::styled(" · ", theme.dim()));
             }
-            chips.push(Span::styled(text, style));
+            spans.push(Span::styled(text, style));
         }
-        lines.push(Line::from(chips));
-    }
+        Line::from(spans)
+    };
 
-    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
+    frame.render_widget(Paragraph::new(line), inner);
 }
 
 /// The right-aligned header line: repo count, selection, sort, and the transient

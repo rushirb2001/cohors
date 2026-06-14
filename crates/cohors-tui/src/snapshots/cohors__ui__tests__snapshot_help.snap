@@ -6,17 +6,17 @@ expression: "render_to_string(&app, 100, 40)"
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────╭ Help ──────────────────────────────────────────────────────────────╮──────────────╯
 ╭ Attention ───│                                                                    │──────────────╮
-│ 4 of 5 reposi│  Legend — what each column shows                                   │              │
-│ 1 unpushed · │    ↑2              commits ahead of upstream                       │              │
-╰──────────────│    ↓5              commits behind upstream                         │──────────────╯
-╭ Repositories │    ·               even with upstream                              │──────────────╮
-│    Repo      │    —               no upstream (local only)                        │              │
-│              │    ● ● ●           CI: pass / fail / pending                       │              │
-│▌   legacy-bil│    2pr             open pull requests                              │ion denied)   │
-│    payments  │    3               changed files, all staged                       │              │
-│    web-app   │    3               changed files, some unstaged                    │              │
-│    infra     │    s1              stash entries                                   │              │
-│    auth-servi│    name            row: clean                                      │              │
+│ 4 of 5 need a│  Legend — what each column shows                                   │              │
+╰──────────────│    ↑2              commits ahead of upstream                       │──────────────╯
+╭ Repositories │    ↓5              commits behind upstream                         │──────────────╮
+│    Repo      │    ·               even with upstream                              │              │
+│              │    —               no upstream (local only)                        │              │
+│▌   legacy-bil│    ● ● ●           CI: pass / fail / pending                       │ion denied)   │
+│    payments  │    2pr             open pull requests                              │              │
+│    web-app   │    3               changed files, all staged                       │              │
+│    infra     │    3               changed files, some unstaged                    │              │
+│    auth-servi│    s1              stash entries                                   │              │
+│              │    name            row: clean                                      │              │
 │              │    name            row: needs attention                            │              │
 │              │    ●               row: marked for a bulk action                   │              │
 │              │                                                                    │              │

@@ -6,14 +6,14 @@ expression: "render_to_string(&app, 100, 20)"
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
-│ 4 of 5 repositories need attention:                                                              │
-│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
+│ 4 of 5 need attention:  1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) ────────────────────────────────────────────────────────────────────────────────╮
 │    Repo              Branch         Sync      Changes  Last commit                               │
 │                                                                                                  │
 │▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
 │    payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
+│    web-app           feat/checkout  ↓5 ●      7        20m  wip: cart drawer                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮

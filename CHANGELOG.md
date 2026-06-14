@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.18] — 2026-06-14
+
+### Changed
+
+- The **Attention** panel now reads on a single line — the category pills
+  (`1 unpushed · 11 dirty · 2 stashed`) sit right after the summary's colon
+  instead of wrapping to their own row, so the box is one row shorter.
+
 ## [0.3.17] — 2026-06-14
 
 ### Added
