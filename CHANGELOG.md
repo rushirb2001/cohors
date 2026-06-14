@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.22] — 2026-06-14
+
+### Added
+
+- When the "Open with…" picker finds **no editor CLI on your `PATH`**, it now
+  shows a short note ("No editor CLI found on your PATH. Install its shell
+  command to list it here.") above the still-available Reveal / lazygit options,
+  instead of silently listing only those.
+
 ## [0.3.21] — 2026-06-14
 
 Opening a repo, done properly.

@@ -1423,9 +1423,17 @@ fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         format!(" Open {repo} with… ")
     };
 
-    // Size to the content: a fixed-ish width, height = items + borders.
-    let w = 48.min(full.width.saturating_sub(2)).max(20);
-    let h = (ow.openers.len() as u16 + 2)
+    // When PATH has no editor CLI, the list is just Reveal/lazygit — explain why
+    // and how to fix it, in a two-line note above the list.
+    let no_editor = !ow
+        .openers
+        .iter()
+        .any(|o| matches!(o, Opener::Editor { .. }));
+    let note_h: u16 = if no_editor { 2 } else { 0 };
+
+    // Size to the content: a fixed-ish width, height = items + note + borders.
+    let w = 52.min(full.width.saturating_sub(2)).max(20);
+    let h = (ow.openers.len() as u16 + note_h + 2)
         .min(full.height.saturating_sub(2))
         .max(3);
     let x = full.x + full.width.saturating_sub(w) / 2;
@@ -1444,6 +1452,26 @@ fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+
+    // Split off the note row(s) when there are no detected editors.
+    let list_area = if no_editor {
+        let [note, list] =
+            Layout::vertical([Constraint::Length(note_h), Constraint::Min(0)]).areas(inner);
+        let lines = vec![
+            Line::from(Span::styled(
+                "No editor CLI found on your PATH.",
+                theme.warn(),
+            )),
+            Line::from(Span::styled(
+                "Install its shell command to list it here.",
+                theme.dim(),
+            )),
+        ];
+        frame.render_widget(Paragraph::new(Text::from(lines)), note);
+        list
+    } else {
+        inner
+    };
 
     let items: Vec<ListItem> = ow
         .openers
@@ -1465,7 +1493,7 @@ fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .highlight_symbol("▌ ");
     let mut state = ListState::default();
     state.select(Some(ow.cursor));
-    frame.render_stateful_widget(list, inner, &mut state);
+    frame.render_stateful_widget(list, list_area, &mut state);
 }
 
 /// A rect centered within `area`, sized as a percentage of it.
@@ -1675,6 +1703,18 @@ mod tests {
             Opener::Lazygit,
         ];
         app.open_with = Some(OpenWith::new(openers, Some("code".to_string())));
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    /// When PATH has no editor CLI, the picker shows a note explaining why and
+    /// still offers Reveal / lazygit.
+    #[test]
+    fn snapshot_open_with_no_editor() {
+        use crate::app::{OpenWith, Opener};
+        let mut app = demo_app();
+        app.mode = Mode::OpenWith;
+        let openers = vec![Opener::Reveal, Opener::Lazygit];
+        app.open_with = Some(OpenWith::new(openers, None));
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 

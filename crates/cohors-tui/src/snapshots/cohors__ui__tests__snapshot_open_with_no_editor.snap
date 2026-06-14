@@ -10,9 +10,9 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo              B╭ Open legacy-billing with… ───────────────────────╮                       │
-│                       │ ▌ VS Code  · default                             │                       │
-│▌   legacy-billing    e│   Neovim                                         │ (permission denied)   │
-│    payments          m│   Reveal in file manager                         │5xx                    │
+│                       │ No editor CLI found on your PATH.                │                       │
+│▌   legacy-billing    e│ Install its shell command to list it here.       │ (permission denied)   │
+│    payments          m│ ▌ Reveal in file manager                         │5xx                    │
 │    web-app           f│   Open in lazygit                                │er                     │
 │    infra             @╰──────────────────────────────────────────────────╯image                  │
 │    auth-service      main           ● 1pr     ·         3d  chore: bump deps                     │
