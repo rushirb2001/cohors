@@ -245,6 +245,8 @@ pub struct App {
     pub run: Option<CommandRun>,
     /// The destructive action awaiting confirmation (`Some` ⇒ `Mode::Confirm`).
     pub confirm: Option<Pending>,
+    /// Collapse the footer hint boxes to a single divider line (toggled with `h`).
+    pub hints_hidden: bool,
 }
 
 impl App {
@@ -268,6 +270,7 @@ impl App {
             command_input: String::new(),
             run: None,
             confirm: None,
+            hints_hidden: false,
         }
     }
 
@@ -402,6 +405,7 @@ impl App {
                 self.clamp_selection();
             }
             KeyCode::Char('?') => self.mode = Mode::Help,
+            KeyCode::Char('h') => self.hints_hidden = !self.hints_hidden,
             KeyCode::Char('r') => return Cmd::Refresh,
             // Actions (operate on the selection / all repos).
             KeyCode::Char('f') => return Cmd::FetchSelected,

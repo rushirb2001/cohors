@@ -7,7 +7,7 @@ expression: "render_to_string(&app, 100, 12)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
                                 No git repos found under: ~/projects                                
                                                                                                     
-                     Run `cohors init` to create a config, or pass --root <dir>.                    
+────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
 │Space mark repo                │ │⏎ open          ! run command │ │↑/↓ move        Tab standup    │
 │a mark all                     │ │f fetch         S stash       │ │s sort          ? help         │

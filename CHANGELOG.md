@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.17] — 2026-06-14
+
+### Added
+
+- **A hide/show toggle for the hint bar.** A divider line above the footer reads
+  `── press h to hide hints ──`; pressing **`h`** collapses the three group boxes
+  to just that line (now `── press h to unhide hints ──`), handing all the
+  reclaimed rows to the repository list. Press `h` again to bring them back.
+
 ## [0.3.16] — 2026-06-14
 
 ### Changed

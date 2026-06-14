@@ -220,6 +220,10 @@ fn footer_col_count(label: &str, box_inner_w: u16, items: &[(&str, &str)]) -> u1
 /// overlay modes it's a single box of wrapped hint rows.
 fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
     if app.mode == Mode::Normal {
+        // The hint bar is collapsed to just its toggle divider.
+        if app.hints_hidden {
+            return 1;
+        }
         let groups = footer_groups(app);
         let bw = footer_box_inner_w(width, groups.len() as u16);
         let rows = groups
@@ -230,7 +234,7 @@ fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
             })
             .max()
             .unwrap_or(1);
-        rows + 2 // just the group-box border; there's no outer box
+        rows + 2 + 1 // group-box border + the toggle divider row
     } else {
         let lines = footer_lines(app, theme);
         let inner = width.saturating_sub(4).max(1);
@@ -248,10 +252,39 @@ fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
 /// to the width; in the overlay modes it's a single box of hint rows.
 fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     if app.mode == Mode::Normal {
-        render_footer_boxed(frame, area, app, theme);
+        // A divider that doubles as the show/hide affordance, then the boxes
+        // (unless the user has collapsed them with `h`).
+        let [divider, boxes] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+        render_hint_divider(frame, divider, app.hints_hidden, theme);
+        if !app.hints_hidden {
+            render_footer_boxed(frame, boxes, app, theme);
+        }
     } else {
         render_footer_simple(frame, area, footer_lines(app, theme), theme);
     }
+}
+
+/// A full-width divider with centered text advertising the `h` toggle:
+/// "── press h to hide hints ──" (or "unhide" when the boxes are collapsed).
+fn render_hint_divider(frame: &mut Frame, area: Rect, hidden: bool, theme: &Theme) {
+    let verb = if hidden { "unhide" } else { "hide" };
+    let mid = vec![
+        Span::styled("press ", theme.dim()),
+        Span::styled("h", theme.ahead().add_modifier(Modifier::BOLD)),
+        Span::styled(format!(" to {verb} hints"), theme.dim()),
+    ];
+    let text_w: usize = mid.iter().map(|s| s.content.chars().count()).sum();
+    let total = area.width as usize;
+    let dashes = total.saturating_sub(text_w + 2); // a space on each side of the text
+    let left = dashes / 2;
+    let right = dashes - left;
+
+    let mut spans = vec![Span::styled("─".repeat(left), theme.dim()), Span::raw(" ")];
+    spans.extend(mid);
+    spans.push(Span::raw(" "));
+    spans.push(Span::styled("─".repeat(right), theme.dim()));
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn render_footer_simple(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, theme: &Theme) {
@@ -987,6 +1020,7 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         Line::from(""),
         head("App"),
         row(key("r"), "refresh (re-scan)"),
+        row(key("h"), "show / hide the hint bar"),
         row(key("?"), "toggle this help"),
         row(key("q / Ctrl-C"), "quit"),
         Line::from(""),
@@ -1520,6 +1554,15 @@ mod tests {
     #[test]
     fn snapshot_list() {
         let app = demo_app();
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    /// With `h` pressed, the hint boxes collapse to just the toggle divider,
+    /// which now reads "unhide".
+    #[test]
+    fn snapshot_hints_hidden() {
+        let mut app = demo_app();
+        app.hints_hidden = true;
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 

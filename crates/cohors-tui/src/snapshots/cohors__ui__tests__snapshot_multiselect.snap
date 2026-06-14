@@ -14,8 +14,8 @@ expression: "render_to_string(&app, 100, 20)"
 │                                                                                                  │
 │▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
 │  ● payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
-│  ● web-app           feat/checkout  ↓5 ●      7        20m  wip: cart drawer                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
 │Space mark repo                │ │⏎ open          ! run command │ │↑/↓ move        Tab standup    │
 │a mark all                     │ │f fetch         S stash       │ │s sort          ? help         │
