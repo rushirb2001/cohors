@@ -5,12 +5,12 @@ expression: "render_to_string(&app, 100, 12)"
 ╭ cohors vX.Y.Z ────────────────────────────────────────0 repos · sort: dirty-first · ⠋ scanning… ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                    
                                        ⠋ Scanning ~/projects…                                       
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│╭ select ──────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ────────────────────────╮│
-││Space mark repo               │ │⏎ open          ! run command │ │↑/↓ move        Tab standup   ││
-││a mark all                    │ │f fetch         S stash       │ │s sort          ? help        ││
-││/ filter                      │ │p pull                        │ │d dirty-only    q quit        ││
-││Esc clear                     │ │                              │ │                              ││
-│╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────╯│
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                    
+╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
+│Space mark repo                │ │⏎ open          ! run command │ │↑/↓ move        Tab standup    │
+│a mark all                     │ │f fetch         S stash       │ │s sort          ? help         │
+│/ filter                       │ │p pull                        │ │d dirty-only    q quit         │
+│Esc clear                      │ │                              │ │                               │
+╰───────────────────────────────╯ ╰──────────────────────────────╯ ╰───────────────────────────────╯

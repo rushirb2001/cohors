@@ -6,11 +6,11 @@ expression: "render_to_string(&app, 100, 12)"
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
                                 No git repos found under: ~/projects                                
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│╭ select ──────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ────────────────────────╮│
-││Space mark repo               │ │⏎ open          ! run command │ │↑/↓ move        Tab standup   ││
-││a mark all                    │ │f fetch         S stash       │ │s sort          ? help        ││
-││/ filter                      │ │p pull                        │ │d dirty-only    q quit        ││
-││Esc clear                     │ │                              │ │                              ││
-│╰──────────────────────────────╯ ╰──────────────────────────────╯ ╰──────────────────────────────╯│
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                    
+                     Run `cohors init` to create a config, or pass --root <dir>.                    
+╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
+│Space mark repo                │ │⏎ open          ! run command │ │↑/↓ move        Tab standup    │
+│a mark all                     │ │f fetch         S stash       │ │s sort          ? help         │
+│/ filter                       │ │p pull                        │ │d dirty-only    q quit         │
+│Esc clear                      │ │                              │ │                               │
+╰───────────────────────────────╯ ╰──────────────────────────────╯ ╰───────────────────────────────╯

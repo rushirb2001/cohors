@@ -182,36 +182,55 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     );
 }
 
-/// Below this width the three side-by-side group boxes get too narrow to hold
-/// their keys, so the footer falls back to the simple stacked-rows layout.
-const FOOTER_BOXED_MIN_WIDTH: u16 = 80;
-
-/// Whether the footer uses the three-box (`select`/`act`/`view`) layout: only in
-/// Normal mode and only when the terminal is wide enough to hold the boxes.
-fn footer_boxed(app: &App, width: u16) -> bool {
-    app.mode == Mode::Normal && width >= FOOTER_BOXED_MIN_WIDTH
+/// Estimate the usable inner width of one footer group box, so the column count
+/// and the footer height agree before the real layout runs. The footer spans the
+/// full width with no outer box; it's split into `n` boxes with `(n-1)` 1-col
+/// gaps, and each box loses 2 cols to its own border. Rounding down keeps this
+/// conservative (never wider than the real box) so we never under-size the box.
+fn footer_box_inner_w(footer_width: u16, n: u16) -> u16 {
+    let gaps = n.saturating_sub(1);
+    let each = footer_width.saturating_sub(gaps) / n.max(1);
+    each.saturating_sub(2)
 }
 
-/// How many internal columns a group box uses. `select` is a single column;
-/// the busier `act`/`view` groups split into two so neither runs tall.
-fn group_cols(label: &str) -> u16 {
-    if label == "act" || label == "view" {
+/// How many internal columns a group box uses for its given width: the busier
+/// `act`/`view` groups prefer two, but drop to one when the box is too narrow to
+/// hold the widest hint twice — so the keys stay readable on a compact terminal
+/// instead of being clipped.
+fn footer_col_count(label: &str, box_inner_w: u16, items: &[(&str, &str)]) -> u16 {
+    let want = if label == "act" || label == "view" {
         2
     } else {
         1
+    };
+    if want < 2 {
+        return 1;
     }
+    let longest = items
+        .iter()
+        .map(|(k, d)| (k.chars().count() + 1 + d.chars().count()) as u16)
+        .max()
+        .unwrap_or(1);
+    let subcol = box_inner_w.saturating_sub(1) / 2; // one gap between two columns
+    if subcol >= longest { 2 } else { 1 }
 }
 
-/// The footer's total height (including borders). The boxed layout is sized to
-/// the tallest group; the simple layout to its wrapped line count.
+/// The footer's total height (including borders). In Normal mode it's the three
+/// group boxes, sized to the tallest after responsive column collapse; in the
+/// overlay modes it's a single box of wrapped hint rows.
 fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
-    if footer_boxed(app, width) {
-        let rows = footer_groups(app)
+    if app.mode == Mode::Normal {
+        let groups = footer_groups(app);
+        let bw = footer_box_inner_w(width, groups.len() as u16);
+        let rows = groups
             .iter()
-            .map(|(label, items)| (items.len() as u16).div_ceil(group_cols(label)))
+            .map(|(label, items)| {
+                let cols = footer_col_count(label, bw, items);
+                (items.len() as u16).div_ceil(cols)
+            })
             .max()
             .unwrap_or(1);
-        rows + 4 // 2 outer border + 2 inner border
+        rows + 2 // just the group-box border; there's no outer box
     } else {
         let lines = footer_lines(app, theme);
         let inner = width.saturating_sub(4).max(1);
@@ -224,11 +243,11 @@ fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
     }
 }
 
-/// The footer: context-sensitive key hints. In Normal mode on a wide terminal
-/// it's one outer box wrapping three titled group boxes (`select`/`act`/`view`);
-/// otherwise it's a single box of stacked, wrapping hint rows.
+/// The footer: context-sensitive key hints. In Normal mode it's three titled
+/// group boxes (`select`/`act`/`view`) side by side — no outer box — that adapt
+/// to the width; in the overlay modes it's a single box of hint rows.
 fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    if footer_boxed(app, area.width) {
+    if app.mode == Mode::Normal {
         render_footer_boxed(frame, area, app, theme);
     } else {
         render_footer_simple(frame, area, footer_lines(app, theme), theme);
@@ -248,31 +267,29 @@ fn render_footer_simple(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>
     );
 }
 
-/// One outer box holding three titled group boxes side by side.
+/// Three titled group boxes side by side, directly in the footer area (no outer
+/// box, to save space). Each box's column count is decided from the same width
+/// estimate the height calc used, so layout and height always agree.
 fn render_footer_boxed(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    let outer = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim());
-    let inner = outer.inner(area);
-    frame.render_widget(outer, area);
-
     let groups = footer_groups(app);
+    let bw = footer_box_inner_w(area.width, groups.len() as u16);
     let cols = Layout::horizontal(vec![Constraint::Fill(1); groups.len()])
         .spacing(1)
-        .split(inner);
+        .split(area);
     for (i, (label, items)) in groups.iter().enumerate() {
-        render_group_box(frame, cols[i], label, items, app, theme);
+        render_group_box(frame, cols[i], label, items, bw, app, theme);
     }
 }
 
-/// A single titled group box. Items flow column-major into `group_cols(label)`
-/// internal columns; the `act` box carries the live action-target on its bottom
-/// edge so you can see what an action will hit without leaving the box.
+/// A single titled group box. Items flow column-major into the responsive number
+/// of internal columns; the `act` box carries the live action-target on its
+/// bottom edge so you can see what an action will hit without leaving the box.
 fn render_group_box(
     frame: &mut Frame,
     area: Rect,
     label: &str,
     items: &[(&'static str, &'static str)],
+    box_inner_w: u16,
     app: &App,
     theme: &Theme,
 ) {
@@ -291,8 +308,8 @@ fn render_group_box(
     frame.render_widget(block, area);
 
     let key_style = theme.ahead().add_modifier(Modifier::BOLD);
-    let ncols = group_cols(label) as usize;
-    let per = items.len().div_ceil(ncols);
+    let ncols = footer_col_count(label, box_inner_w, items) as usize;
+    let per = items.len().div_ceil(ncols.max(1));
     let subcols = Layout::horizontal(vec![Constraint::Fill(1); ncols])
         .spacing(1)
         .split(inner);
@@ -1504,6 +1521,14 @@ mod tests {
     fn snapshot_list() {
         let app = demo_app();
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    /// On a compact terminal the footer's group boxes collapse to single columns
+    /// (so the keys never clip) instead of falling back to a different layout.
+    #[test]
+    fn snapshot_footer_compact() {
+        let app = demo_app();
+        insta::assert_snapshot!(render_to_string(&app, 56, 22));
     }
 
     /// The `cohors demo` fleet renders end-to-end (validates the demo data path).

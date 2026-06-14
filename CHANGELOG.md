@@ -21,6 +21,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.16] — 2026-06-14
+
+### Changed
+
+- **Dropped the footer's outer box** — the three `select`/`act`/`view` boxes now
+  sit directly in the footer area, reclaiming two rows and a little width.
+- **The boxed footer is now the only Normal-mode layout** (the stacked-rows
+  fallback is gone) and it adapts to the width itself: `act`/`view` use two
+  internal columns when there's room and collapse to one on a compact terminal,
+  so the keys are never clipped however narrow the window gets.
+
 ## [0.3.15] — 2026-06-14
 
 ### Changed

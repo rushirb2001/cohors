@@ -1,0 +1,26 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 56, 22)"
+---
+╭ cohors vX.Y.Z ──────────5 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetc │
+╰──────────────────────────────────────────────────────╯
+╭ Attention ───────────────────────────────────────────╮
+│ 4 of 5 repositories need attention:                  │
+│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unre │
+╰──────────────────────────────────────────────────────╯
+╭ Repositories (5) ────────────────────────────────────╮
+│    Repo            Branch         Sync      Changes  │
+│                                                      │
+│▌   legacy-billing  error          ·         ·        │
+│    payments        main           ↑2 ● 2pr  4 s1     │
+│    web-app         feat/checkout  ↓5 ●      7        │
+╰──────────────────────────────────────────────────────╯
+╭ select ────────╮ ╭ act ───────────╮ ╭ view ──────────╮
+│Space mark repo │ │⏎ open          │ │↑/↓ move        │
+│a mark all      │ │f fetch         │ │s sort          │
+│/ filter        │ │p pull          │ │d dirty-only    │
+│Esc clear       │ │! run command   │ │Tab standup     │
+│                │ │S stash         │ │? help          │
+│                │ │                │ │q quit          │
+╰────────────────╯ ╰ legacy-billing ╯ ╰────────────────╯
