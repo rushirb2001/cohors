@@ -2,15 +2,15 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 12)"
 ---
- cohors                                                                 0 repos · sort: dirty-first 
-                                                                                                    
+╭ cohors v0.2.0 ───────────────────────────────────────────────────────0 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                     
                                                                                                     
                                                                                                     
                                 No git repos found under: ~/projects                                
                                                                                                     
                      Run `cohors init` to create a config, or pass --root <dir>.                    
-                                                                                                    
                                                                                                     
                                                                                                     
  ↑/↓ move · / filter · d dirty · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit

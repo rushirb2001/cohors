@@ -2,25 +2,25 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
- cohors                                                                 5 repos · sort: dirty-first 
-┌ Attention ───────────────────────────────────────────────────────────────────────────────────────┐
-│ 4 of 5 reposi┌ Standup ───────────────────────────────────────────────────────────┐              │
-│ 1 unpushed · │ Standup — this week                                                │              │
-└──────────────│                                                                    │──────────────┘
-┌ Repositories │ 3 commits across 2 repos                                           │──────────────┐
-│  Repo        │                                                                    │              │
-│              │ payments                                                           │              │
-│▌ legacy-billi│ - `a1b2c3d` fix: retry on 5xx                                      │ .git (permiss│
-│  payments    │ - `c7d8e9f` test: add retry coverage                               │y on 5xx      │
-│  web-app     │                                                                    │ drawer       │
-│  infra       │ web-app                                                            │n ci image    │
-│  auth-service│ - `e4f5a6b` wip: cart drawer                                       │mp deps       │
+╭ cohors v0.2.0 ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰──────────────╭ Standup ───────────────────────────────────────────────────────────╮──────────────╯
+╭ Attention ───│ Standup — this week                                                │──────────────╮
+│ 4 of 5 reposi│                                                                    │              │
+│ 1 unpushed · │ 3 commits across 2 repos                                           │              │
+╰──────────────│                                                                    │──────────────╯
+╭ Repositories │ payments                                                           │──────────────╮
+│  Repo        │ - `a1b2c3d` fix: retry on 5xx                                      │              │
+│              │ - `c7d8e9f` test: add retry coverage                               │              │
+│▌ legacy-billi│                                                                    │ .git (permiss│
+│  payments    │ web-app                                                            │y on 5xx      │
+│  web-app     │ - `e4f5a6b` wip: cart drawer                                       │ drawer       │
+│  infra       │                                                                    │n ci image    │
+│  auth-service│                                                                    │mp deps       │
 │              │                                                                    │              │
 │              │                                                                    │              │
 │              │                                                                    │              │
 │              │                                                                    │              │
-│              │                                                                    │              │
-│              │                                                                    │              │
-│              └────────────────────────────────────────────────────────────────────┘              │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+│              ╰────────────────────────────────────────────────────────────────────╯              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  w window · y copy · Tab/Esc close

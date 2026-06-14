@@ -2,21 +2,21 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 30)"
 ---
- cohors                                                                 5 repos · sort: dirty-first 
-┌ Attention ───────────────────────────────────────────────────────────────────────────────────────┐
-│ 4 of 5 repositories need attention:                                                              │
-│ 1 unpushed · 1 be┌ Help ──────────────────────────────────────────────────────┐                  │
-└──────────────────│ Navigation                                                 │──────────────────┘
-┌ Repositories (5) │   ↑ / ↓           move selection                           │──────────────────┐
-│  Repo            │   Home / End      top / bottom                             │t                 │
-│                  │                                                            │                  │
-│▌ legacy-billing  │ View                                                       │read .git (permiss│
-│  payments        │   /               fuzzy filter (Esc clears)                │retry on 5xx      │
-│  web-app         │   d               toggle dirty-only                        │cart drawer       │
-│  infra           │   s               cycle sort mode                          │: pin ci image    │
-│  auth-service    │   Tab             weekly standup                           │: bump deps       │
-│                  │                                                            │                  │
-│                  │ Actions                                                    │                  │
+╭ cohors v0.2.0 ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Attention ───────╭ Help ──────────────────────────────────────────────────────╮──────────────────╮
+│ 4 of 5 repositori│ Navigation                                                 │                  │
+│ 1 unpushed · 1 be│   ↑ / ↓           move selection                           │                  │
+╰──────────────────│   Home / End      top / bottom                             │──────────────────╯
+╭ Repositories (5) │                                                            │──────────────────╮
+│  Repo            │ View                                                       │t                 │
+│                  │   /               fuzzy filter (Esc clears)                │                  │
+│▌ legacy-billing  │   d               toggle dirty-only                        │read .git (permiss│
+│  payments        │   s               cycle sort mode                          │retry on 5xx      │
+│  web-app         │   Tab             weekly standup                           │cart drawer       │
+│  infra           │                                                            │: pin ci image    │
+│  auth-service    │ Actions                                                    │: bump deps       │
 │                  │   ⏎               open in editor                           │                  │
 │                  │   o               reveal in file manager                   │                  │
 │                  │   f / F           fetch selected / all                     │                  │
@@ -28,7 +28,7 @@ expression: "render_to_string(&app, 100, 30)"
 │                  │   r               refresh (re-scan)                        │                  │
 │                  │   ?               toggle this help                         │                  │
 │                  │   q / Ctrl-C      quit                                     │                  │
-│                  └────────────────────────────────────────────────────────────┘                  │
+│                  ╰────────────────────────────────────────────────────────────╯                  │
 │                                                                                                  │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  ? / Esc close

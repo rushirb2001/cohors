@@ -2,12 +2,14 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
- cohors                                                                 5 repos · sort: dirty-first 
-┌ Attention ───────────────────────────────────────────────────────────────────────────────────────┐
-│ 4 of 5 reposi┌ Standup ───────────────────────────────────────────────────────────┐              │
-│ 1 unpushed · │ Collecting commits for this week…                                  │              │
-└──────────────│                                                                    │──────────────┘
-┌ Repositories │                                                                    │──────────────┐
+╭ cohors v0.2.0 ───────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰──────────────╭ Standup ───────────────────────────────────────────────────────────╮──────────────╯
+╭ Attention ───│ Collecting commits for this week…                                  │──────────────╮
+│ 4 of 5 reposi│                                                                    │              │
+│ 1 unpushed · │                                                                    │              │
+╰──────────────│                                                                    │──────────────╯
+╭ Repositories │                                                                    │──────────────╮
 │  Repo        │                                                                    │              │
 │              │                                                                    │              │
 │▌ legacy-billi│                                                                    │ .git (permiss│
@@ -15,8 +17,6 @@ expression: "render_to_string(&app, 100, 18)"
 │  web-app     │                                                                    │ drawer       │
 │  infra       │                                                                    │n ci image    │
 │  auth-service│                                                                    │mp deps       │
-│              │                                                                    │              │
-│              │                                                                    │              │
-│              └────────────────────────────────────────────────────────────────────┘              │
-└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+│              ╰────────────────────────────────────────────────────────────────────╯              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  w window · y copy · Tab/Esc close

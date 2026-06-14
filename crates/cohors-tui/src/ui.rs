@@ -7,7 +7,9 @@ use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Cell, Clear, Padding, Paragraph, Row, Table, TableState, Wrap};
+use ratatui::widgets::{
+    Block, BorderType, Cell, Clear, Padding, Paragraph, Row, Table, TableState, Wrap,
+};
 
 use crate::app::{App, Mode};
 
@@ -83,13 +85,13 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     // Top-level layout: a title line, the body, and a footer hint line. There's
     // no outer frame, so the inner panels read as the app's "windows" and we
     // don't waste columns on nested borders.
-    let [title_area, body_area, footer_area] = Layout::vertical([
-        Constraint::Length(1),
+    let [header_area, body_area, footer_area] = Layout::vertical([
+        Constraint::Length(3),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
     .areas(area);
-    render_title(frame, title_area, app);
+    render_header(frame, header_area, app, &theme);
     render_footer(frame, footer_area, app, &theme);
 
     if app.repos.is_empty() {
@@ -121,20 +123,26 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
 }
 
-/// The top line: the app name on the left, repo count / sort / status on the
-/// right. Plain text (no frame) keeps the header compact.
-fn render_title(frame: &mut Frame, area: Rect, app: &App) {
-    let [left, right] = Layout::horizontal([Constraint::Length(8), Constraint::Min(0)]).areas(area);
+/// The branded header: a rounded box with the tool name + version on the left
+/// of the top border, the live repo count / sort / status on the right, and a
+/// one-line description inside — cohors's "business card".
+fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let name = Span::styled("cohors", theme.ahead().add_modifier(Modifier::BOLD));
+    let version = Span::styled(format!(" v{} ", env!("CARGO_PKG_VERSION")), theme.dim());
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .title(Line::from(vec![Span::raw(" "), name, version]))
+        .title(Line::from(header_status(app)).right_aligned())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            " cohors",
-            Style::new().add_modifier(Modifier::BOLD),
-        ))),
-        left,
-    );
-    frame.render_widget(
-        Paragraph::new(Line::from(header_status(app))).alignment(Alignment::Right),
-        right,
+        Paragraph::new(Span::styled(
+            "All your git repositories at a glance — status, fetch, pull & weekly standup.",
+            theme.dim(),
+        )),
+        inner,
     );
 }
 
@@ -151,6 +159,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
 fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
     let s = fleet_summary(&app.repos, now);
     let block = Block::bordered()
+        .border_type(BorderType::Rounded)
         .title(Line::from(" Attention ").bold())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
@@ -282,7 +291,9 @@ fn roots_label(app: &App) -> String {
 /// headers act as the legend, so the bare numbers in each row read clearly.
 fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
     let title = format!(" Repositories ({}) ", app.visible_len());
-    let block = Block::bordered().title(Line::from(title).bold());
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(title).bold());
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -549,6 +560,7 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
     let para = Paragraph::new(Text::from(lines))
         .block(
             Block::bordered()
+                .border_type(BorderType::Rounded)
                 .title(" Help ")
                 .padding(Padding::horizontal(1)),
         )
@@ -571,6 +583,7 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App) {
     let para = Paragraph::new(text)
         .block(
             Block::bordered()
+                .border_type(BorderType::Rounded)
                 .title(" Standup ")
                 .padding(Padding::horizontal(1)),
         )
