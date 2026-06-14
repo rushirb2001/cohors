@@ -19,7 +19,7 @@ A fast, beautiful terminal dashboard — and web app — that shows the live sta
 
 </div>
 
-> ✅ **v0.1 is here.** The local dashboard works: discover every repo under your roots, sorted dirty-first, with fuzzy filter, and fetch / pull / open actions. Remote/PR awareness (v0.2) and the web app (v0.4) are next — see the [Roadmap](docs/ROADMAP.md).
+> ✅ **v0.3 is here.** The dashboard discovers every repo, shows local + GitHub PR/CI status, does a cross-repo weekly standup (v0.2), and now lets you **multi-select repos and act in bulk** — fetch/pull, stash (with confirmation), and run any command across them with live per-repo output (v0.3). The web app (v0.4) is next — see the [Roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -94,7 +94,7 @@ cohors                           # scan + launch the dashboard
 cohors scan                      # or: print snapshots as JSON (scriptable)
 ```
 
-Keys: `↑`/`↓` move · `Home`/`End` top/bottom · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Enter` open in editor · `o` reveal in file manager · `f`/`F` fetch selected/all · `p` pull (fast-forward only) · `L` lazygit · `y` copy path · `r` refresh · `?` help · `q` quit. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
+Keys: `↑`/`↓` move · `Space` mark · `a` mark all · `Esc` clear · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Tab` weekly standup · `Enter` open in editor · `o` reveal · `f`/`F` fetch selection/all · `p` pull (ff-only) · `!` run a command across the selection · `S` stash (confirms) · `L` lazygit · `y` copy path · `r` refresh · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
 
 ## Documentation
 

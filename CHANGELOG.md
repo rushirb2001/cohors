@@ -21,6 +21,28 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.0] — 2026-06-13
+
+Bulk actions across the fleet — select repos and act on all of them.
+
+### Added
+
+- **Multi-select**: `Space` marks/unmarks a repo (`a` marks all, `Esc` clears),
+  with a `· N selected` count in the header and a `●` gutter on marked rows.
+  Marks survive sort/filter/refresh. Actions target the marked set, or the
+  current repo when nothing is marked.
+- **Command runner** (`!`): run an arbitrary shell command across the selected
+  repos concurrently (bounded pool), with a live per-repo status list
+  (`✓`/`✗ exit N`), a scrollable per-repo output pane, a combined
+  `N ✓ · M ✗` summary, and copy-to-clipboard (`y`).
+- **Bulk stash** (`S`) behind a confirmation modal (default No), and **fetch**
+  (`f`) / **pull** (`p`) now act on the whole selection.
+
+### Notes
+
+- Bulk *checkout* is served by the command runner (`! git checkout <branch>`)
+  rather than a dedicated built-in. Config `groups`/tags are deferred (optional).
+
 ## [0.2.2] — 2026-06-13
 
 ### Fixed
