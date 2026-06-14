@@ -1,0 +1,70 @@
+# Changelog
+
+All notable changes to **cohors** are documented here.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## Versioning policy
+
+cohors is pre-1.0, so it follows the `0.MINOR.PATCH` convention:
+
+- **MINOR** (`0.x.0`) — new features _and_ any breaking change (the public surface
+  is still unstable before 1.0).
+- **PATCH** (`0.x.y`) — backwards-compatible bug fixes and polish only.
+
+Every release gets an entry below and an annotated git tag (`vX.Y.Z`) on the
+release commit. The version in `Cargo.toml` (`[workspace.package]`) is the single
+source of truth and is bumped in a dedicated `chore(release)` commit.
+
+## [Unreleased]
+
+_Nothing yet._
+
+## [0.2.0] — 2026-06-13
+
+Remote-aware fleet, a weekly standup, and a full dashboard redesign.
+
+### Added
+
+- **GitHub enrichment** (`cohors-github`): per-repo open-PR count, CI/check
+  status, and default branch via the REST API. Token is discovered from
+  `gh auth token` or `$GITHUB_TOKEN`; results are cached (5-minute TTL) and
+  rate-limit-aware. The local scan paints first and enrichment fills in on a
+  background thread, so the network never blocks the dashboard.
+- **Remote** column showing CI state and open-PR count (or `—` off-GitHub).
+- **Weekly standup** view (`Tab`): a scrollable digest of every commit you
+  authored across all repos in a window (today / this week), grouped by repo and
+  ordered most-active-first, with per-repo commit counts. Copy it to the
+  clipboard as Markdown with `y`; scroll with `↑/↓` · `PgUp/PgDn` · `g/G`.
+
+### Changed
+
+- **Redesigned TUI** for readability: a branded header box (name, version,
+  description), titled **Attention** and **Repositories** panels with
+  plain-word labels instead of terse glyphs, rounded borders throughout, and
+  tightened, header-labelled columns.
+
+## [0.1.0] — 2026-06-13
+
+Initial release: a local git dashboard that beats `git-scope`.
+
+### Added
+
+- Fast ratatui TUI listing every local git repo, with parallel discovery
+  (`gix`, `git2` fallback) behind a pure, WASM-safe core + adapter design.
+- Per-repo status: branch, ahead/behind upstream, dirty counts
+  (staged/modified/untracked), stash count, and last commit.
+- Sort (dirty-first), fuzzy filter, dirty-only toggle, and a help overlay;
+  arrow-key navigation with `Home`/`End`.
+- Actions on a synchronous loop: fetch, pull (fast-forward only), open in
+  `$EDITOR`, open in `lazygit`, copy path, reveal in file manager.
+- Attention/health scoring in the core — urgency sort plus aging-unpushed and
+  stale-stash detection — surfaced as a fleet triage summary.
+- JSON snapshot cache for instant warm start; TOML config with XDG paths;
+  `cohors init` and `cohors scan` (JSON) commands.
+- Privacy-safe sample-data generator for demos; CI (fmt/clippy/test on
+  macOS + Linux, plus a wasm-core build) and a release-on-tag binary workflow.
+
+<!-- Compare/release links intentionally omitted until a remote is configured. -->
+
