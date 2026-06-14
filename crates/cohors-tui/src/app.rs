@@ -80,6 +80,12 @@ pub struct App {
     pub standup: Option<String>,
     /// The standup time window.
     pub standup_window: StandupWindow,
+    /// Vertical scroll offset (in lines) within the standup overlay.
+    pub standup_scroll: u16,
+    /// Max scroll offset, cached from the last render so key handling can clamp
+    /// without knowing the viewport. Interior-mutable: the view writes it each
+    /// frame, the controller reads it.
+    standup_max_scroll: std::cell::Cell<u16>,
 }
 
 impl App {
@@ -99,7 +105,15 @@ impl App {
             config_path,
             standup: None,
             standup_window: StandupWindow::Week,
+            standup_scroll: 0,
+            standup_max_scroll: std::cell::Cell::new(0),
         }
+    }
+
+    /// Cache the standup's maximum scroll offset (the view calls this each frame
+    /// so the controller can clamp scrolling to the available content).
+    pub fn set_standup_max_scroll(&self, max: u16) {
+        self.standup_max_scroll.set(max);
     }
 
     /// The ordered, filtered rows to render this frame.
@@ -186,6 +200,7 @@ impl App {
             KeyCode::Tab => {
                 self.mode = Mode::Standup;
                 self.standup = None;
+                self.standup_scroll = 0;
                 return Cmd::OpenStandup;
             }
             _ => {}
@@ -230,6 +245,7 @@ impl App {
     }
 
     fn on_key_standup(&mut self, key: KeyEvent) -> Cmd {
+        let max = self.standup_max_scroll.get();
         match key.code {
             KeyCode::Tab | KeyCode::Esc | KeyCode::Char('q') => {
                 self.mode = Mode::Normal;
@@ -238,9 +254,34 @@ impl App {
             KeyCode::Char('w') => {
                 self.standup_window = self.standup_window.next();
                 self.standup = None;
+                self.standup_scroll = 0;
                 Cmd::StandupNextWindow
             }
             KeyCode::Char('y') => Cmd::CopyStandup,
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.standup_scroll = self.standup_scroll.saturating_add(1).min(max);
+                Cmd::None
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.standup_scroll = self.standup_scroll.saturating_sub(1);
+                Cmd::None
+            }
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                self.standup_scroll = self.standup_scroll.saturating_add(10).min(max);
+                Cmd::None
+            }
+            KeyCode::PageUp => {
+                self.standup_scroll = self.standup_scroll.saturating_sub(10);
+                Cmd::None
+            }
+            KeyCode::Home | KeyCode::Char('g') => {
+                self.standup_scroll = 0;
+                Cmd::None
+            }
+            KeyCode::End | KeyCode::Char('G') => {
+                self.standup_scroll = max;
+                Cmd::None
+            }
             _ => Cmd::None,
         }
     }

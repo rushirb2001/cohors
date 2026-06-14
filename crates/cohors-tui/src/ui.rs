@@ -8,7 +8,8 @@ use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, BorderType, Cell, Clear, Padding, Paragraph, Row, Table, TableState, Wrap,
+    Block, BorderType, Cell, Clear, Padding, Paragraph, Row, Scrollbar, ScrollbarOrientation,
+    ScrollbarState, Table, TableState, Wrap,
 };
 
 use crate::app::{App, Mode};
@@ -119,7 +120,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         render_help(frame, area, app);
     }
     if app.mode == Mode::Standup {
-        render_standup(frame, area, app);
+        render_standup(frame, area, app, &theme);
     }
 }
 
@@ -243,7 +244,9 @@ fn footer_hints(app: &App) -> String {
     match app.mode {
         Mode::Filter => " type to filter · ↑/↓ move · ⏎ apply · Esc clear ".to_string(),
         Mode::Help => " ? / Esc close ".to_string(),
-        Mode::Standup => " w window · y copy · Tab/Esc close ".to_string(),
+        Mode::Standup => {
+            " ↑/↓ scroll · PgUp/PgDn · w window · y copy · Esc close ".to_string()
+        }
         Mode::Normal => {
             " ↑/↓ move · / filter · d dirty · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit ".to_string()
         }
@@ -568,54 +571,117 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
     frame.render_widget(para, area);
 }
 
-/// The standup overlay: the rendered markdown digest for the current window,
-/// or a "collecting" placeholder while the worker thread walks the commits.
-fn render_standup(frame: &mut Frame, full: Rect, app: &App) {
-    let area = centered_rect(70, 80, full);
+/// The standup overlay: a scrollable digest of the user's commits for the
+/// current window, ordered by most-active repo, with a scrollbar and a
+/// line-position indicator. `None` shows a "collecting" placeholder.
+fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let area = centered_rect(82, 85, full);
     frame.render_widget(Clear, area);
-    let text = match &app.standup {
-        Some(md) => Text::from(standup_lines(md)),
-        None => Text::from(Line::from(Span::styled(
-            format!("Collecting commits for {}…", app.standup_window.label()),
-            Style::new().add_modifier(Modifier::DIM),
-        ))),
+
+    let window = app.standup_window.label();
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(format!(" Standup · {window} ")).bold())
+        .padding(Padding::new(1, 0, 0, 0));
+    let inner = block.inner(area);
+
+    // Still walking the commits: a placeholder, nothing to scroll.
+    let Some(md) = &app.standup else {
+        app.set_standup_max_scroll(0);
+        frame.render_widget(block, area);
+        frame.render_widget(
+            Paragraph::new(Span::styled(
+                format!("Collecting your commits for {window}…"),
+                theme.dim(),
+            )),
+            inner,
+        );
+        return;
     };
-    let para = Paragraph::new(text)
-        .block(
-            Block::bordered()
-                .border_type(BorderType::Rounded)
-                .title(" Standup ")
-                .padding(Padding::horizontal(1)),
-        )
-        .wrap(Wrap { trim: false });
-    frame.render_widget(para, area);
+
+    let lines = standup_lines(md, theme);
+    let total = lines.len() as u16;
+    let viewport = inner.height;
+    let max_scroll = total.saturating_sub(viewport);
+    app.set_standup_max_scroll(max_scroll);
+    let offset = app.standup_scroll.min(max_scroll);
+
+    // Line-position indicator in the bottom border, so a long week is legible.
+    let pos = if max_scroll > 0 {
+        let last = (offset + viewport).min(total);
+        format!(" lines {}–{} of {} ", offset + 1, last, total)
+    } else {
+        format!(" {total} lines ")
+    };
+    frame.render_widget(block.title_bottom(Line::from(pos).right_aligned()), area);
+
+    // Text on the left; a scrollbar on the right when the content overflows.
+    let [text_area, bar_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).scroll((offset, 0)),
+        text_area,
+    );
+    if max_scroll > 0 {
+        let mut sb = ScrollbarState::new(total as usize)
+            .position(offset as usize)
+            .viewport_content_length(viewport as usize);
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight),
+            bar_area,
+            &mut sb,
+        );
+    }
 }
 
-/// Lightly style the standup markdown for the terminal: headings bold, the
-/// summary line dim, commit bullets as-is.
-fn standup_lines(md: &str) -> Vec<Line<'static>> {
-    md.lines()
-        .map(|line| {
-            if let Some(rest) = line.strip_prefix("### ") {
-                Line::from(Span::styled(
-                    rest.to_string(),
-                    Style::new().add_modifier(Modifier::BOLD),
-                ))
-            } else if let Some(rest) = line.strip_prefix("## ") {
-                Line::from(Span::styled(
-                    rest.to_string(),
-                    Style::new().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
-                ))
-            } else if line.len() > 1 && line.starts_with('_') && line.ends_with('_') {
-                Line::from(Span::styled(
-                    line.trim_matches('_').to_string(),
-                    Style::new().add_modifier(Modifier::DIM),
-                ))
-            } else {
-                Line::from(line.to_string())
-            }
-        })
-        .collect()
+/// Style the standup markdown for the terminal: accented repo headers, a dim
+/// summary line, and indented commits with a colored short id. The `## Standup`
+/// H1 is dropped — the window already shows in the overlay's border title.
+fn standup_lines(md: &str, theme: &Theme) -> Vec<Line<'static>> {
+    let mut out: Vec<Line> = Vec::new();
+    for line in md.lines() {
+        if line.starts_with("## ") {
+            continue;
+        }
+        let styled = if let Some(rest) = line.strip_prefix("### ") {
+            Line::from(Span::styled(
+                rest.to_string(),
+                theme.ahead().add_modifier(Modifier::BOLD),
+            ))
+        } else if line.len() > 1 && line.starts_with('_') && line.ends_with('_') {
+            Line::from(Span::styled(
+                line.trim_matches('_').to_string(),
+                theme.dim(),
+            ))
+        } else if line.starts_with("- `") {
+            commit_line(line, theme)
+        } else {
+            Line::from(line.to_string())
+        };
+        out.push(styled);
+    }
+    // Drop the blank line the dropped H1 left behind.
+    while out.first().is_some_and(|l| l.width() == 0) {
+        out.remove(0);
+    }
+    out
+}
+
+/// Render a `- `id` subject` bullet as an indented, accented short id + subject.
+fn commit_line(line: &str, theme: &Theme) -> Line<'static> {
+    if let Some(open) = line.find('`')
+        && let Some(close_rel) = line[open + 1..].find('`')
+    {
+        let id = line[open + 1..open + 1 + close_rel].to_string();
+        let msg = line[open + 1 + close_rel + 1..].trim_start().to_string();
+        return Line::from(vec![
+            Span::raw("  "),
+            Span::styled(id, theme.ahead()),
+            Span::raw("  "),
+            Span::raw(msg),
+        ]);
+    }
+    Line::from(line.to_string())
 }
 
 /// A rect centered within `area`, sized as a percentage of it.
@@ -802,27 +868,27 @@ mod tests {
         let mut app = demo_app();
         app.mode = Mode::Standup;
         app.standup_window = StandupWindow::Week;
-        let commits = vec![
-            StandupCommit {
+        // Enough commits to overflow the overlay and exercise the scrollbar +
+        // line-position indicator; payments (most active) sorts first.
+        let mut commits = Vec::new();
+        for i in 0..12 {
+            commits.push(StandupCommit {
                 repo: "payments".into(),
-                short_id: "a1b2c3d".into(),
-                summary: "fix: retry on 5xx".into(),
-                timestamp: NOW - 7200,
-            },
-            StandupCommit {
+                short_id: format!("aa{i:05}"),
+                summary: format!("feat: payments work item {i}"),
+                timestamp: NOW - (i as i64) * 3600,
+            });
+        }
+        for i in 0..5 {
+            commits.push(StandupCommit {
                 repo: "web-app".into(),
-                short_id: "e4f5a6b".into(),
-                summary: "wip: cart drawer".into(),
-                timestamp: NOW - 1200,
-            },
-            StandupCommit {
-                repo: "payments".into(),
-                short_id: "c7d8e9f".into(),
-                summary: "test: add retry coverage".into(),
-                timestamp: NOW - 90_000,
-            },
-        ];
+                short_id: format!("bb{i:05}"),
+                summary: format!("fix: web-app bug {i}"),
+                timestamp: NOW - (i as i64) * 7200,
+            });
+        }
         app.standup = Some(to_markdown(&commits, StandupWindow::Week));
+        app.standup_scroll = 3; // scrolled down a few lines
         insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }
 

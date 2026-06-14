@@ -89,9 +89,14 @@ pub fn to_markdown(commits: &[StandupCommit], window: StandupWindow) -> String {
     );
     let _ = writeln!(out);
 
-    for (repo, mut list) in by_repo {
+    // Order repos by how much you did there (most commits first), ties
+    // alphabetical — so a standup leads with where your effort actually went.
+    let mut groups: Vec<(&str, Vec<&StandupCommit>)> = by_repo.into_iter().collect();
+    groups.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then_with(|| a.0.cmp(b.0)));
+
+    for (repo, mut list) in groups {
         list.sort_by_key(|c| std::cmp::Reverse(c.timestamp)); // newest first
-        let _ = writeln!(out, "### {repo}");
+        let _ = writeln!(out, "### {repo} ({})", list.len());
         for commit in list {
             let _ = writeln!(out, "- `{}` {}", commit.short_id, commit.summary);
         }
@@ -147,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn groups_by_repo_alphabetically_newest_first() {
+    fn groups_by_repo_most_active_first_newest_within() {
         let commits = vec![
             commit("web", "aaa1111", "older web", NOW - 2 * DAY),
             commit("api", "bbb2222", "api change", NOW - DAY),
@@ -156,10 +161,13 @@ mod tests {
         let md = to_markdown(&commits, StandupWindow::Week);
 
         assert!(md.contains("_3 commits across 2 repos_"));
-        // api group comes before web (alphabetical).
-        let api = md.find("### api").unwrap();
-        let web = md.find("### web").unwrap();
-        assert!(api < web);
+        // Repo headers carry their commit count.
+        assert!(md.contains("### web (2)"));
+        assert!(md.contains("### api (1)"));
+        // web (2 commits) is listed before api (1) — most active first.
+        let web = md.find("### web (2)").unwrap();
+        let api = md.find("### api (1)").unwrap();
+        assert!(web < api);
         // Within web, the newer commit is listed first.
         let newer = md.find("newer web").unwrap();
         let older = md.find("older web").unwrap();
@@ -169,11 +177,23 @@ mod tests {
     }
 
     #[test]
+    fn ties_in_count_fall_back_to_alphabetical() {
+        let commits = vec![
+            commit("zebra", "aaa1111", "z change", NOW),
+            commit("alpha", "bbb2222", "a change", NOW),
+        ];
+        let md = to_markdown(&commits, StandupWindow::Week);
+        // Both have 1 commit, so alphabetical: alpha before zebra.
+        assert!(md.find("### alpha (1)").unwrap() < md.find("### zebra (1)").unwrap());
+    }
+
+    #[test]
     fn singular_counts_have_no_plural_s() {
         let md = to_markdown(
             &[commit("solo", "deadbee", "only one", NOW)],
             StandupWindow::Today,
         );
         assert!(md.contains("_1 commit across 1 repo_"));
+        assert!(md.contains("### solo (1)"));
     }
 }
