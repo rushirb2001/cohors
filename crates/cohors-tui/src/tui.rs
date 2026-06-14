@@ -16,7 +16,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use cohors_core::{RepoId, RepoRef, RepoSnapshot};
+use cohors_core::{RepoId, RepoRef, RepoSnapshot, StandupCommit};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
@@ -28,7 +28,7 @@ use ratatui::crossterm::terminal::{
 };
 
 use crate::action;
-use crate::app::{App, Cmd, CommandRun, ConfirmAction, Mode, RunResult, RunState};
+use crate::app::{App, Cmd, CommandRun, ConfirmAction, Mode, RunResult, RunState, StandupView};
 use crate::scan::Scanner;
 use crate::ui;
 
@@ -59,8 +59,8 @@ enum BgMsg {
     Scanned(Vec<RepoSnapshot>),
     /// Snapshots with GitHub `remote` info filled in (v0.2). Merged by id.
     RemoteEnriched(Vec<RepoSnapshot>),
-    /// The rendered standup markdown for the current window.
-    StandupReady(String),
+    /// The user's commits for the current standup window (grouped in the view).
+    StandupReady(Vec<StandupCommit>),
     /// One repo in a command run finished (or failed to spawn). `run_id` lets
     /// the loop discard a previous run's late results.
     RunRepoDone {
@@ -203,8 +203,8 @@ fn drain_background(
                 // immediately instead of "—" until the next enrichment.
                 crate::cache::save(&app.repos);
             }
-            BgMsg::StandupReady(markdown) => {
-                app.standup = Some(markdown);
+            BgMsg::StandupReady(commits) => {
+                app.standup = Some(StandupView::new(commits));
             }
             BgMsg::RunRepoDone {
                 run_id,
@@ -466,11 +466,11 @@ fn spawn_enrich(mut repos: Vec<RepoSnapshot>, token: String, tx: Sender<BgMsg>) 
 /// worker thread, render them to markdown, and deliver the result.
 fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
     let Some(email) = scanner.author_email() else {
-        app.standup = Some("Set `git config user.email` to generate a standup.".to_string());
+        app.status = Some("set `git config user.email` to use the standup".to_string());
+        app.mode = Mode::Normal;
         return;
     };
-    let window = app.standup_window;
-    let (since, until) = window.range(now_secs());
+    let (since, until) = app.standup_window.range(now_secs());
     let paths: Vec<Utf8PathBuf> = app.repos.iter().filter_map(|r| r.path.clone()).collect();
     let tx = tx.clone();
     std::thread::spawn(move || {
@@ -478,15 +478,15 @@ fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
         for path in &paths {
             commits.extend(cohors_git::collect_commits(path, &email, since, until));
         }
-        let markdown = cohors_core::to_markdown(&commits, window);
-        let _ = tx.send(BgMsg::StandupReady(markdown));
+        let _ = tx.send(BgMsg::StandupReady(commits));
     });
 }
 
 fn copy_standup(app: &mut App) {
-    let Some(markdown) = app.standup.clone() else {
+    let Some(view) = &app.standup else {
         return;
     };
+    let markdown = cohors_core::to_markdown(&view.commits, app.standup_window);
     app.status = Some(match action::copy_to_clipboard(&markdown) {
         Ok(()) => "copied standup to clipboard".to_string(),
         Err(e) => format!("copy failed: {e}"),

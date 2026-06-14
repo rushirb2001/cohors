@@ -305,8 +305,8 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
         Mode::Standup => vec![(
             "",
             vec![
-                ("↑/↓", "scroll"),
-                ("PgUp/PgDn", "page"),
+                ("↑/↓", "repo"),
+                ("PgUp/PgDn", "scroll"),
                 ("w", "window"),
                 ("y", "copy"),
                 ("Esc", "close"),
@@ -730,9 +730,10 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
     frame.render_widget(para, area);
 }
 
-/// The standup overlay: a scrollable digest of the user's commits for the
-/// current window, ordered by most-active repo, with a scrollbar and a
-/// line-position indicator. `None` shows a "collecting" placeholder.
+/// The standup overlay: the user's commits as a repo list (with per-repo
+/// counts) on the left and the focused repo's scrollable commits on the right —
+/// the same two-pane shape as the command runner. `None` shows a "collecting"
+/// placeholder.
 fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let area = centered_rect(82, 85, full);
     frame.render_widget(Clear, area);
@@ -742,11 +743,10 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .border_type(BorderType::Rounded)
         .title(Line::from(format!(" Standup · {window} ")).bold())
         .padding(Padding::new(1, 0, 0, 0));
-    let inner = block.inner(area);
 
-    // Still walking the commits: a placeholder, nothing to scroll.
-    let Some(md) = &app.standup else {
-        app.set_standup_max_scroll(0);
+    // Still walking the commits: a placeholder.
+    let Some(view) = &app.standup else {
+        let inner = block.inner(area);
         frame.render_widget(block, area);
         frame.render_widget(
             Paragraph::new(Span::styled(
@@ -758,31 +758,75 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         return;
     };
 
-    let lines = standup_lines(md, theme);
-    let total = lines.len() as u16;
-    let viewport = inner.height;
-    let max_scroll = total.saturating_sub(viewport);
-    app.set_standup_max_scroll(max_scroll);
-    let offset = app.standup_scroll.min(max_scroll);
+    let total = view.commits.len();
+    let repos = view.groups.len();
+    let summary = format!(
+        " {total} commit{} · {repos} repo{} ",
+        if total == 1 { "" } else { "s" },
+        if repos == 1 { "" } else { "s" },
+    );
+    let block = block.title_bottom(Line::from(summary).right_aligned());
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    // Line-position indicator in the bottom border, so a long week is legible.
-    let pos = if max_scroll > 0 {
-        let last = (offset + viewport).min(total);
-        format!(" lines {}–{} of {} ", offset + 1, last, total)
-    } else {
-        format!(" {total} lines ")
-    };
-    frame.render_widget(block.title_bottom(Line::from(pos).right_aligned()), area);
+    if view.groups.is_empty() {
+        frame.render_widget(
+            Paragraph::new(Span::styled(format!("No commits {window}."), theme.dim())),
+            inner,
+        );
+        return;
+    }
 
-    // Text on the left; a scrollbar on the right when the content overflows.
+    // Left: repos with commit counts (focused highlighted). Right: that repo's
+    // commits, scrollable.
+    let [list_area, detail_area] =
+        Layout::horizontal([Constraint::Length(22), Constraint::Min(0)]).areas(inner);
+
+    let items: Vec<ListItem> = view
+        .groups
+        .iter()
+        .map(|(repo, commits)| {
+            ListItem::new(Line::from(vec![
+                Span::raw(ellipsize(repo, 15)),
+                Span::styled(format!("  {}", commits.len()), theme.dim()),
+            ]))
+        })
+        .collect();
+    let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let mut list_state = ListState::default();
+    list_state.select(Some(view.focus));
+    frame.render_stateful_widget(list, list_area, &mut list_state);
+
+    let lines: Vec<Line> = view
+        .groups
+        .get(view.focus)
+        .map(|(_, commits)| {
+            commits
+                .iter()
+                .map(|c| {
+                    Line::from(vec![
+                        Span::styled(c.short_id.clone(), theme.ahead()),
+                        Span::raw("  "),
+                        Span::raw(c.summary.clone()),
+                    ])
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let total_lines = lines.len() as u16;
+    let viewport = detail_area.height;
+    let max_scroll = total_lines.saturating_sub(viewport);
+    view.set_max_scroll(max_scroll);
+    let offset = view.scroll.min(max_scroll);
+
     let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(detail_area);
     frame.render_widget(
         Paragraph::new(Text::from(lines)).scroll((offset, 0)),
         text_area,
     );
     if max_scroll > 0 {
-        let mut sb = ScrollbarState::new(total as usize)
+        let mut sb = ScrollbarState::new(total_lines as usize)
             .position(offset as usize)
             .viewport_content_length(viewport as usize);
         frame.render_stateful_widget(
@@ -791,56 +835,6 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
             &mut sb,
         );
     }
-}
-
-/// Style the standup markdown for the terminal: accented repo headers, a dim
-/// summary line, and indented commits with a colored short id. The `## Standup`
-/// H1 is dropped — the window already shows in the overlay's border title.
-fn standup_lines(md: &str, theme: &Theme) -> Vec<Line<'static>> {
-    let mut out: Vec<Line> = Vec::new();
-    for line in md.lines() {
-        if line.starts_with("## ") {
-            continue;
-        }
-        let styled = if let Some(rest) = line.strip_prefix("### ") {
-            Line::from(Span::styled(
-                rest.to_string(),
-                theme.ahead().add_modifier(Modifier::BOLD),
-            ))
-        } else if line.len() > 1 && line.starts_with('_') && line.ends_with('_') {
-            Line::from(Span::styled(
-                line.trim_matches('_').to_string(),
-                theme.dim(),
-            ))
-        } else if line.starts_with("- `") {
-            commit_line(line, theme)
-        } else {
-            Line::from(line.to_string())
-        };
-        out.push(styled);
-    }
-    // Drop the blank line the dropped H1 left behind.
-    while out.first().is_some_and(|l| l.width() == 0) {
-        out.remove(0);
-    }
-    out
-}
-
-/// Render a `- `id` subject` bullet as an indented, accented short id + subject.
-fn commit_line(line: &str, theme: &Theme) -> Line<'static> {
-    if let Some(open) = line.find('`')
-        && let Some(close_rel) = line[open + 1..].find('`')
-    {
-        let id = line[open + 1..open + 1 + close_rel].to_string();
-        let msg = line[open + 1 + close_rel + 1..].trim_start().to_string();
-        return Line::from(vec![
-            Span::raw("  "),
-            Span::styled(id, theme.ahead()),
-            Span::raw("  "),
-            Span::raw(msg),
-        ]);
-    }
-    Line::from(line.to_string())
 }
 
 /// The command-input overlay: a small box to type the command to run, showing
@@ -1320,12 +1314,12 @@ mod tests {
 
     #[test]
     fn snapshot_standup() {
-        use cohors_core::{StandupCommit, StandupWindow, to_markdown};
+        use crate::app::StandupView;
+        use cohors_core::{StandupCommit, StandupWindow};
         let mut app = demo_app();
         app.mode = Mode::Standup;
         app.standup_window = StandupWindow::Week;
-        // Enough commits to overflow the overlay and exercise the scrollbar +
-        // line-position indicator; payments (most active) sorts first.
+        // payments (most active) sorts first; its commits overflow the pane.
         let mut commits = Vec::new();
         for i in 0..12 {
             commits.push(StandupCommit {
@@ -1343,8 +1337,7 @@ mod tests {
                 timestamp: NOW - (i as i64) * 7200,
             });
         }
-        app.standup = Some(to_markdown(&commits, StandupWindow::Week));
-        app.standup_scroll = 3; // scrolled down a few lines
+        app.standup = Some(StandupView::new(commits));
         insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }
 

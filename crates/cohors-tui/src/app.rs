@@ -9,7 +9,8 @@
 use std::collections::HashSet;
 
 use cohors_core::{
-    RepoId, RepoSnapshot, SortMode, StandupWindow, ViewParams, ViewRow, compute_view,
+    RepoId, RepoSnapshot, SortMode, StandupCommit, StandupWindow, ViewParams, ViewRow,
+    compute_view, group_commits,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -171,6 +172,40 @@ impl CommandRun {
     }
 }
 
+/// The weekly-standup view: the user's commits grouped per repo, shown as a
+/// repo list + the focused repo's scrollable commits (mirrors `CommandRun`).
+pub struct StandupView {
+    /// The raw commits, kept for the markdown copy (`y`).
+    pub commits: Vec<StandupCommit>,
+    /// Commits grouped by repo, most-active first (shared ordering with the
+    /// markdown digest via `group_commits`).
+    pub groups: Vec<(String, Vec<StandupCommit>)>,
+    /// Which repo's commits are shown (index into `groups`).
+    pub focus: usize,
+    /// Vertical scroll offset within the focused repo's commit list.
+    pub scroll: u16,
+    /// Max scroll, cached from the last render for clamp-without-viewport.
+    max_scroll: std::cell::Cell<u16>,
+}
+
+impl StandupView {
+    pub fn new(commits: Vec<StandupCommit>) -> Self {
+        let groups = group_commits(&commits);
+        Self {
+            commits,
+            groups,
+            focus: 0,
+            scroll: 0,
+            max_scroll: std::cell::Cell::new(0),
+        }
+    }
+
+    /// Cache the focused repo's max scroll (the view calls this each frame).
+    pub fn set_max_scroll(&self, max: u16) {
+        self.max_scroll.set(max);
+    }
+}
+
 /// All dashboard state.
 pub struct App {
     pub repos: Vec<RepoSnapshot>,
@@ -195,16 +230,10 @@ pub struct App {
     pub roots: Vec<String>,
     /// Config file path, for the help overlay.
     pub config_path: String,
-    /// The rendered standup markdown (`None` while collecting, or not opened).
-    pub standup: Option<String>,
+    /// The standup view (`None` while collecting, or not opened).
+    pub standup: Option<StandupView>,
     /// The standup time window.
     pub standup_window: StandupWindow,
-    /// Vertical scroll offset (in lines) within the standup overlay.
-    pub standup_scroll: u16,
-    /// Max scroll offset, cached from the last render so key handling can clamp
-    /// without knowing the viewport. Interior-mutable: the view writes it each
-    /// frame, the controller reads it.
-    standup_max_scroll: std::cell::Cell<u16>,
     /// The command being typed in `CommandInput` mode (mirrors `filter`).
     pub command_input: String,
     /// The in-flight / last command run, shown in `CommandRun` mode.
@@ -231,18 +260,10 @@ impl App {
             config_path,
             standup: None,
             standup_window: StandupWindow::Week,
-            standup_scroll: 0,
-            standup_max_scroll: std::cell::Cell::new(0),
             command_input: String::new(),
             run: None,
             confirm: None,
         }
-    }
-
-    /// Cache the standup's maximum scroll offset (the view calls this each frame
-    /// so the controller can clamp scrolling to the available content).
-    pub fn set_standup_max_scroll(&self, max: u16) {
-        self.standup_max_scroll.set(max);
     }
 
     /// The ordered, filtered rows to render this frame.
@@ -397,7 +418,6 @@ impl App {
             KeyCode::Tab => {
                 self.mode = Mode::Standup;
                 self.standup = None;
-                self.standup_scroll = 0;
                 return Cmd::OpenStandup;
             }
             _ => {}
@@ -442,44 +462,53 @@ impl App {
     }
 
     fn on_key_standup(&mut self, key: KeyEvent) -> Cmd {
-        let max = self.standup_max_scroll.get();
+        let max = self.standup.as_ref().map_or(0, |s| s.max_scroll.get());
         match key.code {
-            KeyCode::Tab | KeyCode::Esc | KeyCode::Char('q') => {
-                self.mode = Mode::Normal;
-                Cmd::None
-            }
+            KeyCode::Tab | KeyCode::Esc | KeyCode::Char('q') => self.mode = Mode::Normal,
             KeyCode::Char('w') => {
                 self.standup_window = self.standup_window.next();
                 self.standup = None;
-                self.standup_scroll = 0;
-                Cmd::StandupNextWindow
+                return Cmd::StandupNextWindow;
             }
-            KeyCode::Char('y') => Cmd::CopyStandup,
-            KeyCode::Down | KeyCode::Char('j') => {
-                self.standup_scroll = self.standup_scroll.saturating_add(1).min(max);
-                Cmd::None
-            }
-            KeyCode::Up | KeyCode::Char('k') => {
-                self.standup_scroll = self.standup_scroll.saturating_sub(1);
-                Cmd::None
-            }
+            KeyCode::Char('y') => return Cmd::CopyStandup,
+            // ↑/↓ move between repos; PgUp/PgDn scroll the focused repo's commits.
+            KeyCode::Down | KeyCode::Char('j') => self.standup_focus_step(1),
+            KeyCode::Up | KeyCode::Char('k') => self.standup_focus_step(-1),
             KeyCode::PageDown | KeyCode::Char(' ') => {
-                self.standup_scroll = self.standup_scroll.saturating_add(10).min(max);
-                Cmd::None
+                if let Some(s) = &mut self.standup {
+                    s.scroll = s.scroll.saturating_add(10).min(max);
+                }
             }
             KeyCode::PageUp => {
-                self.standup_scroll = self.standup_scroll.saturating_sub(10);
-                Cmd::None
+                if let Some(s) = &mut self.standup {
+                    s.scroll = s.scroll.saturating_sub(10);
+                }
             }
             KeyCode::Home | KeyCode::Char('g') => {
-                self.standup_scroll = 0;
-                Cmd::None
+                if let Some(s) = &mut self.standup {
+                    s.scroll = 0;
+                }
             }
             KeyCode::End | KeyCode::Char('G') => {
-                self.standup_scroll = max;
-                Cmd::None
+                if let Some(s) = &mut self.standup {
+                    s.scroll = max;
+                }
             }
-            _ => Cmd::None,
+            _ => {}
+        }
+        Cmd::None
+    }
+
+    /// Move the standup focus by `delta` repos, clamped, resetting the commit
+    /// scroll to the top of the newly-focused repo.
+    fn standup_focus_step(&mut self, delta: isize) {
+        if let Some(s) = &mut self.standup {
+            if s.groups.is_empty() {
+                return;
+            }
+            let last = s.groups.len() - 1;
+            s.focus = (s.focus as isize + delta).clamp(0, last as isize) as usize;
+            s.scroll = 0;
         }
     }
 
@@ -599,12 +628,14 @@ impl App {
                 }
             }
             Mode::Standup => {
-                let max = self.standup_max_scroll.get();
-                self.standup_scroll = if toward_top {
-                    self.standup_scroll.saturating_sub(3)
-                } else {
-                    self.standup_scroll.saturating_add(3).min(max)
-                };
+                if let Some(s) = &mut self.standup {
+                    let max = s.max_scroll.get();
+                    s.scroll = if toward_top {
+                        s.scroll.saturating_sub(3)
+                    } else {
+                        s.scroll.saturating_add(3).min(max)
+                    };
+                }
             }
             Mode::CommandRun => {
                 if let Some(run) = &mut self.run {

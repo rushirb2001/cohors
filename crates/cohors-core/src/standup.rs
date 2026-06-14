@@ -56,19 +56,36 @@ impl StandupWindow {
     }
 }
 
-/// Render the commits as markdown grouped by repo (alphabetical), newest commit
-/// first within each repo — a digest you can paste into a standup channel.
-pub fn to_markdown(commits: &[StandupCommit], window: StandupWindow) -> String {
+/// Group commits by repo, ordered by how much was done there (most commits
+/// first, ties alphabetical), each repo's commits newest-first. Shared by the
+/// markdown digest and the TUI standup view so both agree on ordering.
+pub fn group_commits(commits: &[StandupCommit]) -> Vec<(String, Vec<StandupCommit>)> {
     use std::collections::BTreeMap;
-    use std::fmt::Write;
 
-    let mut by_repo: BTreeMap<&str, Vec<&StandupCommit>> = BTreeMap::new();
+    let mut by_repo: BTreeMap<&str, Vec<StandupCommit>> = BTreeMap::new();
     for commit in commits {
         by_repo
             .entry(commit.repo.as_str())
             .or_default()
-            .push(commit);
+            .push(commit.clone());
     }
+    let mut groups: Vec<(String, Vec<StandupCommit>)> = by_repo
+        .into_iter()
+        .map(|(repo, list)| (repo.to_string(), list))
+        .collect();
+    groups.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then_with(|| a.0.cmp(&b.0)));
+    for (_, list) in &mut groups {
+        list.sort_by_key(|c| std::cmp::Reverse(c.timestamp)); // newest first
+    }
+    groups
+}
+
+/// Render the commits as markdown grouped by repo (most-active first), newest
+/// commit first within each repo — a digest you can paste into a standup channel.
+pub fn to_markdown(commits: &[StandupCommit], window: StandupWindow) -> String {
+    use std::fmt::Write;
+
+    let groups = group_commits(commits);
 
     let mut out = String::new();
     let _ = writeln!(out, "## Standup — {}", window.label());
@@ -84,18 +101,12 @@ pub fn to_markdown(commits: &[StandupCommit], window: StandupWindow) -> String {
         "_{} commit{} across {} repo{}_",
         commits.len(),
         plural(commits.len()),
-        by_repo.len(),
-        plural(by_repo.len()),
+        groups.len(),
+        plural(groups.len()),
     );
     let _ = writeln!(out);
 
-    // Order repos by how much you did there (most commits first), ties
-    // alphabetical — so a standup leads with where your effort actually went.
-    let mut groups: Vec<(&str, Vec<&StandupCommit>)> = by_repo.into_iter().collect();
-    groups.sort_by(|a, b| b.1.len().cmp(&a.1.len()).then_with(|| a.0.cmp(b.0)));
-
-    for (repo, mut list) in groups {
-        list.sort_by_key(|c| std::cmp::Reverse(c.timestamp)); // newest first
+    for (repo, list) in &groups {
         let _ = writeln!(out, "### {repo} ({})", list.len());
         for commit in list {
             let _ = writeln!(out, "- `{}` {}", commit.short_id, commit.summary);

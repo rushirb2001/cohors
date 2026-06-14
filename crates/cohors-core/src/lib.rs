@@ -36,5 +36,5 @@ pub use model::{
 };
 pub use provider::RepoProvider;
 pub use sort::SortMode;
-pub use standup::{StandupCommit, StandupWindow, to_markdown};
+pub use standup::{StandupCommit, StandupWindow, group_commits, to_markdown};
 pub use view::{ViewParams, ViewRow, compute_view};
