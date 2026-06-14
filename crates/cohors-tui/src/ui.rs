@@ -744,6 +744,29 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
 /// The standup overlay: a "Repos" box (per-repo commit counts) beside a box of
 /// the focused repo's commits, scrollable. The active pane's title is bold; the
 /// other is dim. `None` shows a "collecting" placeholder.
+/// Below this inner width a two-pane overlay can't show both panes side-by-side
+/// without squeezing one of them, so it stacks the list on top instead.
+const TWO_PANE_MIN_WIDTH: u16 = 64;
+
+/// Lay out a two-pane overlay (a list + a detail view). On a wide terminal the
+/// panes sit side-by-side (`list_w` wide list, gap, detail fills the rest); on a
+/// narrow one the list stacks on top (`stacked_list_h` tall) so neither pane is
+/// squeezed. Returns `(list_area, detail_area)`.
+fn two_pane(inner: Rect, list_w: u16, stacked_list_h: u16) -> (Rect, Rect) {
+    if inner.width >= TWO_PANE_MIN_WIDTH {
+        let [list, detail] = Layout::horizontal([Constraint::Length(list_w), Constraint::Min(0)])
+            .spacing(2)
+            .areas(inner);
+        (list, detail)
+    } else {
+        let [list, detail] =
+            Layout::vertical([Constraint::Length(stacked_list_h), Constraint::Min(0)])
+                .spacing(1)
+                .areas(inner);
+        (list, detail)
+    }
+}
+
 fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let area = centered_rect(84, 86, full);
     frame.render_widget(Clear, area);
@@ -788,10 +811,9 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         return;
     }
 
-    // A "Repos" box and a "{repo}" commits box, with a gap between them.
-    let [left_area, right_area] = Layout::horizontal([Constraint::Length(26), Constraint::Min(0)])
-        .spacing(2)
-        .areas(inner);
+    // A "Repos" box and a "{repo}" commits box: side-by-side when there's room,
+    // stacked (repos on top) on a narrow terminal.
+    let (left_area, right_area) = two_pane(inner, 26, 8);
 
     // Highlight the active pane's title (bold) and dim the inactive one.
     let active = |on: bool| {
@@ -923,8 +945,8 @@ fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     frame.render_widget(block, area);
 
     // Left: the repo list (with focus highlight). Right: the focused output.
-    let [list_area, out_area] =
-        Layout::horizontal([Constraint::Length(26), Constraint::Min(0)]).areas(inner);
+    // Stacks (list on top) on a narrow terminal so neither pane is squeezed.
+    let (list_area, out_area) = two_pane(inner, 26, 6);
 
     let spin = spinner_frame(app.spinner);
     let items: Vec<ListItem> = run
@@ -1382,6 +1404,36 @@ mod tests {
         }
         app.standup = Some(StandupView::new(commits));
         insta::assert_snapshot!(render_to_string(&app, 100, 22));
+    }
+
+    /// On a narrow terminal the standup's two panes stack (Repos box on top,
+    /// commits box below) instead of sitting side-by-side.
+    #[test]
+    fn snapshot_standup_narrow_stacked() {
+        use crate::app::StandupView;
+        use cohors_core::{StandupCommit, StandupWindow};
+        let mut app = demo_app();
+        app.mode = Mode::Standup;
+        app.standup_window = StandupWindow::Week;
+        let mut commits = Vec::new();
+        for i in 0..8 {
+            commits.push(StandupCommit {
+                repo: "payments".into(),
+                short_id: format!("aa{i:05}"),
+                summary: format!("feat: payments work item {i}"),
+                timestamp: NOW - (i as i64) * 3600,
+            });
+        }
+        for i in 0..3 {
+            commits.push(StandupCommit {
+                repo: "web-app".into(),
+                short_id: format!("bb{i:05}"),
+                summary: format!("fix: web-app bug {i}"),
+                timestamp: NOW - (i as i64) * 7200,
+            });
+        }
+        app.standup = Some(StandupView::new(commits));
+        insta::assert_snapshot!(render_to_string(&app, 50, 24));
     }
 
     #[test]

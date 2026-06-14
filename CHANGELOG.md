@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.8] — 2026-06-14
+
+### Added
+
+- **Responsive two-pane overlays.** The standup and command-runner views now
+  adapt to the terminal width: side-by-side (list + detail) when there's room,
+  and **stacked** (list on top, detail below) on a narrow terminal, so neither
+  pane gets squeezed. The command-runner also gains a small gap between its repo
+  list and output for clarity.
+
 ## [0.3.7] — 2026-06-14
 
 ### Changed
