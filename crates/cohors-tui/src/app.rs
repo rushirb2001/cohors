@@ -72,6 +72,9 @@ pub struct App {
     pub spinner: usize,
     /// Repos with an action (fetch/pull) in flight — shown with a row spinner.
     pub busy: HashSet<RepoId>,
+    /// Repos the user has explicitly marked (Space) for bulk actions, keyed by
+    /// id so the set survives re-sort / filter / refresh — exactly like `busy`.
+    pub selection: HashSet<RepoId>,
     /// Configured roots, for the empty/loading states.
     pub roots: Vec<String>,
     /// Config file path, for the help overlay.
@@ -101,6 +104,7 @@ impl App {
             status: None,
             spinner: 0,
             busy: HashSet::new(),
+            selection: HashSet::new(),
             roots,
             config_path,
             standup: None,
@@ -133,13 +137,67 @@ impl App {
         self.view().len()
     }
 
-    /// The repo under the selection, if any. (Used by the action keys —
-    /// fetch/pull/open — landing in the next milestone; exercised by tests now.)
-    #[allow(dead_code)]
+    /// The repo under the cursor, if any.
     pub fn selected_repo(&self) -> Option<&RepoSnapshot> {
         self.view()
             .get(self.selected)
             .map(|row| &self.repos[row.index])
+    }
+
+    /// The repos an action should operate on: the marked selection (intersected
+    /// with what's currently visible, in view order) if any are marked, else the
+    /// repo under the cursor. Callers still drop error/path-less repos, exactly
+    /// as the single-repo action paths already do.
+    // Consumed by the command runner and bulk actions in the following chunks.
+    #[allow(dead_code)]
+    pub fn action_targets(&self) -> Vec<RepoId> {
+        if self.selection.is_empty() {
+            return self
+                .selected_repo()
+                .map(|r| r.id.clone())
+                .into_iter()
+                .collect();
+        }
+        self.view()
+            .iter()
+            .map(|vr| self.repos[vr.index].id.clone())
+            .filter(|id| self.selection.contains(id))
+            .collect()
+    }
+
+    /// Toggle the cursor repo's membership in the selection. No-op on an error
+    /// or path-less repo — those can't be acted on, so they can't be marked.
+    fn toggle_selection(&mut self) {
+        let Some(repo) = self.selected_repo() else {
+            return;
+        };
+        if repo.has_error() {
+            return;
+        }
+        let id = repo.id.clone();
+        if !self.selection.remove(&id) {
+            self.selection.insert(id);
+        }
+    }
+
+    /// Mark every visible, actionable repo — or clear them all if they're
+    /// already marked (toggle-all).
+    fn select_all_visible(&mut self) {
+        let ids: Vec<RepoId> = self
+            .view()
+            .iter()
+            .map(|vr| &self.repos[vr.index])
+            .filter(|r| !r.has_error())
+            .map(|r| r.id.clone())
+            .collect();
+        let all_marked = !ids.is_empty() && ids.iter().all(|id| self.selection.contains(id));
+        for id in ids {
+            if all_marked {
+                self.selection.remove(&id);
+            } else {
+                self.selection.insert(id);
+            }
+        }
     }
 
     /// Replace the repo set (e.g. after a scan) and keep the selection in range.
@@ -178,6 +236,10 @@ impl App {
             KeyCode::Up => self.move_up(),
             KeyCode::Home => self.selected = 0,
             KeyCode::End => self.select_last(),
+            // Multi-select for bulk actions.
+            KeyCode::Char(' ') => self.toggle_selection(),
+            KeyCode::Char('a') => self.select_all_visible(),
+            KeyCode::Esc => self.selection.clear(),
             KeyCode::Char('/') => self.mode = Mode::Filter,
             KeyCode::Char('d') => {
                 self.dirty_only = !self.dirty_only;
@@ -382,6 +444,73 @@ mod tests {
         app.on_key(key('d'));
         assert_eq!(app.visible_len(), 1);
         assert_eq!(app.selected_repo().unwrap().name, "dirty");
+    }
+
+    #[test]
+    fn space_toggles_selection_membership() {
+        let mut app = app_with(&[("a", false), ("b", false)]);
+        let current = app.selected_repo().unwrap().id.clone();
+        app.on_key(key(' '));
+        assert!(app.selection.contains(&current));
+        app.on_key(key(' '));
+        assert!(!app.selection.contains(&current));
+    }
+
+    #[test]
+    fn select_all_then_toggle_clears() {
+        let mut app = app_with(&[("a", false), ("b", false), ("c", false)]);
+        app.on_key(key('a'));
+        assert_eq!(app.selection.len(), 3);
+        app.on_key(key('a')); // already all marked → clears
+        assert!(app.selection.is_empty());
+    }
+
+    #[test]
+    fn esc_clears_selection() {
+        let mut app = app_with(&[("a", false)]);
+        app.on_key(key('a'));
+        assert_eq!(app.selection.len(), 1);
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.selection.is_empty());
+    }
+
+    #[test]
+    fn error_repo_cannot_be_marked() {
+        let mut app = App::new(vec![], String::new());
+        let mut bad = snap("bad", false);
+        bad.error = Some("unreadable".to_string());
+        app.set_repos(vec![bad]);
+        app.on_key(key(' '));
+        assert!(app.selection.is_empty());
+    }
+
+    #[test]
+    fn action_targets_falls_back_to_current_when_unmarked() {
+        let app = app_with(&[("a", false), ("b", false)]);
+        let current = app.selected_repo().unwrap().id.clone();
+        assert_eq!(app.action_targets(), vec![current]);
+    }
+
+    #[test]
+    fn action_targets_is_marked_intersect_visible_in_view_order() {
+        let mut app = app_with(&[("clean", false), ("dirty", true)]);
+        app.selection.insert(RepoId("clean".to_string()));
+        app.selection.insert(RepoId("dirty".to_string()));
+        // The dirty-only filter hides "clean", so only "dirty" is targetable.
+        app.on_key(key('d'));
+        assert_eq!(app.action_targets(), vec![RepoId("dirty".to_string())]);
+    }
+
+    #[test]
+    fn selection_survives_set_repos_and_dead_ids_drop() {
+        let mut app = app_with(&[("a", false), ("b", false)]);
+        app.selection.insert(RepoId("a".to_string()));
+        // Re-scan with the same ids reordered: the mark persists.
+        app.set_repos(vec![snap("b", false), snap("a", false)]);
+        assert_eq!(app.action_targets(), vec![RepoId("a".to_string())]);
+        // Re-scan dropping "a": it's no longer a target (intersect with view).
+        app.set_repos(vec![snap("b", false)]);
+        assert!(app.action_targets().is_empty());
     }
 
     #[test]

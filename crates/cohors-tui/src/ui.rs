@@ -227,6 +227,9 @@ fn header_status(app: &App) -> String {
     } else {
         format!("{total} repos")
     };
+    if !app.selection.is_empty() {
+        status.push_str(&format!(" · {} selected", app.selection.len()));
+    }
     status.push_str(&format!(" · sort: {}", app.sort.label()));
     if app.dirty_only {
         status.push_str(" · dirty-only");
@@ -248,7 +251,7 @@ fn footer_hints(app: &App) -> String {
             " ↑/↓ scroll · PgUp/PgDn · w window · y copy · Esc close ".to_string()
         }
         Mode::Normal => {
-            " ↑/↓ move · / filter · d dirty · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit ".to_string()
+            " ↑/↓ move · Space mark · a all · / filter · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit ".to_string()
         }
     }
 }
@@ -319,7 +322,8 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         .map(|vr| {
             let snap = &app.repos[vr.index];
             let busy = app.busy.contains(&snap.id).then_some(spin);
-            repo_row(snap, &vr.name_highlights, now, theme, busy)
+            let marked = app.selection.contains(&snap.id);
+            repo_row(snap, &vr.name_highlights, now, theme, busy, marked)
         })
         .collect();
 
@@ -352,14 +356,19 @@ fn repo_row<'a>(
     now: i64,
     theme: &Theme,
     busy: Option<&str>,
+    marked: bool,
 ) -> Row<'a> {
     if let Some(reason) = &snap.error {
         // A broken repo: a red name + an "error" marker and the reason in the
         // wide last column. The data columns get a dim "·" (no data to report);
         // they must be non-empty or the table collapses them and misaligns.
+        // The leading "  " keeps the name aligned with the selection gutter.
         let dot = || Cell::from(Span::styled("·", theme.dim()));
         return Row::new(vec![
-            Cell::from(Span::styled(snap.name.clone(), theme.error())),
+            Cell::from(Line::from(vec![
+                Span::raw("  "),
+                Span::styled(snap.name.clone(), theme.error()),
+            ])),
             Cell::from(Span::styled("error", theme.risk())),
             dot(),
             dot(),
@@ -376,7 +385,7 @@ fn repo_row<'a>(
         None => sync_cell(snap, theme),
     };
     Row::new(vec![
-        name_cell(&snap.name, highlights, severity, theme),
+        name_cell(&snap.name, highlights, severity, marked, theme),
         branch_cell(snap, severity, theme),
         sync,
         changes_cell(snap, theme),
@@ -413,31 +422,42 @@ fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     }
 }
 
-/// The repo name. Dimmed when clean, red when in a risk state, default
-/// otherwise; fuzzy-matched characters are bold-highlighted.
-fn name_cell<'a>(name: &str, highlights: &[u32], severity: Severity, theme: &Theme) -> Cell<'a> {
+/// The repo name, preceded by a selection gutter: a cyan `●` when the repo is
+/// marked for a bulk action, two spaces otherwise (so names stay aligned). The
+/// name is dimmed when clean, red in a risk state, default otherwise;
+/// fuzzy-matched characters are bold-highlighted.
+fn name_cell<'a>(
+    name: &str,
+    highlights: &[u32],
+    severity: Severity,
+    marked: bool,
+    theme: &Theme,
+) -> Cell<'a> {
     let base = match severity {
         Severity::Ok | Severity::Info => theme.dim(),
         Severity::Risk => theme.risk(),
         _ => Style::new(),
     };
+    let gutter = if marked {
+        Span::styled("● ", theme.ahead())
+    } else {
+        Span::raw("  ")
+    };
+    let mut spans = vec![gutter];
     if highlights.is_empty() {
-        return Cell::from(Span::styled(name.to_string(), base));
-    }
-    // Bold the fuzzy-matched characters.
-    let hl = base.patch(theme.highlight());
-    let spans: Vec<Span> = name
-        .chars()
-        .enumerate()
-        .map(|(i, ch)| {
+        spans.push(Span::styled(name.to_string(), base));
+    } else {
+        // Bold the fuzzy-matched characters.
+        let hl = base.patch(theme.highlight());
+        spans.extend(name.chars().enumerate().map(|(i, ch)| {
             let style = if highlights.contains(&(i as u32)) {
                 hl
             } else {
                 base
             };
             Span::styled(ch.to_string(), style)
-        })
-        .collect();
+        }));
+    }
     Cell::from(Line::from(spans))
 }
 
@@ -866,6 +886,14 @@ mod tests {
     #[test]
     fn snapshot_list() {
         let app = demo_app();
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    #[test]
+    fn snapshot_multiselect() {
+        let mut app = demo_app();
+        app.selection.insert(RepoId("payments".to_string()));
+        app.selection.insert(RepoId("web-app".to_string()));
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 
