@@ -671,12 +671,23 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         .border_type(BorderType::Rounded)
         .title(Line::from(title));
     let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    // Track the table's scroll so we can tell the user when the list overflows
-    // the window. The body is `inner` minus the header row and its 1-row margin.
     let view = app.view();
     let total = view.len();
-    let viewport = inner.height.saturating_sub(2) as usize;
+    // Does the fleet overflow the body (inner minus the header row + its margin)?
+    let overflow = total > inner.height.saturating_sub(2) as usize;
+    // When it does, reserve the last inner row for a scroll hint *inside* the box
+    // (not on the border); the table takes the rest.
+    let (table_area, hint_area) = if overflow {
+        let [t, h] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+        (t, Some(h))
+    } else {
+        (inner, None)
+    };
+
+    // Track the table's scroll so the visible rows and the hint count agree.
+    let viewport = (table_area.height as usize).saturating_sub(2);
     let mut offset = app.repos_scroll.get();
     if app.selected < offset {
         offset = app.selected;
@@ -685,22 +696,6 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     }
     offset = offset.min(total.saturating_sub(viewport));
     app.repos_scroll.set(offset);
-    let below = total.saturating_sub(offset + viewport);
-
-    // On a window too short to show every repo, hint that the list scrolls — a
-    // dim "… N more ↓" on the bottom border. Hidden once everything fits.
-    let block = if below > 0 {
-        block.title_bottom(
-            Line::from(Span::styled(
-                format!(" … {below} more ↓ "),
-                theme.ahead().add_modifier(Modifier::BOLD),
-            ))
-            .centered(),
-        )
-    } else {
-        block
-    };
-    frame.render_widget(block, area);
 
     // "Repo" is padded by 2 so it lines up with the names, which carry a 2-col
     // selection gutter (`● ` / `  `) inside their cell.
@@ -755,10 +750,31 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     if !view.is_empty() {
         state.select(Some(app.selected));
     }
-    // Use the offset we computed above so the "… N more" hint and the visible
-    // rows agree (and the table doesn't re-scroll past our clamp).
+    // Use the offset we computed above so the hint and the visible rows agree
+    // (and the table doesn't re-scroll past our clamp).
     *state.offset_mut() = offset;
-    frame.render_stateful_widget(table, inner, &mut state);
+    frame.render_stateful_widget(table, table_area, &mut state);
+
+    // The scroll hint, centered on its own row inside the box: how many repos
+    // are below the fold (or above, once scrolled to the bottom).
+    if let Some(h) = hint_area {
+        let below = total.saturating_sub(offset + viewport);
+        let text = if below > 0 {
+            format!("… {below} more ↓")
+        } else {
+            format!("↑ {offset} more")
+        };
+        frame.render_widget(
+            Paragraph::new(
+                Line::from(Span::styled(
+                    text,
+                    theme.ahead().add_modifier(Modifier::BOLD),
+                ))
+                .centered(),
+            ),
+            h,
+        );
+    }
 }
 
 fn repo_row<'a>(

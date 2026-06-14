@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.25] — 2026-06-14
+
+### Changed
+
+- The repo list's scroll hint now renders **on its own centered row inside the
+  box** (bold accent) instead of on the bottom border, and shows `↑ N more` once
+  you've scrolled to the bottom — so the affordance reads as content, not chrome.
+
 ## [0.3.24] — 2026-06-14
 
 ### Changed
