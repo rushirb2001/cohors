@@ -1,0 +1,17 @@
+[package]
+name = "cohors-github"
+description = "Remote (GitHub) data source for cohors: PR and CI status via the REST API."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+cohors-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ureq = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

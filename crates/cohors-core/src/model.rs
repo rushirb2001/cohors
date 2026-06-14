@@ -118,6 +118,34 @@ pub struct CommitMeta {
     pub summary: String,
 }
 
+/// CI / checks status for a repo's default branch (v0.2). `None` means no checks
+/// configured (or not fetched yet).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CiStatus {
+    Passing,
+    Failing,
+    Pending,
+    None,
+}
+
+/// Remote (GitHub) info for a repo, populated by `cohors-github` (v0.2). `None`
+/// on a snapshot means "not a GitHub repo, or not fetched yet".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteInfo {
+    /// e.g. `github.com`.
+    pub host: String,
+    pub owner: String,
+    pub repo: String,
+    pub default_branch: String,
+    /// Open pull requests on the repo.
+    pub open_prs: u32,
+    /// PRs requesting the current user's review.
+    pub prs_awaiting_review: u32,
+    /// CI/checks status of the default branch's latest commit.
+    pub ci: CiStatus,
+}
+
 /// A full point-in-time view of one repo — the unit the dashboard renders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepoSnapshot {
@@ -138,6 +166,14 @@ pub struct RepoSnapshot {
     #[serde(default)]
     pub stash_latest: Option<i64>,
     pub last_commit: Option<CommitMeta>,
+    /// The `origin` remote URL (local git data), if any — feeds GitHub
+    /// resolution in `cohors-github`.
+    #[serde(default)]
+    pub remote_url: Option<String>,
+    /// GitHub-derived info (v0.2), filled asynchronously after the local scan;
+    /// `None` until fetched (or for non-GitHub repos).
+    #[serde(default)]
+    pub remote: Option<RemoteInfo>,
     /// Set when the repo couldn't be read; the other fields then hold
     /// best-effort defaults. One bad repo must never crash the dashboard, so
     /// adapters record the reason here instead of failing the whole scan.
@@ -165,6 +201,8 @@ impl RepoSnapshot {
             stash_count: 0,
             stash_latest: None,
             last_commit: None,
+            remote_url: None,
+            remote: None,
             error: Some(error.into()),
         }
     }
@@ -242,6 +280,8 @@ pub(crate) fn sample(
         },
         stash_count: stash,
         stash_latest: None,
+        remote_url: None,
+        remote: None,
         last_commit: commit_ts.map(|t| CommitMeta {
             short_id: "abc1234".to_string(),
             author: "Dev".to_string(),

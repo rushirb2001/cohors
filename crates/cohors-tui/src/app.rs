@@ -246,6 +246,8 @@ mod tests {
             },
             stash_count: 0,
             stash_latest: None,
+            remote_url: None,
+            remote: None,
             last_commit: Some(CommitMeta {
                 short_id: "abc1234".to_string(),
                 author: "Dev".to_string(),

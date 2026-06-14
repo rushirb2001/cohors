@@ -4,6 +4,7 @@ members = [
     "crates/cohors-core",
     "crates/cohors-config",
     "crates/cohors-git",
+    "crates/cohors-github",
     "crates/cohors-tui",
 ]
 
@@ -58,6 +59,9 @@ ratatui = "0.30"
 # Clipboard for the "copy path" action.
 arboard = "3"
 
+# Remote adapter (cohors-github): blocking HTTP client with rustls TLS + JSON.
+ureq = { version = "2", features = ["json"] }
+
 # Dev/test helpers.
 tempfile = "3"
 assert_cmd = "2"
@@ -68,6 +72,7 @@ insta = "1"
 cohors-core = { path = "crates/cohors-core" }
 cohors-config = { path = "crates/cohors-config" }
 cohors-git = { path = "crates/cohors-git" }
+cohors-github = { path = "crates/cohors-github" }
 
 # Release config for cargo-dist (the `dist` tool). This is a starting point —
 # run `dist init` to (re)generate the matching `.github/workflows/release.yml`

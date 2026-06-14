@@ -53,6 +53,8 @@ pub fn snapshot_repo(repo_ref: &RepoRef) -> RepoSnapshot {
         worktree: extras.worktree,
         stash_count: extras.stash_count,
         stash_latest: extras.stash_latest,
+        remote_url: extras.remote_url,
+        remote: None,
         last_commit,
         error: None,
     }
@@ -118,6 +120,7 @@ struct Extras {
     upstream: Option<Upstream>,
     stash_count: u32,
     stash_latest: Option<i64>,
+    remote_url: Option<String>,
 }
 
 #[cfg(feature = "git2-fallback")]
@@ -133,6 +136,11 @@ fn git2_extras(path: &Utf8Path) -> Extras {
 
     extras.worktree = worktree_status(&repo);
     extras.upstream = upstream_info(&repo);
+    // The `origin` URL is local git data; cohors-github resolves it to a repo.
+    extras.remote_url = repo
+        .find_remote("origin")
+        .ok()
+        .and_then(|r| r.url().ok().map(str::to_string));
 
     // `stash_foreach` needs `&mut`, so do it last after the shared borrows end.
     // Index 0 is the most recent stash; capture its oid to time it afterward.

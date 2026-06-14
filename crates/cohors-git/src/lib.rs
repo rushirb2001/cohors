@@ -16,8 +16,10 @@ mod discover;
 mod error;
 mod provider;
 mod snapshot;
+mod standup;
 
 pub use discover::{DiscoveryOptions, discover};
 pub use error::GitError;
 pub use provider::LocalGitProvider;
 pub use snapshot::snapshot_repo;
+pub use standup::collect_commits;

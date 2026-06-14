@@ -23,13 +23,18 @@ pub mod fuzzy;
 pub mod model;
 pub mod provider;
 pub mod sort;
+pub mod standup;
 pub mod time;
 pub mod view;
 
 // Re-export the most-used types at the crate root so adapters can write
 // `use cohors_core::RepoSnapshot;` instead of reaching into modules.
 pub use attention::{Assessment, AttentionReason, FleetSummary, Severity, assess, fleet_summary};
-pub use model::{Branch, CommitMeta, RepoId, RepoRef, RepoSnapshot, Upstream, WorktreeStatus};
+pub use model::{
+    Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoRef, RepoSnapshot, Upstream,
+    WorktreeStatus,
+};
 pub use provider::RepoProvider;
 pub use sort::SortMode;
+pub use standup::{StandupCommit, StandupWindow, to_markdown};
 pub use view::{ViewParams, ViewRow, compute_view};

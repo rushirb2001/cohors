@@ -289,6 +289,8 @@ mod tests {
             },
             stash_count: stash,
             stash_latest,
+            remote_url: None,
+            remote: None,
             last_commit: commit_ts.map(|t| CommitMeta {
                 short_id: "abc".into(),
                 author: "D".into(),
