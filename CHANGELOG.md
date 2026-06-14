@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.10] — 2026-06-14
+
+### Fixed
+
+- Tightened the fused **Sync** column: it was too wide (left a large empty gap
+  before Changes) and showed a redundant `·` next to the remote dot for repos
+  that are even with upstream (two tiny dots with a gap that read as wasted
+  space). The `·` is now dropped whenever the remote dot is present, so an
+  even, tracked repo shows just `●`, and the column is narrower.
+
 ## [0.3.9] — 2026-06-14
 
 ### Changed

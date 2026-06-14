@@ -12,7 +12,7 @@ expression: "render_to_string(&app, 100, 22)"
 ╭ Reposi│ │                        │  │ aa00002  feat: payments work item 2             █│ │───────╮
 │    Rep│ │                        │  │ aa00003  feat: payments work item 3             █│ │       │
 │       │ │                        │  │ aa00004  feat: payments work item 4             █│ │       │
-│▌   leg│ │                        │  │ aa00005  feat: payments work item 5             ║│ │sion de│
+│▌   leg│ │                        │  │ aa00005  feat: payments work item 5             ║│ │n denie│
 │    pay│ │                        │  │ aa00006  feat: payments work item 6             ║│ │       │
 │    web│ │                        │  │ aa00007  feat: payments work item 7             ║│ │       │
 │    inf│ │                        │  │ aa00008  feat: payments work item 8             ║│ │       │

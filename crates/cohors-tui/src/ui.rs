@@ -465,7 +465,7 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     let widths = [
         Constraint::Length(18), // Repo (incl. 2-col selection gutter)
         Constraint::Length(13), // Branch
-        Constraint::Length(13), // Sync (ahead/behind + remote CI/PRs)
+        Constraint::Length(10), // Sync (ahead/behind + remote CI/PRs)
         Constraint::Length(10), // Changes (working tree + stash)
         Constraint::Fill(1),    // Last commit takes the remaining width
     ];
@@ -614,11 +614,21 @@ fn branch_cell<'a>(snap: &RepoSnapshot, severity: Severity, theme: &Theme) -> Ce
 /// remote dot + open-PR count (`●`, `● 2pr`). Examples: `↑2 ● 2pr`, `↓5 ●`,
 /// `· ●`. "—" when the repo has neither an upstream nor a remote (purely local).
 fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
-    // The upstream sub-part: ahead/behind arrows, or "·" when even. Empty (not
-    // "—") when there's no upstream, so it can sit beside the remote dot.
+    let remote = remote_spans(snap, theme);
+
+    // The upstream sub-part: ahead/behind arrows when the branch has diverged.
+    // When it's even with upstream we'd normally show "·", but that's redundant
+    // next to the remote dot (which already says "this is tracked") — so we only
+    // emit the "·" when there's no remote dot to stand in for it.
     let upstream: Vec<Span> = match &snap.upstream {
         None => Vec::new(),
-        Some(up) if up.ahead == 0 && up.behind == 0 => vec![Span::styled("·", theme.dim())],
+        Some(up) if up.ahead == 0 && up.behind == 0 => {
+            if remote.is_empty() {
+                vec![Span::styled("·", theme.dim())]
+            } else {
+                Vec::new()
+            }
+        }
         Some(up) => {
             let mut spans = Vec::new();
             if up.ahead > 0 {
@@ -633,7 +643,6 @@ fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
             spans
         }
     };
-    let remote = remote_spans(snap, theme);
 
     // Join the two sub-parts with a space; fall back to "—" when both are empty.
     let mut spans = upstream;

@@ -12,11 +12,11 @@ expression: "render_to_string(&app, 100, 40)"
 ╭ Repositories (5) │   Home / End      top / bottom                             │──────────────────╮
 │    Repo          │                                                            │                  │
 │                  │ Select                                                     │                  │
-│▌   legacy-billing│   Space           mark / unmark the repo                   │git (permission de│
-│    payments      │   a               mark all (again to clear)                │on 5xx            │
-│    web-app       │   Esc             clear the selection                      │rawer             │
-│    infra         │                                                            │ci image          │
-│    auth-service  │ View                                                       │ deps             │
+│▌   legacy-billing│   Space           mark / unmark the repo                   │ (permission denie│
+│    payments      │   a               mark all (again to clear)                │5xx               │
+│    web-app       │   Esc             clear the selection                      │er                │
+│    infra         │                                                            │image             │
+│    auth-service  │ View                                                       │ps                │
 │                  │   /               fuzzy filter (Esc clears)                │                  │
 │                  │   d               toggle dirty-only                        │                  │
 │                  │   s               cycle sort mode                          │                  │

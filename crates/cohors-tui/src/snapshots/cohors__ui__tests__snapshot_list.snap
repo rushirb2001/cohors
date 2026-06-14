@@ -10,12 +10,12 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) ────────────────────────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync           Changes     Last commit                       │
+│    Repo              Branch         Sync        Changes     Last commit                          │
 │                                                                                                  │
-│▌   legacy-billing    error          ·              ·           could not read .git (permission de│
-│    payments          main           ↑2 ● 2pr       4 s1         2h  fix: retry on 5xx            │
-│    web-app           feat/checkout  ↓5 ●           7           20m  wip: cart drawer             │
-│    infra             @a1b2c3d       —              4            1w  build: pin ci image          │
+│▌   legacy-billing    error          ·           ·           could not read .git (permission denie│
+│    payments          main           ↑2 ● 2pr    4 s1         2h  fix: retry on 5xx               │
+│    web-app           feat/checkout  ↓5 ●        7           20m  wip: cart drawer                │
+│    infra             @a1b2c3d       —           4            1w  build: pin ci image             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ select Space mark repo · a mark all · / filter · Esc clear                                       │
