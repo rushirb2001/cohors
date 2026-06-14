@@ -84,18 +84,23 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     let area = frame.area();
 
     // Top-level layout: the branded header box, the body, and a boxed key-hint
-    // footer that grows to wrap its commands on a narrow ("compact") terminal.
-    let hint_len = footer_hints(app).trim().chars().count() as u16;
+    // footer — one labelled group per row, each wrapping if the terminal is
+    // narrow, so no command is ever truncated.
+    let footer = footer_lines(app, &theme);
     let footer_inner = area.width.saturating_sub(4).max(1); // 2 border + 2 padding
-    let footer_height = hint_len.div_ceil(footer_inner).clamp(1, 3) + 2;
+    let footer_rows: u16 = footer
+        .iter()
+        .map(|l| (l.width() as u16).max(1).div_ceil(footer_inner))
+        .sum::<u16>()
+        .clamp(1, 6);
     let [header_area, body_area, footer_area] = Layout::vertical([
         Constraint::Length(3),
         Constraint::Min(0),
-        Constraint::Length(footer_height),
+        Constraint::Length(footer_rows + 2),
     ])
     .areas(area);
     render_header(frame, header_area, app, &theme);
-    render_footer(frame, footer_area, app, &theme);
+    render_footer(frame, footer_area, footer, &theme);
 
     if app.repos.is_empty() {
         if app.scanning {
@@ -158,9 +163,9 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     );
 }
 
-/// The footer: context-sensitive key hints in a box, wrapping to more lines on
-/// a narrow terminal so no command is ever truncated.
-fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+/// The footer: context-sensitive key hints in a box, one labelled group per row,
+/// wrapping on a narrow terminal so no command is ever truncated.
+fn render_footer(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>, theme: &Theme) {
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
@@ -168,11 +173,7 @@ fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
     frame.render_widget(
-        Paragraph::new(Span::styled(
-            footer_hints(app).trim().to_string(),
-            theme.dim(),
-        ))
-        .wrap(Wrap { trim: true }),
+        Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
         inner,
     );
 }
@@ -265,20 +266,95 @@ fn header_status(app: &App) -> String {
     status
 }
 
-fn footer_hints(app: &App) -> String {
+/// The footer key hints for the current mode, in labelled groups. Each group is
+/// `(group label, [(key, what it does)])` and renders on its own row, so the
+/// controls read like a small legend: the group label says what the keys are
+/// for (e.g. the "act" keys act on the marked repos).
+fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
     match app.mode {
-        Mode::Filter => " type to filter · ↑/↓ move · ⏎ apply · Esc clear ".to_string(),
-        Mode::Help => " ? / Esc close ".to_string(),
-        Mode::Standup => {
-            " ↑/↓ scroll · PgUp/PgDn · w window · y copy · Esc close ".to_string()
-        }
-        Mode::CommandInput => " type a command · ⏎ run · Esc cancel ".to_string(),
-        Mode::CommandRun => " ↑/↓ repo · PgUp/PgDn scroll · y copy · Esc close ".to_string(),
-        Mode::Confirm => " y confirm · N / Esc cancel ".to_string(),
-        Mode::Normal => {
-            " ↑/↓ move · Space mark · a all · / filter · ⏎ open · p pull · ! run · S stash · Tab standup · ? help · q quit ".to_string()
-        }
+        Mode::Filter => vec![(
+            "filter",
+            vec![("type", "to filter"), ("⏎", "apply"), ("Esc", "clear")],
+        )],
+        Mode::Help => vec![("", vec![("? / Esc", "close")])],
+        Mode::Standup => vec![(
+            "",
+            vec![
+                ("↑/↓", "scroll"),
+                ("PgUp/PgDn", "page"),
+                ("w", "window"),
+                ("y", "copy"),
+                ("Esc", "close"),
+            ],
+        )],
+        Mode::CommandInput => vec![(
+            "",
+            vec![("type", "a command"), ("⏎", "run it"), ("Esc", "cancel")],
+        )],
+        Mode::CommandRun => vec![(
+            "",
+            vec![
+                ("↑/↓", "repo"),
+                ("PgUp/PgDn", "scroll output"),
+                ("y", "copy"),
+                ("Esc", "close"),
+            ],
+        )],
+        Mode::Confirm => vec![("", vec![("y", "confirm"), ("N / Esc", "cancel")])],
+        Mode::Normal => vec![
+            (
+                "select",
+                vec![
+                    ("Space", "mark repo"),
+                    ("a", "mark all"),
+                    ("/", "filter"),
+                    ("Esc", "clear"),
+                ],
+            ),
+            (
+                "act",
+                vec![
+                    ("⏎", "open"),
+                    ("f", "fetch"),
+                    ("p", "pull"),
+                    ("!", "run command"),
+                    ("S", "stash"),
+                ],
+            ),
+            (
+                "view",
+                vec![
+                    ("↑/↓", "move"),
+                    ("Tab", "standup"),
+                    ("?", "help"),
+                    ("q", "quit"),
+                ],
+            ),
+        ],
     }
+}
+
+/// Build one styled footer row per group: a dim group label, then each key in an
+/// accent colour with its dimmed description, `·`-separated.
+fn footer_lines(app: &App, theme: &Theme) -> Vec<Line<'static>> {
+    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
+    footer_groups(app)
+        .into_iter()
+        .map(|(label, items)| {
+            let mut spans: Vec<Span> = Vec::new();
+            if !label.is_empty() {
+                spans.push(Span::styled(format!("{label:<7}"), theme.dim()));
+            }
+            for (i, (key, desc)) in items.into_iter().enumerate() {
+                if i > 0 {
+                    spans.push(Span::styled(" · ", theme.dim()));
+                }
+                spans.push(Span::styled(key, key_style));
+                spans.push(Span::styled(format!(" {desc}"), theme.dim()));
+            }
+            Line::from(spans)
+        })
+        .collect()
 }
 
 fn render_filter_input(frame: &mut Frame, area: Rect, app: &App) {

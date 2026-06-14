@@ -22,5 +22,5 @@ expression: "render_to_string(&app, 100, 22)"
 │        │   bb00000  fix: web-app bug 0                                                 ║│        │
 ╰────────│   bb00001  fix: web-app bug 1                                                 ▼│────────╯
 ╭────────╰────────────────────────────────────────────────────────────── lines 4–19 of 23 ╯────────╮
-│ ↑/↓ scroll · PgUp/PgDn · w window · y copy · Esc close                                           │
+│ ↑/↓ scroll · PgUp/PgDn page · w window · y copy · Esc close                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
