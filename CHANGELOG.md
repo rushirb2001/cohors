@@ -21,6 +21,24 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.33] — 2026-06-14
+
+### Changed
+
+- **The standup commits pane now has a highlighted cursor.** Focusing it (`→`/
+  `⏎`) highlights a commit and `↑/↓` move that highlight, with the list scrolling
+  to keep it in view — so scrolling is contextual instead of a free offset.
+- The commits pane title shows the **commit count** (`payments · 24 commits`).
+- The description above the panes is now an **at-a-glance summary of what you
+  did** — `You authored 29 commits this week — 24 feat · 5 fix` (top commit
+  types) — rather than UI instructions.
+
+### Fixed
+
+- The standup **scrollbar** now tracks the cursor correctly (proportional thumb,
+  accurate position), replacing the previous free-offset scroll that could drift
+  out of sync.
+
 ## [0.3.32] — 2026-06-14
 
 ### Changed

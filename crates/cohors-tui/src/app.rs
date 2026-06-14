@@ -190,14 +190,16 @@ pub struct StandupView {
     pub groups: Vec<(String, Vec<StandupCommit>)>,
     /// Which repo's commits are shown (index into `groups`).
     pub focus: usize,
-    /// Vertical scroll offset within the focused repo's commit list.
-    pub scroll: u16,
+    /// The highlighted commit within the focused repo (index into its commits);
+    /// movement keeps it visible, so scrolling is contextual.
+    pub commit_cursor: usize,
     /// Which pane the keys drive: `false` = the repo list (↑/↓ switch repos),
-    /// `true` = the commits (↑/↓ scroll them). Lets arrow-key-only users read
-    /// the full history without PgUp/PgDn.
+    /// `true` = the commits (↑/↓ move the highlighted commit). Lets arrow-only
+    /// users read the full history without PgUp/PgDn.
     pub commits_focused: bool,
-    /// Max scroll, cached from the last render for clamp-without-viewport.
-    max_scroll: std::cell::Cell<u16>,
+    /// Render-managed scroll offset for the commits pane (kept so the cursor
+    /// stays visible); interior mutability like the other scroll states.
+    commit_offset: std::cell::Cell<u16>,
 }
 
 impl StandupView {
@@ -207,15 +209,23 @@ impl StandupView {
             commits,
             groups,
             focus: 0,
-            scroll: 0,
+            commit_cursor: 0,
             commits_focused: false,
-            max_scroll: std::cell::Cell::new(0),
+            commit_offset: std::cell::Cell::new(0),
         }
     }
 
-    /// Cache the focused repo's max scroll (the view calls this each frame).
-    pub fn set_max_scroll(&self, max: u16) {
-        self.max_scroll.set(max);
+    /// Number of commits in the focused repo.
+    pub fn focused_len(&self) -> usize {
+        self.groups.get(self.focus).map_or(0, |(_, c)| c.len())
+    }
+
+    /// The commits-pane scroll offset (render reads/writes it each frame).
+    pub fn offset(&self) -> u16 {
+        self.commit_offset.get()
+    }
+    pub fn set_offset(&self, offset: u16) {
+        self.commit_offset.set(offset);
     }
 }
 
@@ -552,7 +562,6 @@ impl App {
     }
 
     fn on_key_standup(&mut self, key: KeyEvent) -> Cmd {
-        let max = self.standup.as_ref().map_or(0, |s| s.max_scroll.get());
         let focused = self.standup.as_ref().is_some_and(|s| s.commits_focused);
         match key.code {
             KeyCode::Char('q') => self.mode = Mode::Normal,
@@ -590,44 +599,32 @@ impl App {
                     s.commits_focused = false;
                 }
             }
-            // ↑/↓ act on the focused pane: scroll commits, or switch repos.
+            // ↑/↓ act on the focused pane: move the commit cursor, or switch repos.
             KeyCode::Down | KeyCode::Char('j') => {
                 if focused {
-                    if let Some(s) = &mut self.standup {
-                        s.scroll = s.scroll.saturating_add(1).min(max);
-                    }
+                    self.move_commit_cursor(1);
                 } else {
                     self.standup_focus_step(1);
                 }
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 if focused {
-                    if let Some(s) = &mut self.standup {
-                        s.scroll = s.scroll.saturating_sub(1);
-                    }
+                    self.move_commit_cursor(-1);
                 } else {
                     self.standup_focus_step(-1);
                 }
             }
-            // PgUp/PgDn/g/G always scroll the commits (a bonus for those keys).
-            KeyCode::PageDown | KeyCode::Char(' ') => {
-                if let Some(s) = &mut self.standup {
-                    s.scroll = s.scroll.saturating_add(10).min(max);
-                }
-            }
-            KeyCode::PageUp => {
-                if let Some(s) = &mut self.standup {
-                    s.scroll = s.scroll.saturating_sub(10);
-                }
-            }
+            // PgUp/PgDn/g/G always move the commit cursor (a bonus for those keys).
+            KeyCode::PageDown | KeyCode::Char(' ') => self.move_commit_cursor(10),
+            KeyCode::PageUp => self.move_commit_cursor(-10),
             KeyCode::Char('g') => {
                 if let Some(s) = &mut self.standup {
-                    s.scroll = 0;
+                    s.commit_cursor = 0;
                 }
             }
             KeyCode::Char('G') => {
                 if let Some(s) = &mut self.standup {
-                    s.scroll = max;
+                    s.commit_cursor = s.focused_len().saturating_sub(1);
                 }
             }
             _ => {}
@@ -644,7 +641,20 @@ impl App {
             }
             let last = s.groups.len() - 1;
             s.focus = (s.focus as isize + delta).clamp(0, last as isize) as usize;
-            s.scroll = 0;
+            // New repo → start at its first commit, scrolled to the top.
+            s.commit_cursor = 0;
+            s.set_offset(0);
+        }
+    }
+
+    /// Move the highlighted commit within the focused repo, clamped to its range.
+    fn move_commit_cursor(&mut self, delta: isize) {
+        if let Some(s) = &mut self.standup {
+            let n = s.focused_len();
+            if n == 0 {
+                return;
+            }
+            s.commit_cursor = (s.commit_cursor as isize + delta).clamp(0, n as isize - 1) as usize;
         }
     }
 
@@ -764,14 +774,8 @@ impl App {
                 }
             }
             Mode::Standup => {
-                if let Some(s) = &mut self.standup {
-                    let max = s.max_scroll.get();
-                    s.scroll = if toward_top {
-                        s.scroll.saturating_sub(3)
-                    } else {
-                        s.scroll.saturating_add(3).min(max)
-                    };
-                }
+                // Wheel moves the highlighted commit (scroll follows it).
+                self.move_commit_cursor(if toward_top { -3 } else { 3 });
             }
             Mode::CommandRun => {
                 if let Some(run) = &mut self.run {

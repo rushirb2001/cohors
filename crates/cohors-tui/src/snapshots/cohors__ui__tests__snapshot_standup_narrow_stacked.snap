@@ -8,7 +8,7 @@ expression: "render_to_string(&app, 50, 24)"
 ╭ Attention (4 of 5 repositories) ───────────────╮
 │ 1 ╭ Standup · this week ───────────────────╮·  │
 ╰───│                                        │───╯
-╭ Re│ Your commits this week  ·  pick a repo │───╮
+╭ Re│ You authored 11 commits this week — 8  │───╮
 │   │                                        │s  │
 │   │ ╭ Repos ─────────────────────────────╮ │   │
 │▌  │ │ payments  8                        │ │   │
@@ -19,7 +19,7 @@ expression: "render_to_string(&app, 50, 24)"
 │   │ │                                    │ │   │
 │   │ ╰────────────────────────────────────╯ │   │
 │   │                                        │   │
-│   │ ╭ payments ──────────────────────────╮ │   │
+│   │ ╭ payments  ·  8 commits ────────────╮ │   │
 │   ╰────────────────── 11 commits · 2 repos ╯   │
 ╰────────────────────────────────────────────────╯
 ╭────────────────────────────────────────────────╮

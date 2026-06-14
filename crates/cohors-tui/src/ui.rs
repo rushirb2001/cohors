@@ -2,7 +2,9 @@
 //! from [`App::view`] (i.e. `cohors-core`) and maps them onto ratatui widgets.
 //! No state is mutated here.
 
-use cohors_core::{Branch, CiStatus, RepoSnapshot, Severity, assess, fleet_summary, time};
+use cohors_core::{
+    Branch, CiStatus, RepoSnapshot, Severity, StandupCommit, assess, fleet_summary, time,
+};
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
@@ -1189,6 +1191,24 @@ fn two_pane(inner: Rect, list_w: u16, stacked_list_h: u16) -> (Rect, Rect) {
     }
 }
 
+/// Count commits by their conventional-commit type (the word before the first
+/// `:`, scope stripped: `feat(ui): …` → `feat`), most-common first. Powers the
+/// standup's at-a-glance "what you did" description.
+fn commit_type_counts(commits: &[StandupCommit]) -> Vec<(String, usize)> {
+    let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for c in commits {
+        if let Some((prefix, _)) = c.summary.split_once(':') {
+            let kind = prefix.split('(').next().unwrap_or(prefix).trim();
+            if !kind.is_empty() && kind.len() <= 12 && !kind.contains(' ') {
+                *counts.entry(kind.to_lowercase()).or_default() += 1;
+            }
+        }
+    }
+    let mut v: Vec<(String, usize)> = counts.into_iter().collect();
+    v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    v
+}
+
 fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     // Size the modal to its content (capped) so it doesn't dominate the screen:
     // the panes are as tall as the busiest repo's commit list, up to a cap, and
@@ -1262,17 +1282,25 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .unwrap_or("");
     let [desc_area, panes_area] =
         Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(inner);
-    frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled("Your commits ", theme.dim()),
-            Span::styled(window, theme.ahead().add_modifier(Modifier::BOLD)),
-            Span::styled(
-                "  ·  pick a repo (left) to read its commits (right)",
-                theme.dim(),
-            ),
-        ])),
-        desc_area,
-    );
+
+    // A glance of *what you did*: total commits + the top commit types.
+    let top: Vec<String> = commit_type_counts(&view.commits)
+        .into_iter()
+        .take(4)
+        .map(|(kind, n)| format!("{n} {kind}"))
+        .collect();
+    let mut desc = vec![
+        Span::styled("You authored ", theme.dim()),
+        Span::styled(
+            format!("{total} commit{}", if total == 1 { "" } else { "s" }),
+            theme.ahead().add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(format!(" {window}"), theme.dim()),
+    ];
+    if !top.is_empty() {
+        desc.push(Span::styled(format!(" — {}", top.join(" · ")), theme.dim()));
+    }
+    frame.render_widget(Paragraph::new(Line::from(desc)), desc_area);
 
     // A "Repos" box and a "{repo}" commits box: side-by-side when there's room,
     // stacked (repos on top) on a narrow terminal.
@@ -1309,44 +1337,67 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     list_state.select(Some(view.focus));
     frame.render_stateful_widget(list, repos_inner, &mut list_state);
 
-    // Right: the focused repo's commits, scrollable.
+    // Right: the focused repo's commits, with the commit count in the title and
+    // a highlighted cursor (so scrolling is contextual).
+    let n = view.focused_len();
     let commits_block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(format!(" {repo_name} ")).style(active(view.commits_focused)))
+        .title(
+            Line::from(format!(
+                " {repo_name}  ·  {n} commit{} ",
+                if n == 1 { "" } else { "s" }
+            ))
+            .style(active(view.commits_focused)),
+        )
         .padding(Padding::new(1, 0, 0, 0));
     let commits_inner = commits_block.inner(right_area);
     frame.render_widget(commits_block, right_area);
 
-    let lines: Vec<Line> = view
+    let items: Vec<ListItem> = view
         .groups
         .get(view.focus)
         .map(|(_, commits)| {
             commits
                 .iter()
                 .map(|c| {
-                    Line::from(vec![
+                    ListItem::new(Line::from(vec![
                         Span::styled(c.short_id.clone(), theme.ahead()),
                         Span::raw("  "),
                         Span::raw(c.summary.clone()),
-                    ])
+                    ]))
                 })
                 .collect()
         })
         .unwrap_or_default();
-    let total_lines = lines.len() as u16;
-    let viewport = commits_inner.height;
-    let max_scroll = total_lines.saturating_sub(viewport);
-    view.set_max_scroll(max_scroll);
-    let offset = view.scroll.min(max_scroll);
 
     let [text_area, bar_area] =
         Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(commits_inner);
-    frame.render_widget(
-        Paragraph::new(Text::from(lines)).scroll((offset, 0)),
-        text_area,
-    );
-    if max_scroll > 0 {
-        let mut sb = ScrollbarState::new(total_lines as usize)
+
+    // Keep the highlighted commit visible: nudge the scroll offset only as far as
+    // needed, then clamp. This drives both the list and the scrollbar.
+    let total = items.len() as u16;
+    let viewport = text_area.height;
+    let cursor = view.commit_cursor as u16;
+    let mut offset = view.offset();
+    if cursor < offset {
+        offset = cursor;
+    } else if viewport > 0 && cursor >= offset + viewport {
+        offset = cursor + 1 - viewport;
+    }
+    offset = offset.min(total.saturating_sub(viewport));
+    view.set_offset(offset);
+
+    let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let mut list_state = ListState::default();
+    // Only show the cursor when the commits pane has focus.
+    if view.commits_focused {
+        list_state.select(Some(view.commit_cursor));
+    }
+    *list_state.offset_mut() = offset as usize;
+    frame.render_stateful_widget(list, text_area, &mut list_state);
+
+    if total > viewport {
+        let mut sb = ScrollbarState::new(total as usize)
             .position(offset as usize)
             .viewport_content_length(viewport as usize);
         frame.render_stateful_widget(
@@ -2027,7 +2078,12 @@ mod tests {
                 timestamp: NOW - (i as i64) * 7200,
             });
         }
-        app.standup = Some(StandupView::new(commits));
+        let mut view = StandupView::new(commits);
+        // Focus the commits with the cursor deep in the list, so the highlight
+        // and contextual scroll (the list follows the cursor) are exercised.
+        view.commits_focused = true;
+        view.commit_cursor = 20;
+        app.standup = Some(view);
         insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }
 

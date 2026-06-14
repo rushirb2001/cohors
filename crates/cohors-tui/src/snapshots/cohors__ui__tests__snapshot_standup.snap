@@ -5,22 +5,22 @@ expression: "render_to_string(&app, 100, 22)"
 ╭ cohors vX.Y.Z ──────────────────────────────────────────────────────────────────────────────────╮
 │ All yo╭ Standup · this week ─────────────────────────────────────────────────────────────╮       │
 ╰───────│                                                                                  │───────╯
-╭ Attent│ Your commits this week  ·  pick a repo (left) to read its commits (right)        │───────╮
+╭ Attent│ You authored 29 commits this week — 24 feat · 5 fix                              │───────╮
 │ 1 unpu│                                                                                  │       │
-╰───────│ ╭ Repos ─────────────────╮  ╭ payments ────────────────────────────────────────╮ │───────╯
-╭ Reposi│ │ payments  24           │  │ aa00000  feat: payments work item 0             █│ │───────╮
-│    Rep│ │ web-app  5             │  │ aa00001  feat: payments work item 1             █│ │       │
-│       │ │                        │  │ aa00002  feat: payments work item 2             █│ │       │
-│▌   leg│ │                        │  │ aa00003  feat: payments work item 3             █│ │ied)   │
-│    pay│ │                        │  │ aa00004  feat: payments work item 4             █│ │       │
-│    web│ │                        │  │ aa00005  feat: payments work item 5             ║│ │       │
-│    inf│ │                        │  │ aa00006  feat: payments work item 6             ║│ │       │
-│    aut│ │                        │  │ aa00007  feat: payments work item 7             ║│ │       │
-│       │ │                        │  │ aa00008  feat: payments work item 8             ║│ │       │
-│       │ │                        │  │ aa00009  feat: payments work item 9             ║│ │       │
+╰───────│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │───────╯
+╭ Reposi│ │ payments  24           │  │ aa00008  feat: payments work item 8             ║│ │───────╮
+│    Rep│ │ web-app  5             │  │ aa00009  feat: payments work item 9             ║│ │       │
 │       │ │                        │  │ aa00010  feat: payments work item 10            ║│ │       │
-│       │ │                        │  │ aa00011  feat: payments work item 11            ║│ │       │
-╰───────│ │                        │  │ aa00012  feat: payments work item 12            ║│ │───────╯
+│▌   leg│ │                        │  │ aa00011  feat: payments work item 11            █│ │ied)   │
+│    pay│ │                        │  │ aa00012  feat: payments work item 12            █│ │       │
+│    web│ │                        │  │ aa00013  feat: payments work item 13            █│ │       │
+│    inf│ │                        │  │ aa00014  feat: payments work item 14            █│ │       │
+│    aut│ │                        │  │ aa00015  feat: payments work item 15            █│ │       │
+│       │ │                        │  │ aa00016  feat: payments work item 16            ║│ │       │
+│       │ │                        │  │ aa00017  feat: payments work item 17            ║│ │       │
+│       │ │                        │  │ aa00018  feat: payments work item 18            ║│ │       │
+│       │ │                        │  │ aa00019  feat: payments work item 19            ║│ │       │
+╰───────│ │                        │  │ aa00020  feat: payments work item 20            ║│ │───────╯
 ╭───────│ ╰────────────────────────╯  ╰──────────────────────────────────────────────────╯ │───────╮
-│ ↑/↓ re╰──────────────────────────────────────────────────────────── 29 commits · 2 repos ╯       │
+│ ↑/↓ sc╰──────────────────────────────────────────────────────────── 29 commits · 2 repos ╯       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
