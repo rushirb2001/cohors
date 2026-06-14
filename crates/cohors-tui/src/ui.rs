@@ -853,7 +853,9 @@ mod tests {
             }
             out.push('\n');
         }
-        out
+        // Normalize the version so a bump doesn't churn every header snapshot —
+        // these tests assert layout, not the version number.
+        out.replace(&format!("v{}", env!("CARGO_PKG_VERSION")), "vX.Y.Z")
     }
 
     #[test]

@@ -126,7 +126,17 @@ fn drain_background(
 ) {
     while let Ok(msg) = rx.try_recv() {
         match msg {
-            BgMsg::Scanned(repos) => {
+            BgMsg::Scanned(mut repos) => {
+                // Carry over already-fetched remote info so the Remote column
+                // stays put across a refresh instead of blanking to "—" until
+                // re-enrichment completes (enrichment will refresh it).
+                for repo in &mut repos {
+                    if repo.remote.is_none()
+                        && let Some(old) = app.repos.iter().find(|r| r.id == repo.id)
+                    {
+                        repo.remote = old.remote.clone();
+                    }
+                }
                 app.set_repos(repos);
                 app.scanning = false;
                 if app.status.as_deref() == Some("refreshing…") {
@@ -144,6 +154,9 @@ fn drain_background(
                         local.remote = snap.remote;
                     }
                 }
+                // Persist the enriched set so a warm start shows remote state
+                // immediately instead of "—" until the next enrichment.
+                crate::cache::save(&app.repos);
             }
             BgMsg::StandupReady(markdown) => {
                 app.standup = Some(markdown);

@@ -19,12 +19,23 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.2.1] — 2026-06-13
+
 ### Changed
 
 - The **Remote** column now shows a single cloud (`☁`) colored by CI health —
   green passing, red failing, yellow pending, dim when there's no signal — with
   the open-PR count beside it, instead of distinct `✓`/`✗`/`●`/`·` glyphs. One
   recognizable icon reads more simply than four.
+
+### Fixed
+
+- Remote (PR/CI) state now **persists**: it's carried across a re-scan instead of
+  blanking to "—" until re-enrichment, and it's written to the warm-start cache
+  so a relaunch shows it immediately. Previously the column flickered on every
+  refresh and never survived a restart.
 
 ## [0.2.0] — 2026-06-13
 
