@@ -4,6 +4,7 @@
 
 use cohors_core::{Branch, CiStatus, RepoSnapshot, Severity, assess, fleet_summary, time};
 use ratatui::Frame;
+use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
@@ -123,6 +124,17 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         render_repos_panel(frame, list, app, now, &theme);
     }
 
+    // Dim the whole frame behind a modal overlay so the background recedes and
+    // the overlay stands out. The overlays `Clear` their own area, so they
+    // render crisp on top of the dimmed background.
+    let overlay_open = matches!(
+        app.mode,
+        Mode::Help | Mode::Standup | Mode::CommandInput | Mode::CommandRun | Mode::Confirm
+    );
+    if overlay_open {
+        dim_area(frame.buffer_mut(), area);
+    }
+
     if app.mode == Mode::Help {
         render_help(frame, area, app);
     }
@@ -137,6 +149,19 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::Confirm {
         render_confirm(frame, area, app, &theme);
+    }
+}
+
+/// Dim every cell in `area` (keeps its colours, adds the DIM attribute) — used
+/// to fade the background behind a modal overlay.
+fn dim_area(buf: &mut Buffer, area: Rect) {
+    let dim = Style::new().add_modifier(Modifier::DIM);
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            if let Some(cell) = buf.cell_mut((x, y)) {
+                cell.set_style(dim);
+            }
+        }
     }
 }
 
