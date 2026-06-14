@@ -4,41 +4,41 @@ expression: "render_to_string(&app, 100, 40)"
 ---
 ╭ cohors vX.Y.Z ──────────────────────────────────────────────────────5 repos · sort: dirty-first ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
-│ 4 of 5 repositori╭ Help ──────────────────────────────────────────────────────╮                  │
-│ 1 unpushed · 1 be│ Navigation                                                 │                  │
-╰──────────────────│   ↑ / ↓           move cursor                              │──────────────────╯
-╭ Repositories (5) │   Home / End      top / bottom                             │──────────────────╮
-│    Repo          │                                                            │                  │
-│                  │ Select                                                     │                  │
-│▌   legacy-billing│   Space           mark / unmark the repo                   │mission denied)   │
-│    payments      │   a               mark all (again to clear)                │                  │
-│    web-app       │   Esc             clear the selection                      │                  │
-│    infra         │                                                            │                  │
-│    auth-service  │ View                                                       │                  │
-│                  │   /               fuzzy filter (Esc clears)                │                  │
-│                  │   d               toggle dirty-only                        │                  │
-│                  │   s               cycle sort mode                          │                  │
-│                  │   Tab             weekly standup                           │                  │
-│                  │                                                            │                  │
-│                  │ Actions  (on the selection, or the current repo)           │                  │
-│                  │   ⏎               open in editor                           │                  │
-│                  │   o               reveal in file manager                   │                  │
-│                  │   f / F           fetch selection / all                    │                  │
-│                  │   p               pull (fast-forward only)                 │                  │
-│                  │   !               run a command across them                │                  │
-│                  │   S               stash (asks to confirm)                  │                  │
-│                  │   L               open in lazygit                          │                  │
-│                  │   y               copy path to clipboard                   │                  │
-│                  │                                                            │                  │
-│                  │ App                                                        │                  │
-│                  │   r               refresh (re-scan)                        │                  │
-│                  │   ?               toggle this help                         │                  │
-│                  │   q / Ctrl-C      quit                                     │                  │
-│                  │                                                            │                  │
-│                  ╰────────────────────────────────────────────────────────────╯                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+╰────────────────╭ Help ──────────────────────────────────────────────────────────╮────────────────╯
+╭ Attention ─────│ Legend  —  what the columns show                               │────────────────╮
+│ 4 of 5 reposito│   Sync     ↑2 ahead  ↓5 behind  · even  — local                │                │
+│ 1 unpushed · 1 │            ●●● CI passing/failing/pending  2pr open PRs        │                │
+╰────────────────│   Changes  3 all staged  3 unstaged work  s1 one stash         │────────────────╯
+╭ Repositories (5│   Rows     name clean  name needs attention  ● marked for an   │────────────────╮
+│    Repo        │ action                                                         │                │
+│                │                                                                │                │
+│▌   legacy-billi│ Navigation                                                     │ssion denied)   │
+│    payments    │   ↑ / ↓           move cursor                                  │                │
+│    web-app     │   Home / End      top / bottom                                 │                │
+│    infra       │                                                                │                │
+│    auth-service│ Select  &  filter                                              │                │
+│                │   Space           mark / unmark the repo                       │                │
+│                │   a               mark all (again to clear)                    │                │
+│                │   Esc             clear the selection                          │                │
+│                │   /               fuzzy filter (Esc clears)                    │                │
+│                │   d               toggle dirty-only                            │                │
+│                │   s               cycle sort mode                              │                │
+│                │   Tab             weekly standup                               │                │
+│                │                                                                │                │
+│                │ Actions  (on the marked repos, or the current one)             │                │
+│                │   ⏎               open in editor                               │                │
+│                │   o               reveal in file manager                       │                │
+│                │   f / F           fetch selection / all                        │                │
+│                │   p               pull (fast-forward only)                     │                │
+│                │   !               run a command across them                    │                │
+│                │   S               stash (asks to confirm)                      │                │
+│                │   L               open in lazygit                              │                │
+│                │   y               copy path to clipboard                       │                │
+│                │                                                                │                │
+│                │ App                                                            │                │
+│                │   r               refresh (re-scan)                            │                │
+│                │   ?               toggle this help                             │                │
+╰────────────────│   q / Ctrl-C      quit                                         │────────────────╯
+╭────────────────╰────────────────────────────────────────────────────────────────╯────────────────╮
 │ ? / Esc close                                                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

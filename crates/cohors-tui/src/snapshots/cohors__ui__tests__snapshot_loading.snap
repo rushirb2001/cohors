@@ -12,5 +12,5 @@ expression: "render_to_string(&app, 100, 12)"
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ select Space mark repo · a mark all · / filter · Esc clear                                       │
 │ act    ⏎ open · f fetch · p pull · ! run command · S stash                                       │
-│ view   ↑/↓ move · Tab standup · ? help · q quit                                                  │
+│ view   ↑/↓ move · s sort · d dirty-only · Tab standup · ? help · q quit                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

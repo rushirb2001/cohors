@@ -12,7 +12,7 @@ use std::collections::VecDeque;
 use std::io::Stdout;
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
@@ -107,6 +107,12 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
     // results are ignored once a new run starts.
     let mut run_seq: u64 = 0;
 
+    // Track the status toast so it can auto-clear after a few idle seconds:
+    // remember the last text we saw and when it appeared.
+    let mut toast_seen: Option<String> = None;
+    let mut toast_since = Instant::now();
+    const TOAST_TTL: Duration = Duration::from_secs(4);
+
     loop {
         terminal.draw(|f| ui::render(f, &app, now_secs()))?;
 
@@ -157,6 +163,19 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
         }
 
         drain_background(&mut app, &rx, &mut batch, &scanner, &tx);
+
+        // Auto-expire a result toast once nothing is in flight, so a stale
+        // "fetched 3 repos" doesn't sit there forever. In-progress messages are
+        // refreshed every frame, so their timer keeps resetting and they stay.
+        if app.status != toast_seen {
+            toast_seen = app.status.clone();
+            toast_since = Instant::now();
+        }
+        let idle = !app.scanning && app.busy.is_empty() && !run_in_progress(&app);
+        if idle && app.status.is_some() && toast_since.elapsed() >= TOAST_TTL {
+            app.status = None;
+            toast_seen = None;
+        }
     }
     Ok(())
 }

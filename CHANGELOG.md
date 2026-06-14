@@ -21,6 +21,29 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.12] — 2026-06-14
+
+Making the dashboard explain itself.
+
+### Added
+
+- **A legend in the `?` help** that decodes the columns with their real colored
+  glyphs: what `↑2`/`↓5`/`·`/`—` mean in Sync, the CI dot colors and `Npr`, the
+  staged-vs-unstaged colors and `s1` in Changes, and what a dim vs red row (and
+  the `●` marker) signify. New users no longer have to guess what they're seeing.
+- **A live action-target hint** on the footer's `act` row: it now says exactly
+  what an action will hit — `→ acts on 3 selected`, or `→ acts on <repo>` when
+  nothing is marked — so the "marked set, else cursor" rule is visible, not
+  inferred.
+
+### Changed
+
+- The footer's `view` row now surfaces **`s` sort** and **`d` dirty-only**, which
+  were previously only discoverable inside the help overlay.
+- Action feedback is now a **brighter, auto-clearing toast**: confirmations show
+  green with a `✓`, failures show red, and the message clears itself a few
+  seconds after the work finishes instead of lingering in the header.
+
 ## [0.3.11] — 2026-06-14
 
 ### Changed

@@ -136,7 +136,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
 
     if app.mode == Mode::Help {
-        render_help(frame, area, app);
+        render_help(frame, area, app, &theme);
     }
     if app.mode == Mode::Standup {
         render_standup(frame, area, app, &theme);
@@ -175,7 +175,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
         .title(Line::from(vec![Span::raw(" "), name, version]))
-        .title(Line::from(header_status(app)).right_aligned())
+        .title(header_status_line(app, theme).right_aligned())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -267,28 +267,44 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
     frame.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
-fn header_status(app: &App) -> String {
+/// The right-aligned header line: repo count, selection, sort, and the transient
+/// status. The status is styled to stand out — green for a confirmation, red for
+/// a failure — instead of blending into the dim metadata.
+fn header_status_line(app: &App, theme: &Theme) -> Line<'static> {
     let total = app.repos.len();
     let shown = app.visible_len();
-    let mut status = if shown != total {
+    let mut meta = if shown != total {
         format!("{shown}/{total} repos")
     } else {
         format!("{total} repos")
     };
     if !app.selection.is_empty() {
-        status.push_str(&format!(" · {} selected", app.selection.len()));
+        meta.push_str(&format!(" · {} selected", app.selection.len()));
     }
-    status.push_str(&format!(" · sort: {}", app.sort.label()));
+    meta.push_str(&format!(" · sort: {}", app.sort.label()));
     if app.dirty_only {
-        status.push_str(" · dirty-only");
+        meta.push_str(" · dirty-only");
     }
+
+    let mut spans = vec![Span::styled(meta, theme.dim())];
     if app.scanning {
-        status.push_str(&format!(" · {} scanning…", spinner_frame(app.spinner)));
+        spans.push(Span::styled(
+            format!(" · {} scanning…", spinner_frame(app.spinner)),
+            theme.dim(),
+        ));
     } else if let Some(msg) = &app.status {
-        status.push_str(&format!(" · {msg}"));
+        // A failure reads red; everything else is a confirmation (green + ✓).
+        let failed = msg.contains("fail") || msg.contains("error") || msg.starts_with("no ");
+        let (prefix, style) = if failed {
+            ("", theme.risk())
+        } else {
+            ("✓ ", theme.ok().add_modifier(Modifier::BOLD))
+        };
+        spans.push(Span::styled(" · ", theme.dim()));
+        spans.push(Span::styled(format!("{prefix}{msg}"), style));
     }
-    status.push(' '); // small gap before the border corner
-    status
+    spans.push(Span::raw(" ")); // small gap before the border corner
+    Line::from(spans)
 }
 
 /// The footer key hints for the current mode, in labelled groups. Each group is
@@ -365,6 +381,8 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
                 "view",
                 vec![
                     ("↑/↓", "move"),
+                    ("s", "sort"),
+                    ("d", "dirty-only"),
                     ("Tab", "standup"),
                     ("?", "help"),
                     ("q", "quit"),
@@ -392,9 +410,31 @@ fn footer_lines(app: &App, theme: &Theme) -> Vec<Line<'static>> {
                 spans.push(Span::styled(key, key_style));
                 spans.push(Span::styled(format!(" {desc}"), theme.dim()));
             }
+            // On the "act" row, spell out *what* an action will hit — the marked
+            // set, or the repo under the cursor when nothing is marked — so the
+            // selection model isn't a hidden rule the user has to infer.
+            if label == "act"
+                && let Some((arrow, target)) = action_target_hint(app)
+            {
+                spans.push(Span::styled(arrow, theme.dim()));
+                spans.push(Span::styled(target, theme.highlight()));
+            }
             Line::from(spans)
         })
         .collect()
+}
+
+/// The "what will an action affect" hint for the footer: the count of marked
+/// repos, or the current repo's name when nothing is marked. Returns the dim
+/// lead-in and the highlighted target separately. `None` when there's nothing.
+fn action_target_hint(app: &App) -> Option<(String, String)> {
+    let n = app.selection.len();
+    if n > 0 {
+        Some(("   → acts on ".to_string(), format!("{n} selected")))
+    } else {
+        app.selected_repo()
+            .map(|r| ("   → acts on ".to_string(), r.name.clone()))
+    }
 }
 
 fn render_filter_input(frame: &mut Frame, area: Rect, app: &App) {
@@ -745,26 +785,69 @@ fn ellipsize(s: &str, max: usize) -> String {
     out
 }
 
-fn render_help(frame: &mut Frame, full: Rect, app: &App) {
-    let area = centered_rect(62, 80, full);
+fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let area = centered_rect(66, 88, full);
     frame.render_widget(Clear, area);
+
+    // A small helper: a styled span, so the legend can show the *real* colored
+    // glyphs next to their meaning rather than describing them in words.
+    let s = |t: &str, st: Style| Span::styled(t.to_string(), st);
+    let dim = |t: &str| s(t, theme.dim());
+
     let lines = vec![
+        // The legend goes first: it answers "what am I looking at?", which is the
+        // question a new user has before they care about keybindings.
+        Line::from("Legend  —  what the columns show").bold(),
+        Line::from(vec![
+            dim("  Sync     "),
+            s("↑2", theme.ahead()),
+            dim(" ahead  "),
+            s("↓5", theme.behind()),
+            dim(" behind  "),
+            dim("· even  — local"),
+        ]),
+        Line::from(vec![
+            dim("           "),
+            s("●", theme.ok()),
+            s("●", theme.risk()),
+            s("●", theme.warn()),
+            dim(" CI passing/failing/pending  "),
+            dim("2pr"),
+            dim(" open PRs"),
+        ]),
+        Line::from(vec![
+            dim("  Changes  "),
+            s("3", theme.staged()),
+            dim(" all staged  "),
+            s("3", theme.modified()),
+            dim(" unstaged work  "),
+            dim("s1"),
+            dim(" one stash"),
+        ]),
+        Line::from(vec![
+            dim("  Rows     "),
+            s("name", theme.dim()),
+            dim(" clean  "),
+            s("name", theme.risk()),
+            dim(" needs attention  "),
+            s("●", theme.ahead()),
+            dim(" marked for an action"),
+        ]),
+        Line::from(""),
         Line::from("Navigation").bold(),
         Line::from("  ↑ / ↓           move cursor"),
         Line::from("  Home / End      top / bottom"),
         Line::from(""),
-        Line::from("Select").bold(),
+        Line::from("Select  &  filter").bold(),
         Line::from("  Space           mark / unmark the repo"),
         Line::from("  a               mark all (again to clear)"),
         Line::from("  Esc             clear the selection"),
-        Line::from(""),
-        Line::from("View").bold(),
         Line::from("  /               fuzzy filter (Esc clears)"),
         Line::from("  d               toggle dirty-only"),
         Line::from("  s               cycle sort mode"),
         Line::from("  Tab             weekly standup"),
         Line::from(""),
-        Line::from("Actions  (on the selection, or the current repo)").bold(),
+        Line::from("Actions  (on the marked repos, or the current one)").bold(),
         Line::from("  ⏎               open in editor"),
         Line::from("  o               reveal in file manager"),
         Line::from("  f / F           fetch selection / all"),
