@@ -20,7 +20,7 @@ expression: "render_to_string(&app, 56, 22)"
 │Space mark repo │ │⏎ open          │ │↑/↓ move        │
 │a mark all      │ │f fetch         │ │s sort          │
 │/ filter        │ │p pull          │ │d dirty-only    │
-│Esc clear       │ │! run command   │ │Tab standup     │
-│                │ │S stash         │ │? help          │
-│                │ │                │ │q quit          │
+│Esc clear       │ │P push          │ │Tab standup     │
+│                │ │! run command   │ │? help          │
+│                │ │S stash         │ │q quit          │
 ╰────────────────╯ ╰ legacy-billing ╯ ╰────────────────╯

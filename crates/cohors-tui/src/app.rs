@@ -48,6 +48,8 @@ pub enum Cmd {
     FetchAll,
     /// Pull (fast-forward-only) the selected repo.
     PullSelected,
+    /// Push the selected repo's current branch to its upstream.
+    PushSelected,
     /// Open the selected repo in the editor.
     OpenEditor,
     /// Open the selected repo in lazygit.
@@ -489,6 +491,7 @@ impl App {
             KeyCode::Char('f') => return Cmd::FetchSelected,
             KeyCode::Char('F') => return Cmd::FetchAll,
             KeyCode::Char('p') => return Cmd::PullSelected,
+            KeyCode::Char('P') => return Cmd::PushSelected,
             KeyCode::Char('!') => {
                 if self.action_targets().is_empty() {
                     self.status = Some("no repos selected".to_string());
@@ -1105,6 +1108,7 @@ mod tests {
         assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
         assert_eq!(app.on_key(key('F')), Cmd::FetchAll);
         assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
+        assert_eq!(app.on_key(key('P')), Cmd::PushSelected);
         assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
         assert_eq!(app.on_key(key('L')), Cmd::Lazygit);
         assert_eq!(app.on_key(key('y')), Cmd::CopyPath);

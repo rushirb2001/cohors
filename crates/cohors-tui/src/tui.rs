@@ -44,6 +44,7 @@ const POLL: Duration = Duration::from_millis(100);
 enum ActionKind {
     Fetch,
     Pull,
+    Push,
     Stash,
 }
 
@@ -143,6 +144,7 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
                     | Cmd::FetchSelected
                     | Cmd::FetchAll
                     | Cmd::PullSelected
+                    | Cmd::PushSelected
                     | Cmd::Lazygit
                     | Cmd::ConfirmAccept => {
                         app.status =
@@ -244,6 +246,9 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                     Cmd::FetchAll => start_fetch_all(&mut app, &tx, &mut batch),
                     Cmd::PullSelected => {
                         start_action_targets(&mut app, &tx, ActionKind::Pull, &mut batch)
+                    }
+                    Cmd::PushSelected => {
+                        start_action_targets(&mut app, &tx, ActionKind::Push, &mut batch)
                     }
                     Cmd::CopyPath => copy_selected(&mut app),
                     Cmd::OpenEditor => open_editor(terminal, &mut app, &scanner, &tx)?,
@@ -422,6 +427,7 @@ fn start_action_targets(
     let (doing, done) = match kind {
         ActionKind::Fetch => ("fetching", "fetched"),
         ActionKind::Pull => ("pulling", "pulled"),
+        ActionKind::Push => ("pushing", "pushed"),
         ActionKind::Stash => ("stashing", "stashed"),
     };
     if targets.len() > 1 {
@@ -828,6 +834,7 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
         let outcome = match kind {
             ActionKind::Fetch => action::fetch(&path, &name),
             ActionKind::Pull => action::pull_ff(&path, &name),
+            ActionKind::Push => action::push(&path, &name),
             ActionKind::Stash => action::stash_push(&path, &name),
         };
         let message = match outcome {

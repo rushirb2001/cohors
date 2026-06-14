@@ -45,6 +45,25 @@ pub fn pull_ff(path: &Utf8Path, name: &str) -> Result<String, String> {
     }
 }
 
+/// Push the current branch to its upstream (`git push`). Non-fast-forward
+/// pushes are *rejected by git* (we never pass `--force`), so this can't
+/// overwrite remote history. Returns a short status message.
+pub fn push(path: &Utf8Path, name: &str) -> Result<String, String> {
+    let out = run_git(path, &["push"])?;
+    if out.status.success() {
+        Ok(format!("pushed {name}"))
+    } else {
+        let msg = first_line(&out.stderr).to_lowercase();
+        if msg.contains("no upstream") || msg.contains("no configured push") {
+            Err(format!("push {name}: no upstream — skipped"))
+        } else if msg.contains("rejected") || msg.contains("non-fast-forward") {
+            Err(format!("push {name}: rejected (pull first)"))
+        } else {
+            Err(format!("push {name}: {}", first_line(&out.stderr)))
+        }
+    }
+}
+
 /// Stash the repo's tracked changes (`git stash push`). Untracked files are
 /// left alone (predictable). "No local changes" is a no-op success, not a
 /// failure. Returns a short status message.
@@ -155,5 +174,47 @@ mod tests {
         assert_eq!(code, 3);
         assert_eq!(out, "hi");
         assert_eq!(err, "oops");
+    }
+
+    /// `push` succeeds against a configured (local, offline) upstream. Exercises
+    /// the happy path without touching the network.
+    #[test]
+    fn push_succeeds_to_a_configured_local_remote() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8Path::from_path(tmp.path()).unwrap();
+        let bare = root.join("remote.git");
+        let work = root.join("work");
+        let git = |dir: &Utf8Path, args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(dir.as_str())
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {:?}", out);
+        };
+        Command::new("git")
+            .args(["init", "--bare", bare.as_str()])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["init", "-b", "main", work.as_str()])
+            .output()
+            .unwrap();
+        git(&work, &["config", "user.email", "t@example.com"]);
+        git(&work, &["config", "user.name", "Tester"]);
+        git(&work, &["remote", "add", "origin", bare.as_str()]);
+        std::fs::write(work.join("a.txt"), "1").unwrap();
+        git(&work, &["add", "."]);
+        git(&work, &["commit", "-m", "one"]);
+        git(&work, &["push", "-u", "origin", "main"]);
+        // A new commit, then push it through our action.
+        std::fs::write(work.join("a.txt"), "2").unwrap();
+        git(&work, &["add", "."]);
+        git(&work, &["commit", "-m", "two"]);
+
+        let res = push(&work, "work");
+        assert_eq!(res, Ok("pushed work".to_string()));
     }
 }

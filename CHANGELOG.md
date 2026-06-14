@@ -21,6 +21,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.26] — 2026-06-14
+
+Tier 1 of the pro-grade push: closing the unpushed loop.
+
+### Added
+
+- **Push (`P`), single and bulk.** Pushes the current branch to its upstream
+  across the marked repos (or the current one), with the same live per-repo
+  status and aggregate summary as fetch/pull. It never passes `--force`, so a
+  non-fast-forward push is rejected by git (reported as "rejected (pull first)")
+  rather than overwriting remote history — resolving the #1 attention reason
+  (unpushed) without leaving the dashboard.
+
 ## [0.3.25] — 2026-06-14
 
 ### Changed
