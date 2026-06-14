@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.2] — 2026-06-14
+
+### Changed
+
+- The key-hint **footer** is now a box whose commands **wrap onto more lines on a
+  narrow ("compact") terminal**, instead of being truncated on the right.
+- **Reverted** the command-run view to the two-pane list + scrollable detail (the
+  per-repo boxed column from 0.3.1 wasn't wanted). The mouse-scroll reversal from
+  0.3.1 stays.
+
 ## [0.3.1] — 2026-06-13
 
 ### Changed
