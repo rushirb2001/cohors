@@ -19,7 +19,7 @@ A fast, beautiful terminal dashboard — and web app — that shows the live sta
 
 </div>
 
-> ✅ **v0.3 is here.** The dashboard discovers every repo, shows local + GitHub PR/CI status, does a cross-repo weekly standup (v0.2), and now lets you **multi-select repos and act in bulk** — fetch/pull, stash (with confirmation), and run any command across them with live per-repo output (v0.3). The web app (v0.4) is next — see the [Roadmap](docs/ROADMAP.md).
+> ✅ **v0.3 is here.** The dashboard discovers every repo, shows local + GitHub PR/CI status, does a cross-repo weekly standup (v0.2), and now lets you **multi-select repos and act in bulk** — fetch/pull, stash (with confirmation), and run any command across them with live per-repo output (v0.3). The **MCP server** (v0.4) — the same powers for your coding agent — is next, then the web app (v0.5). See the [Roadmap](docs/ROADMAP.md).
 
 ---
 
@@ -43,7 +43,8 @@ Existing tools each solve one slice:
 - 🎬 **Act in bulk.** Fetch/pull across selected repos, open any repo in your editor or lazygit, copy paths — without leaving the dashboard.
 - 🌐 **Remote-aware** *(v0.2)*. Open-PR counts, CI status, and ahead/behind vs upstream, right in the table.
 - 🗓️ **"What did I ship?"** *(v0.2)*. A cross-repo weekly standup: every commit you made this week, across every repo, in one view.
-- 🖥️ **Online version** *(v0.4)*. The same core, compiled to WebAssembly: connect GitHub, see your whole fleet's health in the browser, and share a read-only team dashboard.
+- 🤖 **Agent-native (MCP)** *(v0.4)*. Run a `cohors` MCP server so Claude Code (and other agents) get the same fleet sense + bulk actions you have — "find every repo calling `X` and open a PR in each." See [docs/MCP-DESIGN.md](docs/MCP-DESIGN.md).
+- 🖥️ **Online version** *(v0.5)*. The same core, compiled to WebAssembly: connect GitHub, see your whole fleet's health in the browser, and share a read-only team dashboard.
 
 ## Why it's built the way it is
 
@@ -65,7 +66,8 @@ Because the core is data-source- and front-end-agnostic, the *exact same* analys
 | Bulk actions (fetch/pull/run) | ✅ | ❌ read-only | ✅ | ❌ |
 | Remote / PR / CI awareness | ✅ *(v0.2)* | ❌ | ❌ | ⚠️ single repo |
 | Cross-repo "weekly standup" | ✅ *(v0.2)* | ❌ | ❌ | ❌ |
-| Online / shareable dashboard | ✅ *(v0.4)* | ❌ | ❌ | ❌ |
+| Agent control (MCP) | ✅ *(v0.4)* | ❌ | ❌ | ❌ |
+| Online / shareable dashboard | ✅ *(v0.5)* | ❌ | ❌ | ❌ |
 | Language | Rust | Go | Go / Python | Go / Rust |
 
 ## Install
@@ -121,6 +123,8 @@ Keys: `↑`/`↓` move · `Space` mark · `a` mark all · `Esc` clear · `/` fuz
 | [MVP-SPEC](docs/MVP-SPEC.md) | The detailed spec for v0.1 (build this first) |
 | [TUI-DESIGN](docs/TUI-DESIGN.md) | Wireframes, keymap, states, theming |
 | [DISTRIBUTION](docs/DISTRIBUTION.md) | How we ship and how cohors gets discovered |
+| [USE-CASES](docs/USE-CASES.md) | Personas + jobs-to-be-done across TUI / MCP / web |
+| [MCP-DESIGN](docs/MCP-DESIGN.md) | The `cohors mcp` agent surface: tools, selectors, safety |
 | [DECISIONS](docs/DECISIONS.md) | Architecture decision records (ADRs) |
 
 ## Contributing
