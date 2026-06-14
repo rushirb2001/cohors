@@ -1,16 +1,24 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 92, 12)"
+expression: "render_to_string(&app, 100, 20)"
 ---
-┌ cohors ────────────────────────────────────────────────────2/5 repos · sort: dirty-first ┐
-│/ pay▏                                                                                    │
-│  Repo               Branch           ↑/↓     Dirty       Stash Remote   Last commit      │
-│▌ payments           main             ↑2      +3 ?1       1     —        2h  ↑2 unpushed  │
-│  legacy-billing     ⚠ could not read                                                     │
-│                                                                                          │
-│                                                                                          │
-│                                                                                          │
-│                                                                                          │
-│                                                                                          │
-│                                                                                          │
-└ type to filter · ↑/↓ move · ⏎ apply · Esc clear ─────────────────────────────────────────┘
+ cohors                                                               2/5 repos · sort: dirty-first 
+/ pay▏                                                                                              
+┌ Repositories (2) ────────────────────────────────────────────────────────────────────────────────┐
+│  Repo                Branch         Sync     Changes  Stash  Remote  Last commit                 │
+│                                                                                                  │
+│▌ payments            main           ↑2       4        1      —        2h  fix: retry on 5xx      │
+│  legacy-billing      error          ·        ·        ·      ·       could not read .git (permiss│
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ type to filter · ↑/↓ move · ⏎ apply · Esc clear

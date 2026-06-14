@@ -2,14 +2,12 @@
 //! from [`App::view`] (i.e. `cohors-core`) and maps them onto ratatui widgets.
 //! No state is mutated here.
 
-use cohors_core::{
-    Assessment, Branch, CiStatus, RepoSnapshot, Severity, assess, fleet_summary, time,
-};
+use cohors_core::{Branch, CiStatus, RepoSnapshot, Severity, assess, fleet_summary, time};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
-use ratatui::widgets::{Block, Cell, Clear, Paragraph, Row, Table, TableState, Wrap};
+use ratatui::widgets::{Block, Cell, Clear, Padding, Paragraph, Row, Table, TableState, Wrap};
 
 use crate::app::{App, Mode};
 
@@ -50,9 +48,6 @@ impl Theme {
     fn modified(&self) -> Style {
         self.fg(Color::Yellow)
     }
-    fn untracked(&self) -> Style {
-        self.dim()
-    }
     fn ahead(&self) -> Style {
         self.fg(Color::Cyan)
     }
@@ -77,15 +72,6 @@ impl Theme {
     fn ok(&self) -> Style {
         self.fg(Color::Green)
     }
-    /// Color for an attention severity (the per-row reason + the summary).
-    fn severity_style(&self, severity: Severity) -> Style {
-        match severity {
-            Severity::Risk => self.risk(),
-            Severity::Warn => self.warn(),
-            Severity::Notice => Style::new(),
-            Severity::Info | Severity::Ok => self.dim(),
-        }
-    }
 }
 
 /// Render the whole dashboard for one frame. `now` (Unix seconds) is injected
@@ -94,29 +80,38 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     let theme = Theme::from_env();
     let area = frame.area();
 
-    let block = Block::bordered()
-        .title_top(Line::from(" cohors ").bold())
-        .title_top(Line::from(header_status(app)).right_aligned())
-        .title_bottom(Line::from(footer_hints(app)));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    // Top-level layout: a title line, the body, and a footer hint line. There's
+    // no outer frame, so the inner panels read as the app's "windows" and we
+    // don't waste columns on nested borders.
+    let [title_area, body_area, footer_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Min(0),
+        Constraint::Length(1),
+    ])
+    .areas(area);
+    render_title(frame, title_area, app);
+    render_footer(frame, footer_area, app, &theme);
 
-    // A 1-line strip above the table: the fuzzy input while filtering, otherwise
-    // the fleet triage summary (when there are repos to summarize).
-    let body_area = if app.mode == Mode::Filter {
-        let [strip, body] =
-            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
-        render_filter_input(frame, strip, app);
-        body
-    } else if app.repos.is_empty() {
-        inner
+    if app.repos.is_empty() {
+        if app.scanning {
+            render_loading(frame, body_area, app);
+        } else {
+            render_empty(frame, body_area, app);
+        }
     } else {
-        let [strip, body] =
-            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
-        render_summary_strip(frame, strip, app, now, &theme);
-        body
-    };
-    render_body(frame, body_area, app, now, &theme);
+        // A strip on top — the fuzzy input while filtering, otherwise the
+        // Attention panel — then the Repositories panel fills the rest.
+        let strip_height = if app.mode == Mode::Filter { 1 } else { 4 };
+        let [strip, list] =
+            Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
+                .areas(body_area);
+        if app.mode == Mode::Filter {
+            render_filter_input(frame, strip, app);
+        } else {
+            render_attention_panel(frame, strip, app, now, &theme);
+        }
+        render_repos_panel(frame, list, app, now, &theme);
+    }
 
     if app.mode == Mode::Help {
         render_help(frame, area, app);
@@ -126,67 +121,92 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
 }
 
-/// The fleet triage summary: "N need attention" plus a chip per category.
-fn render_summary_strip(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
-    let s = fleet_summary(&app.repos, now);
-    let mut spans: Vec<Span> = Vec::new();
-
-    if s.needs_attention == 0 {
-        spans.push(Span::styled("✓ all clear", theme.ok()));
-    } else {
-        spans.push(Span::styled(
-            format!("⚠ {} need attention", s.needs_attention),
+/// The top line: the app name on the left, repo count / sort / status on the
+/// right. Plain text (no frame) keeps the header compact.
+fn render_title(frame: &mut Frame, area: Rect, app: &App) {
+    let [left, right] = Layout::horizontal([Constraint::Length(8), Constraint::Min(0)]).areas(area);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            " cohors",
             Style::new().add_modifier(Modifier::BOLD),
-        ));
-
-        let mut chips: Vec<Span> = Vec::new();
-        if s.unpushed > 0 {
-            let mut label = format!("↑{} unpushed", s.unpushed);
-            let style = if s.unpushed_aging > 0 {
-                label.push_str(&format!(" ({} aging)", s.unpushed_aging));
-                theme.risk()
-            } else {
-                theme.ahead()
-            };
-            chips.push(Span::styled(label, style));
-        }
-        if s.behind > 0 {
-            chips.push(Span::styled(
-                format!("↓{} behind", s.behind),
-                theme.behind(),
-            ));
-        }
-        if s.dirty > 0 {
-            chips.push(Span::styled(
-                format!("✎{} dirty", s.dirty),
-                theme.modified(),
-            ));
-        }
-        if s.stash > 0 {
-            chips.push(Span::styled(format!("⚑{} stash", s.stash), theme.dim()));
-        }
-        if s.errors > 0 {
-            chips.push(Span::styled(format!("⚠{} error", s.errors), theme.risk()));
-        }
-        for chip in chips {
-            spans.push(Span::styled("  ·  ", theme.dim()));
-            spans.push(chip);
-        }
-    }
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+        ))),
+        left,
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(header_status(app))).alignment(Alignment::Right),
+        right,
+    );
 }
 
-fn render_body(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
-    if app.repos.is_empty() {
-        if app.scanning {
-            render_loading(frame, area, app);
-        } else {
-            render_empty(frame, area, app);
-        }
+/// The bottom line: context-sensitive key hints, dimmed.
+fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    frame.render_widget(
+        Paragraph::new(Span::styled(footer_hints(app), theme.dim())),
+        area,
+    );
+}
+
+/// The "Attention" panel: a titled box summarizing what needs the user, in
+/// plain words ("3 dirty · 1 behind") rather than terse glyphs.
+fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+    let s = fleet_summary(&app.repos, now);
+    let block = Block::bordered()
+        .title(Line::from(" Attention ").bold())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+    if s.needs_attention == 0 {
+        lines.push(Line::from(Span::styled(
+            format!("All {} repositories are up to date.", s.total),
+            theme.ok(),
+        )));
     } else {
-        render_table(frame, area, app, now, theme);
+        lines.push(Line::from(Span::styled(
+            format!(
+                "{} of {} repositories need attention:",
+                s.needs_attention, s.total
+            ),
+            Style::new().add_modifier(Modifier::BOLD),
+        )));
+
+        // Readable, word-labeled chips; skip any category with a zero count.
+        let mut items: Vec<(String, Style)> = Vec::new();
+        if s.unpushed > 0 {
+            if s.unpushed_aging > 0 {
+                items.push((
+                    format!("{} unpushed ({} aging)", s.unpushed, s.unpushed_aging),
+                    theme.risk(),
+                ));
+            } else {
+                items.push((format!("{} unpushed", s.unpushed), theme.ahead()));
+            }
+        }
+        if s.behind > 0 {
+            items.push((format!("{} behind", s.behind), theme.behind()));
+        }
+        if s.dirty > 0 {
+            items.push((format!("{} dirty", s.dirty), theme.modified()));
+        }
+        if s.stash > 0 {
+            items.push((format!("{} stashed", s.stash), Style::new()));
+        }
+        if s.errors > 0 {
+            items.push((format!("{} unreadable", s.errors), theme.risk()));
+        }
+
+        let mut chips: Vec<Span> = Vec::new();
+        for (i, (text, style)) in items.into_iter().enumerate() {
+            if i > 0 {
+                chips.push(Span::styled(" · ", theme.dim()));
+            }
+            chips.push(Span::styled(text, style));
+        }
+        lines.push(Line::from(chips));
     }
+
+    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
 fn header_status(app: &App) -> String {
@@ -258,17 +278,25 @@ fn roots_label(app: &App) -> String {
     }
 }
 
-fn render_table(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+/// The "Repositories" panel: the repo table wrapped in a titled box. The column
+/// headers act as the legend, so the bare numbers in each row read clearly.
+fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+    let title = format!(" Repositories ({}) ", app.visible_len());
+    let block = Block::bordered().title(Line::from(title).bold());
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
     let header = Row::new([
         "Repo",
         "Branch",
-        "↑/↓",
-        "Dirty",
+        "Sync",
+        "Changes",
         "Stash",
         "Remote",
         "Last commit",
     ])
-    .style(Style::new().add_modifier(Modifier::BOLD));
+    .style(Style::new().add_modifier(Modifier::BOLD))
+    .bottom_margin(1);
 
     let view = app.view();
     let spin = spinner_frame(app.spinner);
@@ -282,18 +310,18 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Them
         .collect();
 
     let widths = [
-        Constraint::Min(14),    // Repo
-        Constraint::Length(16), // Branch
-        Constraint::Length(7),  // ↑/↓
-        Constraint::Length(11), // Dirty
+        Constraint::Length(18), // Repo
+        Constraint::Length(13), // Branch
+        Constraint::Length(7),  // Sync (ahead/behind)
+        Constraint::Length(7),  // Changes (file count)
         Constraint::Length(5),  // Stash
-        Constraint::Length(8),  // Remote (CI + PRs)
-        Constraint::Min(16),    // Last commit
+        Constraint::Length(6),  // Remote (CI + PRs)
+        Constraint::Fill(1),    // Last commit takes the remaining width
     ];
 
     let table = Table::new(rows, widths)
         .header(header)
-        .column_spacing(1)
+        .column_spacing(2)
         .row_highlight_style(Style::new().add_modifier(Modifier::REVERSED))
         .highlight_symbol("▌ ");
 
@@ -301,7 +329,7 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Them
     if !view.is_empty() {
         state.select(Some(app.selected));
     }
-    frame.render_stateful_widget(table, area, &mut state);
+    frame.render_stateful_widget(table, inner, &mut state);
 }
 
 fn repo_row<'a>(
@@ -312,33 +340,35 @@ fn repo_row<'a>(
     busy: Option<&str>,
 ) -> Row<'a> {
     if let Some(reason) = &snap.error {
-        // Error repos show the reason in place of the normal columns.
+        // A broken repo: a red name + an "error" marker and the reason in the
+        // wide last column. The data columns get a dim "·" (no data to report);
+        // they must be non-empty or the table collapses them and misaligns.
+        let dot = || Cell::from(Span::styled("·", theme.dim()));
         return Row::new(vec![
-            name_cell(&snap.name, &[], false, theme),
-            Cell::from(Span::styled(format!("⚠ {reason}"), theme.error())),
-            Cell::default(),
-            Cell::default(),
-            Cell::default(),
-            Cell::default(),
-            Cell::default(),
+            Cell::from(Span::styled(snap.name.clone(), theme.error())),
+            Cell::from(Span::styled("error", theme.risk())),
+            dot(),
+            dot(),
+            dot(),
+            dot(),
+            Cell::from(Span::styled(reason.clone(), theme.dim())),
         ]);
     }
 
-    let assessment = assess(snap, now);
-    let attention = assessment.needs_attention();
-    // While an action runs, the ↑/↓ cell shows a spinner instead.
-    let arrows = match busy {
+    let severity = assess(snap, now).severity;
+    // While an action runs, the Sync cell shows a spinner instead.
+    let sync = match busy {
         Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
-        None => arrows_cell(snap, theme),
+        None => sync_cell(snap, theme),
     };
     Row::new(vec![
-        name_cell(&snap.name, highlights, attention, theme),
-        branch_cell(snap, attention, theme),
-        arrows,
-        dirty_cell(snap, theme),
+        name_cell(&snap.name, highlights, severity, theme),
+        branch_cell(snap, severity, theme),
+        sync,
+        changes_cell(snap, theme),
         stash_cell(snap, theme),
         remote_cell(snap, theme),
-        status_cell(snap, &assessment, now, theme),
+        last_commit_cell(snap, now, theme),
     ])
 }
 
@@ -363,8 +393,14 @@ fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     }
 }
 
-fn name_cell<'a>(name: &str, highlights: &[u32], attention: bool, theme: &Theme) -> Cell<'a> {
-    let base = if attention { Style::new() } else { theme.dim() };
+/// The repo name. Dimmed when clean, red when in a risk state, default
+/// otherwise; fuzzy-matched characters are bold-highlighted.
+fn name_cell<'a>(name: &str, highlights: &[u32], severity: Severity, theme: &Theme) -> Cell<'a> {
+    let base = match severity {
+        Severity::Ok | Severity::Info => theme.dim(),
+        Severity::Risk => theme.risk(),
+        _ => Style::new(),
+    };
     if highlights.is_empty() {
         return Cell::from(Span::styled(name.to_string(), base));
     }
@@ -385,16 +421,28 @@ fn name_cell<'a>(name: &str, highlights: &[u32], attention: bool, theme: &Theme)
     Cell::from(Line::from(spans))
 }
 
-fn branch_cell<'a>(snap: &RepoSnapshot, attention: bool, theme: &Theme) -> Cell<'a> {
-    let style = match snap.branch {
-        Branch::Detached(_) => theme.detached(),
-        _ if attention => Style::new(),
-        _ => theme.dim(),
-    };
-    Cell::from(Span::styled(snap.branch.label(), style))
+/// The branch — or a compact `@sha` for detached HEAD / "unborn" for a fresh
+/// repo — ellipsized to the column width.
+fn branch_cell<'a>(snap: &RepoSnapshot, severity: Severity, theme: &Theme) -> Cell<'a> {
+    match &snap.branch {
+        Branch::Detached(id) => {
+            let short: String = id.chars().take(7).collect();
+            Cell::from(Span::styled(format!("@{short}"), theme.detached()))
+        }
+        Branch::Unborn => Cell::from(Span::styled("unborn", theme.dim())),
+        Branch::Named(name) => {
+            let style = match severity {
+                Severity::Ok | Severity::Info => theme.dim(),
+                _ => Style::new(),
+            };
+            Cell::from(Span::styled(ellipsize(name, 13), style))
+        }
+    }
 }
 
-fn arrows_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+/// The Sync column: how far ahead/behind upstream, e.g. "↑2", "↓5", "↑2 ↓5".
+/// "·" means even with upstream; "—" means no upstream is configured.
+fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     match &snap.upstream {
         None => Cell::from(Span::styled("—", theme.dim())),
         Some(up) if up.ahead == 0 && up.behind == 0 => Cell::from(Span::styled("·", theme.dim())),
@@ -404,7 +452,7 @@ fn arrows_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
                 spans.push(Span::styled(format!("↑{}", up.ahead), theme.ahead()));
             }
             if up.ahead > 0 && up.behind > 0 {
-                spans.push(Span::raw("·"));
+                spans.push(Span::raw(" "));
             }
             if up.behind > 0 {
                 spans.push(Span::styled(format!("↓{}", up.behind), theme.behind()));
@@ -414,30 +462,23 @@ fn arrows_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     }
 }
 
-fn dirty_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+/// The Changes column: a count of changed files, green when everything is
+/// staged and yellow when there's still unstaged work. "·" when clean.
+fn changes_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     let w = &snap.worktree;
-    if !w.is_dirty() {
+    let total = w.staged + w.modified + w.untracked;
+    if total == 0 {
         return Cell::from(Span::styled("·", theme.dim()));
     }
-    let mut spans = Vec::new();
-    if w.staged > 0 {
-        spans.push(Span::styled(format!("●{}", w.staged), theme.staged()));
-    }
-    if w.modified > 0 {
-        if !spans.is_empty() {
-            spans.push(Span::raw(" "));
-        }
-        spans.push(Span::styled(format!("+{}", w.modified), theme.modified()));
-    }
-    if w.untracked > 0 {
-        if !spans.is_empty() {
-            spans.push(Span::raw(" "));
-        }
-        spans.push(Span::styled(format!("?{}", w.untracked), theme.untracked()));
-    }
-    Cell::from(Line::from(spans))
+    let style = if w.modified > 0 || w.untracked > 0 {
+        theme.modified()
+    } else {
+        theme.staged()
+    };
+    Cell::from(Span::styled(total.to_string(), style))
 }
 
+/// The Stash column: how many stashed entries, or "·" when there are none.
 fn stash_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     if snap.stash_count > 0 {
         Cell::from(snap.stash_count.to_string())
@@ -446,33 +487,33 @@ fn stash_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     }
 }
 
-/// The rightmost column: for a repo needing attention, its primary reason
-/// (colored by severity); otherwise the last commit's age + subject.
-fn status_cell<'a>(
-    snap: &RepoSnapshot,
-    assessment: &Assessment,
-    now: i64,
-    theme: &Theme,
-) -> Cell<'a> {
-    let age = snap
-        .last_commit
-        .as_ref()
-        .map(|c| time::relative(c.timestamp, now));
-    let age = age.as_deref().unwrap_or("—");
-
-    if let Some(primary) = &assessment.primary {
-        Cell::from(Line::from(vec![
-            Span::styled(format!("{age}  "), theme.dim()),
-            Span::styled(primary.label(), theme.severity_style(assessment.severity)),
-        ]))
-    } else if let Some(commit) = &snap.last_commit {
-        Cell::from(Span::styled(
-            format!("{age}  {}", commit.summary),
-            theme.dim(),
-        ))
-    } else {
-        Cell::from(Span::styled("—", theme.dim()))
+/// The Last commit column: the commit's age and subject. Why a repo needs the
+/// user is carried by the row's colors, not repeated here as text.
+fn last_commit_cell<'a>(snap: &'a RepoSnapshot, now: i64, theme: &Theme) -> Cell<'a> {
+    match &snap.last_commit {
+        Some(commit) => Cell::from(Line::from(vec![
+            Span::styled(
+                format!("{:>3}  ", time::relative(commit.timestamp, now)),
+                theme.dim(),
+            ),
+            Span::raw(commit.summary.clone()),
+        ])),
+        None => Cell::from(Span::styled("—", theme.dim())),
     }
+}
+
+/// Truncate `s` to at most `max` characters, adding an ellipsis when cut.
+fn ellipsize(s: &str, max: usize) -> String {
+    let len = s.chars().count();
+    if len <= max {
+        return s.to_string();
+    }
+    if max == 0 {
+        return String::new();
+    }
+    let mut out: String = s.chars().take(max - 1).collect();
+    out.push('…');
+    out
 }
 
 fn render_help(frame: &mut Frame, full: Rect, app: &App) {
@@ -506,7 +547,11 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App) {
         Line::from(format!("config: {}", app.config_path)),
     ];
     let para = Paragraph::new(Text::from(lines))
-        .block(Block::bordered().title(" Help "))
+        .block(
+            Block::bordered()
+                .title(" Help ")
+                .padding(Padding::horizontal(1)),
+        )
         .wrap(Wrap { trim: false });
     frame.render_widget(para, area);
 }
@@ -524,7 +569,11 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App) {
         ))),
     };
     let para = Paragraph::new(text)
-        .block(Block::bordered().title(" Standup "))
+        .block(
+            Block::bordered()
+                .title(" Standup ")
+                .padding(Padding::horizontal(1)),
+        )
         .wrap(Wrap { trim: false });
     frame.render_widget(para, area);
 }
@@ -709,14 +758,14 @@ mod tests {
     #[test]
     fn snapshot_list() {
         let app = demo_app();
-        insta::assert_snapshot!(render_to_string(&app, 92, 12));
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 
     #[test]
     fn snapshot_dirty_only() {
         let mut app = demo_app();
         app.dirty_only = true;
-        insta::assert_snapshot!(render_to_string(&app, 92, 12));
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 
     #[test]
@@ -724,14 +773,14 @@ mod tests {
         let mut app = demo_app();
         app.mode = Mode::Filter;
         app.filter = "pay".to_string();
-        insta::assert_snapshot!(render_to_string(&app, 92, 12));
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 
     #[test]
     fn snapshot_help() {
         let mut app = demo_app();
         app.mode = Mode::Help;
-        insta::assert_snapshot!(render_to_string(&app, 92, 28));
+        insta::assert_snapshot!(render_to_string(&app, 100, 30));
     }
 
     #[test]
@@ -761,7 +810,7 @@ mod tests {
             },
         ];
         app.standup = Some(to_markdown(&commits, StandupWindow::Week));
-        insta::assert_snapshot!(render_to_string(&app, 92, 20));
+        insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }
 
     #[test]
@@ -769,19 +818,19 @@ mod tests {
         let mut app = demo_app();
         app.mode = Mode::Standup;
         app.standup = None;
-        insta::assert_snapshot!(render_to_string(&app, 92, 16));
+        insta::assert_snapshot!(render_to_string(&app, 100, 18));
     }
 
     #[test]
     fn snapshot_empty() {
         let app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
-        insta::assert_snapshot!(render_to_string(&app, 92, 10));
+        insta::assert_snapshot!(render_to_string(&app, 100, 12));
     }
 
     #[test]
     fn snapshot_loading() {
         let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
         app.scanning = true;
-        insta::assert_snapshot!(render_to_string(&app, 92, 10));
+        insta::assert_snapshot!(render_to_string(&app, 100, 12));
     }
 }

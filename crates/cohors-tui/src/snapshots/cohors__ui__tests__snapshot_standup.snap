@@ -1,24 +1,26 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 92, 20)"
+expression: "render_to_string(&app, 100, 22)"
 ---
-┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
-│⚠ 4 need attention  ·  ↑1 unpushed  ·  ↓1 behind  ·  ✎3 dirty  ·  ⚑1 stash  ·  ⚠1 error   │
-│  Repo       ┌ Standup ─────────────────────────────────────────────────────┐ commit      │
-│▌ legacy-bill│Standup — this week                                           │             │
-│  payments   │                                                              │↑2 unpushed  │
-│  web-app    │3 commits across 2 repos                                      │ ↓5 behind — │
-│  infra      │                                                              │4 uncommitted│
-│  auth-servic│payments                                                      │chore: bump d│
-│             │- `a1b2c3d` fix: retry on 5xx                                 │             │
-│             │- `c7d8e9f` test: add retry coverage                          │             │
-│             │                                                              │             │
-│             │web-app                                                       │             │
-│             │- `e4f5a6b` wip: cart drawer                                  │             │
-│             │                                                              │             │
-│             │                                                              │             │
-│             │                                                              │             │
-│             │                                                              │             │
-│             └──────────────────────────────────────────────────────────────┘             │
-│                                                                                          │
-└ w window · y copy · Tab/Esc close ───────────────────────────────────────────────────────┘
+ cohors                                                                 5 repos · sort: dirty-first 
+┌ Attention ───────────────────────────────────────────────────────────────────────────────────────┐
+│ 4 of 5 reposi┌ Standup ───────────────────────────────────────────────────────────┐              │
+│ 1 unpushed · │ Standup — this week                                                │              │
+└──────────────│                                                                    │──────────────┘
+┌ Repositories │ 3 commits across 2 repos                                           │──────────────┐
+│  Repo        │                                                                    │              │
+│              │ payments                                                           │              │
+│▌ legacy-billi│ - `a1b2c3d` fix: retry on 5xx                                      │ .git (permiss│
+│  payments    │ - `c7d8e9f` test: add retry coverage                               │y on 5xx      │
+│  web-app     │                                                                    │ drawer       │
+│  infra       │ web-app                                                            │n ci image    │
+│  auth-service│ - `e4f5a6b` wip: cart drawer                                       │mp deps       │
+│              │                                                                    │              │
+│              │                                                                    │              │
+│              │                                                                    │              │
+│              │                                                                    │              │
+│              │                                                                    │              │
+│              │                                                                    │              │
+│              └────────────────────────────────────────────────────────────────────┘              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ w window · y copy · Tab/Esc close

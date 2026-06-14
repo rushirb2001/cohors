@@ -1,14 +1,16 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 92, 10)"
+expression: "render_to_string(&app, 100, 12)"
 ---
-┌ cohors ────────────────────────────────────────0 repos · sort: dirty-first · ⠋ scanning… ┐
-│                                                                                          │
-│                                                                                          │
-│                                                                                          │
-│                                                                                          │
-│                                  ⠋ Scanning ~/projects…                                  │
-│                                                                                          │
-│                                                                                          │
-│                                                                                          │
-└ ↑/↓ move · / filter · d dirty · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help┘
+ cohors                                                   0 repos · sort: dirty-first · ⠋ scanning… 
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                       ⠋ Scanning ~/projects…                                       
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+ ↑/↓ move · / filter · d dirty · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit

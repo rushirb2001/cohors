@@ -1,20 +1,22 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 92, 16)"
+expression: "render_to_string(&app, 100, 18)"
 ---
-┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
-│⚠ 4 need attention  ·  ↑1 unpushed  ·  ↓1 behind  ·  ✎3 dirty  ·  ⚑1 stash  ·  ⚠1 error   │
-│  Repo       ┌ Standup ─────────────────────────────────────────────────────┐ commit      │
-│▌ legacy-bill│Collecting commits for this week…                             │             │
-│  payments   │                                                              │↑2 unpushed  │
-│  web-app    │                                                              │ ↓5 behind — │
-│  infra      │                                                              │4 uncommitted│
-│  auth-servic│                                                              │chore: bump d│
-│             │                                                              │             │
-│             │                                                              │             │
-│             │                                                              │             │
-│             │                                                              │             │
-│             │                                                              │             │
-│             └──────────────────────────────────────────────────────────────┘             │
-│                                                                                          │
-└ w window · y copy · Tab/Esc close ───────────────────────────────────────────────────────┘
+ cohors                                                                 5 repos · sort: dirty-first 
+┌ Attention ───────────────────────────────────────────────────────────────────────────────────────┐
+│ 4 of 5 reposi┌ Standup ───────────────────────────────────────────────────────────┐              │
+│ 1 unpushed · │ Collecting commits for this week…                                  │              │
+└──────────────│                                                                    │──────────────┘
+┌ Repositories │                                                                    │──────────────┐
+│  Repo        │                                                                    │              │
+│              │                                                                    │              │
+│▌ legacy-billi│                                                                    │ .git (permiss│
+│  payments    │                                                                    │y on 5xx      │
+│  web-app     │                                                                    │ drawer       │
+│  infra       │                                                                    │n ci image    │
+│  auth-service│                                                                    │mp deps       │
+│              │                                                                    │              │
+│              │                                                                    │              │
+│              └────────────────────────────────────────────────────────────────────┘              │
+└──────────────────────────────────────────────────────────────────────────────────────────────────┘
+ w window · y copy · Tab/Esc close
