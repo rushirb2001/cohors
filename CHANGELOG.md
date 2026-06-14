@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.3] — 2026-06-14
+
+### Changed
+
+- The footer now groups the key hints into labelled rows — **select** / **act** /
+  **view** — with the key in an accent colour and a plain-word description, so
+  it reads like a legend (it's clear that, e.g., the "act" keys act on the marked
+  repos). Each row wraps independently on a narrow terminal.
+
 ## [0.3.2] — 2026-06-14
 
 ### Changed
