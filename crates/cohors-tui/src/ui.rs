@@ -13,7 +13,7 @@ use ratatui::widgets::{
     ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
 };
 
-use crate::app::{App, ConfirmAction, Mode, RunState};
+use crate::app::{App, ConfirmAction, Mode, Opener, RunState};
 
 /// Spinner frames (braille) for the scan indicator.
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -123,7 +123,12 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     // render crisp on top of the dimmed background.
     let overlay_open = matches!(
         app.mode,
-        Mode::Help | Mode::Standup | Mode::CommandInput | Mode::CommandRun | Mode::Confirm
+        Mode::Help
+            | Mode::Standup
+            | Mode::CommandInput
+            | Mode::CommandRun
+            | Mode::Confirm
+            | Mode::OpenWith
     );
     if overlay_open {
         dim_area(frame.buffer_mut(), area);
@@ -143,6 +148,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::Confirm {
         render_confirm(frame, area, app, &theme);
+    }
+    if app.mode == Mode::OpenWith {
+        render_open_with(frame, area, app, &theme);
     }
 }
 
@@ -517,6 +525,15 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
             ],
         )],
         Mode::Confirm => vec![("", vec![("y", "confirm"), ("N / Esc", "cancel")])],
+        Mode::OpenWith => vec![(
+            "",
+            vec![
+                ("↑/↓", "choose"),
+                ("⏎", "open"),
+                ("d", "set default"),
+                ("Esc", "cancel"),
+            ],
+        )],
         Mode::Normal => vec![
             (
                 "select",
@@ -1022,8 +1039,8 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         row(key("Tab"), "weekly standup"),
         Line::from(""),
         head("Act — on the marked repos, else the current one"),
-        row(key("⏎"), "open in editor"),
-        row(key("o"), "reveal in file manager"),
+        row(key("⏎"), "open in default editor"),
+        row(key("o"), "open with… (editors, reveal, lazygit)"),
         row(key("f / F"), "fetch selection / all"),
         row(key("p"), "pull (fast-forward only)"),
         row(key("!"), "run a command across them"),
@@ -1391,6 +1408,66 @@ fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     );
 }
 
+/// The "Open with…" picker: a centered list of installed editors plus "Reveal
+/// in folder" and lazygit, with the current default marked. `↑/↓` choose, `⏎`
+/// opens, `d` sets the highlighted editor as the default.
+fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let Some(ow) = &app.open_with else {
+        return;
+    };
+
+    let repo = app.selected_repo().map(|r| r.name.as_str()).unwrap_or("");
+    let title = if repo.is_empty() {
+        " Open with… ".to_string()
+    } else {
+        format!(" Open {repo} with… ")
+    };
+
+    // Size to the content: a fixed-ish width, height = items + borders.
+    let w = 48.min(full.width.saturating_sub(2)).max(20);
+    let h = (ow.openers.len() as u16 + 2)
+        .min(full.height.saturating_sub(2))
+        .max(3);
+    let x = full.x + full.width.saturating_sub(w) / 2;
+    let y = full.y + full.height.saturating_sub(h) / 2;
+    let area = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+    frame.render_widget(Clear, area);
+
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(title).bold())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let items: Vec<ListItem> = ow
+        .openers
+        .iter()
+        .map(|o| match o {
+            Opener::Editor { command, label } => {
+                let mut spans = vec![Span::raw(label.clone())];
+                if ow.default_command.as_deref() == Some(command.as_str()) {
+                    spans.push(Span::styled("  · default", theme.ahead()));
+                }
+                ListItem::new(Line::from(spans))
+            }
+            Opener::Reveal => ListItem::new(Span::styled("Reveal in file manager", theme.dim())),
+            Opener::Lazygit => ListItem::new(Span::styled("Open in lazygit", theme.dim())),
+        })
+        .collect();
+    let list = List::new(items)
+        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+        .highlight_symbol("▌ ");
+    let mut state = ListState::default();
+    state.select(Some(ow.cursor));
+    frame.render_stateful_widget(list, inner, &mut state);
+}
+
 /// A rect centered within `area`, sized as a percentage of it.
 fn centered_rect(pct_x: u16, pct_y: u16, area: Rect) -> Rect {
     let [_, vmid, _] = Layout::vertical([
@@ -1576,6 +1653,28 @@ mod tests {
     fn snapshot_hints_hidden() {
         let mut app = demo_app();
         app.hints_hidden = true;
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    /// The "Open with…" picker lists detected openers with the default marked.
+    #[test]
+    fn snapshot_open_with() {
+        use crate::app::{OpenWith, Opener};
+        let mut app = demo_app();
+        app.mode = Mode::OpenWith;
+        let openers = vec![
+            Opener::Editor {
+                command: "code".to_string(),
+                label: "VS Code".to_string(),
+            },
+            Opener::Editor {
+                command: "nvim".to_string(),
+                label: "Neovim".to_string(),
+            },
+            Opener::Reveal,
+            Opener::Lazygit,
+        ];
+        app.open_with = Some(OpenWith::new(openers, Some("code".to_string())));
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 

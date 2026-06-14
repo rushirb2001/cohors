@@ -21,6 +21,32 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.21] — 2026-06-14
+
+Opening a repo, done properly.
+
+### Added
+
+- **An "Open with…" picker (`o`)** that **auto-detects the editors installed on
+  your `PATH`** — VS Code, Cursor, Zed, Sublime, JetBrains, Windsurf, then
+  nvim/vim/helix/emacs/… — alongside "Reveal in file manager" and lazygit. Pick
+  one with `↑/↓ · ⏎`, or press `d` to **set it as your default** (remembered
+  across runs in a small prefs file, so your `config.toml` is left untouched).
+
+### Changed
+
+- **`Enter` now opens the default editor** (resolved from your saved pick →
+  `editor`/`$EDITOR`/`$VISUAL` → the first detected editor). The **first time**
+  you press it with no default set, it opens the picker so you choose once.
+- **`o` is now "Open with…"** (reveal-in-folder moved inside the picker). The
+  old dead-end "no editor configured" message is gone.
+
+### Notes
+
+- A modifier+Enter trigger (e.g. `Cmd`/`Ctrl`+`Enter`) was considered but isn't
+  reliably deliverable to a terminal app, so the picker uses the dedicated `o`
+  key instead. See ADR-026.
+
 ## [0.3.20] — 2026-06-14
 
 ### Changed

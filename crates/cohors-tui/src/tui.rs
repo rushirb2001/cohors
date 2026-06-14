@@ -28,7 +28,9 @@ use ratatui::crossterm::terminal::{
 };
 
 use crate::action;
-use crate::app::{App, Cmd, CommandRun, ConfirmAction, Mode, RunResult, RunState, StandupView};
+use crate::app::{
+    App, Cmd, CommandRun, ConfirmAction, Mode, OpenWith, Opener, RunResult, RunState, StandupView,
+};
 use crate::scan::Scanner;
 use crate::ui;
 
@@ -124,13 +126,23 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
                     Cmd::RunCommand => simulate_demo_run(&mut app),
                     Cmd::CopyRunOutput => copy_run_output(&mut app),
                     Cmd::CopyPath => copy_selected(&mut app),
+                    // Show the picker (a real feature worth demoing); set-default
+                    // persists harmlessly; the launch itself is stubbed.
+                    Cmd::OpenEditor | Cmd::OpenWith => {
+                        open_with_picker(&mut app, crate::prefs::default_editor());
+                    }
+                    Cmd::OpenWithSetDefault => set_open_with_default(&mut app),
+                    Cmd::OpenWithAccept => {
+                        app.mode = Mode::Normal;
+                        app.open_with = None;
+                        app.status =
+                            Some("demo mode — install cohors to act on real repos".to_string());
+                    }
                     // Everything that would touch real repos is a friendly no-op.
                     Cmd::Refresh
                     | Cmd::FetchSelected
                     | Cmd::FetchAll
                     | Cmd::PullSelected
-                    | Cmd::OpenEditor
-                    | Cmd::RevealFileManager
                     | Cmd::Lazygit
                     | Cmd::ConfirmAccept => {
                         app.status =
@@ -234,9 +246,11 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                         start_action_targets(&mut app, &tx, ActionKind::Pull, &mut batch)
                     }
                     Cmd::CopyPath => copy_selected(&mut app),
-                    Cmd::RevealFileManager => reveal_selected(&mut app),
                     Cmd::OpenEditor => open_editor(terminal, &mut app, &scanner, &tx)?,
                     Cmd::Lazygit => open_lazygit(terminal, &mut app, &scanner, &tx)?,
+                    Cmd::OpenWith => open_with_picker(&mut app, resolve_default_editor(&scanner)),
+                    Cmd::OpenWithAccept => accept_open_with(terminal, &mut app, &scanner, &tx)?,
+                    Cmd::OpenWithSetDefault => set_open_with_default(&mut app),
                     Cmd::OpenStandup | Cmd::StandupNextWindow => {
                         spawn_standup(&mut app, &scanner, &tx)
                     }
@@ -515,12 +529,107 @@ fn open_editor(
         app.status = Some("no repo selected".to_string());
         return Ok(());
     };
-    let Some(editor) = scanner.editor_command() else {
-        app.status = Some("no editor configured (set `editor`, or $EDITOR/$VISUAL)".to_string());
+    // First Enter with no default yet → open the picker so the user chooses one
+    // (and it's remembered); after that, Enter just opens the default.
+    let Some(editor) = resolve_default_editor(scanner) else {
+        open_with_picker(app, None);
         return Ok(());
     };
     let argv = action::editor_argv(&editor, &path);
     run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
+}
+
+/// The default editor command: the user's saved pick first (set via the picker),
+/// then config `editor` / `$EDITOR` / `$VISUAL`, then the first installed editor.
+fn resolve_default_editor(scanner: &Arc<Scanner>) -> Option<String> {
+    crate::prefs::default_editor()
+        .or_else(|| scanner.editor_command())
+        .or_else(|| crate::editors::first_detected_command().map(str::to_string))
+}
+
+/// Open the "Open with…" picker for the selected repo: detected editors, plus
+/// "Reveal in folder" and lazygit (when installed). `default` is the command to
+/// mark as the current default, if any.
+fn open_with_picker(app: &mut App, default: Option<String>) {
+    if selected_path(app).is_none() {
+        app.status = Some("no repo selected".to_string());
+        return;
+    }
+    let mut openers: Vec<Opener> = crate::editors::detected()
+        .into_iter()
+        .map(|e| Opener::Editor {
+            command: e.command.to_string(),
+            label: e.label.to_string(),
+        })
+        .collect();
+    openers.push(Opener::Reveal);
+    if crate::editors::installed("lazygit") {
+        openers.push(Opener::Lazygit);
+    }
+    app.open_with = Some(OpenWith::new(openers, default));
+    app.mode = Mode::OpenWith;
+}
+
+/// Run the picker's highlighted opener, then close the picker.
+fn accept_open_with(
+    terminal: &mut Tui,
+    app: &mut App,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
+) -> Result<()> {
+    let Some(path) = selected_path(app) else {
+        app.mode = Mode::Normal;
+        app.open_with = None;
+        return Ok(());
+    };
+    app.mode = Mode::Normal;
+    let Some(ow) = app.open_with.take() else {
+        return Ok(());
+    };
+    let Some(opener) = ow.openers.into_iter().nth(ow.cursor) else {
+        return Ok(());
+    };
+    match opener {
+        Opener::Editor { command, .. } => {
+            let argv = action::editor_argv(&command, &path);
+            run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
+        }
+        Opener::Reveal => {
+            reveal_selected(app);
+            Ok(())
+        }
+        Opener::Lazygit => {
+            let argv = vec![
+                "lazygit".to_string(),
+                "-p".to_string(),
+                path.as_str().to_string(),
+            ];
+            run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
+        }
+    }
+}
+
+/// Remember the picker's highlighted editor as the default (persisted to prefs).
+fn set_open_with_default(app: &mut App) {
+    let chosen = {
+        let Some(ow) = app.open_with.as_ref() else {
+            return;
+        };
+        match ow.openers.get(ow.cursor) {
+            Some(Opener::Editor { command, label }) => Some((command.clone(), label.clone())),
+            _ => None,
+        }
+    };
+    match chosen {
+        Some((command, label)) => {
+            crate::prefs::set_default_editor(&command);
+            if let Some(ow) = app.open_with.as_mut() {
+                ow.default_command = Some(command);
+            }
+            app.status = Some(format!("default editor set to {label}"));
+        }
+        None => app.status = Some("pick an editor to set as default".to_string()),
+    }
 }
 
 fn open_lazygit(

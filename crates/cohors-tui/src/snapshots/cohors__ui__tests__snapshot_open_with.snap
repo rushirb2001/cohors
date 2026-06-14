@@ -1,0 +1,24 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 100, 20)"
+---
+╭ cohors vX.Y.Z ───────────────────────────────────────────────────────────────────────────────── ╮
+│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
+│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
+│    Repo              Bra╭ Open legacy-billing with… ───────────────────╮                         │
+│                         │ ▌ VS Code  · default                         │                         │
+│▌   legacy-billing    err│   Neovim                                     │it (permission denied)   │
+│    payments          mai│   Reveal in file manager                     │n 5xx                    │
+│    web-app           fea│   Open in lazygit                            │awer                     │
+│    infra             @a1╰──────────────────────────────────────────────╯i image                  │
+│    auth-service      main           ● 1pr     ·         3d  chore: bump deps                     │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ↑/↓ choose · ⏎ open · d set default · Esc cancel                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

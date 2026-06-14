@@ -34,8 +34,8 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    Tab             weekly standup                                  │              │
 │              │                                                                    │              │
 │              │  Act — on the marked repos, else the current one                   │              │
-│              │    ⏎               open in editor                                  │              │
-│              │    o               reveal in file manager                          │              │
+│              │    ⏎               open in default editor                          │              │
+│              │    o               open with… (editors, reveal, lazygit)           │              │
 │              │    f / F           fetch selection / all                           │              │
 │              │    p               pull (fast-forward only)                        │              │
 ╰──────────────│                                                                    │──────────────╯

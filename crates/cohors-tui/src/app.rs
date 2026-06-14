@@ -30,6 +30,8 @@ pub enum Mode {
     CommandRun,
     /// A yes/no confirmation modal for a destructive bulk action.
     Confirm,
+    /// The "Open with…" picker (choose an editor / reveal / lazygit).
+    OpenWith,
 }
 
 /// A side effect for the event loop to perform after a key is handled. Actions
@@ -48,8 +50,6 @@ pub enum Cmd {
     PullSelected,
     /// Open the selected repo in the editor.
     OpenEditor,
-    /// Reveal the selected repo in the file manager.
-    RevealFileManager,
     /// Open the selected repo in lazygit.
     Lazygit,
     /// Copy the selected repo's path to the clipboard.
@@ -66,6 +66,12 @@ pub enum Cmd {
     CopyRunOutput,
     /// The user accepted the pending confirmation; run its action.
     ConfirmAccept,
+    /// Open the "Open with…" picker for the current repo.
+    OpenWith,
+    /// Run the picker's highlighted opener (editor / reveal / lazygit).
+    OpenWithAccept,
+    /// Remember the picker's highlighted editor as the default.
+    OpenWithSetDefault,
 }
 
 /// A destructive bulk action awaiting confirmation.
@@ -247,6 +253,45 @@ pub struct App {
     pub confirm: Option<Pending>,
     /// Collapse the footer hint boxes to a single divider line (toggled with `h`).
     pub hints_hidden: bool,
+    /// The "Open with…" picker (`Some` ⇒ `Mode::OpenWith`).
+    pub open_with: Option<OpenWith>,
+}
+
+/// One choice in the "Open with…" picker.
+pub enum Opener {
+    /// Launch an editor by command, opening the repo folder.
+    Editor { command: String, label: String },
+    /// Reveal the repo in the OS file manager.
+    Reveal,
+    /// Open the repo in lazygit.
+    Lazygit,
+}
+
+/// State for the "Open with…" picker: the openers, the cursor, and which editor
+/// command is currently the default (so the list can mark it).
+pub struct OpenWith {
+    pub openers: Vec<Opener>,
+    pub cursor: usize,
+    pub default_command: Option<String>,
+}
+
+impl OpenWith {
+    pub fn new(openers: Vec<Opener>, default_command: Option<String>) -> Self {
+        // Start the cursor on the current default editor when it's in the list.
+        let cursor = default_command
+            .as_deref()
+            .and_then(|d| {
+                openers
+                    .iter()
+                    .position(|o| matches!(o, Opener::Editor { command, .. } if command == d))
+            })
+            .unwrap_or(0);
+        Self {
+            openers,
+            cursor,
+            default_command,
+        }
+    }
 }
 
 impl App {
@@ -271,6 +316,7 @@ impl App {
             run: None,
             confirm: None,
             hints_hidden: false,
+            open_with: None,
         }
     }
 
@@ -380,7 +426,34 @@ impl App {
             Mode::CommandInput => self.on_key_command_input(key),
             Mode::CommandRun => self.on_key_command_run(key),
             Mode::Confirm => self.on_key_confirm(key),
+            Mode::OpenWith => self.on_key_open_with(key),
         }
+    }
+
+    fn on_key_open_with(&mut self, key: KeyEvent) -> Cmd {
+        let n = self.open_with.as_ref().map_or(0, |o| o.openers.len());
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.mode = Mode::Normal;
+                self.open_with = None;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(o) = &mut self.open_with {
+                    o.cursor = o.cursor.saturating_sub(1);
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(o) = &mut self.open_with
+                    && o.cursor + 1 < n
+                {
+                    o.cursor += 1;
+                }
+            }
+            KeyCode::Enter => return Cmd::OpenWithAccept,
+            KeyCode::Char('d') => return Cmd::OpenWithSetDefault,
+            _ => {}
+        }
+        Cmd::None
     }
 
     fn on_key_normal(&mut self, key: KeyEvent) -> Cmd {
@@ -421,7 +494,7 @@ impl App {
             }
             KeyCode::Char('S') => self.request_bulk_stash(),
             KeyCode::Enter => return Cmd::OpenEditor,
-            KeyCode::Char('o') => return Cmd::RevealFileManager,
+            KeyCode::Char('o') => return Cmd::OpenWith,
             KeyCode::Char('L') => return Cmd::Lazygit,
             KeyCode::Char('y') => return Cmd::CopyPath,
             KeyCode::Tab => {
@@ -1027,7 +1100,7 @@ mod tests {
         assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
         assert_eq!(app.on_key(key('F')), Cmd::FetchAll);
         assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
-        assert_eq!(app.on_key(key('o')), Cmd::RevealFileManager);
+        assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
         assert_eq!(app.on_key(key('L')), Cmd::Lazygit);
         assert_eq!(app.on_key(key('y')), Cmd::CopyPath);
         assert_eq!(
