@@ -2,7 +2,7 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
-╭ cohors vX.Y.Z ───────────────────────────────────────────────────────────────────────────────── ╮
+╭ cohors vX.Y.Z ──────────────────────────────────────────────────────────────────────────────────╮
 │ All yo╭ Standup · this week ─────────────────────────────────────────────────────────────╮       │
 ╰───────│                                                                                  │───────╯
 ╭ Attent│ Collecting your commits for this week…                                           │───────╮

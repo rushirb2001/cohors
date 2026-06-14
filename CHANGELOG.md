@@ -21,6 +21,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.27] — 2026-06-14
+
+### Changed
+
+- **Moved transient feedback out of the header into a self-dismissing toast.**
+  Scan progress and action results (fetch/pull/push/stash/copy/…) now appear in a
+  small floating box at the bottom-right, above the footer — green `✓` for a
+  confirmation, red `✗` for a failure, a spinner while scanning. In-progress
+  messages stay until the work finishes; results clear themselves after a few
+  seconds. The header box is now purely the cohors name, version, and tagline.
+
 ## [0.3.26] — 2026-06-14
 
 Tier 1 of the pro-grade push: closing the unpushed loop.

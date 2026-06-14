@@ -152,6 +152,10 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     if app.mode == Mode::OpenWith {
         render_open_with(frame, area, app, &theme);
     }
+
+    // The transient toast renders last, so it floats crisp over everything
+    // (including a dimmed overlay) and never gets dimmed itself.
+    render_toast(frame, area, app, footer_h, &theme);
 }
 
 /// Dim every cell in `area` (keeps its colours, adds the DIM attribute) — used
@@ -167,17 +171,16 @@ fn dim_area(buf: &mut Buffer, area: Rect) {
     }
 }
 
-/// The branded header: a rounded box with the tool name + version on the left
-/// of the top border, the live repo count / sort / status on the right, and a
-/// one-line description inside — cohors's "business card".
-fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+/// The branded header: a rounded box with the tool name + version and a one-line
+/// description — cohors's "business card". Transient feedback (scan progress,
+/// action results) lives in a self-dismissing toast, not here.
+fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
     let name = Span::styled("cohors", theme.ahead().add_modifier(Modifier::BOLD));
     let version = Span::styled(format!(" v{} ", env!("CARGO_PKG_VERSION")), theme.dim());
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
         .title(Line::from(vec![Span::raw(" "), name, version]))
-        .title(header_status_line(app, theme).right_aligned())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -439,40 +442,64 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
     frame.render_widget(Paragraph::new(line), inner);
 }
 
-/// The right-aligned header line: the selection count and the transient status.
-/// (The repo count and sort mode live on the Repositories box title instead.)
-/// The status stands out — green for a confirmation, red for a failure.
-fn header_status_line(app: &App, theme: &Theme) -> Line<'static> {
-    let mut spans: Vec<Span> = Vec::new();
-    if !app.selection.is_empty() {
-        spans.push(Span::styled(
-            format!("{} selected", app.selection.len()),
+/// A self-dismissing toast in the bottom-right (above the footer) carrying the
+/// transient feedback that used to crowd the header: scan progress and action
+/// results (fetch/pull/push/stash/copy…). In-progress messages stay until the
+/// work finishes; results clear themselves after a few seconds (the event loop
+/// owns the timer). `footer_h` is passed so the toast sits just above the footer.
+fn render_toast(frame: &mut Frame, full: Rect, app: &App, footer_h: u16, theme: &Theme) {
+    // What to show: a live scan spinner, else the latest status, else nothing.
+    let (icon, body, style) = if app.scanning {
+        (
+            format!("{} ", spinner_frame(app.spinner)),
+            app.status
+                .clone()
+                .unwrap_or_else(|| "scanning…".to_string()),
             theme.dim(),
-        ));
-    }
-    if app.scanning {
-        if !spans.is_empty() {
-            spans.push(Span::styled(" · ", theme.dim()));
-        }
-        spans.push(Span::styled(
-            format!("{} scanning…", spinner_frame(app.spinner)),
-            theme.dim(),
-        ));
+        )
     } else if let Some(msg) = &app.status {
-        if !spans.is_empty() {
-            spans.push(Span::styled(" · ", theme.dim()));
-        }
         // A failure reads red; everything else is a confirmation (green + ✓).
-        let failed = msg.contains("fail") || msg.contains("error") || msg.starts_with("no ");
-        let (prefix, style) = if failed {
-            ("", theme.risk())
+        let failed = msg.contains("fail")
+            || msg.contains("error")
+            || msg.contains("reject")
+            || msg.starts_with("no ");
+        if failed {
+            ("✗ ".to_string(), msg.clone(), theme.risk())
         } else {
-            ("✓ ", theme.ok().add_modifier(Modifier::BOLD))
-        };
-        spans.push(Span::styled(format!("{prefix}{msg}"), style));
-    }
-    spans.push(Span::raw(" ")); // small gap before the border corner
-    Line::from(spans)
+            (
+                "✓ ".to_string(),
+                msg.clone(),
+                theme.ok().add_modifier(Modifier::BOLD),
+            )
+        }
+    } else {
+        return;
+    };
+
+    let line = Line::from(vec![Span::styled(icon, style), Span::styled(body, style)]);
+    let text_w = line.width() as u16;
+    // Box = text + 2 padding + 2 border, clamped to the frame.
+    let w = (text_w + 4).min(full.width.saturating_sub(2)).max(6);
+    let h = 3;
+    // Bottom-right, just above the footer.
+    let x = full.x + full.width.saturating_sub(w + 1);
+    let y = full
+        .y
+        .saturating_add(full.height.saturating_sub(footer_h + h));
+    let area = Rect {
+        x,
+        y,
+        width: w,
+        height: h,
+    };
+    frame.render_widget(Clear, area);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    frame.render_widget(Paragraph::new(line), inner);
 }
 
 /// The footer key hints for the current mode, in labelled groups. Each group is
@@ -1730,6 +1757,15 @@ mod tests {
     fn snapshot_hints_hidden() {
         let mut app = demo_app();
         app.hints_hidden = true;
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    /// Action/scan feedback shows as a self-dismissing toast (bottom-right, above
+    /// the footer), not in the header.
+    #[test]
+    fn snapshot_toast() {
+        let mut app = demo_app();
+        app.status = Some("pushed 3 repos".to_string());
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 
