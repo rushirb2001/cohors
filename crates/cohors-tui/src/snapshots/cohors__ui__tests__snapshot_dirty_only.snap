@@ -2,13 +2,13 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
-╭ cohors vX.Y.Z ───────────────────────────────────────3/5 repos · sort: dirty-first · dirty-only ╮
+╭ cohors vX.Y.Z ───────────────────────────────────────────────────────────────────────────────── ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (3) ────────────────────────────────────────────────────────────────────────────────╮
+╭ Repositories (3) · sort: dirty-first · dirty-only ───────────────────────────────────────────────╮
 │    Repo              Branch         Sync      Changes  Last commit                               │
 │                                                                                                  │
 │▌   payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │

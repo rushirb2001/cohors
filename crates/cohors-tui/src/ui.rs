@@ -431,32 +431,29 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
     frame.render_widget(Paragraph::new(line), inner);
 }
 
-/// The right-aligned header line: repo count, selection, sort, and the transient
-/// status. The status is styled to stand out — green for a confirmation, red for
-/// a failure — instead of blending into the dim metadata.
+/// The right-aligned header line: the selection count and the transient status.
+/// (The repo count and sort mode live on the Repositories box title instead.)
+/// The status stands out — green for a confirmation, red for a failure.
 fn header_status_line(app: &App, theme: &Theme) -> Line<'static> {
-    let total = app.repos.len();
-    let shown = app.visible_len();
-    let mut meta = if shown != total {
-        format!("{shown}/{total} repos")
-    } else {
-        format!("{total} repos")
-    };
+    let mut spans: Vec<Span> = Vec::new();
     if !app.selection.is_empty() {
-        meta.push_str(&format!(" · {} selected", app.selection.len()));
-    }
-    meta.push_str(&format!(" · sort: {}", app.sort.label()));
-    if app.dirty_only {
-        meta.push_str(" · dirty-only");
-    }
-
-    let mut spans = vec![Span::styled(meta, theme.dim())];
-    if app.scanning {
         spans.push(Span::styled(
-            format!(" · {} scanning…", spinner_frame(app.spinner)),
+            format!("{} selected", app.selection.len()),
+            theme.dim(),
+        ));
+    }
+    if app.scanning {
+        if !spans.is_empty() {
+            spans.push(Span::styled(" · ", theme.dim()));
+        }
+        spans.push(Span::styled(
+            format!("{} scanning…", spinner_frame(app.spinner)),
             theme.dim(),
         ));
     } else if let Some(msg) = &app.status {
+        if !spans.is_empty() {
+            spans.push(Span::styled(" · ", theme.dim()));
+        }
         // A failure reads red; everything else is a confirmation (green + ✓).
         let failed = msg.contains("fail") || msg.contains("error") || msg.starts_with("no ");
         let (prefix, style) = if failed {
@@ -464,7 +461,6 @@ fn header_status_line(app: &App, theme: &Theme) -> Line<'static> {
         } else {
             ("✓ ", theme.ok().add_modifier(Modifier::BOLD))
         };
-        spans.push(Span::styled(" · ", theme.dim()));
         spans.push(Span::styled(format!("{prefix}{msg}"), style));
     }
     spans.push(Span::raw(" ")); // small gap before the border corner
@@ -641,10 +637,22 @@ fn roots_label(app: &App) -> String {
 /// The "Repositories" panel: the repo table wrapped in a titled box. The column
 /// headers act as the legend, so the bare numbers in each row read clearly.
 fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
-    let title = format!(" Repositories ({}) ", app.visible_len());
+    // The list's view state lives in its own title: the (visible) count in bold,
+    // then the sort mode (and the dirty-only filter, when on) in dim.
+    let mut title = vec![Span::styled(
+        format!(" Repositories ({}) ", app.visible_len()),
+        Style::new().add_modifier(Modifier::BOLD),
+    )];
+    title.push(Span::styled(
+        format!("· sort: {} ", app.sort.label()),
+        theme.dim(),
+    ));
+    if app.dirty_only {
+        title.push(Span::styled("· dirty-only ", theme.dim()));
+    }
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(title).bold());
+        .title(Line::from(title));
     let inner = block.inner(area);
     frame.render_widget(block, area);
 

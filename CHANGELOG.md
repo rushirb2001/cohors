@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.20] — 2026-06-14
+
+### Changed
+
+- Moved the **sort mode into the Repositories box title** (`Repositories (18) ·
+  sort: dirty-first`, plus `· dirty-only` when that filter is on) and **dropped
+  the redundant repo count from the header** — the box title already carries it.
+  The header's right side now shows only the live selection count and the
+  transient status toast.
+
 ## [0.3.19] — 2026-06-14
 
 ### Changed

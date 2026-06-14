@@ -2,13 +2,13 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
-╭ cohors vX.Y.Z ─────────────────────────────────────────5 repos · 2 selected · sort: dirty-first ╮
+╭ cohors vX.Y.Z ───────────────────────────────────────────────────────────────────────2 selected ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) ────────────────────────────────────────────────────────────────────────────────╮
+╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo              Branch         Sync      Changes  Last commit                               │
 │                                                                                                  │
 │▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
