@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.34] — 2026-06-14
+
+### Added
+
+- **Colour-coded commit types in the standup** — `feat` (green), `fix` (red),
+  `design`/`style` (magenta), `chore`/`build`/`ci` (blue), `docs`/`content`
+  (cyan), `refactor`/`perf` (yellow), unknown (dim). The colours appear both in
+  the glance summary (`24 feat · 5 fix`) and on each commit's type prefix in the
+  list, so the kind of work reads at a glance. Honours `NO_COLOR`.
+
 ## [0.3.33] — 2026-06-14
 
 ### Changed

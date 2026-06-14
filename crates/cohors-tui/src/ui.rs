@@ -1197,16 +1197,51 @@ fn two_pane(inner: Rect, list_w: u16, stacked_list_h: u16) -> (Rect, Rect) {
 fn commit_type_counts(commits: &[StandupCommit]) -> Vec<(String, usize)> {
     let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
     for c in commits {
-        if let Some((prefix, _)) = c.summary.split_once(':') {
-            let kind = prefix.split('(').next().unwrap_or(prefix).trim();
-            if !kind.is_empty() && kind.len() <= 12 && !kind.contains(' ') {
-                *counts.entry(kind.to_lowercase()).or_default() += 1;
-            }
+        if let Some(kind) = commit_kind(&c.summary) {
+            *counts.entry(kind).or_default() += 1;
         }
     }
     let mut v: Vec<(String, usize)> = counts.into_iter().collect();
     v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     v
+}
+
+/// A stable colour per commit type, so the standup reads at a glance. Unknown
+/// types fall back to dim. Respects `NO_COLOR` via `Theme::fg`.
+fn commit_type_style(kind: &str, theme: &Theme) -> Style {
+    let color = match kind {
+        "feat" => Color::Green,
+        "fix" => Color::Red,
+        "design" | "style" => Color::Magenta,
+        "chore" | "build" | "ci" | "deps" => Color::Blue,
+        "docs" | "content" => Color::Cyan,
+        "refactor" | "perf" => Color::Yellow,
+        "test" => Color::LightGreen,
+        _ => return theme.dim(),
+    };
+    theme.fg(color)
+}
+
+/// The commit type (`feat`, `fix`, scope stripped) at the start of a summary, if
+/// it reads like a conventional-commit prefix.
+fn commit_kind(summary: &str) -> Option<String> {
+    let (prefix, _) = summary.split_once(':')?;
+    let kind = prefix.split('(').next().unwrap_or(prefix).trim();
+    (!kind.is_empty() && kind.len() <= 12 && !kind.contains(' ')).then(|| kind.to_lowercase())
+}
+
+/// A commit summary as styled spans: the type prefix coloured by kind, the rest
+/// plain.
+fn commit_summary_spans(summary: &str, theme: &Theme) -> Vec<Span<'static>> {
+    if let Some(kind) = commit_kind(summary)
+        && let Some((prefix, rest)) = summary.split_once(':')
+    {
+        return vec![
+            Span::styled(format!("{prefix}:"), commit_type_style(&kind, theme)),
+            Span::raw(rest.to_string()),
+        ];
+    }
+    vec![Span::raw(summary.to_string())]
 }
 
 fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
@@ -1283,12 +1318,8 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let [desc_area, panes_area] =
         Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(inner);
 
-    // A glance of *what you did*: total commits + the top commit types.
-    let top: Vec<String> = commit_type_counts(&view.commits)
-        .into_iter()
-        .take(4)
-        .map(|(kind, n)| format!("{n} {kind}"))
-        .collect();
+    // A glance of *what you did*: total commits + the top commit types, each
+    // coloured by kind.
     let mut desc = vec![
         Span::styled("You authored ", theme.dim()),
         Span::styled(
@@ -1297,8 +1328,16 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         ),
         Span::styled(format!(" {window}"), theme.dim()),
     ];
-    if !top.is_empty() {
-        desc.push(Span::styled(format!(" — {}", top.join(" · ")), theme.dim()));
+    let counts = commit_type_counts(&view.commits);
+    for (i, (kind, n)) in counts.iter().take(4).enumerate() {
+        desc.push(Span::styled(
+            if i == 0 { "  —  " } else { "  ·  " },
+            theme.dim(),
+        ));
+        desc.push(Span::styled(
+            format!("{n} {kind}"),
+            commit_type_style(kind, theme).add_modifier(Modifier::BOLD),
+        ));
     }
     frame.render_widget(Paragraph::new(Line::from(desc)), desc_area);
 
@@ -1360,11 +1399,12 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
             commits
                 .iter()
                 .map(|c| {
-                    ListItem::new(Line::from(vec![
+                    let mut spans = vec![
                         Span::styled(c.short_id.clone(), theme.ahead()),
                         Span::raw("  "),
-                        Span::raw(c.summary.clone()),
-                    ]))
+                    ];
+                    spans.extend(commit_summary_spans(&c.summary, theme));
+                    ListItem::new(Line::from(spans))
                 })
                 .collect()
         })
