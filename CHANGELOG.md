@@ -21,7 +21,21 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
-## [0.3.5] — 2026-06-14
+## [0.3.6] — 2026-06-14
+
+### Changed
+
+- The standup view now wraps each pane in its own padded, titled box ("Repos"
+  and the focused repo name), with the active pane's title bold — more breathing
+  room and clearer structure.
+
+### Fixed
+
+- The standup scrollbar now renders cleanly inside the commits box (proportional
+  thumb, no stray arrows) instead of cramped against the outer border.
+- You can read a repo's full commit history with arrow keys alone: `→`/`⏎` (or
+  `Tab`) focuses the commits pane so `↑/↓` scroll them, `←` goes back — no
+  PgUp/PgDn required.
 
 ### Changed
 
