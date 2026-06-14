@@ -412,6 +412,7 @@ dependencies = [
  "cohors-config",
  "cohors-core",
  "cohors-git",
+ "cohors-github",
  "insta",
  "ratatui",
  "serde_json",

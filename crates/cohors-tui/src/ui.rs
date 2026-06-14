@@ -2,7 +2,9 @@
 //! from [`App::view`] (i.e. `cohors-core`) and maps them onto ratatui widgets.
 //! No state is mutated here.
 
-use cohors_core::{Assessment, Branch, RepoSnapshot, Severity, assess, fleet_summary, time};
+use cohors_core::{
+    Assessment, Branch, CiStatus, RepoSnapshot, Severity, assess, fleet_summary, time,
+};
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
@@ -253,8 +255,16 @@ fn roots_label(app: &App) -> String {
 }
 
 fn render_table(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
-    let header = Row::new(["Repo", "Branch", "↑/↓", "Dirty", "Stash", "Last commit"])
-        .style(Style::new().add_modifier(Modifier::BOLD));
+    let header = Row::new([
+        "Repo",
+        "Branch",
+        "↑/↓",
+        "Dirty",
+        "Stash",
+        "Remote",
+        "Last commit",
+    ])
+    .style(Style::new().add_modifier(Modifier::BOLD));
 
     let view = app.view();
     let spin = spinner_frame(app.spinner);
@@ -268,12 +278,13 @@ fn render_table(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Them
         .collect();
 
     let widths = [
-        Constraint::Min(16),    // Repo
-        Constraint::Length(18), // Branch
-        Constraint::Length(8),  // ↑/↓
-        Constraint::Length(12), // Dirty
+        Constraint::Min(14),    // Repo
+        Constraint::Length(16), // Branch
+        Constraint::Length(7),  // ↑/↓
+        Constraint::Length(11), // Dirty
         Constraint::Length(5),  // Stash
-        Constraint::Min(20),    // Last commit
+        Constraint::Length(8),  // Remote (CI + PRs)
+        Constraint::Min(16),    // Last commit
     ];
 
     let table = Table::new(rows, widths)
@@ -305,6 +316,7 @@ fn repo_row<'a>(
             Cell::default(),
             Cell::default(),
             Cell::default(),
+            Cell::default(),
         ]);
     }
 
@@ -321,8 +333,30 @@ fn repo_row<'a>(
         arrows,
         dirty_cell(snap, theme),
         stash_cell(snap, theme),
+        remote_cell(snap, theme),
         status_cell(snap, &assessment, now, theme),
     ])
+}
+
+/// The Remote column: CI glyph (✓/✗/●/·) + open-PR count, or "—" when the repo
+/// isn't on GitHub or hasn't been fetched yet.
+fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+    match &snap.remote {
+        None => Cell::from(Span::styled("—", theme.dim())),
+        Some(r) => {
+            let (glyph, style) = match r.ci {
+                CiStatus::Passing => ("✓", theme.ok()),
+                CiStatus::Failing => ("✗", theme.risk()),
+                CiStatus::Pending => ("●", theme.warn()),
+                CiStatus::None => ("·", theme.dim()),
+            };
+            let mut spans = vec![Span::styled(glyph, style)];
+            if r.open_prs > 0 {
+                spans.push(Span::styled(format!(" {}pr", r.open_prs), theme.dim()));
+            }
+            Cell::from(Line::from(spans))
+        }
+    }
 }
 
 fn name_cell<'a>(name: &str, highlights: &[u32], attention: bool, theme: &Theme) -> Cell<'a> {

@@ -44,6 +44,8 @@ enum ActionKind {
 /// Messages from background threads to the loop.
 enum BgMsg {
     Scanned(Vec<RepoSnapshot>),
+    /// Snapshots with GitHub `remote` info filled in (v0.2). Merged by id.
+    RemoteEnriched(Vec<RepoSnapshot>),
     ActionDone {
         id: RepoId,
         message: String,
@@ -103,7 +105,7 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
             app.spinner = app.spinner.wrapping_add(1);
         }
 
-        drain_background(&mut app, &rx, &mut fetch_all_total);
+        drain_background(&mut app, &rx, &mut fetch_all_total, &scanner, &tx);
     }
     Ok(())
 }
@@ -113,6 +115,8 @@ fn drain_background(
     app: &mut App,
     rx: &mpsc::Receiver<BgMsg>,
     fetch_all_total: &mut Option<usize>,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
 ) {
     while let Ok(msg) = rx.try_recv() {
         match msg {
@@ -121,6 +125,18 @@ fn drain_background(
                 app.scanning = false;
                 if app.status.as_deref() == Some("refreshing…") {
                     app.status = None;
+                }
+                // Local data is painted; now fill in GitHub PR/CI in the
+                // background (cached + rate-limit-aware — never blocks local).
+                if let Some(token) = scanner.github_token() {
+                    spawn_enrich(app.repos.clone(), token, tx.clone());
+                }
+            }
+            BgMsg::RemoteEnriched(enriched) => {
+                for snap in enriched {
+                    if let Some(local) = app.repos.iter_mut().find(|r| r.id == snap.id) {
+                        local.remote = snap.remote;
+                    }
                 }
             }
             BgMsg::ActionDone {
@@ -283,6 +299,15 @@ fn spawn_scan(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
         let repos = scanner.scan();
         crate::cache::save(&repos);
         let _ = tx.send(BgMsg::Scanned(repos));
+    });
+}
+
+/// Enrich snapshots with GitHub PR/CI on a worker thread, then deliver them for
+/// merging. Runs after the local scan so the dashboard never waits on network.
+fn spawn_enrich(mut repos: Vec<RepoSnapshot>, token: String, tx: Sender<BgMsg>) {
+    std::thread::spawn(move || {
+        cohors_github::enrich(&mut repos, Some(&token));
+        let _ = tx.send(BgMsg::RemoteEnriched(repos));
     });
 }
 

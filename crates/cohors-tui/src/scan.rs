@@ -18,6 +18,8 @@ pub struct Scanner {
     config: Config,
     home: Option<Utf8PathBuf>,
     config_path: String,
+    /// GitHub token (v0.2): `gh auth token` / `$GITHUB_TOKEN`, discovered once.
+    token: Option<String>,
 }
 
 impl Scanner {
@@ -39,7 +41,13 @@ impl Scanner {
             config,
             home,
             config_path,
+            token: cohors_github::discover_token(),
         })
+    }
+
+    /// The GitHub token, if one was found (enables remote PR/CI enrichment).
+    pub fn github_token(&self) -> Option<String> {
+        self.token.clone()
     }
 
     /// Discover and snapshot every repo (in parallel), applying aliases.

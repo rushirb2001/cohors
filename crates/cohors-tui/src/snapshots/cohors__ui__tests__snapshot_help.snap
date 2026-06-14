@@ -4,12 +4,12 @@ expression: "render_to_string(&app, 92, 28)"
 ---
 ┌ cohors ──────────────────────────────────────────────────────5 repos · sort: dirty-first ┐
 │⚠ 4 need attention  ·  ↑1 unpushed  ·  ↓1 behind  ·  ✎3 dirty  ·  ⚑1 stash  ·  ⚠1 error   │
-│  Repo                 Branch             ↑/↓      Dirty        Stash Last commit         │
+│  Repo               Branch           ↑/↓     Dirty       Stash Remote   Last commit      │
 │▌ legacy-billing┌ Help ──────────────────────────────────────────────────┐                │
-│  payments      │Navigation                                              │↑2 unpushed     │
-│  web-app       │  ↑ / ↓           move selection                        │ ↓5 behind — pul│
-│  infra         │  Home / End      top / bottom                          │4 uncommitted ch│
-│  auth-service  │                                                        │chore: bump deps│
+│  payments      │Navigation                                              │h  ↑2 unpushed  │
+│  web-app       │  ↑ / ↓           move selection                        │0m  ↓5 behind — │
+│  infra         │  Home / End      top / bottom                          │w  4 uncommitted│
+│  auth-service  │                                                        │d  chore: bump d│
 │                │View                                                    │                │
 │                │  /               fuzzy filter (Esc clears)             │                │
 │                │  d               toggle dirty-only                     │                │
