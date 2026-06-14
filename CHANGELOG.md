@@ -21,6 +21,23 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.23] — 2026-06-14
+
+### Added
+
+- **A scroll affordance on the repository list.** When the fleet is taller than
+  the window, the list's bottom border shows a dim `… N more ↓` so it's obvious
+  there are repos below the fold; it disappears once everything fits. The table's
+  scroll offset is tracked so the count is accurate as you move.
+
+### Notes
+
+- Audited the TUI's glyphs against what renders reliably in terminals — `↑`/`↓`
+  (Arrows block), `●` (Geometric Shapes), `▌` (Block Elements), the rounded box
+  borders (Box Drawing), and `…` (U+2026) are all in the well-supported ranges,
+  so the structure is stable across modern monospace fonts. No glyph changes
+  needed; this was a deliberate check, not an assumption.
+
 ## [0.3.22] — 2026-06-14
 
 ### Added

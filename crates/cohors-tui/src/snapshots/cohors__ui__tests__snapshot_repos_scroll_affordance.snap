@@ -1,6 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 26)"
+expression: "render_to_string(&app, 100, 18)"
 ---
 ╭ cohors vX.Y.Z ───────────────────────────────────────────────────────────────────────────────── ╮
 │ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
@@ -18,13 +18,5 @@ expression: "render_to_string(&app, 100, 26)"
 │    design-system     main           ↑1 ● 1pr     · s1      6h  feat: dark-mode tokens            │
 │    web-app           feat/checkout  ↓5 ● 1pr     7        20m  wip: cart drawer animation        │
 │    data-pipeline     main           ↓3 ●         ·         5h  fix: backfill job off-by-one windo│
-│    experiments       @9f8e7d6       —            7         1y  spike: try wgpu for the renderer  │
-│    infra             @a1b2c3d       —            4         1w  build: pin terraform provider vers│
-╰────────────────────────────────────────────────────────────────────────────────────── … 3 more ↓ ╯
-────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
-│Space mark repo                │ │⏎ open          ! run command │ │↑/↓ move        Tab standup    │
-│a mark all                     │ │f fetch         S stash       │ │s sort          ? help         │
-│/ filter                       │ │p pull                        │ │d dirty-only    q quit         │
-│Esc clear                      │ │                              │ │                               │
-╰───────────────────────────────╯ ╰──────────── → legacy-billing ╯ ╰───────────────────────────────╯
+╰────────────────────────────────────────────────────────────────────────────────────── … 5 more ↓ ╯
+───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

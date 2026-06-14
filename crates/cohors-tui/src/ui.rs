@@ -671,6 +671,31 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         .border_type(BorderType::Rounded)
         .title(Line::from(title));
     let inner = block.inner(area);
+
+    // Track the table's scroll so we can tell the user when the list overflows
+    // the window. The body is `inner` minus the header row and its 1-row margin.
+    let view = app.view();
+    let total = view.len();
+    let viewport = inner.height.saturating_sub(2) as usize;
+    let mut offset = app.repos_scroll.get();
+    if app.selected < offset {
+        offset = app.selected;
+    } else if viewport > 0 && app.selected >= offset + viewport {
+        offset = app.selected + 1 - viewport;
+    }
+    offset = offset.min(total.saturating_sub(viewport));
+    app.repos_scroll.set(offset);
+    let below = total.saturating_sub(offset + viewport);
+
+    // On a window too short to show every repo, hint that the list scrolls — a
+    // dim "… N more ↓" on the bottom border. Hidden once everything fits.
+    let block = if below > 0 {
+        block.title_bottom(
+            Line::from(Span::styled(format!(" … {below} more ↓ "), theme.dim())).right_aligned(),
+        )
+    } else {
+        block
+    };
     frame.render_widget(block, area);
 
     // "Repo" is padded by 2 so it lines up with the names, which carry a 2-col
@@ -679,7 +704,6 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         .style(Style::new().add_modifier(Modifier::BOLD))
         .bottom_margin(1);
 
-    let view = app.view();
     let spin = spinner_frame(app.spinner);
     let rows: Vec<Row> = view
         .iter()
@@ -727,6 +751,9 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     if !view.is_empty() {
         state.select(Some(app.selected));
     }
+    // Use the offset we computed above so the "… N more" hint and the visible
+    // rows agree (and the table doesn't re-scroll past our clamp).
+    *state.offset_mut() = offset;
     frame.render_stateful_widget(table, inner, &mut state);
 }
 
@@ -1724,6 +1751,17 @@ mod tests {
     fn snapshot_footer_compact() {
         let app = demo_app();
         insta::assert_snapshot!(render_to_string(&app, 56, 22));
+    }
+
+    /// On a window too short for the whole fleet, the list shows a "… N more ↓"
+    /// affordance on its bottom border.
+    #[test]
+    fn snapshot_repos_scroll_affordance() {
+        let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
+        app.set_repos(cohors_core::demo::fleet(NOW));
+        app.hints_hidden = true; // give the list room so some rows show and some overflow
+        // Short height so the 12-repo fleet overflows the viewport.
+        insta::assert_snapshot!(render_to_string(&app, 100, 18));
     }
 
     /// The `cohors demo` fleet renders end-to-end (validates the demo data path).

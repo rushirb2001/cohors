@@ -255,6 +255,10 @@ pub struct App {
     pub hints_hidden: bool,
     /// The "Open with…" picker (`Some` ⇒ `Mode::OpenWith`).
     pub open_with: Option<OpenWith>,
+    /// The repo table's scroll offset, cached from the last render (interior
+    /// mutability, like the overlay scroll states) so the panel can show a
+    /// "… N more" affordance when the list overflows the window.
+    pub repos_scroll: std::cell::Cell<usize>,
 }
 
 /// One choice in the "Open with…" picker.
@@ -317,6 +321,7 @@ impl App {
             confirm: None,
             hints_hidden: false,
             open_with: None,
+            repos_scroll: std::cell::Cell::new(0),
         }
     }
 
