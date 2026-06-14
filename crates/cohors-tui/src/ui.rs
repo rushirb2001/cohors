@@ -386,19 +386,20 @@ fn repo_row<'a>(
     ])
 }
 
-/// The Remote column: CI glyph (✓/✗/●/·) + open-PR count, or "—" when the repo
-/// isn't on GitHub or hasn't been fetched yet.
+/// The Remote column: a cloud (the repo is on GitHub) colored by CI health —
+/// green passing, red failing, yellow pending, dim when there's no CI signal —
+/// plus the open-PR count. "—" when the repo isn't on a remote.
 fn remote_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     match &snap.remote {
         None => Cell::from(Span::styled("—", theme.dim())),
         Some(r) => {
-            let (glyph, style) = match r.ci {
-                CiStatus::Passing => ("✓", theme.ok()),
-                CiStatus::Failing => ("✗", theme.risk()),
-                CiStatus::Pending => ("●", theme.warn()),
-                CiStatus::None => ("·", theme.dim()),
+            let style = match r.ci {
+                CiStatus::Passing => theme.ok(),
+                CiStatus::Failing => theme.risk(),
+                CiStatus::Pending => theme.warn(),
+                CiStatus::None => theme.dim(),
             };
-            let mut spans = vec![Span::styled(glyph, style)];
+            let mut spans = vec![Span::styled("☁", style)];
             if r.open_prs > 0 {
                 spans.push(Span::styled(format!(" {}pr", r.open_prs), theme.dim()));
             }
@@ -716,7 +717,9 @@ fn center_v(area: Rect, height: u16) -> Rect {
 mod tests {
     use super::*;
     use crate::app::{App, Mode};
-    use cohors_core::{Branch, CommitMeta, RepoId, RepoSnapshot, Upstream, WorktreeStatus};
+    use cohors_core::{
+        Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, Upstream, WorktreeStatus,
+    };
     use ratatui::Terminal;
     use ratatui::backend::TestBackend;
 
@@ -767,34 +770,53 @@ mod tests {
             vec!["~/projects".to_string(), "~/work".to_string()],
             "~/.config/cohors/config.toml".to_string(),
         );
+        // A few repos carry GitHub remote info so the Remote cloud is exercised
+        // in passing/failing/pending states; the rest stay local ("—").
+        let remote = |open_prs: u32, ci: CiStatus| {
+            Some(RemoteInfo {
+                host: "github.com".to_string(),
+                owner: "demo".to_string(),
+                repo: "demo".to_string(),
+                default_branch: "main".to_string(),
+                open_prs,
+                prs_awaiting_review: 0,
+                ci,
+            })
+        };
+        let mut payments = snap(
+            "payments",
+            Branch::Named("main".into()),
+            Some(("origin/main", 2, 0)),
+            (0, 3, 1),
+            1,
+            Some((NOW - 7200, "fix: retry on 5xx")),
+            None,
+        );
+        payments.remote = remote(2, CiStatus::Passing);
+        let mut web_app = snap(
+            "web-app",
+            Branch::Named("feat/checkout".into()),
+            Some(("origin/feat", 0, 5)),
+            (0, 7, 0),
+            0,
+            Some((NOW - 1200, "wip: cart drawer")),
+            None,
+        );
+        web_app.remote = remote(0, CiStatus::Failing);
+        let mut auth_service = snap(
+            "auth-service",
+            Branch::Named("main".into()),
+            None,
+            (0, 0, 0),
+            0,
+            Some((NOW - 259_200, "chore: bump deps")),
+            None,
+        );
+        auth_service.remote = remote(1, CiStatus::Pending);
         app.set_repos(vec![
-            snap(
-                "payments",
-                Branch::Named("main".into()),
-                Some(("origin/main", 2, 0)),
-                (0, 3, 1),
-                1,
-                Some((NOW - 7200, "fix: retry on 5xx")),
-                None,
-            ),
-            snap(
-                "web-app",
-                Branch::Named("feat/checkout".into()),
-                Some(("origin/feat", 0, 5)),
-                (0, 7, 0),
-                0,
-                Some((NOW - 1200, "wip: cart drawer")),
-                None,
-            ),
-            snap(
-                "auth-service",
-                Branch::Named("main".into()),
-                None,
-                (0, 0, 0),
-                0,
-                Some((NOW - 259_200, "chore: bump deps")),
-                None,
-            ),
+            payments,
+            web_app,
+            auth_service,
             snap(
                 "infra",
                 Branch::Detached("a1b2c3d".into()),

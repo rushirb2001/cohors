@@ -19,7 +19,12 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- The **Remote** column now shows a single cloud (`☁`) colored by CI health —
+  green passing, red failing, yellow pending, dim when there's no signal — with
+  the open-PR count beside it, instead of distinct `✓`/`✗`/`●`/`·` glyphs. One
+  recognizable icon reads more simply than four.
 
 ## [0.2.0] — 2026-06-13
 
