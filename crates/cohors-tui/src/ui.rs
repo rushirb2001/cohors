@@ -12,7 +12,7 @@ use ratatui::widgets::{
     ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
 };
 
-use crate::app::{App, Mode, RunState};
+use crate::app::{App, ConfirmAction, Mode, RunState};
 
 /// Spinner frames (braille) for the scan indicator.
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -127,6 +127,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::CommandRun {
         render_command_run(frame, area, app, &theme);
+    }
+    if app.mode == Mode::Confirm {
+        render_confirm(frame, area, app, &theme);
     }
 }
 
@@ -258,8 +261,9 @@ fn footer_hints(app: &App) -> String {
         }
         Mode::CommandInput => " type a command · ⏎ run · Esc cancel ".to_string(),
         Mode::CommandRun => " ↑/↓ repo · PgUp/PgDn scroll · y copy · Esc close ".to_string(),
+        Mode::Confirm => " y confirm · N / Esc cancel ".to_string(),
         Mode::Normal => {
-            " ↑/↓ move · Space mark · a all · / filter · s sort · Tab standup · ⏎ open · F fetch · p pull · ? help · q quit ".to_string()
+            " ↑/↓ move · Space mark · a all · / filter · ⏎ open · p pull · ! run · S stash · Tab standup · ? help · q quit ".to_string()
         }
     }
 }
@@ -845,6 +849,53 @@ fn run_output_lines(run: &crate::app::CommandRun, theme: &Theme) -> Vec<Line<'st
     }
 }
 
+/// The confirmation modal: the prompt, the affected repos, and y/N choices with
+/// No as the default. Reached only via a deliberate action key (ADR-008/021).
+fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let Some(pending) = &app.confirm else {
+        return;
+    };
+    let names: Vec<&str> = match &pending.action {
+        ConfirmAction::BulkStash(ids) => ids
+            .iter()
+            .filter_map(|id| {
+                app.repos
+                    .iter()
+                    .find(|r| &r.id == id)
+                    .map(|r| r.name.as_str())
+            })
+            .collect(),
+    };
+    let area = centered_rect(54, 32, full);
+    frame.render_widget(Clear, area);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(" Confirm ").bold())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let lines = vec![
+        Line::from(Span::styled(
+            pending.prompt.clone(),
+            Style::new().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(""),
+        Line::from(Span::styled(names.join(", "), theme.dim())),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("[y]", theme.ok()),
+            Span::raw(" yes    "),
+            Span::styled("[N]", theme.warn()),
+            Span::raw(" no    "),
+            Span::styled("(Esc cancels)", theme.dim()),
+        ]),
+    ];
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
+        inner,
+    );
+}
+
 /// A rect centered within `area`, sized as a percentage of it.
 fn centered_rect(pct_x: u16, pct_y: u16, area: Rect) -> Rect {
     let [_, vmid, _] = Layout::vertical([
@@ -1029,6 +1080,23 @@ mod tests {
         let mut app = demo_app();
         app.selection.insert(RepoId("payments".to_string()));
         app.selection.insert(RepoId("web-app".to_string()));
+        insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    #[test]
+    fn snapshot_confirm_stash() {
+        use crate::app::{ConfirmAction, Pending};
+        let mut app = demo_app();
+        app.selection.insert(RepoId("payments".to_string()));
+        app.selection.insert(RepoId("web-app".to_string()));
+        app.mode = Mode::Confirm;
+        app.confirm = Some(Pending {
+            prompt: "Stash changes in 2 repos?".to_string(),
+            action: ConfirmAction::BulkStash(vec![
+                RepoId("payments".to_string()),
+                RepoId("web-app".to_string()),
+            ]),
+        });
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 

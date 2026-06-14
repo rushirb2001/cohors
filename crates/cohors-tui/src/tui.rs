@@ -26,7 +26,7 @@ use ratatui::crossterm::terminal::{
 };
 
 use crate::action;
-use crate::app::{App, Cmd, CommandRun, Mode, RunResult, RunState};
+use crate::app::{App, Cmd, CommandRun, ConfirmAction, Mode, RunResult, RunState};
 use crate::scan::Scanner;
 use crate::ui;
 
@@ -40,6 +40,16 @@ const POLL: Duration = Duration::from_millis(100);
 enum ActionKind {
     Fetch,
     Pull,
+    Stash,
+}
+
+/// An in-flight bulk batch, for the aggregate progress/summary status line.
+struct Batch {
+    total: usize,
+    /// Present participle for the in-progress message, e.g. "stashing".
+    doing: &'static str,
+    /// Past tense for the done message, e.g. "stashed".
+    done: &'static str,
 }
 
 /// Messages from background threads to the loop.
@@ -89,8 +99,8 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
     app.scanning = true;
     spawn_scan(&scanner, tx.clone());
 
-    // The total of an in-flight `fetch all` batch (for aggregate progress).
-    let mut fetch_all_total: Option<usize> = None;
+    // An in-flight bulk batch (fetch-all / bulk stash), for aggregate progress.
+    let mut batch: Option<Batch> = None;
     // Monotonic id stamped on each command run, so a previous run's late
     // results are ignored once a new run starts.
     let mut run_seq: u64 = 0;
@@ -106,7 +116,7 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                     Cmd::Quit => break,
                     Cmd::Refresh => start_refresh(&mut app, &scanner, &tx),
                     Cmd::FetchSelected => start_action_selected(&mut app, &tx, ActionKind::Fetch),
-                    Cmd::FetchAll => start_fetch_all(&mut app, &tx, &mut fetch_all_total),
+                    Cmd::FetchAll => start_fetch_all(&mut app, &tx, &mut batch),
                     Cmd::PullSelected => start_action_selected(&mut app, &tx, ActionKind::Pull),
                     Cmd::CopyPath => copy_selected(&mut app),
                     Cmd::RevealFileManager => reveal_selected(&mut app),
@@ -118,6 +128,15 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                     Cmd::CopyStandup => copy_standup(&mut app),
                     Cmd::RunCommand => start_command_run(&mut app, &tx, &mut run_seq),
                     Cmd::CopyRunOutput => copy_run_output(&mut app),
+                    Cmd::ConfirmAccept => {
+                        if let Some(pending) = app.confirm.take() {
+                            match pending.action {
+                                ConfirmAction::BulkStash(ids) => {
+                                    start_bulk_stash(&mut app, &tx, ids, &mut batch)
+                                }
+                            }
+                        }
+                    }
                     Cmd::None => {}
                 }
             }
@@ -126,7 +145,7 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
             app.spinner = app.spinner.wrapping_add(1);
         }
 
-        drain_background(&mut app, &rx, &mut fetch_all_total, &scanner, &tx);
+        drain_background(&mut app, &rx, &mut batch, &scanner, &tx);
     }
     Ok(())
 }
@@ -135,7 +154,7 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
 fn drain_background(
     app: &mut App,
     rx: &mpsc::Receiver<BgMsg>,
-    fetch_all_total: &mut Option<usize>,
+    batch: &mut Option<Batch>,
     scanner: &Arc<Scanner>,
     tx: &Sender<BgMsg>,
 ) {
@@ -204,13 +223,15 @@ fn drain_background(
                 if let Some(new_snapshot) = snapshot {
                     replace_snapshot(app, &id, *new_snapshot);
                 }
-                match fetch_all_total {
-                    Some(total) if app.busy.is_empty() => {
-                        app.status = Some(format!("fetched {total} repos"));
-                        *fetch_all_total = None;
+                if let Some(b) = batch.as_ref() {
+                    if app.busy.is_empty() {
+                        app.status = Some(format!("{} {} repos", b.done, b.total));
+                        *batch = None;
+                    } else {
+                        app.status = Some(format!("{}… {} left", b.doing, app.busy.len()));
                     }
-                    Some(_) => app.status = Some(format!("fetching… {} left", app.busy.len())),
-                    None => app.status = Some(message),
+                } else {
+                    app.status = Some(message);
                 }
             }
         }
@@ -238,13 +259,14 @@ fn start_action_selected(app: &mut App, tx: &Sender<BgMsg>, kind: ActionKind) {
     app.status = Some(match kind {
         ActionKind::Fetch => format!("fetching {name}…"),
         ActionKind::Pull => format!("pulling {name}…"),
+        ActionKind::Stash => format!("stashing {name}…"),
     });
     app.busy.insert(id.clone());
     spawn_action(tx.clone(), kind, id, path, name);
 }
 
 /// Start a fetch on every (readable) repo.
-fn start_fetch_all(app: &mut App, tx: &Sender<BgMsg>, fetch_all_total: &mut Option<usize>) {
+fn start_fetch_all(app: &mut App, tx: &Sender<BgMsg>, batch: &mut Option<Batch>) {
     let targets: Vec<(RepoId, Utf8PathBuf, String)> = app
         .repos
         .iter()
@@ -257,11 +279,47 @@ fn start_fetch_all(app: &mut App, tx: &Sender<BgMsg>, fetch_all_total: &mut Opti
         app.status = Some("no repos to fetch".to_string());
         return;
     }
-    *fetch_all_total = Some(targets.len());
+    *batch = Some(Batch {
+        total: targets.len(),
+        doing: "fetching",
+        done: "fetched",
+    });
     app.status = Some(format!("fetching {} repos…", targets.len()));
     for (id, path, name) in targets {
         app.busy.insert(id.clone());
         spawn_action(tx.clone(), ActionKind::Fetch, id, path, name);
+    }
+}
+
+/// Stash changes across the given repos (post-confirmation) on the per-repo
+/// busy/`ActionDone` path, so each row re-snapshots when done.
+fn start_bulk_stash(
+    app: &mut App,
+    tx: &Sender<BgMsg>,
+    ids: Vec<RepoId>,
+    batch: &mut Option<Batch>,
+) {
+    let targets: Vec<(RepoId, Utf8PathBuf, String)> = ids
+        .iter()
+        .filter_map(|id| app.repos.iter().find(|r| &r.id == id))
+        .filter(|r| !r.has_error())
+        .filter_map(|r| r.path.clone().map(|p| (r.id.clone(), p, r.name.clone())))
+        .filter(|(id, _, _)| !app.busy.contains(id))
+        .collect();
+
+    if targets.is_empty() {
+        app.status = Some("no repos to stash".to_string());
+        return;
+    }
+    *batch = Some(Batch {
+        total: targets.len(),
+        doing: "stashing",
+        done: "stashed",
+    });
+    app.status = Some(format!("stashing {} repos…", targets.len()));
+    for (id, path, name) in targets {
+        app.busy.insert(id.clone());
+        spawn_action(tx.clone(), ActionKind::Stash, id, path, name);
     }
 }
 
@@ -500,6 +558,7 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
         let outcome = match kind {
             ActionKind::Fetch => action::fetch(&path, &name),
             ActionKind::Pull => action::pull_ff(&path, &name),
+            ActionKind::Stash => action::stash_push(&path, &name),
         };
         let message = match outcome {
             Ok(m) | Err(m) => m,

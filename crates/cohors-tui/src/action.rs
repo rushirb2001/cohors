@@ -45,6 +45,22 @@ pub fn pull_ff(path: &Utf8Path, name: &str) -> Result<String, String> {
     }
 }
 
+/// Stash the repo's tracked changes (`git stash push`). Untracked files are
+/// left alone (predictable). "No local changes" is a no-op success, not a
+/// failure. Returns a short status message.
+pub fn stash_push(path: &Utf8Path, name: &str) -> Result<String, String> {
+    let out = run_git(path, &["stash", "push"])?;
+    if !out.status.success() {
+        return Err(format!("stash {name}: {}", first_line(&out.stderr)));
+    }
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    if stdout.to_lowercase().contains("no local changes") {
+        Ok(format!("{name}: nothing to stash"))
+    } else {
+        Ok(format!("stashed {name}"))
+    }
+}
+
 /// Run an arbitrary `cmd` via the user's shell inside `path`, capturing
 /// stdout/stderr and the exit code. Uses `sh -c` / `cmd /C` so the user can
 /// pipe and glob as in a terminal (consistent with ADR-013's shell-out model).

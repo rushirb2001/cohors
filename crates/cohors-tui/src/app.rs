@@ -27,6 +27,8 @@ pub enum Mode {
     CommandInput,
     /// The per-repo command-run results view.
     CommandRun,
+    /// A yes/no confirmation modal for a destructive bulk action.
+    Confirm,
 }
 
 /// A side effect for the event loop to perform after a key is handled. Actions
@@ -61,6 +63,23 @@ pub enum Cmd {
     RunCommand,
     /// Copy the focused repo's command output to the clipboard.
     CopyRunOutput,
+    /// The user accepted the pending confirmation; run its action.
+    ConfirmAccept,
+}
+
+/// A destructive bulk action awaiting confirmation.
+#[derive(Debug, Clone)]
+pub struct Pending {
+    /// The question shown in the modal, e.g. "Stash changes in 4 repos?".
+    pub prompt: String,
+    pub action: ConfirmAction,
+}
+
+/// What a confirmed modal will do. One variant per destructive bulk action.
+#[derive(Debug, Clone)]
+pub enum ConfirmAction {
+    /// `git stash push` across these repos.
+    BulkStash(Vec<RepoId>),
 }
 
 /// One repo's slot in a command run.
@@ -190,6 +209,8 @@ pub struct App {
     pub command_input: String,
     /// The in-flight / last command run, shown in `CommandRun` mode.
     pub run: Option<CommandRun>,
+    /// The destructive action awaiting confirmation (`Some` ⇒ `Mode::Confirm`).
+    pub confirm: Option<Pending>,
 }
 
 impl App {
@@ -214,6 +235,7 @@ impl App {
             standup_max_scroll: std::cell::Cell::new(0),
             command_input: String::new(),
             run: None,
+            confirm: None,
         }
     }
 
@@ -328,6 +350,7 @@ impl App {
             Mode::Standup => self.on_key_standup(key),
             Mode::CommandInput => self.on_key_command_input(key),
             Mode::CommandRun => self.on_key_command_run(key),
+            Mode::Confirm => self.on_key_confirm(key),
         }
     }
 
@@ -366,6 +389,7 @@ impl App {
                     self.command_input.clear();
                 }
             }
+            KeyCode::Char('S') => self.request_bulk_stash(),
             KeyCode::Enter => return Cmd::OpenEditor,
             KeyCode::Char('o') => return Cmd::RevealFileManager,
             KeyCode::Char('L') => return Cmd::Lazygit,
@@ -510,6 +534,41 @@ impl App {
             _ => {}
         }
         Cmd::None
+    }
+
+    fn on_key_confirm(&mut self, key: KeyEvent) -> Cmd {
+        // Default is No: only an explicit y/Y proceeds; anything else cancels.
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                self.mode = Mode::Normal;
+                Cmd::ConfirmAccept // tui.rs reads `self.confirm` to run it
+            }
+            _ => {
+                self.mode = Mode::Normal;
+                self.confirm = None;
+                Cmd::None
+            }
+        }
+    }
+
+    /// Open the confirmation modal for stashing the target repos' changes.
+    fn request_bulk_stash(&mut self) {
+        let ids: Vec<RepoId> = self
+            .action_targets()
+            .into_iter()
+            .filter(|id| self.repos.iter().any(|r| &r.id == id && !r.has_error()))
+            .collect();
+        if ids.is_empty() {
+            self.status = Some("no repos to stash".to_string());
+            return;
+        }
+        let n = ids.len();
+        let s = if n == 1 { "" } else { "s" };
+        self.confirm = Some(Pending {
+            prompt: format!("Stash changes in {n} repo{s}?"),
+            action: ConfirmAction::BulkStash(ids),
+        });
+        self.mode = Mode::Confirm;
     }
 
     /// Move the run-view focus by `delta` repos, clamped, resetting the output
@@ -765,6 +824,37 @@ mod tests {
         assert_eq!(app.run.as_ref().unwrap().focus, 1);
         app.on_key(code(KeyCode::Down)); // at bottom → clamp
         assert_eq!(app.run.as_ref().unwrap().focus, 1);
+    }
+
+    #[test]
+    fn stash_key_opens_confirm_not_action() {
+        let mut app = app_with(&[("a", true)]);
+        let cmd = app.on_key(key('S'));
+        assert_eq!(cmd, Cmd::None); // opens the modal, runs nothing yet
+        assert_eq!(app.mode, Mode::Confirm);
+        assert!(app.confirm.is_some());
+    }
+
+    #[test]
+    fn confirm_y_accepts_and_keeps_pending_for_loop() {
+        let mut app = app_with(&[("a", true)]);
+        app.on_key(key('S'));
+        let cmd = app.on_key(key('y'));
+        assert_eq!(cmd, Cmd::ConfirmAccept);
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.confirm.is_some()); // the loop consumes it via take()
+    }
+
+    #[test]
+    fn confirm_default_is_no_n_esc_and_other_cancel() {
+        for cancel in [key('n'), code(KeyCode::Esc), key('x')] {
+            let mut app = app_with(&[("a", true)]);
+            app.on_key(key('S'));
+            let cmd = app.on_key(cancel);
+            assert_eq!(cmd, Cmd::None);
+            assert_eq!(app.mode, Mode::Normal);
+            assert!(app.confirm.is_none());
+        }
     }
 
     #[test]

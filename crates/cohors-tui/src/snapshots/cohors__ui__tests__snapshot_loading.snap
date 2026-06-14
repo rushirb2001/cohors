@@ -13,4 +13,4 @@ expression: "render_to_string(&app, 100, 12)"
                                                                                                     
                                                                                                     
                                                                                                     
- ↑/↓ move · Space mark · a all · / filter · s sort · Tab standup · ⏎ open · F fetch · p pull · ? hel
+ ↑/↓ move · Space mark · a all · / filter · ⏎ open · p pull · ! run · S stash · Tab standup · ? help

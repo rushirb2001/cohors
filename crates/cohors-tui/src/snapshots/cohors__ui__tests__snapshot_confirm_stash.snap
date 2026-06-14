@@ -9,16 +9,16 @@ expression: "render_to_string(&app, 100, 20)"
 │ 4 of 5 repositories need attention:                                                              │
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) ────────────────────────────────────────────────────────────────────────────────╮
-│  Repo                Branch         Sync     Changes  Stash  Remote  Last commit                 │
-│                                                                                                  │
-│▌   legacy-billing    error          ·        ·        ·      ·       could not read .git (permiss│
-│  ● payments          main           ↑2       4        1      ● 2pr    2h  fix: retry on 5xx      │
-│  ● web-app           feat/checkout  ↓5       7        ·      ●       20m  wip: cart drawer       │
+╭ Repositories (5) ────╭ Confirm ───────────────────────────────────────────╮──────────────────────╮
+│  Repo                │ Stash changes in 2 repos?                          │ommit                 │
+│                      │                                                    │                      │
+│▌   legacy-billing    │ payments, web-app                                  │not read .git (permiss│
+│  ● payments          │                                                    │ix: retry on 5xx      │
+│  ● web-app           ╰────────────────────────────────────────────────────╯ip: cart drawer       │
 │    infra             @a1b2c3d       —        4        ·      —        1w  build: pin ci image    │
 │    auth-service      main           —        ·        ·      ● 1pr    3d  chore: bump deps       │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
- ↑/↓ move · Space mark · a all · / filter · ⏎ open · p pull · ! run · S stash · Tab standup · ? help
+ y confirm · N / Esc cancel
