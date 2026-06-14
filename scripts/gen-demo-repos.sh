@@ -25,15 +25,24 @@ recent=$((now - 2 * 3600)) # 2 hours ago
 aging=$((now - 5 * DAY))   # 5 days ago  → "aging" unpushed work
 stale=$((now - 14 * DAY))  # 2 weeks ago → "stale" stash
 
+# Commit author. The standup view (Tab) lists commits by the *viewer's*
+# `git config user.email`, so by default we author as the running user — that
+# way the standup actually populates in a demo. Override both for a reproducible
+# release GIF; fall back to a fake identity when no git user is configured.
+AUTHOR_NAME="${COHORS_DEMO_AUTHOR_NAME:-$(git config user.name 2>/dev/null || true)}"
+AUTHOR_EMAIL="${COHORS_DEMO_AUTHOR_EMAIL:-$(git config user.email 2>/dev/null || true)}"
+AUTHOR_NAME="${AUTHOR_NAME:-Ada Lovelace}"
+AUTHOR_EMAIL="${AUTHOR_EMAIL:-ada@demo.invalid}"
+
 rm -rf "$TARGET"
 mkdir -p "$TARGET"
 
-# git with a fixed fake identity, no global/system config, and an explicit date.
+# git with the resolved identity, no global/system config, and an explicit date.
 gi() {
   local dir="$1" date="$2"
   shift 2
-  GIT_AUTHOR_NAME="Ada Lovelace" GIT_AUTHOR_EMAIL="ada@demo.invalid" \
-    GIT_COMMITTER_NAME="Ada Lovelace" GIT_COMMITTER_EMAIL="ada@demo.invalid" \
+  GIT_AUTHOR_NAME="$AUTHOR_NAME" GIT_AUTHOR_EMAIL="$AUTHOR_EMAIL" \
+    GIT_COMMITTER_NAME="$AUTHOR_NAME" GIT_COMMITTER_EMAIL="$AUTHOR_EMAIL" \
     GIT_AUTHOR_DATE="@$date +0000" GIT_COMMITTER_DATE="@$date +0000" \
     GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
     git -C "$dir" "$@"
