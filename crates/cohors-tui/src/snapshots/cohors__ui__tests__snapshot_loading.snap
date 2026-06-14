@@ -9,8 +9,8 @@ expression: "render_to_string(&app, 100, 12)"
                                        ⠋ Scanning ~/projects…                                       
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
-│Space mark repo                │ │⏎ open          P push        │ │↑/↓ move        Tab standup    │
-│a mark all                     │ │f fetch         ! run command │ │s sort          ? help         │
-│/ filter                       │ │p pull          S stash       │ │d dirty-only    q quit         │
-│Esc clear                      │ │                              │ │                               │
+│a mark all     │Esc clear      │ │⏎ open         │P push        │ │↑/↓ move       │? help         │
+│/ filter       │               │ │f fetch        │S stash       │ │s sort         │q quit         │
+│Space mark repo                │ │p pull         │              │ │d dirty-only                   │
+│                               │ │! run command                 │ │Tab standup                    │
 ╰───────────────────────────────╯ ╰──────────────────────────────╯ ╰───────────────────────────────╯

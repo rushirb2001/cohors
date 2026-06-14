@@ -21,6 +21,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.29] — 2026-06-14
+
+### Changed
+
+- **Footer group boxes now use a two-column grid with a `│` divider, with the
+  multi-word commands stacked full-width below it.** Short hints (`open`,
+  `fetch`, `pull`, `push`, `stash`; `move`, `sort`, `help`, `quit`; `filter`,
+  `clear`, `mark all`) pack two-up; longer ones (`run command`, `mark repo`,
+  `dirty-only`, `standup`) get their own full-width rows. Because the columns
+  only ever hold short hints, they **stay two-up even on a compact terminal**
+  (no more collapsing to one column), and there's no inner padding eating the
+  width.
+
 ## [0.3.28] — 2026-06-14
 
 ### Changed

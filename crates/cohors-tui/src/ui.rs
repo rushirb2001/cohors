@@ -189,37 +189,32 @@ fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
     );
 }
 
-/// Estimate the usable inner width of one footer group box, so the column count
-/// and the footer height agree before the real layout runs. The footer spans the
-/// full width with no outer box; it's split into `n` boxes with `(n-1)` 1-col
-/// gaps, and each box loses 2 cols to its own border. Rounding down keeps this
-/// conservative (never wider than the real box) so we never under-size the box.
-fn footer_box_inner_w(footer_width: u16, n: u16) -> u16 {
-    let gaps = n.saturating_sub(1);
-    let each = footer_width.saturating_sub(gaps) / n.max(1);
-    each.saturating_sub(2)
+/// A hint's rendered width (`key` + space + `desc`).
+fn footer_item_w(key: &str, desc: &str) -> usize {
+    key.chars().count() + 1 + desc.chars().count()
 }
 
-/// How many internal columns a group box uses for its given width: the busier
-/// `act`/`view` groups prefer two, but drop to one when the box is too narrow to
-/// hold the widest hint twice — so the keys stay readable on a compact terminal
-/// instead of being clipped.
-fn footer_col_count(label: &str, box_inner_w: u16, items: &[(&str, &str)]) -> u16 {
-    let want = if label == "act" || label == "view" {
-        2
-    } else {
-        1
-    };
-    if want < 2 {
-        return 1;
-    }
-    let longest = items
+/// Hints at or below this width pack into the two-column grid; wider ones
+/// ("run command", "mark repo"…) drop to full-width rows below the grid, so the
+/// columns stay narrow enough to always fit two-up — even on a compact terminal.
+const FOOTER_GRID_MAX: usize = 10;
+
+/// One footer hint: `(key, description)`.
+type Hint<'a> = &'a (&'a str, &'a str);
+
+/// Split a group's hints into the two-column "short" set and the full-width
+/// "long" set, preserving order.
+fn footer_partition<'a>(items: &'a [(&'a str, &'a str)]) -> (Vec<Hint<'a>>, Vec<Hint<'a>>) {
+    items
         .iter()
-        .map(|(k, d)| (k.chars().count() + 1 + d.chars().count()) as u16)
-        .max()
-        .unwrap_or(1);
-    let subcol = box_inner_w.saturating_sub(1) / 2; // one gap between two columns
-    if subcol >= longest { 2 } else { 1 }
+        .partition(|(k, d)| footer_item_w(k, d) <= FOOTER_GRID_MAX)
+}
+
+/// A group box's content height: the two-column grid rows plus the full-width
+/// long rows.
+fn footer_group_rows(items: &[(&str, &str)]) -> u16 {
+    let (short, long) = footer_partition(items);
+    (short.len().div_ceil(2) + long.len()) as u16
 }
 
 /// The footer's total height (including borders). In Normal mode it's the three
@@ -231,14 +226,9 @@ fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
         if app.hints_hidden {
             return 1;
         }
-        let groups = footer_groups(app);
-        let bw = footer_box_inner_w(width, groups.len() as u16);
-        let rows = groups
+        let rows = footer_groups(app)
             .iter()
-            .map(|(label, items)| {
-                let cols = footer_col_count(label, bw, items);
-                (items.len() as u16).div_ceil(cols)
-            })
+            .map(|(_, items)| footer_group_rows(items))
             .max()
             .unwrap_or(1);
         rows + 2 + 1 // group-box border + the toggle divider row
@@ -308,28 +298,26 @@ fn render_footer_simple(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>
 }
 
 /// Three titled group boxes side by side, directly in the footer area (no outer
-/// box, to save space). Each box's column count is decided from the same width
-/// estimate the height calc used, so layout and height always agree.
+/// box, to save space).
 fn render_footer_boxed(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let groups = footer_groups(app);
-    let bw = footer_box_inner_w(area.width, groups.len() as u16);
     let cols = Layout::horizontal(vec![Constraint::Fill(1); groups.len()])
         .spacing(1)
         .split(area);
     for (i, (label, items)) in groups.iter().enumerate() {
-        render_group_box(frame, cols[i], label, items, bw, app, theme);
+        render_group_box(frame, cols[i], label, items, app, theme);
     }
 }
 
-/// A single titled group box. Items flow column-major into the responsive number
-/// of internal columns; the `act` box carries the live action-target on its
-/// bottom edge so you can see what an action will hit without leaving the box.
+/// A single titled group box. Short hints fill a two-column grid split by a thin
+/// `│` divider; multi-word hints stack full-width below it. No inner padding, so
+/// the two columns stay two-up even on a compact terminal. The `act` box carries
+/// the live action-target on its bottom edge.
 fn render_group_box(
     frame: &mut Frame,
     area: Rect,
     label: &str,
     items: &[(&'static str, &'static str)],
-    box_inner_w: u16,
     app: &App,
     theme: &Theme,
 ) {
@@ -348,24 +336,42 @@ fn render_group_box(
     frame.render_widget(block, area);
 
     let key_style = theme.ahead().add_modifier(Modifier::BOLD);
-    let ncols = footer_col_count(label, box_inner_w, items) as usize;
-    let per = items.len().div_ceil(ncols.max(1));
-    let subcols = Layout::horizontal(vec![Constraint::Fill(1); ncols])
-        .spacing(1)
-        .split(inner);
-    for (c, sub) in subcols.iter().enumerate() {
-        let start = c * per;
-        let chunk = &items[start..(start + per).min(items.len())];
-        let lines: Vec<Line> = chunk
-            .iter()
-            .map(|(key, desc)| {
-                Line::from(vec![
-                    Span::styled(*key, key_style),
-                    Span::styled(format!(" {desc}"), theme.dim()),
-                ])
-            })
+    let hint = |key: &str, desc: &str| {
+        Line::from(vec![
+            Span::styled(key.to_string(), key_style),
+            Span::styled(format!(" {desc}"), theme.dim()),
+        ])
+    };
+
+    let (short, long) = footer_partition(items);
+    let grid_rows = short.len().div_ceil(2) as u16;
+    let [grid_area, long_area] =
+        Layout::vertical([Constraint::Length(grid_rows), Constraint::Min(0)]).areas(inner);
+
+    // Two columns with a 1-col `│` divider between them.
+    if !short.is_empty() {
+        let [c1, divider, c2] = Layout::horizontal([
+            Constraint::Fill(1),
+            Constraint::Length(1),
+            Constraint::Fill(1),
+        ])
+        .areas(grid_area);
+        let half = short.len().div_ceil(2);
+        let col = |chunk: &[&(&str, &str)]| {
+            Text::from(chunk.iter().map(|(k, d)| hint(k, d)).collect::<Vec<_>>())
+        };
+        frame.render_widget(Paragraph::new(col(&short[..half])), c1);
+        frame.render_widget(Paragraph::new(col(&short[half..])), c2);
+        let bar: Vec<Line> = (0..grid_rows)
+            .map(|_| Line::from(Span::styled("│", theme.dim())))
             .collect();
-        frame.render_widget(Paragraph::new(Text::from(lines)), *sub);
+        frame.render_widget(Paragraph::new(Text::from(bar)), divider);
+    }
+
+    // Multi-word hints, full-width below the grid.
+    if !long.is_empty() {
+        let lines: Vec<Line> = long.iter().map(|(k, d)| hint(k, d)).collect();
+        frame.render_widget(Paragraph::new(Text::from(lines)), long_area);
     }
 }
 
