@@ -15,7 +15,7 @@ A fast, beautiful terminal dashboard — and web app — that shows the live sta
 
 ![cohors dashboard demo](docs/demo.gif)
 
-<sub>Demo generated from <a href="docs/demo.tape"><code>docs/demo.tape</code></a> with <a href="https://github.com/charmbracelet/vhs">vhs</a> (<code>vhs docs/demo.tape</code>).</sub>
+<sub>Rendered at release time from generated <strong>sample</strong> repos — never real data (<a href="docs/DECISIONS.md">ADR-015</a>): <code>vhs docs/demo.tape</code>.</sub>
 
 </div>
 
