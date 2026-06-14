@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.4] — 2026-06-14
+
+### Added
+
+- The background now **dims behind a modal overlay** (help, standup, command
+  runner, confirm), so the open view stands out and the rest recedes — a
+  terminal-friendly stand-in for a blur.
+
 ## [0.3.3] — 2026-06-14
 
 ### Changed
