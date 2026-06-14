@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.28] — 2026-06-14
+
+### Changed
+
+- The action/scan toast now rides the **top-right of the Repositories box
+  border** (e.g. `Repositories (5) · sort: dirty-first ──── ✓ pushed 3 repos`)
+  instead of floating as a separate box — cleaner, no overlap with the footer.
+  Still colored (green `✓` / red `✗` / dim spinner) and self-dismissing.
+
 ## [0.3.27] — 2026-06-14
 
 ### Changed

@@ -152,10 +152,6 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     if app.mode == Mode::OpenWith {
         render_open_with(frame, area, app, &theme);
     }
-
-    // The transient toast renders last, so it floats crisp over everything
-    // (including a dimmed overlay) and never gets dimmed itself.
-    render_toast(frame, area, app, footer_h, &theme);
 }
 
 /// Dim every cell in `area` (keeps its colours, adds the DIM attribute) — used
@@ -442,64 +438,34 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
     frame.render_widget(Paragraph::new(line), inner);
 }
 
-/// A self-dismissing toast in the bottom-right (above the footer) carrying the
-/// transient feedback that used to crowd the header: scan progress and action
-/// results (fetch/pull/push/stash/copy…). In-progress messages stay until the
-/// work finishes; results clear themselves after a few seconds (the event loop
-/// owns the timer). `footer_h` is passed so the toast sits just above the footer.
-fn render_toast(frame: &mut Frame, full: Rect, app: &App, footer_h: u16, theme: &Theme) {
-    // What to show: a live scan spinner, else the latest status, else nothing.
-    let (icon, body, style) = if app.scanning {
-        (
-            format!("{} ", spinner_frame(app.spinner)),
-            app.status
-                .clone()
-                .unwrap_or_else(|| "scanning…".to_string()),
+/// The self-dismissing toast line — scan progress or the latest action result
+/// (fetch/pull/push/stash/copy…) — shown on the **top-right of the Repositories
+/// box border**, not crowding the header. `None` when there's nothing to show.
+/// In-progress messages stay until the work finishes; results clear after a few
+/// seconds (the event loop owns the timer).
+fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
+    if app.scanning {
+        let msg = app
+            .status
+            .clone()
+            .unwrap_or_else(|| "scanning…".to_string());
+        return Some(Line::from(Span::styled(
+            format!(" {} {msg} ", spinner_frame(app.spinner)),
             theme.dim(),
-        )
-    } else if let Some(msg) = &app.status {
-        // A failure reads red; everything else is a confirmation (green + ✓).
-        let failed = msg.contains("fail")
-            || msg.contains("error")
-            || msg.contains("reject")
-            || msg.starts_with("no ");
-        if failed {
-            ("✗ ".to_string(), msg.clone(), theme.risk())
-        } else {
-            (
-                "✓ ".to_string(),
-                msg.clone(),
-                theme.ok().add_modifier(Modifier::BOLD),
-            )
-        }
+        )));
+    }
+    let msg = app.status.as_ref()?;
+    // A failure reads red; everything else is a confirmation (green + ✓).
+    let failed = msg.contains("fail")
+        || msg.contains("error")
+        || msg.contains("reject")
+        || msg.starts_with("no ");
+    let (icon, style) = if failed {
+        ("✗", theme.risk())
     } else {
-        return;
+        ("✓", theme.ok().add_modifier(Modifier::BOLD))
     };
-
-    let line = Line::from(vec![Span::styled(icon, style), Span::styled(body, style)]);
-    let text_w = line.width() as u16;
-    // Box = text + 2 padding + 2 border, clamped to the frame.
-    let w = (text_w + 4).min(full.width.saturating_sub(2)).max(6);
-    let h = 3;
-    // Bottom-right, just above the footer.
-    let x = full.x + full.width.saturating_sub(w + 1);
-    let y = full
-        .y
-        .saturating_add(full.height.saturating_sub(footer_h + h));
-    let area = Rect {
-        x,
-        y,
-        width: w,
-        height: h,
-    };
-    frame.render_widget(Clear, area);
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim())
-        .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    frame.render_widget(Paragraph::new(line), inner);
+    Some(Line::from(Span::styled(format!(" {icon} {msg} "), style)))
 }
 
 /// The footer key hints for the current mode, in labelled groups. Each group is
@@ -695,9 +661,14 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     if app.dirty_only {
         title.push(Span::styled("· dirty-only ", theme.dim()));
     }
-    let block = Block::bordered()
+    let mut block = Block::bordered()
         .border_type(BorderType::Rounded)
         .title(Line::from(title));
+    // Transient feedback (scan progress, action results) rides the top-right of
+    // this box's border — a self-dismissing toast that doesn't crowd the header.
+    if let Some(toast) = toast_line(app, theme) {
+        block = block.title(toast.right_aligned());
+    }
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
