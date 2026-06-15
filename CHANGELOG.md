@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.36] — 2026-06-14
+
+### Changed
+
+- The standup description is now a **flowing sentence** instead of a chip list:
+  "You authored 130 commits this week across 5 repos, shipping 68 features,
+  fixing 14 bugs, polishing 16 design changes, clearing 15 chores, and writing 8
+  doc updates." Each commit type maps to a natural verb/noun clause, the nouns
+  stay colour-coded by kind, and the sentence wraps.
+
 ## [0.3.35] — 2026-06-14
 
 ### Fixed

@@ -1230,6 +1230,39 @@ fn commit_kind(summary: &str) -> Option<String> {
     (!kind.is_empty() && kind.len() <= 12 && !kind.contains(' ')).then(|| kind.to_lowercase())
 }
 
+/// A natural-language clause for a commit type, as `(lead, noun)` — e.g.
+/// `("shipping 68 ", "features")` — so the standup can read like a sentence
+/// ("…, shipping 68 features, fixing 3 bugs, …"). The noun is coloured by kind
+/// by the caller; the lead stays plain. Unknown kinds get a generic phrasing.
+fn commit_phrase(kind: &str, n: usize) -> (String, String) {
+    let known = match kind {
+        "feat" => Some(("shipping", "feature", "features")),
+        "fix" => Some(("fixing", "bug", "bugs")),
+        "design" => Some(("polishing", "design change", "design changes")),
+        "style" => Some(("tidying", "style change", "style changes")),
+        "chore" => Some(("clearing", "chore", "chores")),
+        "docs" => Some(("writing", "doc update", "doc updates")),
+        "content" => Some(("writing", "content update", "content updates")),
+        "refactor" => Some(("refactoring in", "commit", "commits")),
+        "perf" => Some(("tuning", "perf change", "perf changes")),
+        "test" => Some(("adding", "test", "tests")),
+        "build" => Some(("updating", "build change", "build changes")),
+        "ci" => Some(("tweaking", "CI change", "CI changes")),
+        _ => None,
+    };
+    match known {
+        Some((verb, singular, plural)) => {
+            let noun = if n == 1 { singular } else { plural };
+            (format!("{verb} {n} "), noun.to_string())
+        }
+        // Unknown type → keep the literal kind: "3 wip commits".
+        None => (
+            format!("{n} "),
+            format!("{kind} commit{}", if n == 1 { "" } else { "s" }),
+        ),
+    }
+}
+
 /// A commit summary as styled spans: the type prefix coloured by kind, the rest
 /// plain.
 fn commit_summary_spans(summary: &str, theme: &Theme) -> Vec<Span<'static>> {
@@ -1318,45 +1351,67 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let [desc_area, panes_area] =
         Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(inner);
 
-    // A glance of *what you did*: a one-line sentence, then the commit-type
-    // breakdown coloured by kind on its own line — both wrap so nothing clips.
-    let sentence = Line::from(vec![
+    // A glance of *what you did*, as one flowing, wrapping sentence:
+    // "You authored 130 commits this week across 5 repos, shipping 68 features,
+    //  fixing 14 bugs, polishing 16 design changes, and writing 8 doc updates."
+    // (the type nouns are coloured by kind; the rest is prose.)
+    let mut spans = vec![
         Span::styled("You authored ", theme.dim()),
         Span::styled(
-            format!("{total} commit{}", if total == 1 { "" } else { "s" }),
+            total.to_string(),
             theme.ahead().add_modifier(Modifier::BOLD),
         ),
         Span::styled(
             format!(
-                " {window} across {repos} repo{}",
+                " commit{} {window} across {repos} repo{}",
+                if total == 1 { "" } else { "s" },
                 if repos == 1 { "" } else { "s" }
             ),
             theme.dim(),
         ),
-    ]);
+    ];
+    // Each commit type becomes a clause ("shipping 68 features"); join them with
+    // commas and a final "and".
     let counts = commit_type_counts(&view.commits);
-    let mut chips: Vec<Span> = Vec::new();
-    for (i, (kind, n)) in counts.iter().take(6).enumerate() {
-        if i > 0 {
-            chips.push(Span::styled("  ·  ", theme.dim()));
-        }
-        chips.push(Span::styled(
-            format!("{n} {kind}"),
-            commit_type_style(kind, theme).add_modifier(Modifier::BOLD),
-        ));
-    }
-    if counts.len() > 6 {
-        chips.push(Span::styled(
-            format!("  ·  +{} more", counts.len() - 6),
+    let mut clauses: Vec<Vec<Span>> = counts
+        .iter()
+        .take(5)
+        .map(|(kind, n)| {
+            let (lead, noun) = commit_phrase(kind, *n);
+            vec![
+                Span::styled(lead, theme.dim()),
+                Span::styled(noun, commit_type_style(kind, theme)),
+            ]
+        })
+        .collect();
+    if counts.len() > 5 {
+        let rest: usize = counts.iter().skip(5).map(|(_, n)| *n).sum();
+        clauses.push(vec![Span::styled(
+            format!("and {rest} more across other kinds"),
             theme.dim(),
-        ));
+        )]);
     }
-    let desc = if chips.is_empty() {
-        Text::from(sentence)
-    } else {
-        Text::from(vec![sentence, Line::from(chips)])
-    };
-    frame.render_widget(Paragraph::new(desc).wrap(Wrap { trim: true }), desc_area);
+    if !clauses.is_empty() {
+        spans.push(Span::styled(", ", theme.dim()));
+        let last = clauses.len() - 1;
+        let has_more = counts.len() > 5; // the final clause already starts with "and"
+        for (i, clause) in clauses.into_iter().enumerate() {
+            if i > 0 {
+                let sep = if i == last && !has_more {
+                    if last > 1 { ", and " } else { " and " }
+                } else {
+                    ", "
+                };
+                spans.push(Span::styled(sep, theme.dim()));
+            }
+            spans.extend(clause);
+        }
+    }
+    spans.push(Span::styled(".", theme.dim()));
+    frame.render_widget(
+        Paragraph::new(Line::from(spans)).wrap(Wrap { trim: true }),
+        desc_area,
+    );
 
     // A "Repos" box and a "{repo}" commits box: side-by-side when there's room,
     // stacked (repos on top) on a narrow terminal.
