@@ -9,8 +9,8 @@
 use std::collections::HashSet;
 
 use cohors_core::{
-    RepoDetail, RepoId, RepoSnapshot, SortMode, StandupCommit, StandupWindow, ViewParams, ViewRow,
-    compute_view, group_commits,
+    RemoteDetail, RepoDetail, RepoId, RepoSnapshot, SortMode, StandupCommit, StandupWindow,
+    ViewParams, ViewRow, compute_view, group_commits,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
@@ -289,9 +289,14 @@ pub struct DetailView {
     /// Which repo this is for (to ignore late background results after a switch).
     pub repo_id: RepoId,
     pub repo_name: String,
-    /// `None` while the data is still being read in the background.
+    /// `None` while the local git data is still being read in the background.
     pub detail: Option<RepoDetail>,
-    /// Vertical scroll offset.
+    /// GitHub PRs + contributors, fetched when the pane opens (`None` until then,
+    /// or when there's no GitHub remote / token).
+    pub remote: Option<RemoteDetail>,
+    /// A remote fetch is in flight (drives the "loading…" state).
+    pub remote_pending: bool,
+    /// Vertical scroll offset (the left/state pane).
     pub scroll: u16,
     /// Max scroll, cached from the last render for clamp-without-viewport.
     max_scroll: std::cell::Cell<u16>,
@@ -303,6 +308,8 @@ impl DetailView {
             repo_id,
             repo_name,
             detail: None,
+            remote: None,
+            remote_pending: false,
             scroll: 0,
             max_scroll: std::cell::Cell::new(0),
         }

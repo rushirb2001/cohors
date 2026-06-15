@@ -19,13 +19,13 @@ expression: "render_to_string(&app, 100, 28)"
 │    aut│ │ Stashes (1)                          │ │                                      ││       │
 │       │ │ WIP on main: dashboard tweaks        │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │
-│       │ │ Pull requests                        │ │                                      ││       │
-│       │ │ needs a GitHub remote + token        │ │                                      ││       │
+│       │ │ Pull requests (2)                    │ │                                      ││       │
+│       │ │ #142 fix: retry charge on 5xx  @may  │ │                                      ││       │
+│       │ │ #147 wip: webhook signatures  @sam   │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │
-│       │ │ Contributors                         │ │                                      ││       │
-│       │ │                                      │ │                                      ││       │
-│       │ │                                      │ │                                      ││       │
-│       │ │                                      │ │                                      ││       │
+│       │ │ Contributors (2)                     │ │                                      ││       │
+│       │ │ @maya  ×128                          │ │                                      ││       │
+│       │ │ @sam  ×64                            │ │                                      ││       │
 ╰───────│ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│───────╯
 ╭───────╰──────────────────────────────────────────────────────────────────────────────────╯───────╮
 │ ↑/↓ scroll · g/G top / bottom · Esc close                                                        │

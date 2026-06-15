@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use cohors_core::{CiStatus, RemoteInfo, RepoSnapshot};
+use cohors_core::{CiStatus, Contributor, PullRequest, RemoteDetail, RemoteInfo, RepoSnapshot};
 
 /// Base URL of the GitHub REST API.
 const API_BASE: &str = "https://api.github.com";
@@ -204,6 +204,56 @@ fn fetch_remote(
     })
 }
 
+/// Fetch the per-repo drill-in detail (open PRs + top contributors) for the
+/// detail pane. Best-effort: a section that fails (or has no data) is empty
+/// rather than failing the whole call. Returns `None` only when the remote
+/// isn't a parseable GitHub repo or there's no token.
+pub fn fetch_repo_detail(token: &str, remote_url: &str) -> Option<RemoteDetail> {
+    if token.is_empty() {
+        return None;
+    }
+    let (owner, repo) = url::parse_repo(remote_url)?;
+    let agent = ureq::AgentBuilder::new().timeout(HTTP_TIMEOUT).build();
+
+    let prs = get_json::<Vec<PrResponse>>(
+        &agent,
+        token,
+        &format!("/repos/{owner}/{repo}/pulls?state=open&per_page=20"),
+    )
+    .map(|raw| {
+        raw.into_iter()
+            .map(|p| PullRequest {
+                number: p.number,
+                title: p.title,
+                author: p.user.map(|u| u.login).unwrap_or_default(),
+                draft: p.draft.unwrap_or(false),
+                branch: p.head.map(|h| h.r#ref).unwrap_or_default(),
+                url: p.html_url,
+            })
+            .collect()
+    })
+    .unwrap_or_default();
+
+    let contributors = get_json::<Vec<ContributorResponse>>(
+        &agent,
+        token,
+        &format!("/repos/{owner}/{repo}/contributors?per_page=10"),
+    )
+    .map(|raw| {
+        raw.into_iter()
+            .filter_map(|c| {
+                c.login.map(|login| Contributor {
+                    login,
+                    contributions: c.contributions,
+                })
+            })
+            .collect()
+    })
+    .unwrap_or_default();
+
+    Some(RemoteDetail { prs, contributors })
+}
+
 /// Issue a `GET {API_BASE}{path}` with the standard GitHub headers and decode
 /// the JSON body into `T`. Maps non-2xx / rate-limit / transport / parse issues
 /// onto [`FetchError`].
@@ -299,6 +349,38 @@ struct SearchResponse {
 #[derive(serde::Deserialize)]
 struct StatusResponse {
     state: String,
+}
+
+/// `GET /repos/{owner}/{repo}/pulls` — the fields the detail pane shows.
+#[derive(serde::Deserialize)]
+struct PrResponse {
+    number: u32,
+    title: String,
+    html_url: String,
+    #[serde(default)]
+    draft: Option<bool>,
+    user: Option<UserResponse>,
+    head: Option<HeadResponse>,
+}
+
+#[derive(serde::Deserialize)]
+struct UserResponse {
+    login: String,
+}
+
+#[derive(serde::Deserialize)]
+struct HeadResponse {
+    #[serde(rename = "ref")]
+    r#ref: String,
+}
+
+/// `GET /repos/{owner}/{repo}/contributors` — login + commit count. `login` is
+/// optional because anonymous entries omit it (we filter those out).
+#[derive(serde::Deserialize)]
+struct ContributorResponse {
+    login: Option<String>,
+    #[serde(default)]
+    contributions: u32,
 }
 
 #[cfg(test)]

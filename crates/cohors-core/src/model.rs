@@ -146,6 +146,32 @@ pub struct RemoteInfo {
     pub ci: CiStatus,
 }
 
+/// An open pull request, for the detail pane (populated by `cohors-github`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PullRequest {
+    pub number: u32,
+    pub title: String,
+    pub author: String,
+    pub draft: bool,
+    pub branch: String,
+    pub url: String,
+}
+
+/// A repository contributor, by commit count.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Contributor {
+    pub login: String,
+    pub contributions: u32,
+}
+
+/// Remote (GitHub) drill-in detail for one repo: open PRs + top contributors.
+/// Fetched on demand when the detail pane opens.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RemoteDetail {
+    pub prs: Vec<PullRequest>,
+    pub contributors: Vec<Contributor>,
+}
+
 /// A full point-in-time view of one repo — the unit the dashboard renders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepoSnapshot {

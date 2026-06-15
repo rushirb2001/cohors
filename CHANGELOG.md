@@ -21,6 +21,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.7] — 2026-06-15
+
+### Added
+
+- **Richer two-pane detail pane (ADR-036).** Pressing `Enter` on a repo now shows
+  a standup-style split: the left column has changes, branches, stashes, **open
+  pull requests, and top contributors**; the right column has recent commits. PRs
+  and contributors are fetched from GitHub on demand (when the repo has a remote
+  and a token), shown with a `loading…` / `needs a GitHub remote + token` state
+  so an empty section never reads as broken. New `cohors-core` models
+  (`PullRequest`, `Contributor`, `RemoteDetail`) + `cohors_github::fetch_repo_detail`.
+
 ## [0.4.6] — 2026-06-15
 
 ### Added

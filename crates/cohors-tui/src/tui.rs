@@ -16,7 +16,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use cohors_core::{RepoDetail, RepoId, RepoRef, RepoSnapshot, StandupCommit};
+use cohors_core::{RemoteDetail, RepoDetail, RepoId, RepoRef, RepoSnapshot, StandupCommit};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
@@ -70,6 +70,11 @@ enum BgMsg {
     DetailReady {
         id: RepoId,
         detail: Box<RepoDetail>,
+    },
+    /// The detail pane's GitHub data (PRs + contributors) arrived (matched by id).
+    RemoteDetailReady {
+        id: RepoId,
+        remote: Option<Box<RemoteDetail>>,
     },
     /// One repo in a command run finished (or failed to spawn). `run_id` lets
     /// the loop discard a previous run's late results.
@@ -280,7 +285,7 @@ fn run_loop(
                         start_action_targets(&mut app, &tx, ActionKind::Push, &mut batch)
                     }
                     Cmd::CopyPath => copy_selected(&mut app),
-                    Cmd::OpenDetail => open_detail(&mut app, &tx),
+                    Cmd::OpenDetail => open_detail(&mut app, &scanner, &tx),
                     Cmd::Lazygit => open_lazygit(terminal, &mut app, &scanner, &tx)?,
                     Cmd::OpenWith => open_with_picker(&mut app, resolve_default_editor(&scanner)),
                     Cmd::OpenWithAccept => accept_open_with(terminal, &mut app, &scanner, &tx)?,
@@ -449,6 +454,14 @@ fn drain_background(
                     && d.repo_id == id
                 {
                     d.detail = Some(*detail);
+                }
+            }
+            BgMsg::RemoteDetailReady { id, remote } => {
+                if let Some(d) = &mut app.detail
+                    && d.repo_id == id
+                {
+                    d.remote = remote.map(|b| *b);
+                    d.remote_pending = false;
                 }
             }
             BgMsg::RunRepoDone {
@@ -627,8 +640,10 @@ fn reveal_selected(app: &mut App) {
     }
 }
 
-/// Open the drill-in detail pane for the current repo and kick off its load.
-fn open_detail(app: &mut App, tx: &Sender<BgMsg>) {
+/// Open the drill-in detail pane for the current repo and kick off its loads:
+/// local git facts always, plus GitHub PRs/contributors when the repo has a
+/// GitHub remote and we have a token.
+fn open_detail(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
     let Some(repo) = app.selected_repo() else {
         app.status = Some("no repo selected".to_string());
         return;
@@ -636,12 +651,14 @@ fn open_detail(app: &mut App, tx: &Sender<BgMsg>) {
     let id = repo.id.clone();
     let name = repo.name.clone();
     let path = repo.path.clone();
-    app.detail = Some(DetailView::new(id.clone(), name));
-    app.mode = Mode::Detail;
+    let remote_url = repo.remote_url.clone();
+    let mut dv = DetailView::new(id.clone(), name);
+
     // Read the git facts off-thread; the pane shows a "loading" state until they
     // arrive (matched back by id, so a fast repo-switch can't show stale data).
     if let Some(path) = path {
         let tx = tx.clone();
+        let id = id.clone();
         std::thread::spawn(move || {
             let detail = cohors_git::repo_detail(&path);
             let _ = tx.send(BgMsg::DetailReady {
@@ -650,6 +667,19 @@ fn open_detail(app: &mut App, tx: &Sender<BgMsg>) {
             });
         });
     }
+
+    // Fetch GitHub PRs + contributors when there's a remote and a token.
+    if let (Some(url), Some(token)) = (remote_url, scanner.github_token()) {
+        dv.remote_pending = true;
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let remote = cohors_github::fetch_repo_detail(&token, &url).map(Box::new);
+            let _ = tx.send(BgMsg::RemoteDetailReady { id, remote });
+        });
+    }
+
+    app.detail = Some(dv);
+    app.mode = Mode::Detail;
 }
 
 /// The default editor command: the user's saved pick first (set via the picker),

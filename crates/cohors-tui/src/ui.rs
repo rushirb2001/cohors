@@ -1935,7 +1935,7 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
     let Some(dv) = &app.detail else {
         return;
     };
-    let area = centered_rect(80, 82, full);
+    let area = centered_rect(84, 84, full);
     frame.render_widget(Clear, area);
 
     let branch = dv.detail.as_ref().and_then(|d| d.current_branch.clone());
@@ -1958,12 +1958,21 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
         return;
     };
 
-    let mut lines: Vec<Line> = Vec::new();
+    // Two panes (like the standup): repo state on the left, commits on the right.
+    let [left_area, right_area] =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .spacing(1)
+            .areas(inner);
 
-    detail_section(
-        &mut lines,
-        format!("Recent commits ({})", d.recent_commits.len()),
-    );
+    // Right pane: recent commits.
+    let commits_block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .title(Line::from(format!(" Commits ({}) ", d.recent_commits.len())).bold())
+        .padding(Padding::horizontal(1));
+    let commits_inner = commits_block.inner(right_area);
+    frame.render_widget(commits_block, right_area);
+    let mut clines: Vec<Line> = Vec::new();
     for c in &d.recent_commits {
         let mut spans = vec![
             Span::styled(format!("{}  ", c.short_id), theme.ahead()),
@@ -1973,8 +1982,21 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
             ),
         ];
         spans.extend(commit_summary_spans(&c.summary, theme));
-        lines.push(Line::from(spans));
+        clines.push(Line::from(spans));
     }
+    cap_lines(&mut clines, commits_inner.height as usize, theme);
+    frame.render_widget(Paragraph::new(Text::from(clines)), commits_inner);
+
+    // Left pane: changes · branches · stashes · PRs · contributors.
+    let state_block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .title(Line::from(" Changes · branches · PRs ").bold())
+        .padding(Padding::horizontal(1));
+    let state_inner = state_block.inner(left_area);
+    frame.render_widget(state_block, left_area);
+
+    let mut lines: Vec<Line> = Vec::new();
 
     detail_section(&mut lines, format!("Changes ({})", d.changed_files.len()));
     if d.changed_files.is_empty() {
@@ -2011,15 +2033,18 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
         }
     }
 
-    // Scroll, with a scrollbar when it overflows.
+    // GitHub: open PRs + top contributors.
+    render_remote_sections(&mut lines, dv, theme);
+
+    // Scroll the (denser) left pane, with a scrollbar when it overflows.
     let total = lines.len() as u16;
-    let viewport = inner.height;
+    let viewport = state_inner.height;
     let max_scroll = total.saturating_sub(viewport);
     dv.set_max_scroll(max_scroll);
     let offset = dv.scroll.min(max_scroll);
 
     let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(state_inner);
     frame.render_widget(
         Paragraph::new(Text::from(lines)).scroll((offset, 0)),
         text_area,
@@ -2036,6 +2061,84 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
             &mut sb,
         );
     }
+}
+
+/// Append the GitHub PR + contributor sections to the detail pane's left column,
+/// with loading / no-data states so an empty section reads as "nothing" rather
+/// than "broken."
+fn render_remote_sections(
+    lines: &mut Vec<Line<'static>>,
+    dv: &crate::app::DetailView,
+    theme: &Theme,
+) {
+    detail_section(
+        lines,
+        match dv.remote.as_ref().map(|r| r.prs.len()) {
+            Some(n) => format!("Pull requests ({n})"),
+            None => "Pull requests".to_string(),
+        },
+    );
+    match (&dv.remote, dv.remote_pending) {
+        (_, true) => lines.push(Line::from(Span::styled("loading…", theme.dim()))),
+        (Some(r), _) if r.prs.is_empty() => {
+            lines.push(Line::from(Span::styled("none open", theme.dim())));
+        }
+        (Some(r), _) => {
+            for pr in &r.prs {
+                let mut spans = vec![
+                    Span::styled(format!("#{} ", pr.number), theme.ahead()),
+                    Span::raw(pr.title.clone()),
+                ];
+                if !pr.author.is_empty() {
+                    spans.push(Span::styled(format!("  @{}", pr.author), theme.dim()));
+                }
+                if pr.draft {
+                    spans.push(Span::styled("  draft", theme.warn()));
+                }
+                lines.push(Line::from(spans));
+            }
+        }
+        (None, _) => lines.push(Line::from(Span::styled(
+            "needs a GitHub remote + token",
+            theme.dim(),
+        ))),
+    }
+
+    detail_section(
+        lines,
+        match dv.remote.as_ref().map(|r| r.contributors.len()) {
+            Some(n) => format!("Contributors ({n})"),
+            None => "Contributors".to_string(),
+        },
+    );
+    match (&dv.remote, dv.remote_pending) {
+        (_, true) => lines.push(Line::from(Span::styled("loading…", theme.dim()))),
+        (Some(r), _) if r.contributors.is_empty() => {
+            lines.push(Line::from(Span::styled("—", theme.dim())));
+        }
+        (Some(r), _) => {
+            for c in &r.contributors {
+                lines.push(Line::from(vec![
+                    Span::raw(format!("@{}", c.login)),
+                    Span::styled(format!("  ×{}", c.contributions), theme.dim()),
+                ]));
+            }
+        }
+        (None, _) => {}
+    }
+}
+
+/// Truncate `lines` to `height`, replacing the overflow with a dim "↓ N more".
+fn cap_lines(lines: &mut Vec<Line<'static>>, height: usize, theme: &Theme) {
+    if height == 0 || lines.len() <= height {
+        return;
+    }
+    let hidden = lines.len() - (height - 1);
+    lines.truncate(height - 1);
+    lines.push(Line::from(Span::styled(
+        format!("↓ {hidden} more"),
+        theme.dim(),
+    )));
 }
 
 /// The command-run overlay: a left list of repos (status glyph + name, the
@@ -2610,6 +2713,50 @@ mod tests {
         let id = app.repos[0].id.clone();
         let mut dv = DetailView::new(id, "payments".to_string());
         dv.detail = Some(cohors_core::demo::detail(NOW));
+        app.detail = Some(dv);
+        insta::assert_snapshot!(render_to_string(&app, 100, 28));
+    }
+
+    /// Detail with GitHub data: the PR + contributor sections populated.
+    #[test]
+    fn snapshot_detail_with_remote() {
+        use crate::app::DetailView;
+        use cohors_core::{Contributor, PullRequest, RemoteDetail};
+        let mut app = demo_app();
+        app.mode = Mode::Detail;
+        let id = app.repos[0].id.clone();
+        let mut dv = DetailView::new(id, "payments".to_string());
+        dv.detail = Some(cohors_core::demo::detail(NOW));
+        dv.remote = Some(RemoteDetail {
+            prs: vec![
+                PullRequest {
+                    number: 142,
+                    title: "fix: retry charge on 5xx".to_string(),
+                    author: "maya".to_string(),
+                    draft: false,
+                    branch: "fix/retry".to_string(),
+                    url: String::new(),
+                },
+                PullRequest {
+                    number: 147,
+                    title: "wip: webhook signatures".to_string(),
+                    author: "sam".to_string(),
+                    draft: true,
+                    branch: "spike/webhooks".to_string(),
+                    url: String::new(),
+                },
+            ],
+            contributors: vec![
+                Contributor {
+                    login: "maya".to_string(),
+                    contributions: 128,
+                },
+                Contributor {
+                    login: "sam".to_string(),
+                    contributions: 64,
+                },
+            ],
+        });
         app.detail = Some(dv);
         insta::assert_snapshot!(render_to_string(&app, 100, 28));
     }
