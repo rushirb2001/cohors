@@ -21,6 +21,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.1] — 2026-06-15
+
+### Changed
+
+- **Remote tools now report what they dropped.** `list_prs` / `ci_status` add
+  `meta.excluded` (and a note) for selected repos that have no GitHub remote, so
+  an agent can reconcile "18 repos but 14 CI rows" instead of guessing.
+- **Fixed stale tool descriptions.** `fetch`/`pull`/`stash`/`run` now correctly
+  state that `dry_run` previews need neither the tier flag nor `confirm`, and
+  `run` documents the enforced `timeout_secs` (no longer claims it's unenforced).
+
 ## [0.4.0] — 2026-06-15
 
 **Milestone: the agent surface.** `cohors mcp` exposes the fleet to a coding

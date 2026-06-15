@@ -215,7 +215,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "fetch",
-            "description": "git fetch across the selected repos (non-destructive). Requires the server launched with --allow-writes. Pass dry_run:true to preview the target set without acting.",
+            "description": "git fetch across the selected repos (non-destructive). Execution requires the server launched with --allow-writes; dry_run:true previews the target set without it.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean" } },
@@ -224,7 +224,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "pull",
-            "description": "git pull --ff-only across the selected repos — never merges or rebases, so it can't lose work. Requires --allow-writes. Pass dry_run:true to preview.",
+            "description": "git pull --ff-only across the selected repos — never merges or rebases, so it can't lose work. Execution requires --allow-writes; dry_run:true previews without it.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -237,7 +237,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "stash",
-            "description": "git stash push (tracked changes) across the selected repos. Requires --allow-writes AND confirm:true. Pass dry_run:true to preview.",
+            "description": "git stash push (tracked changes) across the selected repos. Execution requires --allow-writes and confirm:true; dry_run:true previews the target set with neither.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -250,7 +250,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "run",
-            "description": "Run a shell command in each selected repo; returns per-repo {exit_code, stdout, stderr, truncated}. The fleet codemod/audit/test primitive. Requires --allow-run AND confirm:true. Pass dry_run:true to preview the targets. (timeout_secs is accepted but not yet enforced.)",
+            "description": "Run a shell command in each selected repo; returns per-repo {exit_code, stdout, stderr, truncated, timed_out}. The fleet codemod/audit/test primitive. Execution requires --allow-run and confirm:true; dry_run:true previews the target set with neither. Each repo is bounded by timeout_secs (default 120s).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -537,14 +537,20 @@ fn resolve_read<'a>(args: &Value, snaps: &'a [RepoSnapshot], now: i64) -> Vec<&'
         .collect()
 }
 
-/// Fail-loud meta for the remote tools — adds a token hint when enrichment can't
-/// run, so an empty PR/CI result reads as "no token," not "no PRs."
-fn remote_meta(ctx: &Ctx, snaps: &[RepoSnapshot]) -> Value {
+/// Fail-loud meta for the remote tools. `excluded` is how many *selected* repos
+/// were dropped for having no GitHub remote, so an agent can reconcile "18 repos
+/// but 14 CI rows" instead of guessing. A missing token is called out too.
+fn remote_meta(ctx: &Ctx, snaps: &[RepoSnapshot], excluded: usize) -> Value {
     let mut m = meta(ctx, snaps);
+    m["excluded"] = json!(excluded);
     if ctx.token.is_none() {
         m["note"] = json!(
             "No GitHub token found (run `gh auth login` or set $GITHUB_TOKEN); PR/CI data is unavailable."
         );
+    } else if excluded > 0 {
+        m["note"] = json!(format!(
+            "{excluded} selected repo(s) have no GitHub remote and were omitted from the results."
+        ));
     }
     m
 }
@@ -552,7 +558,8 @@ fn remote_meta(ctx: &Ctx, snaps: &[RepoSnapshot]) -> Value {
 fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
     let mut snaps = (ctx.scan)();
     cohors_github::enrich(&mut snaps, ctx.token);
-    let repos: Vec<Value> = resolve_read(args, &snaps, now)
+    let selected = resolve_read(args, &snaps, now);
+    let repos: Vec<Value> = selected
         .iter()
         .filter_map(|s| {
             s.remote.as_ref().map(|r| {
@@ -560,13 +567,15 @@ fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
             })
         })
         .collect();
-    json!({ "repos": repos, "meta": remote_meta(ctx, &snaps) })
+    let excluded = selected.len() - repos.len();
+    json!({ "repos": repos, "meta": remote_meta(ctx, &snaps, excluded) })
 }
 
 fn ci_status(args: &Value, ctx: &Ctx, now: i64) -> Value {
     let mut snaps = (ctx.scan)();
     cohors_github::enrich(&mut snaps, ctx.token);
-    let repos: Vec<Value> = resolve_read(args, &snaps, now)
+    let selected = resolve_read(args, &snaps, now);
+    let repos: Vec<Value> = selected
         .iter()
         .filter_map(|s| {
             s.remote
@@ -574,7 +583,8 @@ fn ci_status(args: &Value, ctx: &Ctx, now: i64) -> Value {
                 .map(|r| json!({ "repo": s.id.0, "ci": r.ci }))
         })
         .collect();
-    json!({ "repos": repos, "meta": remote_meta(ctx, &snaps) })
+    let excluded = selected.len() - repos.len();
+    json!({ "repos": repos, "meta": remote_meta(ctx, &snaps, excluded) })
 }
 
 fn list_repos(args: &Value, ctx: &Ctx, now: i64) -> Value {
@@ -1174,6 +1184,7 @@ mod tests {
             let resp = call(act(tool, json!({})));
             let p = payload(&resp);
             assert!(p["repos"].is_array(), "{tool} repos");
+            assert!(p["meta"]["excluded"].is_number(), "{tool} reports excluded");
             assert!(
                 p["meta"]["note"].as_str().unwrap().contains("token"),
                 "{tool} should note the missing token"
