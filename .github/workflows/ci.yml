@@ -22,7 +22,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Installs the toolchain pinned in rust-toolchain.toml, including the
       # rustfmt/clippy components and the wasm32 target listed there.
       - name: Install pinned toolchain
@@ -39,7 +39,7 @@ jobs:
     name: wasm-core build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
@@ -54,7 +54,7 @@ jobs:
     # git-CLI test fixtures are tuned for Unix), so don't block CI on it.
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
