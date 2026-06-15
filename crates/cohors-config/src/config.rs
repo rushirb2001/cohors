@@ -211,9 +211,25 @@ follow_symlinks = false
 # "~/work/payments-service" = "payments"
 "#;
 
-/// Write the starter config to `path`. Refuses to overwrite an existing file
-/// unless `force` is true, and creates parent directories as needed.
-pub fn write_starter(path: &Utf8Path, force: bool) -> Result<(), ConfigError> {
+/// Render the starter config with a concrete `roots` line. Empty `roots` keeps
+/// the commented placeholder (so a no-detection `cohors init` still writes a
+/// valid, edit-me file).
+pub fn starter_config(roots: &[String]) -> String {
+    if roots.is_empty() {
+        return STARTER_CONFIG.to_string();
+    }
+    let list = roots
+        .iter()
+        .map(|r| format!("\"{r}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    STARTER_CONFIG.replace("roots = [\"~/projects\"]", &format!("roots = [{list}]"))
+}
+
+/// Write the starter config to `path`, seeded with `roots` (auto-detected by the
+/// caller). Refuses to overwrite an existing file unless `force` is true, and
+/// creates parent directories as needed.
+pub fn write_starter(path: &Utf8Path, force: bool, roots: &[String]) -> Result<(), ConfigError> {
     if path.exists() && !force {
         return Err(ConfigError::AlreadyExists(path.to_owned()));
     }
@@ -223,7 +239,7 @@ pub fn write_starter(path: &Utf8Path, force: bool) -> Result<(), ConfigError> {
             source,
         })?;
     }
-    std::fs::write(path, STARTER_CONFIG).map_err(|source| ConfigError::Write {
+    std::fs::write(path, starter_config(roots)).map_err(|source| ConfigError::Write {
         path: path.to_owned(),
         source,
     })
@@ -363,18 +379,18 @@ mod tests {
             .expect("utf8 path");
 
         // First write succeeds and creates parent dirs.
-        write_starter(&path, false).expect("first write");
+        write_starter(&path, false, &[]).expect("first write");
         assert!(path.exists());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), STARTER_CONFIG);
 
         // Second write without force is refused.
         assert!(matches!(
-            write_starter(&path, false),
+            write_starter(&path, false, &[]),
             Err(ConfigError::AlreadyExists(_))
         ));
 
         // With force it overwrites.
-        write_starter(&path, true).expect("forced write");
+        write_starter(&path, true, &[]).expect("forced write");
     }
 
     #[test]

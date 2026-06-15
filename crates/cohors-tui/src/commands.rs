@@ -11,16 +11,25 @@ use cohors_core::{AttentionLevel, CiStatus, Selector, SortMode};
 use crate::cli::Cli;
 use crate::scan::Scanner;
 
-/// `cohors init` — write a starter config and print its path.
+/// `cohors init` — write a starter config and print its path. Auto-detects where
+/// the user keeps repos and seeds `roots` with them, so the first `cohors` run
+/// shows a populated fleet instead of an empty one.
 pub fn init(cli: &Cli, force: bool) -> Result<()> {
     let path: Utf8PathBuf = match &cli.config {
         Some(p) => Utf8PathBuf::from(p),
         None => cohors_config::paths::config_file().context("resolving the config path")?,
     };
-    cohors_config::write_starter(&path, force)
+    let home = cohors_config::paths::home_dir().ok();
+    let roots = crate::detect::detect_roots(home.as_deref());
+    cohors_config::write_starter(&path, force, &roots)
         .with_context(|| format!("writing config to {path}"))?;
     println!("Wrote starter config to {path}");
-    println!("Edit it, then run `cohors`.");
+    if roots.is_empty() {
+        println!("No repos auto-detected — edit `roots` to point at your code, then run `cohors`.");
+    } else {
+        println!("Detected roots: {}", roots.join(", "));
+        println!("Run `cohors` to see your fleet (edit `roots` to adjust).");
+    }
     Ok(())
 }
 

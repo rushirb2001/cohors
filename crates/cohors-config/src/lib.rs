@@ -15,5 +15,5 @@ mod config;
 mod error;
 pub mod paths;
 
-pub use config::{Config, STARTER_CONFIG, expand_tilde, write_starter};
+pub use config::{Config, STARTER_CONFIG, expand_tilde, starter_config, write_starter};
 pub use error::ConfigError;

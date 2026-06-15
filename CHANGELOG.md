@@ -21,6 +21,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.2] — 2026-06-15
+
+### Changed
+
+- **Auto-detected discovery, consistent across CLI/TUI/MCP (ADR-032).** With no
+  configured roots, cohors probes common code directories (`~/code`,
+  `~/projects`, `~/dev`, `~/src`, `~/work`, `~/Developer`, …) and the working
+  directory (using its parent when you're inside a repo) to find where your repos
+  live — so a zero-config run shows a populated fleet everywhere, not an empty
+  one. Resolution: `--root` → config `roots` → auto-detected → current directory.
+- **`cohors init` seeds real roots.** It now writes the detected roots into the
+  config (and reports them) instead of the blind `~/projects` placeholder.
+
 ## [0.4.1] — 2026-06-15
 
 ### Changed

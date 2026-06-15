@@ -110,11 +110,20 @@ pub(crate) fn discovery_options(
     root_overrides: &[String],
     home: Option<&Utf8Path>,
 ) -> DiscoveryOptions {
-    let raw_roots = if root_overrides.is_empty() {
+    let mut raw_roots = if root_overrides.is_empty() {
         config.roots.clone()
     } else {
         root_overrides.to_vec()
     };
+
+    // Zero-config default: with no roots set, auto-detect where the user keeps
+    // repos (common code dirs + the current directory), so `cohors` "just works"
+    // anywhere instead of showing an empty fleet. Explicit `--root`/config roots
+    // always win. Shared by the CLI, TUI, and MCP (all go through here).
+    if raw_roots.is_empty() {
+        raw_roots = crate::detect::detect_roots(home);
+    }
+
     let mut roots: Vec<String> = raw_roots
         .iter()
         .map(|r| match home {
@@ -123,9 +132,7 @@ pub(crate) fn discovery_options(
         })
         .collect();
 
-    // Zero-config default: with no roots set, scan the current directory — so
-    // `cohors` "just works" anywhere (like ripgrep/lazygit) instead of showing an
-    // empty fleet. Explicit `--root`/config roots always win.
+    // Last-ditch fallback when nothing was detected: the current directory.
     if roots.is_empty()
         && let Ok(cwd) = std::env::current_dir()
         && let Some(cwd) = cwd.to_str()
