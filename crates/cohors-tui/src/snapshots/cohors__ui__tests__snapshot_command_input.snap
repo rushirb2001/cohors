@@ -9,16 +9,16 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync      Changes  Last commit                               │
-│▌   legacy-bil╭ Run command · 1 repos ─────────────────────────────────────────────╮ion denied)   │
-│    payments  │ $ git fetch --all▏                                                 │              │
-│    web-app   │                                                                    │              │
-│    infra     ╰────────────────────────────────────────────────────────────────────╯              │
-│    auth-service      main           ● 1pr     ·         3d  chore: bump deps                     │
+│    Repo    ╭ Run command · 1 repos ─────────────────────────────────────────────────╮            │
+│▌   legacy-b│ $ git fetch --all▏                                                     │n denied)   │
+│    payments│                                                                        │            │
+│    web-app │ Runs concurrently across the 1 target repo, capturing per-repo output. │            │
+│    infra   │ e.g.     git checkout main   ·   npm ci   ·   rg TODO                  │            │
+│    auth-ser╰────────────────────────────────────────────────────────────────────────╯            │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ type a command · ⏎ run it · Esc cancel                                                           │
+│ ⏎ run · Esc cancel                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

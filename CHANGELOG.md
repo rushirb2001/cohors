@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.47] — 2026-06-14
+
+### Changed
+
+- Both command modals now carry a **structured, colour-coded cheat sheet inside
+  the box** instead of dumping hints on the footer. The `:` palette groups verbs
+  by `act` / `shell` / `view` / `go` (verbs in accent, descriptions dim,
+  placeholders shown), and the `!` runner explains what it does with example
+  commands. Their footers are slimmed to just `⏎ run · Esc cancel`.
+
 ## [0.3.46] — 2026-06-14
 
 ### Changed

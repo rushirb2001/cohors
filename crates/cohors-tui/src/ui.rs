@@ -530,16 +530,7 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
             "filter",
             vec![("type", "to filter"), ("⏎", "apply"), ("Esc", "clear")],
         )],
-        Mode::Command => vec![(
-            "command",
-            vec![
-                (":fetch :push", ""),
-                (":!cmd", "shell across repos"),
-                (":sort name", ""),
-                ("/text", "filter"),
-                ("Esc", "cancel"),
-            ],
-        )],
+        Mode::Command => vec![("", vec![("⏎", "run"), ("Esc", "cancel")])],
         Mode::Help => vec![("", vec![("? / Esc", "close")])],
         Mode::Standup => {
             if app.standup.as_ref().is_some_and(|s| s.commits_focused) {
@@ -566,10 +557,7 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
                 )]
             }
         }
-        Mode::CommandInput => vec![(
-            "",
-            vec![("type", "a command"), ("⏎", "run it"), ("Esc", "cancel")],
-        )],
+        Mode::CommandInput => vec![("", vec![("⏎", "run"), ("Esc", "cancel")])],
         Mode::CommandRun => vec![(
             "",
             vec![
@@ -683,10 +671,82 @@ fn render_filter_input(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// The `:`-command palette: a centered boxed overlay mirroring the `!` runner,
-/// with a `:` prompt. Verbs/aliases live on the footer.
+/// A centered modal of fixed width (% of the frame) and height, for the command
+/// overlays.
+fn centered_modal(full: Rect, pct_w: u16, h: u16) -> Rect {
+    let w = ((full.width as u32 * pct_w as u32 / 100) as u16).clamp(24, full.width);
+    let h = h.min(full.height.saturating_sub(2)).max(3);
+    Rect {
+        x: full.x + full.width.saturating_sub(w) / 2,
+        y: full.y + full.height.saturating_sub(h) / 2,
+        width: w,
+        height: h,
+    }
+}
+
+/// The `:`-command palette: a centered boxed overlay (mirroring the `!` runner)
+/// with the `:` prompt and a structured, colour-coded cheat sheet of the verbs.
 fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let area = centered_rect(70, 20, full);
+    let cmd = |t: &str| Span::styled(t.to_string(), theme.ahead().add_modifier(Modifier::BOLD));
+    let dim = |t: &str| Span::styled(t.to_string(), theme.dim());
+    // A labelled row: a dim 9-col label, then the (already-styled) spans.
+    let row = |label: &str, mut spans: Vec<Span<'static>>| -> Line<'static> {
+        let mut out = vec![Span::styled(format!("{label:<9}"), theme.dim())];
+        out.append(&mut spans);
+        Line::from(out)
+    };
+
+    let lines = vec![
+        Line::from(vec![
+            cmd(":"),
+            Span::raw(" "),
+            Span::raw(app.command_line.clone()),
+            Span::raw("▏"),
+        ]),
+        Line::from(""),
+        row(
+            "act",
+            vec![
+                cmd(":fetch"),
+                dim("  "),
+                cmd(":pull"),
+                dim("  "),
+                cmd(":push"),
+            ],
+        ),
+        row(
+            "shell",
+            vec![
+                cmd(":!<cmd>"),
+                dim("   run a command across the target repos"),
+            ],
+        ),
+        row(
+            "view",
+            vec![
+                cmd(":sort"),
+                dim(" <name·dirty·recent>   "),
+                cmd(":dirty"),
+                dim("   "),
+                cmd("/<text>"),
+                dim(" filter"),
+            ],
+        ),
+        row(
+            "go",
+            vec![
+                cmd(":jump"),
+                dim(" <repo>   "),
+                cmd(":standup"),
+                dim("   "),
+                cmd(":refresh"),
+                dim("   "),
+                cmd(":quit"),
+            ],
+        ),
+    ];
+
+    let area = centered_modal(full, 74, lines.len() as u16 + 2);
     frame.render_widget(Clear, area);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -694,12 +754,7 @@ fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let line = Line::from(vec![
-        Span::styled(": ", theme.ahead().add_modifier(Modifier::BOLD)),
-        Span::raw(app.command_line.clone()),
-        Span::raw("▏"),
-    ]);
-    frame.render_widget(Paragraph::new(line), inner);
+    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
 fn render_loading(frame: &mut Frame, area: Rect, app: &App) {
@@ -1749,21 +1804,40 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
 /// The command-input overlay: a small box to type the command to run, showing
 /// how many repos it will run across.
 fn render_command_input(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let area = centered_rect(70, 20, full);
-    frame.render_widget(Clear, area);
     let n = app.action_targets().len();
+    let dim = |t: &str| Span::styled(t.to_string(), theme.dim());
+    let ex = |t: &str| Span::raw(t.to_string());
+
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("$ ", theme.ahead().add_modifier(Modifier::BOLD)),
+            Span::raw(app.command_input.clone()),
+            Span::raw("▏"),
+        ]),
+        Line::from(""),
+        Line::from(vec![dim(&format!(
+            "Runs concurrently across the {n} target repo{}, capturing per-repo output.",
+            if n == 1 { "" } else { "s" }
+        ))]),
+        Line::from(vec![
+            Span::styled(format!("{:<9}", "e.g."), theme.dim()),
+            ex("git checkout main"),
+            dim("   ·   "),
+            ex("npm ci"),
+            dim("   ·   "),
+            ex("rg TODO"),
+        ]),
+    ];
+
+    let area = centered_modal(full, 74, lines.len() as u16 + 2);
+    frame.render_widget(Clear, area);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .title(Line::from(format!(" Run command · {n} repos ")).bold())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let line = Line::from(vec![
-        Span::styled("$ ", theme.dim()),
-        Span::raw(app.command_input.clone()),
-        Span::raw("▏"),
-    ]);
-    frame.render_widget(Paragraph::new(line), inner);
+    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
 /// The command-run overlay: a left list of repos (status glyph + name, the

@@ -9,18 +9,18 @@ expression: "render_to_string(&app, 100, 22)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync      Changes  Last commit                               │
-│▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
-│    payments  ╭ Command ───────────────────────────────────────────────────────────╮              │
-│    web-app   │ : sort name▏                                                       │              │
-│    infra     │                                                                    │              │
-│    auth-servi╰────────────────────────────────────────────────────────────────────╯              │
-│                                                                                                  │
-│                                                                                                  │
+│    Repo    ╭ Command ───────────────────────────────────────────────────────────────╮            │
+│▌   legacy-b│ : sort name▏                                                           │n denied)   │
+│    payments│                                                                        │            │
+│    web-app │ act      :fetch  :pull  :push                                          │            │
+│    infra   │ shell    :!<cmd>   run a command across the target repos               │            │
+│    auth-ser│ view     :sort <name·dirty·recent>   :dirty   /<text> filter           │            │
+│            │ go       :jump <repo>   :standup   :refresh   :quit                    │            │
+│            ╰────────────────────────────────────────────────────────────────────────╯            │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ command:fetch :push  · :!cmd shell across repos · :sort name  · /text filter · Esc cancel        │
+│ ⏎ run · Esc cancel                                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
