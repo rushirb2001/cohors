@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.38] — 2026-06-14
+
+### Fixed
+
+- The repo list's overflow hint now sits on the correct side: `… N more ↓` at the
+  **bottom** while repos remain below, and `↑ N more` at the **top** once you've
+  scrolled to the end (the hidden repos are then above). Previously the `↑ N more`
+  was wrongly shown at the bottom.
+
 ## [0.3.37] — 2026-06-14
 
 ### Changed

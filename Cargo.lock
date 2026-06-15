@@ -350,7 +350,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-config"
-version = "0.3.36"
+version = "0.3.37"
 dependencies = [
  "camino",
  "directories",
@@ -363,7 +363,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-core"
-version = "0.3.36"
+version = "0.3.37"
 dependencies = [
  "camino",
  "nucleo-matcher",
@@ -373,7 +373,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-git"
-version = "0.3.36"
+version = "0.3.37"
 dependencies = [
  "camino",
  "cohors-core",
@@ -390,7 +390,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-github"
-version = "0.3.36"
+version = "0.3.37"
 dependencies = [
  "cohors-core",
  "serde",
@@ -402,7 +402,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-tui"
-version = "0.3.36"
+version = "0.3.37"
 dependencies = [
  "anyhow",
  "arboard",

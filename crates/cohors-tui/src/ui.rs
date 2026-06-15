@@ -720,17 +720,16 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     let total = view.len();
     // Does the fleet overflow the body (inner minus the header row + its margin)?
     let overflow = total > inner.height.saturating_sub(2) as usize;
-    // When it does, reserve the last inner row for a scroll hint *inside* the box
-    // (not on the border); the table takes the rest.
-    let (table_area, hint_area) = if overflow {
-        let [t, h] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
-        (t, Some(h))
-    } else {
-        (inner, None)
-    };
 
-    // Track the table's scroll so the visible rows and the hint count agree.
-    let viewport = (table_area.height as usize).saturating_sub(2);
+    // When it overflows, one inner row is reserved for a scroll hint; the table
+    // gets the rest. Compute the scroll offset first (the reserved row count is 1
+    // wherever it lands), so we know which way the hidden repos are.
+    let table_h = if overflow {
+        inner.height.saturating_sub(1)
+    } else {
+        inner.height
+    };
+    let viewport = (table_h as usize).saturating_sub(2);
     let mut offset = app.repos_scroll.get();
     if app.selected < offset {
         offset = app.selected;
@@ -739,6 +738,19 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     }
     offset = offset.min(total.saturating_sub(viewport));
     app.repos_scroll.set(offset);
+    let below = total.saturating_sub(offset + viewport);
+
+    // Put the hint at the bottom ("… N more ↓") while repos remain below, and at
+    // the top ("↑ N more") once you've scrolled to the end (the rest is above).
+    let (table_area, hint_area) = if !overflow {
+        (inner, None)
+    } else if below > 0 {
+        let [t, h] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+        (t, Some(h))
+    } else {
+        let [h, t] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
+        (t, Some(h))
+    };
 
     // "Repo" is padded by 2 so it lines up with the names, which carry a 2-col
     // selection gutter (`● ` / `  `) inside their cell.
@@ -801,7 +813,6 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     // The scroll hint, centered on its own row inside the box: how many repos
     // are below the fold (or above, once scrolled to the bottom).
     if let Some(h) = hint_area {
-        let below = total.saturating_sub(offset + viewport);
         let text = if below > 0 {
             format!("… {below} more ↓")
         } else {
@@ -2036,6 +2047,17 @@ mod tests {
         app.set_repos(cohors_core::demo::fleet(NOW));
         app.hints_hidden = true; // give the list room so some rows show and some overflow
         // Short height so the 12-repo fleet overflows the viewport.
+        insta::assert_snapshot!(render_to_string(&app, 100, 18));
+    }
+
+    /// Scrolled to the end of the list, the "more" hint flips to the top
+    /// (`↑ N more`), since the hidden repos are now above.
+    #[test]
+    fn snapshot_repos_scroll_at_bottom() {
+        let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
+        app.set_repos(cohors_core::demo::fleet(NOW));
+        app.hints_hidden = true;
+        app.selected = app.visible_len() - 1; // cursor at the last repo → scrolled down
         insta::assert_snapshot!(render_to_string(&app, 100, 18));
     }
 
