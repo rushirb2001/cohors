@@ -5,7 +5,7 @@
 #
 # Why this exists: demos must NEVER point cohors at your real repositories — that
 # would bake personal data (repo names, commit messages) into a committed GIF.
-# This builds fake, reproducible data instead. See docs/DECISIONS.md (ADR-015).
+# This builds fake, reproducible data instead — never real repositories.
 #
 # Dates are relative to *now*, so "aging unpushed" (> 2 days) and "stale stash"
 # (> 1 week) are always correct whenever you render.

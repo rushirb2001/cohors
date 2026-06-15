@@ -26,7 +26,7 @@
 # Demo recording scratch
 *.gif.tmp
 
-# Internal planning docs — kept local, never committed or published.
+# Internal material — kept local, never committed or published.
 /KICKOFF_PROMPT.md
-/docs/MCP-KICKOFF.md
-/docs/COMPETITIVE-ANALYSIS.md
+/CLAUDE.md
+/docs/

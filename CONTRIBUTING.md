@@ -4,7 +4,7 @@ cohors is open source (MIT) and built in public. Issues, ideas, and PRs are welc
 
 ## Before you start
 
-- Read [docs/VISION.md](docs/VISION.md) for what cohors is (and isn't), and [docs/ROADMAP.md](docs/ROADMAP.md) for what's being built now.
+- Skim the [README](README.md) for what cohors is and the current scope.
 - For anything non-trivial, open an issue first so we can agree on the approach before you write code.
 
 ## Dev setup
@@ -34,7 +34,7 @@ CI runs all of these; a PR is only mergeable when they're green.
 - **Core stays pure:** no `std::fs`, `std::process`, `std::net`, threads, or `std::time::Instant` in `cohors-core` — it must compile to WASM.
 - **Tests with changes:** new logic in `cohors-core` needs unit tests; new TUI states should get an `insta` snapshot.
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/), **single subject line, no body** (e.g. `feat(tui): add dirty-only filter`). No AI-attribution trailers.
-- **Docs:** if you change behavior, update the relevant file in `docs/` and tick the box in `ROADMAP.md`.
+- **Docs:** if you change user-facing behavior, update the `README` and `CHANGELOG` accordingly.
 
 ## Good first issues
 
