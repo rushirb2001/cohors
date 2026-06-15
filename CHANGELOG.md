@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.50] — 2026-06-14
+
+### Changed
+
+- **The command-run view now matches the standup view's structure.** Its repo
+  list and output are each wrapped in a titled box (`Repos` and the focused
+  repo's name), with the same padding and a clean (cap-less) scrollbar — the two
+  "list + detail" overlays were previously inconsistent (one boxed, one bare).
+
 ## [0.3.49] — 2026-06-14
 
 ### Changed

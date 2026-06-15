@@ -1872,9 +1872,17 @@ fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Left: the repo list (with focus highlight). Right: the focused output.
-    // Stacks (list on top) on a narrow terminal so neither pane is squeezed.
+    // Two boxed panes — a "Repos" list and the focused repo's output — matching
+    // the standup view's structure. Side-by-side, stacking on a narrow terminal.
     let (list_area, out_area) = two_pane(inner, 26, 6);
+
+    // Left: the repos box.
+    let repos_block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(" Repos ").bold())
+        .padding(Padding::horizontal(1));
+    let repos_inner = repos_block.inner(list_area);
+    frame.render_widget(repos_block, list_area);
 
     let spin = spinner_frame(app.spinner);
     let items: Vec<ListItem> = run
@@ -1889,7 +1897,7 @@ fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
             ListItem::new(Line::from(vec![
                 Span::styled(glyph, style),
                 Span::raw(" "),
-                Span::raw(ellipsize(&r.name, 18)),
+                Span::raw(ellipsize(&r.name, 16)),
                 Span::styled(note, theme.dim()),
             ]))
         })
@@ -1899,18 +1907,30 @@ fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     if !run.results.is_empty() {
         list_state.select(Some(run.focus));
     }
-    frame.render_stateful_widget(list, list_area, &mut list_state);
+    frame.render_stateful_widget(list, repos_inner, &mut list_state);
 
-    // Right: the focused repo's output (stdout, then a dim stderr divider).
+    // Right: the focused repo's output box (stdout, then a dim stderr divider).
+    let focused_name = run
+        .results
+        .get(run.focus)
+        .map(|r| r.name.as_str())
+        .unwrap_or("");
+    let out_block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(format!(" {focused_name} ")).bold())
+        .padding(Padding::new(1, 0, 0, 0));
+    let out_inner = out_block.inner(out_area);
+    frame.render_widget(out_block, out_area);
+
     let out_lines = run_output_lines(run, theme);
     let total = out_lines.len() as u16;
-    let viewport = out_area.height;
+    let viewport = out_inner.height;
     let max_scroll = total.saturating_sub(viewport);
     run.set_max_scroll(max_scroll);
     let offset = run.scroll.min(max_scroll);
 
     let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(out_area);
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(out_inner);
     frame.render_widget(
         Paragraph::new(Text::from(out_lines)).scroll((offset, 0)),
         text_area,
@@ -1920,7 +1940,9 @@ fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
             .position(offset as usize)
             .viewport_content_length(viewport as usize);
         frame.render_stateful_widget(
-            Scrollbar::new(ScrollbarOrientation::VerticalRight),
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
             bar_area,
             &mut sb,
         );
