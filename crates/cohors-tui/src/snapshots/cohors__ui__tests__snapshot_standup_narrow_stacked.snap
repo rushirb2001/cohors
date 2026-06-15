@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 50, 24)"
 ---
 ╭────────────────────────────────────────────────╮
-│ █ ▟███▙ █  cohors  vX.Y.Z                     │
-│ ███ █ ███  All your git repositories at a glan │
-│ █ ╭ Standup · this week ───────────────────╮an │
+│ █ ▟███▙ █  cohors  v0  │  dir    …rojects (+1) │
+│ ███ █ ███  All your g  │  repos  5  ·  3 dirty │
+│ █ ╭ Standup · this week ───────────────────╮nt │
 ╰───│                                        │───╯
 ╭ At│ You authored 11 commits this week      │───╮
 │ 1 │ across 2 repos, shipping 8 features    │·  │

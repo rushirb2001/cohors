@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.53] — 2026-06-14
+
+### Changed
+
+- **The spider mark is now a true purple** (`#A855F7`) instead of the terminal's
+  pinkish ANSI magenta, and the `cohors` wordmark matches it.
+- **The header gained a right-hand info column.** A full-height divider splits the
+  brand block from a one-glance summary: the watched directory (home-abbreviated),
+  the repo / dirty counts, and a needs-attention / all-clear status line.
+
 ## [0.3.52] — 2026-06-14
 
 ### Changed

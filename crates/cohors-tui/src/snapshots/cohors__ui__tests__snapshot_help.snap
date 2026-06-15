@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 40)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ █ ▟███▙ █  cohors  vX.Y.Z                                                                       │
+│ █ ▟███▙ █  cohors  vX.Y.Z                                 │  dir    ~/projects (+1)             │
 │ ███ █ ███  Al╭ Help ──────────────────────────────────────────────────────────────╮              │
-│ █ ▜███▛ █  st│                                                                    │              │
+│ █ ▜███▛ █  st│                                                                    │on            │
 ╰──────────────│  Legend — what each column shows                                   │──────────────╯
 ╭ Attention (4 │    ↑2              commits ahead of upstream                       │──────────────╮
 │ 1 unpushed · │    ↓5              commits behind upstream                         │              │

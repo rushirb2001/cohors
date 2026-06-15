@@ -96,7 +96,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         Constraint::Length(footer_h),
     ])
     .areas(area);
-    render_header(frame, header_area, app, &theme);
+    render_header(frame, header_area, app, now, &theme);
     render_footer(frame, footer_area, app, &theme);
 
     if app.repos.is_empty() {
@@ -176,7 +176,11 @@ fn dim_area(buf: &mut Buffer, area: Rect) {
 /// The branded header: a logo lockup — a shield mark built from block glyphs
 /// beside the wordmark, version, and tagline. cohors's "business card."
 /// Transient feedback lives in a self-dismissing toast, not here.
-fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
+/// The brand purple for the spider mark (a true violet, not the terminal's
+/// pinkish ANSI magenta). Dropped under `NO_COLOR` via [`Theme::fg`].
+const SPIDER_PURPLE: Color = Color::Rgb(0xA8, 0x55, 0xF7);
+
+fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
@@ -184,15 +188,21 @@ fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Spider mark (left) · wordmark + tagline (right). The mark is "pixel art":
-    // every cell is a solid block, the two eyes are gaps that show through to the
-    // terminal background, and the legs splay from the body's sides. Magenta (the
-    // app's "purple") is dropped under NO_COLOR, but the block shape still reads.
-    let [icon_area, text_area] = Layout::horizontal([Constraint::Length(9), Constraint::Min(0)])
-        .spacing(2)
-        .areas(inner);
+    // Layout: spider mark · wordmark/tagline · a vertical divider · an info
+    // column (where we are + fleet stats), mirroring a terminal welcome banner.
+    let [icon_area, text_area, div_area, info_area] = Layout::horizontal([
+        Constraint::Length(9),
+        Constraint::Min(10),
+        Constraint::Length(1),
+        Constraint::Length(34),
+    ])
+    .spacing(2)
+    .areas(inner);
 
-    let mark = theme.fg(Color::Magenta).add_modifier(Modifier::BOLD);
+    // The mark is "pixel art": every cell is a solid block, the two eyes are gaps
+    // that show through to the terminal background, and the legs splay from the
+    // body's sides. The purple is dropped under NO_COLOR, but the shape still reads.
+    let mark = theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD);
     frame.render_widget(
         Paragraph::new(Text::from(vec![
             Line::from(Span::styled("█ ▟███▙ █", mark)),
@@ -205,7 +215,10 @@ fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
     frame.render_widget(
         Paragraph::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("cohors", theme.ahead().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    "cohors",
+                    theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
             ]),
             Line::from(Span::styled(
@@ -219,6 +232,81 @@ fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
         ])),
         text_area,
     );
+
+    // Full-height divider between the brand block and the info column.
+    frame.render_widget(
+        Paragraph::new(Text::from(vec![
+            Line::from(Span::styled("│", theme.dim())),
+            Line::from(Span::styled("│", theme.dim())),
+            Line::from(Span::styled("│", theme.dim())),
+        ])),
+        div_area,
+    );
+
+    frame.render_widget(
+        Paragraph::new(header_info(app, now, info_area.width, theme)),
+        info_area,
+    );
+}
+
+/// The header's right-hand info column: where we're watching plus a one-glance
+/// fleet summary. Three aligned `label value` rows that fit `width`.
+fn header_info(app: &App, now: i64, width: u16, theme: &Theme) -> Text<'static> {
+    let s = fleet_summary(&app.repos, now);
+
+    // Directory row — the configured root(s), home-abbreviated and tail-trimmed.
+    let dir = match app.roots.as_slice() {
+        [] => "(no roots)".to_string(),
+        [one] => abbrev_home(one),
+        [first, rest @ ..] => format!("{} (+{})", abbrev_home(first), rest.len()),
+    };
+    let dir = truncate_tail(&dir, width.saturating_sub(7) as usize);
+
+    // Repo / dirty counts (the "repos" label carries the noun, so the value is
+    // just the number plus a dirty tally).
+    let mut count = vec![Span::styled(format!("{}", s.total), Style::new())];
+    if s.dirty > 0 {
+        count.push(Span::styled("  ·  ", theme.dim()));
+        count.push(Span::styled(format!("{} dirty", s.dirty), theme.modified()));
+    }
+
+    // Status row — needs-attention count, or an all-clear.
+    let status = if s.needs_attention > 0 {
+        Span::styled(
+            format!("{} need attention", s.needs_attention),
+            theme.highlight(),
+        )
+    } else {
+        Span::styled("all up to date", theme.ok())
+    };
+
+    let label = |t: &'static str| Span::styled(format!("{t:<6} "), theme.dim());
+    Text::from(vec![
+        Line::from(vec![label("dir"), Span::styled(dir, Style::new())]),
+        Line::from([vec![label("repos")], count].concat()),
+        Line::from(vec![label("status"), status]),
+    ])
+}
+
+/// Replace a leading `$HOME` with `~` for a compact path display.
+fn abbrev_home(path: &str) -> String {
+    match std::env::var("HOME") {
+        Ok(home) if !home.is_empty() && path.starts_with(&home) => {
+            format!("~{}", &path[home.len()..])
+        }
+        _ => path.to_string(),
+    }
+}
+
+/// Trim `s` to at most `max` columns, keeping the tail (most specific part of a
+/// path) and prefixing an ellipsis when truncated.
+fn truncate_tail(s: &str, max: usize) -> String {
+    let len = s.chars().count();
+    if max == 0 || len <= max {
+        return s.to_string();
+    }
+    let tail: String = s.chars().skip(len - max.saturating_sub(1)).collect();
+    format!("…{tail}")
 }
 
 /// A hint's rendered width (`key` + space + `desc`).

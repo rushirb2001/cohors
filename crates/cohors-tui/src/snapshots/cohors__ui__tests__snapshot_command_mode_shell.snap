@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ █ ▟███▙ █  cohors  vX.Y.Z                                                                       │
-│ ███ █ ███  All your git repositories at a glance —                                               │
-│ █ ▜███▛ █  status · fetch · pull · weekly standup                                                │
+│ █ ▟███▙ █  cohors  vX.Y.Z                                 │  dir    ~/projects (+1)             │
+│ ███ █ ███  All your git repositories at a glance —         │  repos  5  ·  3 dirty               │
+│ █ ▜███▛ █  status · fetch · pull · weekly standup          │  status 4 need attention            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │

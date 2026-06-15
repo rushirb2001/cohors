@@ -3,8 +3,8 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ █ ▟███▙ █  cohors  vX.Y.Z                                                                       │
-│ ███ █ ███  All your git repositories at a glance —                                               │
+│ █ ▟███▙ █  cohors  vX.Y.Z                                 │  dir    ~/projects (+1)             │
+│ ███ █ ███  All your git repositories at a glance —         │  repos  5  ·  3 dirty               │
 │ █ ▜███▛ ╭ payments  ·  main ───────────────────────────────────────────────────────────╮         │
 ╰─────────│ Recent commits (5)                                                           │─────────╯
 ╭ Attentio│ a1b2c3d    2h  fix: retry charge on 5xx from processor                       │─────────╮
