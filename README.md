@@ -2,9 +2,9 @@
 
 # cohors
 
-**Mission control for all your git repositories.**
+**A governed control plane for all your git repositories — for you, and your coding agent.**
 
-A fast terminal dashboard that shows the live status of every git repository on your machine and lets you act on them in bulk — fetch, pull, stash, and run commands across many repos at once. One Rust core, built to grow into a web app and an agent interface.
+Coding agents made single-repo work cheap. The bottleneck moved to the *fleet*: an agent is blind across your 20 repos — it can't see which need attention, can't find which ones call `X`, and can't safely act across them. cohors is the fix — one fast view of every repo, a search that indexes the whole fleet, and bulk actions an agent can preview before you ever grant write access. Over MCP, in the terminal, and (soon) the browser. One Rust core.
 
 <sub><i>cohors</i> — Latin for "cohort," a Roman legion's core unit. Every repository, marshalled into one cohort under your command.</sub>
 
@@ -17,30 +17,77 @@ A fast terminal dashboard that shows the live status of every git repository on 
 
 ---
 
-## Overview
+## The fleet is the new bottleneck
 
-If you work across more than a handful of repositories — microservices, a polyrepo organization, client projects, or a sprawling `~/projects` — you lose track of which ones have uncommitted work, which are behind their remote, and where you left off. Answering that today means a long sequence of `cd … && git status` and a wall of terminal tabs.
+You — and your agent — now work across dozens of repos, and the hard questions are fleet-wide: *Which repos have uncommitted work? Which still import the old client? Run the tests in everything I touched today. Rename this header everywhere and open a PR in each.*
 
-cohors replaces that with a single, fast dashboard across every repository, and the ability to act on them in bulk without leaving the terminal.
+By hand that's `cd … && git status` across a dozen tabs and a `for d in */` loop with no guard rail. And handing that loop to an agent means trusting it with **unbounded mutation across your whole machine**. cohors makes the fleet a first-class thing you can **enumerate, search, and act on — safely.**
 
-Try it in five seconds, with no setup and nothing written to disk:
+## For your agent: a governed MCP control plane
 
-```sh
-cargo run -p cohors-tui -- demo
+`cohors mcp` gives a coding agent the same fleet sense you have, behind a safety model you control. The workflow it unlocks — **find → target → preview → act:**
+
+```text
+search("X-Tenant-Id", kind=content)      →  the 3 repos that still use it
+run("<codemod>", {ids:[…]}, dry_run)     →  "would run in 3 repos"  (nothing touched)
+#  …you approve the plan, then:
+run("<codemod>", {ids:[…]}, confirm)     →  per-repo { ok, exit_code, stdout, … }
 ```
 
-This launches the full interface on a built-in, privacy-safe sample fleet — every column and view populated, so you can see exactly what cohors does before pointing it at your own repositories.
+Register it — **read-only by default**, opt into actions with flags:
 
-## Features
+```sh
+claude mcp add cohors -- cohors mcp                              # read-only
+claude mcp add cohors -- cohors mcp --allow-writes --allow-run   # + bulk actions
+```
 
-- **Every repository on one screen.** Auto-discovers git repositories under your configured roots and shows branch, ahead/behind, dirty state, stashes, and last activity — sorted dirty-first, so what needs attention rises to the top.
-- **Fast.** Parallel scanning with a warm cache; the dashboard launches in milliseconds across dozens of repositories.
-- **Fuzzy navigation.** Jump to any repository by name or path, or filter instantly to just the ones with changes.
-- **Bulk actions.** Fetch, pull (fast-forward only), stash (with confirmation), and run any command across the selected repositories with live, per-repo output.
-- **Remote-aware.** Open pull-request counts, CI status, and ahead/behind against upstream, shown inline.
-- **Weekly standup.** Every commit you made this week, across every repository, gathered into one view.
+**Why an MCP and not a bash loop?** The value isn't capability — an agent *can* loop over `git`. It's the **governed boundary**, which an agent cannot give itself:
 
-A coding-agent (MCP) server and a WebAssembly web dashboard are on the roadmap, both built on the same core.
+- Read-only unless you launch it armed; `pull` is fast-forward-only (it can't lose work).
+- `confirm` on destructive actions; `dry_run` previews the blast radius with zero side effects (even on a read-only server).
+- Scope-locked to your configured roots; an empty selector matches **nothing**, so a fumbled argument can't fan out across everything.
+- A target cap, an optional `run` command allowlist, and an audit log of every action.
+
+**Tools.** Reads (always on): `list_repos`, `get_repo`, `fleet_summary`, `search`, `repo_path`, `list_prs`, `ci_status`. Actions (flag-gated): `fetch`, `pull`, `stash`, `run`. Every read carries diagnostics (the roots searched, the config in effect), so an empty fleet explains itself instead of reading as "all clear."
+
+## For you: a fast fleet dashboard
+
+The same core powers a terminal dashboard. See it in five seconds — no setup, nothing written to disk:
+
+```sh
+cohors demo
+```
+
+- **Every repo on one screen** — branch, ahead/behind, dirty state, stashes, last activity, sorted dirty-first.
+- **Fast** — parallel scanning with a warm cache; launches in milliseconds across dozens of repos.
+- **Bulk actions** — fetch, pull (ff-only), stash (confirmed), and run a command across the selected repos with live, per-repo output.
+- **Remote-aware** — open pull-request counts, CI status, and ahead/behind vs upstream, inline.
+- **Weekly standup** — every commit you made this week, across every repo, in one view.
+
+## Install
+
+Requires [Rust](https://rustup.rs) and `git` on your `PATH`.
+
+```sh
+cargo install --git https://github.com/rushirb2001/cohors cohors-tui   # the `cohors` binary
+cohors init     # auto-detects where your repos live and writes a config
+cohors          # launch the dashboard
+```
+
+Or clone and `cargo install --path crates/cohors-tui`. Distribution via crates.io, Homebrew, and prebuilt release binaries is planned.
+
+## Usage
+
+```sh
+cohors                 # scan your repos and launch the dashboard
+cohors demo            # full UI on built-in sample data (nothing written to disk)
+cohors init            # detect your repos → ~/.config/cohors/config.toml
+cohors scan            # print repository snapshots as JSON (scriptable)
+cohors scan --select dirty           # filter — e.g. dirty, behind, 'name:pay*', or raw JSON
+cohors mcp             # run the MCP server (read-only; --allow-writes / --allow-run to arm)
+```
+
+Inside the dashboard: `↑`/`↓` move · `Enter` inspect · `/` fuzzy filter · `Space` mark · `f`/`p`/`S` fetch/pull/stash · `!` run a command · `Tab` weekly standup · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked.
 
 ## How it compares
 
@@ -50,79 +97,23 @@ A coding-agent (MCP) server and a WebAssembly web dashboard are on the roadmap, 
 | Polished terminal UI | Yes | Yes | No | Yes |
 | Bulk actions (fetch / pull / run) | Yes | Read-only | Yes | No |
 | Remote / PR / CI awareness | Yes | No | No | Single repo |
-| Cross-repo weekly standup | Yes | No | No | No |
+| Cross-repo search + weekly standup | Yes | No | No | No |
+| **Agent control plane (MCP)** | **Yes** | No | No | No |
 | Language | Rust | Go | Go / Python | Go / Rust |
 
-## Architecture
+## How it's built
 
-cohors is a Rust workspace built around a pure, I/O-free core that holds all the domain logic, with thin adapters around it:
+A Rust workspace around a pure, I/O-free core with thin adapters — so the *same* analysis powers the terminal, the agent, and (soon) the browser:
 
-- `cohors-core` — pure analysis and models, with no I/O (kept WebAssembly-safe).
-- `cohors-config` — configuration and repository discovery.
-- `cohors-git` — the local git provider, built on [gitoxide](https://github.com/GitoxideLabs/gitoxide).
-- `cohors-github` — the GitHub provider for remote, PR, and CI data.
-- `cohors-tui` — the terminal front-end, built on [ratatui](https://ratatui.rs); ships the `cohors` binary.
+- `cohors-core` — pure, WASM-safe models and analysis: attention scoring, the selector language, search.
+- `cohors-config` · `cohors-git` ([gitoxide](https://github.com/GitoxideLabs/gitoxide)) · `cohors-github` — config, local git, and GitHub adapters.
+- `cohors-tui` ([ratatui](https://ratatui.rs)) — the `cohors` binary: dashboard, CLI, and MCP server.
 
-Because the core is independent of both its data sources and its front-ends, the same analysis will power the terminal, an agent interface, and the browser.
-
-## Installation
-
-cohors requires [Rust](https://rustup.rs) (the toolchain version is pinned in `rust-toolchain.toml`) and `git` on your `PATH`.
-
-Install directly from the repository:
-
-```sh
-cargo install --git https://github.com/rushirb2001/cohors cohors-tui
-```
-
-Or clone and install from source:
-
-```sh
-git clone https://github.com/rushirb2001/cohors && cd cohors
-cargo install --path crates/cohors-tui
-```
-
-Both install the `cohors` binary. Distribution through crates.io, Homebrew, and prebuilt release binaries is planned.
-
-## Usage
-
-```sh
-cohors demo      # full UI on built-in sample data — no config, nothing written to disk
-cohors init      # write ~/.config/cohors/config.toml, then set: roots = ["~/projects", "~/work"]
-cohors           # scan your repositories and launch the dashboard
-cohors scan      # print repository snapshots as JSON (scriptable)
-cohors scan --select dirty          # filter the JSON to a subset
-cohors scan --select 'behind,name:pay*'   # combine predicates (or pass JSON)
-cohors mcp       # expose the fleet to a coding agent over MCP (read-only)
-```
-
-Register the MCP server with a compatible agent. It's **read-only by default**;
-opt into actions with flags:
-
-```sh
-claude mcp add cohors -- cohors mcp                          # read-only
-claude mcp add cohors -- cohors mcp --allow-writes           # + fetch / pull / stash
-claude mcp add cohors -- cohors mcp --allow-writes --allow-run   # + run (arbitrary shell)
-```
-
-Read tools: `list_repos`, `get_repo`, `fleet_summary`, `search`, `repo_path`,
-and the GitHub-enriched `list_prs` / `ci_status`. Action tools (`fetch`, `pull`,
-`stash`, `run`) are gated by the flags above, require `confirm: true` for the
-destructive ones, and support `dry_run` — a side-effect-free preview of the exact
-target set that works even on a read-only server.
-
-Inside the dashboard, the essentials are:
-
-- `↑` / `↓` move, `Enter` inspect a repository, `/` fuzzy filter, `d` dirty-only, `s` cycle sort.
-- `Space` mark, `a` mark all, `Esc` clear selection.
-- `f` / `F` fetch selection / all, `p` pull (fast-forward only), `S` stash, `!` run a command across the selection.
-- `Tab` weekly standup, `o` open in your editor, `y` copy path, `r` refresh, `q` quit.
-
-Bulk actions target the marked repositories, or the current one when nothing is marked. Press `?` for the full keymap.
+Because the core is independent of its data sources and front-ends, one selector language and one analysis serve every surface.
 
 ## Contributing
 
-Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, quality gates, and conventions.
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, quality gates, and conventions.
 
 ## License
 
