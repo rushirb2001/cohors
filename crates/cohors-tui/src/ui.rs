@@ -188,52 +188,114 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &The
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Layout: spider mark · wordmark/tagline · a vertical divider · an info
-    // column (where we are + fleet stats), mirroring a terminal welcome banner.
-    let [icon_area, text_area, div_area, info_area] = Layout::horizontal([
-        Constraint::Length(9),
-        Constraint::Min(10),
+    // The header mark, drawn as 3 rows of block "pixels". The purple is dropped
+    // under NO_COLOR, but the silhouette still reads. A space ` ` is a
+    // transparent gap (use it for eyes / holes).
+    //
+    // ── Glyph palette ───────────────────────────────────────────────────────
+    // Full / half blocks (solid fills):   █  ▀  ▄  ▌  ▐
+    // Shades (lighter fills):             ░  ▒  ▓
+    // Quadrants — one corner:             ▖(BL) ▗(BR) ▘(TL) ▝(TR)
+    // Quadrants — three corners (notch):  ▙(no TR) ▟(no TL) ▛(no BR) ▜(no BL)
+    // Quadrants — diagonals:              ▚(TL+BR) ▞(TR+BL)
+    // Geometric (centers / eyes):         ● ○ ◉ ◆ ■ ▮ ▬ ◐ ◑
+    //
+    // ── Designs to try ──────────────────────────────────────────────────────
+    // Swap the three rows of `spider` below for a set here, and set `ICON_W`
+    // (just below) to the noted width. Keep all three rows the same length (pad
+    // with spaces) so the columns line up.
+    //
+    //   V0 · droid — width 9
+    //       "█ ▟███▙ █"   /   "███ █ ███"   /   "█ ▜███▛ █"
+    //
+    //   V1 · diagonal legs — width 9
+    //       "▀▄     ▄▀"   /   "   ▟█▙   "   /   "▄▀     ▀▄"
+    //
+    //   V2 · eight quadrant legs — width 9
+    //       "▖▗     ▖▗"   /   "   ▝█▘   "   /   "▘▝     ▘▝"
+    //
+    //   V3 · corner-leg crab — width 9
+    //       "▟▙     ▟▙"   /   "  █████  "   /   "▜▛     ▜▛"
+    //
+    //   V4 · wide diagonal splay — width 11
+    //       "▀▄       ▄▀" /   "    ▟█▙    " /   "▄▀       ▀▄"
+    //
+    //   V5 · octopus: two eyes + feet — width 7
+    //       "▟█████▙"     /   "██ █ ██"     /   " ▘▘ ▘▘ "
+    //
+    //   V6 · bristled body, angled legs — width 9
+    //       "▝▙     ▟▘"   /   "   ███   "   /   "▗▛     ▜▖"
+    //
+    //   V7 · shaded body (soft fill) — width 9
+    //       "▀▄     ▄▀"   /   "   ▒█▒   "   /   "▄▀     ▀▄"
+    // ────────────────────────────────────────────────────────────────────────
+    let mark = theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD);
+    const ICON_W: u16 = 9;
+    let spider = Text::from(vec![
+        Line::from(Span::styled("▜▒▟███▙▒▛", mark)),
+        Line::from(Span::styled("▟██▌█▐██▙", mark)),
+        Line::from(Span::styled("▀▐▖▀█▀▗▌▀", mark)),
+    ]);
+
+    // The wordmark + version — the lede, shared by the full and compact layouts.
+    let lede = Line::from(vec![
+        Span::styled(
+            "cohors",
+            theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
+    ]);
+
+    // Full brand block (lede + taglines) and the info column, both sized to
+    // their content so the bar packs left instead of leaving a gap mid-line.
+    let brand = Text::from(vec![
+        lede.clone(),
+        Line::from(Span::styled(
+            "All your git repositories at a glance",
+            theme.dim(),
+        )),
+        Line::from(Span::styled(
+            "status · fetch · pull · weekly standup",
+            theme.dim(),
+        )),
+    ]);
+    let info = header_info(app, now, 34, theme);
+    let text_w = brand.width() as u16;
+    let info_w = info.width() as u16;
+    let full_need = ICON_W + 2 + text_w + 2 + 1 + 2 + info_w;
+
+    // Compact fallback for narrow terminals: spider + lede, then just the
+    // directory — no taglines, divider, or info column.
+    if inner.width < full_need {
+        let [icon_area, text_area] =
+            Layout::horizontal([Constraint::Length(ICON_W), Constraint::Min(0)])
+                .spacing(2)
+                .areas(inner);
+        frame.render_widget(Paragraph::new(spider), icon_area);
+        let dir = truncate_tail(&header_dir(app), text_area.width as usize);
+        frame.render_widget(
+            Paragraph::new(Text::from(vec![
+                lede,
+                Line::from(Span::styled(dir, theme.dim())),
+            ])),
+            text_area,
+        );
+        return;
+    }
+
+    // Full layout, packed left: spider · brand · divider · info · (spacer).
+    let [icon_area, text_area, div_area, info_area, _rest] = Layout::horizontal([
+        Constraint::Length(ICON_W),
+        Constraint::Length(text_w),
         Constraint::Length(1),
-        Constraint::Length(34),
+        Constraint::Length(info_w),
+        Constraint::Min(0),
     ])
     .spacing(2)
     .areas(inner);
 
-    // A small spider: a compact body with four legs reaching out as solid
-    // half-block diagonals (no thin lines). The purple is dropped under
-    // NO_COLOR, but the silhouette still reads.
-    let mark = theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD);
-    frame.render_widget(
-        Paragraph::new(Text::from(vec![
-            Line::from(Span::styled("▀▄     ▄▀", mark)),
-            Line::from(Span::styled("   ▟█▙   ", mark)),
-            Line::from(Span::styled("▄▀     ▀▄", mark)),
-        ])),
-        icon_area,
-    );
-
-    frame.render_widget(
-        Paragraph::new(Text::from(vec![
-            Line::from(vec![
-                Span::styled(
-                    "cohors",
-                    theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD),
-                ),
-                Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
-            ]),
-            Line::from(Span::styled(
-                "All your git repositories at a glance",
-                theme.dim(),
-            )),
-            Line::from(Span::styled(
-                "status · fetch · pull · weekly standup",
-                theme.dim(),
-            )),
-        ])),
-        text_area,
-    );
-
-    // Full-height divider between the brand block and the info column.
+    frame.render_widget(Paragraph::new(spider), icon_area);
+    frame.render_widget(Paragraph::new(brand), text_area);
     frame.render_widget(
         Paragraph::new(Text::from(vec![
             Line::from(Span::styled("│", theme.dim())),
@@ -242,11 +304,16 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &The
         ])),
         div_area,
     );
+    frame.render_widget(Paragraph::new(info), info_area);
+}
 
-    frame.render_widget(
-        Paragraph::new(header_info(app, now, info_area.width, theme)),
-        info_area,
-    );
+/// The configured root(s) as a compact, home-abbreviated string.
+fn header_dir(app: &App) -> String {
+    match app.roots.as_slice() {
+        [] => "(no roots)".to_string(),
+        [one] => abbrev_home(one),
+        [first, rest @ ..] => format!("{} (+{})", abbrev_home(first), rest.len()),
+    }
 }
 
 /// The header's right-hand info column: session orientation that isn't shown
@@ -256,12 +323,7 @@ fn header_info(app: &App, now: i64, width: u16, theme: &Theme) -> Text<'static> 
     let val = width.saturating_sub(7) as usize;
 
     // Where — the configured root(s), home-abbreviated and tail-trimmed.
-    let dir = match app.roots.as_slice() {
-        [] => "(no roots)".to_string(),
-        [one] => abbrev_home(one),
-        [first, rest @ ..] => format!("{} (+{})", abbrev_home(first), rest.len()),
-    };
-    let dir = truncate_tail(&dir, val);
+    let dir = truncate_tail(&header_dir(app), val);
 
     // Which config is in effect.
     let config = truncate_tail(&abbrev_home(&app.config_path), val);
@@ -2397,6 +2459,14 @@ mod tests {
     fn snapshot_list() {
         let app = demo_app();
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    }
+
+    /// On a narrow terminal the header collapses to the spider + lede + the
+    /// directory only — no taglines, divider, or info column.
+    #[test]
+    fn snapshot_header_compact() {
+        let app = demo_app();
+        insta::assert_snapshot!(render_to_string(&app, 60, 16));
     }
 
     /// With `h` pressed, the hint boxes collapse to just the toggle divider,

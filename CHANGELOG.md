@@ -21,7 +21,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
-## [0.3.56] — 2026-06-14
+## [0.3.57] — 2026-06-14
+
+### Changed
+
+- **New spider mark** — a two-tone design with a solid eyed body and shaded
+  (`▒`) outer legs, giving it depth and a bit of personality.
+- **The header packs to the left.** The brand block, divider, and info column are
+  now sized to their content and grouped together instead of the info column
+  floating against the right edge, removing the empty gap mid-line.
+- **Compact header for narrow terminals.** When the window is too narrow to hold
+  the taglines and info column, the header collapses to the spider, the `cohors`
+  lede, and the watched directory — nothing else.
 
 ### Changed
 
