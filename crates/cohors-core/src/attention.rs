@@ -7,11 +7,14 @@
 //! The TUI uses [`assess`] for the per-row reason and [`fleet_summary`] for the
 //! header strip; the sort uses the clock-free [`rank`]. See ADR-014.
 
+use serde::Serialize;
+
 use crate::model::{Branch, RepoSnapshot};
 
 /// How urgently a repo wants attention, least to most. Ordered (declaration
 /// order = severity order) so `max`/comparison work directly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Severity {
     Ok,
     Info,
@@ -206,7 +209,7 @@ pub fn rank(repo: &RepoSnapshot) -> u32 {
 }
 
 /// Fleet-wide counts for the header summary strip.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct FleetSummary {
     pub total: usize,
     pub needs_attention: usize,

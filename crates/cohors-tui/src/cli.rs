@@ -48,4 +48,17 @@ pub enum Command {
     /// A zero-setup way to try cohors: every column and view is populated with
     /// privacy-safe demo data. Actions are stubbed (nothing touches your disk).
     Demo,
+    /// Run as a Model Context Protocol server over stdio, so a coding agent can
+    /// see and (opt-in) act on your fleet. Read-only by default.
+    Mcp {
+        /// Enable write tools (`fetch`, `pull`).
+        #[arg(long)]
+        allow_writes: bool,
+        /// Enable the `run` tool (arbitrary shell across repos).
+        #[arg(long)]
+        allow_run: bool,
+        /// Enable the local-only `open` tool (shared desktop session).
+        #[arg(long)]
+        allow_open: bool,
+    },
 }

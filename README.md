@@ -93,6 +93,13 @@ cohors           # scan your repositories and launch the dashboard
 cohors scan      # print repository snapshots as JSON (scriptable)
 cohors scan --select dirty          # filter the JSON to a subset
 cohors scan --select 'behind,name:pay*'   # combine predicates (or pass JSON)
+cohors mcp       # expose the fleet to a coding agent over MCP (read-only)
+```
+
+Register the MCP server with a compatible agent (read-only by default):
+
+```sh
+claude mcp add cohors -- cohors mcp
 ```
 
 Inside the dashboard, the essentials are:

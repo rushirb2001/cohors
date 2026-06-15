@@ -21,6 +21,25 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.59] — 2026-06-15
+
+### Added
+
+- **`cohors mcp` — a Model Context Protocol server over stdio** (ADR-028), so a
+  coding agent can see your fleet with the same logic the dashboard uses.
+  Read-only in this slice, with the core read tools: `list_repos` (selector /
+  sort / fields / limit), `get_repo`, `fleet_summary`, and `repo_path`. Each repo
+  is returned in the `cohors scan` shape plus a per-repo `assessment` (severity +
+  needs-attention) and a top-level `fleet` summary. Register it with
+  `claude mcp add cohors -- cohors mcp`. The `--allow-writes` / `--allow-run` /
+  `--allow-open` flags are accepted for the forthcoming action tools.
+
+### Note
+
+- The MCP transport is a hand-rolled synchronous JSON-RPC loop (no `tokio`,
+  no new dependency), keeping the binary on its sync architecture; `rmcp`
+  remains an isolated future swap (ADR-028 revises ADR-023).
+
 ## [0.3.58] — 2026-06-15
 
 ### Added

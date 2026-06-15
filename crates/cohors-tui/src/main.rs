@@ -12,6 +12,7 @@ mod command;
 mod commands;
 mod editors;
 mod logging;
+mod mcp;
 mod prefs;
 mod scan;
 mod tui;
@@ -29,6 +30,11 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Init { force }) => commands::init(&cli, *force),
         Some(Command::Scan { select }) => commands::scan(&cli, select.as_deref()),
         Some(Command::Demo) => commands::run_demo(),
+        Some(Command::Mcp {
+            allow_writes,
+            allow_run,
+            allow_open,
+        }) => commands::run_mcp(&cli, *allow_writes, *allow_run, *allow_open),
         None => commands::run_tui(&cli),
     }
 }

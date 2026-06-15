@@ -210,6 +210,20 @@ pub fn run_demo() -> Result<()> {
     crate::tui::run_demo()
 }
 
+/// `cohors mcp` — speak the Model Context Protocol over stdio. Read-only unless
+/// the matching `--allow-*` flags are passed (none have an effect yet — only the
+/// read tools are implemented).
+pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool) -> Result<()> {
+    let scanner = Scanner::from_cli(cli)?;
+    let caps = crate::mcp::Caps {
+        allow_writes,
+        allow_run,
+        allow_open,
+    };
+    let scan = || scanner.scan();
+    crate::mcp::run(&scan, caps)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
