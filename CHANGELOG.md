@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.45] — 2026-06-14
+
+### Added
+
+- **`:!<cmd>` runs a shell command across the target repos from the command line**
+  — folding the `!` runner into the `:` palette, so one command line drives both
+  cohors's built-in verbs and arbitrary shell. (`!` stays as the quick shortcut.)
+  Groundwork toward a single selector-targeted command surface shared with the
+  planned CLI `--select` and MCP.
+
 ## [0.3.44] — 2026-06-14
 
 Tier 4: watch mode.

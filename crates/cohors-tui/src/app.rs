@@ -690,6 +690,16 @@ impl App {
                 self.clamp_selection();
             }
             Some(C::Jump(name)) => self.jump_to(&name),
+            Some(C::Run(cmd)) => {
+                if self.action_targets().is_empty() {
+                    self.status = Some("no repos selected".to_string());
+                } else {
+                    // Feed the shell runner: same path as the `!` key.
+                    self.command_input = cmd;
+                    self.mode = Mode::CommandRun;
+                    return Cmd::RunCommand;
+                }
+            }
             None => self.status = Some("unknown command".to_string()),
         }
         Cmd::None

@@ -530,10 +530,10 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
         Mode::Command => vec![(
             "command",
             vec![
-                (":fetch :pull :push", ""),
+                (":fetch :push", ""),
+                (":!cmd", "shell across repos"),
                 (":sort name", ""),
                 ("/text", "filter"),
-                ("⏎", "run"),
                 ("Esc", "cancel"),
             ],
         )],
@@ -1195,7 +1195,7 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         row(key("a"), "mark all (again to clear)"),
         row(key("Esc"), "clear the selection"),
         row(key("/"), "fuzzy filter (Esc clears)"),
-        row(key(":"), "command mode (:fetch, :sort name, :jump …)"),
+        row(key(":"), "command mode (:fetch, :!cmd shell, :sort, :jump …)"),
         row(key("d"), "toggle dirty-only"),
         row(key("s"), "cycle sort mode"),
         row(key("Tab"), "weekly standup"),

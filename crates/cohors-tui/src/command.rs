@@ -20,6 +20,8 @@ pub enum Command {
     Sort(SortMode),
     Filter(String),
     Jump(String),
+    /// Run an arbitrary shell command across the target repos (`:!<cmd>`).
+    Run(String),
 }
 
 /// Parse a command-mode input line into a [`Command`].
@@ -39,6 +41,12 @@ pub fn parse(input: &str) -> Option<Command> {
     // `/text` is shorthand for `filter text` (case preserved).
     if let Some(rest) = body.strip_prefix('/') {
         return Some(Command::Filter(rest.to_string()));
+    }
+
+    // `!cmd` runs a shell command across the target repos (case preserved).
+    if let Some(rest) = body.strip_prefix('!') {
+        let cmd = rest.trim();
+        return (!cmd.is_empty()).then(|| Command::Run(cmd.to_string()));
     }
 
     // Split into the verb token and the (optional, case-preserved) argument.
@@ -91,6 +99,7 @@ mod tests {
         );
         assert_eq!(parse("/WIP"), Some(Command::Filter("WIP".into())));
         assert_eq!(parse("cohors"), Some(Command::Jump("cohors".into())));
+        assert_eq!(parse(":!git status"), Some(Command::Run("git status".into())));
         assert_eq!(parse("   "), None);
         assert_eq!(parse("sort sideways"), None);
     }
