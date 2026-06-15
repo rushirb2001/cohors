@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.56] — 2026-06-14
+
+### Changed
+
+- **The spider's legs are now half-block diagonals.** Four legs reach out from a
+  small `▟█▙` body as solid `▀▄`/`▄▀` diagonals, for a cleaner, leggier spider
+  than the corner-quadrant version.
+
 ## [0.3.55] — 2026-06-14
 
 ### Changed
