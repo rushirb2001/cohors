@@ -1,135 +1,111 @@
 <div align="center">
 
-# 🕷️ cohors
+# cohors
 
-**Mission control for all your git repos.**
+**Mission control for all your git repositories.**
 
-A fast, beautiful terminal dashboard — and web app — that shows the live status of *every* git repository on your machine and lets you act on them in bulk. One Rust core, two front-ends.
+A fast terminal dashboard that shows the live status of every git repository on your machine and lets you act on them in bulk — fetch, pull, stash, and run commands across many repos at once. One Rust core, built to grow into a web app and an agent interface.
 
-<sub><i>cohors</i> · Latin for "cohort" — a Roman legion's core battle unit of ~480. Every repo, marshalled into one cohort under your command.</sub>
+<sub><i>cohors</i> — Latin for "cohort," a Roman legion's core unit. Every repository, marshalled into one cohort under your command.</sub>
 
 [![CI](https://github.com/rushirb2001/cohors/actions/workflows/ci.yml/badge.svg)](https://github.com/rushirb2001/cohors/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.3%20·%20bulk%20actions-brightgreen)](docs/ROADMAP.md)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/tag/rushirb2001/cohors?label=release&sort=semver&color=brightgreen)](https://github.com/rushirb2001/cohors/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
-
-![cohors dashboard demo](docs/demo.gif)
-
-<sub>Rendered at release time from generated <strong>sample</strong> repos — never real data (<a href="docs/DECISIONS.md">ADR-015</a>): <code>vhs docs/demo.tape</code>.</sub>
 
 </div>
 
-> ✅ **v0.3 is here.** The dashboard discovers every repo, shows local + GitHub PR/CI status, does a cross-repo weekly standup (v0.2), and now lets you **multi-select repos and act in bulk** — fetch/pull, stash (with confirmation), and run any command across them with live per-repo output (v0.3). The **MCP server** (v0.4) — the same powers for your coding agent — is next, then the web app (v0.5). See the [Roadmap](docs/ROADMAP.md).
-
 ---
 
-## The problem
+## Overview
 
-If you have more than a handful of repos — microservices, a polyrepo org, client work, side projects — you live in *multi-repo blindness*: which repos have uncommitted work? Which are behind their remote? Where did I leave that branch? Today you answer this with a graveyard of `cd ... && git status` and a dozen terminal tabs.
+If you work across more than a handful of repositories — microservices, a polyrepo organization, client projects, or a sprawling `~/projects` — you lose track of which ones have uncommitted work, which are behind their remote, and where you left off. Answering that today means a long sequence of `cd … && git status` and a wall of terminal tabs.
 
-Existing tools each solve one slice:
+cohors replaces that with a single, fast dashboard across every repository, and the ability to act on them in bulk without leaving the terminal.
 
-- **lazygit / gitui** — gorgeous, but one repo at a time.
-- **mani / gita / meta** — run commands across repos, but no visual dashboard and no insight.
-- **git-scope** — a nice multi-repo status view, but *read-only*, *local-only*, with no remote/PR awareness.
+Try it in five seconds, with no setup and nothing written to disk:
 
-**cohors is the one that does all of it:** a single pane of glass across every repo, with the polish of lazygit, the breadth of mani, *and* the ability to act — plus remote/PR/CI health and an online dashboard you can share with your team.
+```sh
+cargo run -p cohors-tui -- demo
+```
 
-## What cohors does
+This launches the full interface on a built-in, privacy-safe sample fleet — every column and view populated, so you can see exactly what cohors does before pointing it at your own repositories.
 
-- 🛰️ **One screen, every repo.** Auto-discovers git repos under your project roots and shows branch, ahead/behind, dirty state, stashes, and last activity — sorted *dirty-first* so what needs you bubbles to the top.
-- ⚡ **Instant.** Parallel scanning + a warm cache. Launches in milliseconds even with 50+ repos.
-- 🔍 **Fuzzy everything.** Jump to any repo by name or path; filter to just the dirty ones.
-- 🎬 **Act in bulk.** Fetch/pull across selected repos, open any repo in your editor or lazygit, copy paths — without leaving the dashboard.
-- 🌐 **Remote-aware** *(v0.2)*. Open-PR counts, CI status, and ahead/behind vs upstream, right in the table.
-- 🗓️ **"What did I ship?"** *(v0.2)*. A cross-repo weekly standup: every commit you made this week, across every repo, in one view.
-- 🤖 **Agent-native (MCP)** *(v0.4)*. Run a `cohors` MCP server so Claude Code (and other agents) get the same fleet sense + bulk actions you have — "find every repo calling `X` and open a PR in each." See [docs/MCP-DESIGN.md](docs/MCP-DESIGN.md).
-- 🖥️ **Online version** *(v0.5)*. The same core, compiled to WebAssembly: connect GitHub, see your whole fleet's health in the browser, and share a read-only team dashboard.
+## Features
 
-## Why it's built the way it is
+- **Every repository on one screen.** Auto-discovers git repositories under your configured roots and shows branch, ahead/behind, dirty state, stashes, and last activity — sorted dirty-first, so what needs attention rises to the top.
+- **Fast.** Parallel scanning with a warm cache; the dashboard launches in milliseconds across dozens of repositories.
+- **Fuzzy navigation.** Jump to any repository by name or path, or filter instantly to just the ones with changes.
+- **Bulk actions.** Fetch, pull (fast-forward only), stash (with confirmation), and run any command across the selected repositories with live, per-repo output.
+- **Remote-aware.** Open pull-request counts, CI status, and ahead/behind against upstream, shown inline.
+- **Weekly standup.** Every commit you made this week, across every repository, gathered into one view.
 
-cohors is a Rust **workspace** with a pure, I/O-free **core** (`cohors-core`) that holds all the domain logic — and thin **adapters** around it:
+A coding-agent (MCP) server and a WebAssembly web dashboard are on the roadmap, both built on the same core.
 
-- a **local git** data source (`cohors-git`, via [gitoxide](https://github.com/GitoxideLabs/gitoxide)),
-- a **GitHub** data source (`cohors-github`),
-- a **TUI** front-end (`cohors-tui`, via [ratatui](https://ratatui.rs)),
-- and a **WASM web** front-end (`cohors-web`, via [Leptos](https://leptos.dev)).
-
-Because the core is data-source- and front-end-agnostic, the *exact same* analysis powers the terminal and the browser. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-## How cohors compares
+## How it compares
 
 | | cohors | git-scope | mani / gita | lazygit / gitui |
 |---|:---:|:---:|:---:|:---:|
-| Multi-repo overview | ✅ | ✅ | ⚠️ text only | ❌ |
-| Beautiful TUI | ✅ | ✅ | ❌ | ✅ |
-| Bulk actions (fetch/pull/run) | ✅ | ❌ read-only | ✅ | ❌ |
-| Remote / PR / CI awareness | ✅ *(v0.2)* | ❌ | ❌ | ⚠️ single repo |
-| Cross-repo "weekly standup" | ✅ *(v0.2)* | ❌ | ❌ | ❌ |
-| Agent control (MCP) | ✅ *(v0.4)* | ❌ | ❌ | ❌ |
-| Online / shareable dashboard | ✅ *(v0.5)* | ❌ | ❌ | ❌ |
+| Multi-repository overview | Yes | Yes | Text only | No |
+| Polished terminal UI | Yes | Yes | No | Yes |
+| Bulk actions (fetch / pull / run) | Yes | Read-only | Yes | No |
+| Remote / PR / CI awareness | Yes | No | No | Single repo |
+| Cross-repo weekly standup | Yes | No | No | No |
 | Language | Rust | Go | Go / Python | Go / Rust |
 
-## Install
+## Architecture
 
-**v0.1 — from source.** Needs [Rust](https://rustup.rs) (the version is pinned in `rust-toolchain.toml`) and `git` on your `PATH`:
+cohors is a Rust workspace built around a pure, I/O-free core that holds all the domain logic, with thin adapters around it:
 
-```sh
-git clone https://github.com/rushirb2001/cohors && cd cohors
-cargo install --path crates/cohors-tui   # installs the `cohors` binary
-```
+- `cohors-core` — pure analysis and models, with no I/O (kept WebAssembly-safe).
+- `cohors-config` — configuration and repository discovery.
+- `cohors-git` — the local git provider, built on [gitoxide](https://github.com/GitoxideLabs/gitoxide).
+- `cohors-github` — the GitHub provider for remote, PR, and CI data.
+- `cohors-tui` — the terminal front-end, built on [ratatui](https://ratatui.rs); ships the `cohors` binary.
 
-Or straight from git, without cloning:
+Because the core is independent of both its data sources and its front-ends, the same analysis will power the terminal, an agent interface, and the browser.
+
+## Installation
+
+cohors requires [Rust](https://rustup.rs) (the toolchain version is pinned in `rust-toolchain.toml`) and `git` on your `PATH`.
+
+Install directly from the repository:
 
 ```sh
 cargo install --git https://github.com/rushirb2001/cohors cohors-tui
 ```
 
-> Crates.io (`cargo install cohors`), `cargo binstall`, a Homebrew tap, and prebuilt binaries on every GitHub Release are planned — see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
-
-## Try it in 5 seconds
-
-No config, no scanning, nothing touched on disk — just the full dashboard on a
-built-in sample fleet:
+Or clone and install from source:
 
 ```sh
-cohors demo
+git clone https://github.com/rushirb2001/cohors && cd cohors
+cargo install --path crates/cohors-tui
 ```
 
-Every column and view is populated with privacy-safe demo data (ahead/behind,
-dirty, stashed, CI/PRs, a detached HEAD, an unreadable repo). Press `?` for the
-legend, `Tab` for the standup, `!` to see the command runner. It's the fastest
-way to see what cohors is before you point it at your own repos.
+Both install the `cohors` binary. Distribution through crates.io, Homebrew, and prebuilt release binaries is planned.
 
-## Quickstart
+## Usage
 
 ```sh
-cohors init                      # writes ~/.config/cohors/config.toml
-# edit it: roots = ["~/projects", "~/work"]
-cohors                           # scan + launch the dashboard
-cohors scan                      # or: print snapshots as JSON (scriptable)
+cohors demo      # full UI on built-in sample data — no config, nothing written to disk
+cohors init      # write ~/.config/cohors/config.toml, then set: roots = ["~/projects", "~/work"]
+cohors           # scan your repositories and launch the dashboard
+cohors scan      # print repository snapshots as JSON (scriptable)
 ```
 
-Keys: `↑`/`↓` move · `Space` mark · `a` mark all · `Esc` clear · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Tab` weekly standup · `Enter` inspect repo (detail pane: commits, changes, branches, stashes) · `o` open with… (auto-detected editors, reveal, lazygit — `d` sets a default) · `f`/`F` fetch selection/all · `p` pull (ff-only) · `!` run a command across the selection · `S` stash (confirms) · `L` lazygit · `y` copy path · `h` hide hints · `r` refresh · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
+Inside the dashboard, the essentials are:
 
-## Documentation
+- `↑` / `↓` move, `Enter` inspect a repository, `/` fuzzy filter, `d` dirty-only, `s` cycle sort.
+- `Space` mark, `a` mark all, `Esc` clear selection.
+- `f` / `F` fetch selection / all, `p` pull (fast-forward only), `S` stash, `!` run a command across the selection.
+- `Tab` weekly standup, `o` open in your editor, `y` copy path, `r` refresh, `q` quit.
 
-| Doc | What's in it |
-|---|---|
-| [VISION](docs/VISION.md) | Who it's for, the thesis, success metrics |
-| [ARCHITECTURE](docs/ARCHITECTURE.md) | Crate layout, the core+adapters design, dependencies |
-| [ROADMAP](docs/ROADMAP.md) | v0.1 → v0.4 milestones with acceptance criteria |
-| [MVP-SPEC](docs/MVP-SPEC.md) | The detailed spec for v0.1 (build this first) |
-| [TUI-DESIGN](docs/TUI-DESIGN.md) | Wireframes, keymap, states, theming |
-| [DISTRIBUTION](docs/DISTRIBUTION.md) | How we ship and how cohors gets discovered |
-| [USE-CASES](docs/USE-CASES.md) | Personas + jobs-to-be-done across TUI / MCP / web |
-| [MCP-DESIGN](docs/MCP-DESIGN.md) | The `cohors mcp` agent surface: tools, selectors, safety |
-| [DECISIONS](docs/DECISIONS.md) | Architecture decision records (ADRs) |
+Bulk actions target the marked repositories, or the current one when nothing is marked. Press `?` for the full keymap.
 
 ## Contributing
 
-cohors is open source (MIT) and built in public. Issues, ideas, and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions are welcome. Please see [CONTRIBUTING.md](CONTRIBUTING.md) for the development setup, quality gates, and conventions.
 
 ## License
 
-[MIT](LICENSE) © cohors contributors
+Released under the [MIT License](LICENSE).
