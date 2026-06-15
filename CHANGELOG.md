@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.40] — 2026-06-14
+
+### Changed
+
+- The repo list now shows **both overflow hints at once** when repos are hidden
+  above *and* below the visible window — `↑ N more` below the header and
+  `… N more ↓` at the bottom — instead of only one. At the very top or bottom it
+  still shows just the relevant one.
+
 ## [0.3.39] — 2026-06-14
 
 ### Changed
