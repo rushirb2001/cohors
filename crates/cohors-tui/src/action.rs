@@ -107,6 +107,92 @@ pub fn run_command(path: &Utf8Path, cmd: &str) -> (i32, String, String) {
     }
 }
 
+/// Outcome of a time-bounded command run.
+pub struct RunOutcome {
+    pub code: i32,
+    pub stdout: String,
+    pub stderr: String,
+    /// The command exceeded its deadline and was killed.
+    pub timed_out: bool,
+}
+
+/// Like [`run_command`], but kills the command (and reports `timed_out`) once it
+/// exceeds `timeout`. Output pipes are drained on threads so a chatty command
+/// can't deadlock on a full pipe, and partial output is still returned on a kill.
+pub fn run_command_timeout(path: &Utf8Path, cmd: &str, timeout: std::time::Duration) -> RunOutcome {
+    use std::io::Read;
+    use std::process::Stdio;
+    use std::time::Instant;
+
+    let (shell, flag) = if cfg!(windows) {
+        ("cmd", "/C")
+    } else {
+        ("sh", "-c")
+    };
+    let mut child = match Command::new(shell)
+        .arg(flag)
+        .arg(cmd)
+        .current_dir(path.as_str())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(e) => {
+            return RunOutcome {
+                code: -1,
+                stdout: String::new(),
+                stderr: format!("could not run command: {e}"),
+                timed_out: false,
+            };
+        }
+    };
+
+    let mut out_pipe = child.stdout.take();
+    let mut err_pipe = child.stderr.take();
+    let out_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(p) = out_pipe.as_mut() {
+            let _ = p.read_to_end(&mut buf);
+        }
+        buf
+    });
+    let err_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(p) = err_pipe.as_mut() {
+            let _ = p.read_to_end(&mut buf);
+        }
+        buf
+    });
+
+    let start = Instant::now();
+    let mut timed_out = false;
+    let code = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status.code().unwrap_or(-1),
+            Ok(None) => {
+                if start.elapsed() >= timeout {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    timed_out = true;
+                    break -1;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => break -1,
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&out_handle.join().unwrap_or_default()).into_owned();
+    let stderr = String::from_utf8_lossy(&err_handle.join().unwrap_or_default()).into_owned();
+    RunOutcome {
+        code,
+        stdout,
+        stderr,
+        timed_out,
+    }
+}
+
 /// Reveal the repo in the OS file manager (spawned detached).
 pub fn reveal(path: &Utf8Path) -> Result<(), String> {
     let opener = if cfg!(target_os = "macos") {
@@ -174,6 +260,24 @@ mod tests {
         assert_eq!(code, 3);
         assert_eq!(out, "hi");
         assert_eq!(err, "oops");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_timeout_completes_fast_command() {
+        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
+        let r = run_command_timeout(&dir, "printf hi; exit 0", std::time::Duration::from_secs(5));
+        assert!(!r.timed_out);
+        assert_eq!(r.code, 0);
+        assert_eq!(r.stdout, "hi");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_command_timeout_kills_a_hang() {
+        let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
+        let r = run_command_timeout(&dir, "sleep 30", std::time::Duration::from_millis(300));
+        assert!(r.timed_out);
     }
 
     /// `push` succeeds against a configured (local, offline) upstream. Exercises

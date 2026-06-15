@@ -105,10 +105,11 @@ claude mcp add cohors -- cohors mcp --allow-writes           # + fetch / pull / 
 claude mcp add cohors -- cohors mcp --allow-writes --allow-run   # + run (arbitrary shell)
 ```
 
-Read tools: `list_repos`, `get_repo`, `fleet_summary`, `search`, `repo_path`.
-Action tools (`fetch`, `pull`, `stash`, `run`) are gated by the flags above,
-require `confirm: true` for destructive ones, and support `dry_run` to preview
-the target set before acting.
+Read tools: `list_repos`, `get_repo`, `fleet_summary`, `search`, `repo_path`,
+and the GitHub-enriched `list_prs` / `ci_status`. Action tools (`fetch`, `pull`,
+`stash`, `run`) are gated by the flags above, require `confirm: true` for the
+destructive ones, and support `dry_run` — a side-effect-free preview of the exact
+target set that works even on a read-only server.
 
 Inside the dashboard, the essentials are:
 

@@ -21,6 +21,24 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.63] — 2026-06-15
+
+### Added
+
+- **Remote MCP read tools `list_prs` and `ci_status`** (ADR-031), GitHub-enriched
+  on demand. With no token they return an empty set plus a `meta.note` saying so.
+  The read surface is now complete: `list_repos`, `get_repo`, `fleet_summary`,
+  `search`, `repo_path`, `list_prs`, `ci_status`.
+
+### Changed
+
+- **`dry_run` is now side-effect-free in the truest sense** — it previews the
+  target set *before* any tier/`confirm` gate, so an agent can preview on a
+  read-only server and a human can approve before enabling writes/run. (Fixes the
+  `dry_run`-required-`confirm` contradiction.)
+- **`run` enforces a per-repo timeout** (`timeout_secs`, default 120s): a hung
+  command is killed and reported as `timed_out` instead of stalling the fan-out.
+
 ## [0.3.62] — 2026-06-15
 
 ### Added

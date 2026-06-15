@@ -8,10 +8,11 @@
 //! swapping in `rmcp` later is contained to [`run`].
 //!
 //! Tools: reads (`list_repos`, `get_repo`, `fleet_summary`, `repo_path`,
-//! `search`) are always on; actions (`fetch`, `pull`, `stash`, `run`) sit behind
-//! the ADR-025 tiers — `--allow-writes`, `--allow-run`, per-call `confirm`, and
-//! `dry_run`. The remote read tools (`list_prs`, `ci_status`) are the remaining
-//! gap. Every read carries fail-loud diagnostics (see [`meta`]).
+//! `search`, and the GitHub-enriched `list_prs`/`ci_status`) are always on;
+//! actions (`fetch`, `pull`, `stash`, `run`) sit behind the ADR-025 tiers —
+//! `--allow-writes`, `--allow-run`, per-call `confirm`, and `dry_run` (a
+//! side-effect-free preview that needs no tier or confirm). Every read carries
+//! fail-loud diagnostics (see [`meta`]).
 
 use std::io::{BufRead, Write};
 
@@ -26,8 +27,7 @@ use serde_json::{Value, json};
 const PROTOCOL_VERSION: &str = "2024-11-05";
 
 /// Which tiers of tools are enabled, chosen by the human at launch (ADR-025).
-/// Read tools are always on; everything else is opt-in. (No action tools exist
-/// yet — these are threaded through for the next slice.)
+/// Read tools are always on; write/run tools are opt-in via these flags.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Caps {
     pub allow_writes: bool,
@@ -45,6 +45,9 @@ type ScanFn<'a> = dyn Fn() -> Vec<RepoSnapshot> + 'a;
 /// tiers are enabled.
 struct Ctx<'a> {
     scan: &'a ScanFn<'a>,
+    /// GitHub token for the remote tools (`list_prs`/`ci_status`); `None` ⇒ no
+    /// enrichment, and the remote tools say so.
+    token: Option<&'a str>,
     roots: &'a [String],
     config_path: &'a str,
     caps: Caps,
@@ -52,9 +55,16 @@ struct Ctx<'a> {
 
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
 /// message; each request gets exactly one response line, notifications none.
-pub fn run(scan: &ScanFn<'_>, roots: &[String], config_path: &str, caps: Caps) -> Result<()> {
+pub fn run(
+    scan: &ScanFn<'_>,
+    token: Option<&str>,
+    roots: &[String],
+    config_path: &str,
+    caps: Caps,
+) -> Result<()> {
     let ctx = Ctx {
         scan,
+        token,
         roots,
         config_path,
         caps,
@@ -188,6 +198,22 @@ fn tool_catalog() -> Value {
             }
         },
         {
+            "name": "list_prs",
+            "description": "Open pull-request counts per repo (GitHub-enriched). Needs a token (gh auth / GITHUB_TOKEN); says so in meta when absent. Scope with an optional selector.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "selector": selector_schema.clone(), "state": { "type": "string", "enum": ["open", "all"] } }
+            }
+        },
+        {
+            "name": "ci_status",
+            "description": "CI/checks status per repo (GitHub-enriched: passing | failing | pending). Needs a token. Scope with an optional selector.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "selector": selector_schema.clone() }
+            }
+        },
+        {
             "name": "fetch",
             "description": "git fetch across the selected repos (non-destructive). Requires the server launched with --allow-writes. Pass dry_run:true to preview the target set without acting.",
             "inputSchema": {
@@ -258,6 +284,8 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         }
         "repo_path" => repo_path(args, ctx),
         "search" => search(args, ctx, now),
+        "list_prs" => Ok(list_prs(args, ctx, now)),
+        "ci_status" => Ok(ci_status(args, ctx, now)),
         "fetch" => fetch_tool(args, ctx, now),
         "pull" => pull_tool(args, ctx, now),
         "stash" => stash_tool(args, ctx, now),
@@ -345,6 +373,7 @@ fn git_action(
     ctx: &Ctx,
     now: i64,
     action: Value,
+    authorize: impl Fn() -> Result<(), String>,
     op: impl Fn(&camino::Utf8Path, &str) -> Result<String, String>,
 ) -> Result<Value, String> {
     let snaps = (ctx.scan)();
@@ -352,9 +381,13 @@ fn git_action(
     if targets.is_empty() {
         return Ok(no_targets());
     }
+    // A dry run is side-effect-free, so it's allowed *before* any gate or
+    // confirm: an agent can preview the exact target set (even on a read-only
+    // server) for a human to approve, then enable the tier and act.
     if is_dry_run(args) {
         return Ok(dry_run_preview(action, &targets));
     }
+    authorize()?;
     let results: Vec<Value> = targets
         .iter()
         .map(|s| {
@@ -369,43 +402,48 @@ fn git_action(
 }
 
 fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    require_writes(ctx, "fetch")?;
-    git_action(args, ctx, now, json!("fetch"), crate::action::fetch)
+    git_action(
+        args,
+        ctx,
+        now,
+        json!("fetch"),
+        || require_writes(ctx, "fetch"),
+        crate::action::fetch,
+    )
 }
 
 fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    require_writes(ctx, "pull")?;
     git_action(
         args,
         ctx,
         now,
         json!("pull --ff-only"),
+        || require_writes(ctx, "pull"),
         crate::action::pull_ff,
     )
 }
 
 fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    require_writes(ctx, "stash")?;
-    require_confirm(args, "stash")?;
     git_action(
         args,
         ctx,
         now,
         json!("stash push"),
+        || {
+            require_writes(ctx, "stash")?;
+            require_confirm(args, "stash")
+        },
         crate::action::stash_push,
     )
 }
 
 /// Maximum captured output per stream per repo (matches the TUI runner, ADR-020).
 const RUN_OUTPUT_CAP: usize = 64 * 1024;
+/// Per-repo wall-clock bound for `run` when the caller doesn't set `timeout_secs`,
+/// so one hung command can't stall the whole fan-out.
+const DEFAULT_RUN_TIMEOUT_SECS: u64 = 120;
 
 fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    if !ctx.caps.allow_run {
-        return Err(
-            "`run` is disabled: relaunch the server with `cohors mcp --allow-run` to enable arbitrary commands.".to_string(),
-        );
-    }
-    require_confirm(args, "run")?;
     let command = args
         .get("command")
         .and_then(Value::as_str)
@@ -418,21 +456,36 @@ fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     if targets.is_empty() {
         return Ok(no_targets());
     }
+    // Side-effect-free preview is allowed before the gates (see `git_action`).
     if is_dry_run(args) {
         return Ok(dry_run_preview(json!({ "run": command }), &targets));
     }
 
+    // Real execution: the `run` tier and a deliberate confirm.
+    if !ctx.caps.allow_run {
+        return Err(
+            "`run` is disabled: relaunch the server with `cohors mcp --allow-run` to enable arbitrary commands.".to_string(),
+        );
+    }
+    require_confirm(args, "run")?;
+
+    let timeout = std::time::Duration::from_secs(
+        args.get("timeout_secs")
+            .and_then(Value::as_u64)
+            .unwrap_or(DEFAULT_RUN_TIMEOUT_SECS)
+            .max(1),
+    );
     let run_id = next_run_id();
     let results: Vec<Value> = targets
         .iter()
         .map(|s| {
             let path = s.path.as_ref().expect("action targets have a path");
-            let (code, stdout, stderr) = crate::action::run_command(path, &command);
-            let (stdout, t1) = cap_output(stdout);
-            let (stderr, t2) = cap_output(stderr);
+            let out = crate::action::run_command_timeout(path, &command, timeout);
+            let (stdout, t1) = cap_output(out.stdout);
+            let (stderr, t2) = cap_output(out.stderr);
             json!({
-                "repo": s.id.0, "ok": code == 0, "exit_code": code,
-                "stdout": stdout, "stderr": stderr, "truncated": t1 || t2
+                "repo": s.id.0, "ok": out.code == 0 && !out.timed_out, "exit_code": out.code,
+                "stdout": stdout, "stderr": stderr, "truncated": t1 || t2, "timed_out": out.timed_out
             })
         })
         .collect();
@@ -461,6 +514,67 @@ fn next_run_id() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(1);
     COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+// ── Remote read tools (GitHub enrichment) ────────────────────────────────────
+
+/// Resolve a read tool's target snapshots: optional selector, defaulting to the
+/// whole fleet (reads, unlike actions, never need an explicit selector).
+fn resolve_read<'a>(args: &Value, snaps: &'a [RepoSnapshot], now: i64) -> Vec<&'a RepoSnapshot> {
+    let mut selector: Selector = args
+        .get("selector")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+    if selector.is_empty() {
+        selector.all = true;
+    }
+    let order = resolve(snaps, &selector, SortMode::DirtyFirst, now);
+    let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
+        snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
+    order
+        .iter()
+        .filter_map(|id| by_id.get(id.0.as_str()).copied())
+        .collect()
+}
+
+/// Fail-loud meta for the remote tools — adds a token hint when enrichment can't
+/// run, so an empty PR/CI result reads as "no token," not "no PRs."
+fn remote_meta(ctx: &Ctx, snaps: &[RepoSnapshot]) -> Value {
+    let mut m = meta(ctx, snaps);
+    if ctx.token.is_none() {
+        m["note"] = json!(
+            "No GitHub token found (run `gh auth login` or set $GITHUB_TOKEN); PR/CI data is unavailable."
+        );
+    }
+    m
+}
+
+fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
+    let mut snaps = (ctx.scan)();
+    cohors_github::enrich(&mut snaps, ctx.token);
+    let repos: Vec<Value> = resolve_read(args, &snaps, now)
+        .iter()
+        .filter_map(|s| {
+            s.remote.as_ref().map(|r| {
+                json!({ "repo": s.id.0, "open_prs": r.open_prs, "awaiting_review": r.prs_awaiting_review })
+            })
+        })
+        .collect();
+    json!({ "repos": repos, "meta": remote_meta(ctx, &snaps) })
+}
+
+fn ci_status(args: &Value, ctx: &Ctx, now: i64) -> Value {
+    let mut snaps = (ctx.scan)();
+    cohors_github::enrich(&mut snaps, ctx.token);
+    let repos: Vec<Value> = resolve_read(args, &snaps, now)
+        .iter()
+        .filter_map(|s| {
+            s.remote
+                .as_ref()
+                .map(|r| json!({ "repo": s.id.0, "ci": r.ci }))
+        })
+        .collect();
+    json!({ "repos": repos, "meta": remote_meta(ctx, &snaps) })
 }
 
 fn list_repos(args: &Value, ctx: &Ctx, now: i64) -> Value {
@@ -720,6 +834,7 @@ mod tests {
         let roots = vec!["/demo".to_string()];
         let ctx = Ctx {
             scan: &scan_fn,
+            token: None,
             roots: &roots,
             config_path: "(test)",
             caps: Caps::default(),
@@ -733,6 +848,7 @@ mod tests {
         let roots = vec!["/demo".to_string()];
         let ctx = Ctx {
             scan: &scan_fn,
+            token: None,
             roots: &roots,
             config_path: "(test)",
             caps,
@@ -779,6 +895,7 @@ mod tests {
         let scan_fn = scan;
         let ctx = Ctx {
             scan: &scan_fn,
+            token: None,
             roots: &[],
             config_path: "(test)",
             caps: Caps::default(),
@@ -927,6 +1044,7 @@ mod tests {
         let roots = vec!["~/projects".to_string()];
         let ctx = Ctx {
             scan: &empty,
+            token: None,
             roots: &roots,
             config_path: "/cfg/config.toml",
             caps: Caps::default(),
@@ -1026,8 +1144,40 @@ mod tests {
             .iter()
             .map(|t| t["name"].as_str().unwrap())
             .collect();
-        for tool in ["fetch", "pull", "stash", "run"] {
+        // Parity: every repo-targeting TUI verb has a matching MCP tool, plus the
+        // remote read tools.
+        for tool in ["fetch", "pull", "stash", "run", "list_prs", "ci_status"] {
             assert!(names.contains(&tool), "missing {tool}");
+        }
+    }
+
+    #[test]
+    fn dry_run_previews_without_confirm_or_gate() {
+        // A side-effect-free preview must work on a read-only server with no
+        // confirm — for both confirm-gated tools (run, stash).
+        for tool in ["run", "stash"] {
+            let mut args = json!({ "selector": { "all": true }, "dry_run": true });
+            if tool == "run" {
+                args["command"] = json!("echo SHOULD_NOT_RUN");
+            }
+            let resp = call(act(tool, args)); // default caps: read-only, no confirm
+            assert_eq!(resp["result"]["isError"], false, "{tool} dry_run errored");
+            let p = payload(&resp);
+            assert_eq!(p["dry_run"], true, "{tool} should preview");
+            assert!(p["targets"].as_u64().unwrap() >= 1);
+        }
+    }
+
+    #[test]
+    fn remote_tools_return_shape_and_note_missing_token() {
+        for tool in ["ci_status", "list_prs"] {
+            let resp = call(act(tool, json!({})));
+            let p = payload(&resp);
+            assert!(p["repos"].is_array(), "{tool} repos");
+            assert!(
+                p["meta"]["note"].as_str().unwrap().contains("token"),
+                "{tool} should note the missing token"
+            );
         }
     }
 }
