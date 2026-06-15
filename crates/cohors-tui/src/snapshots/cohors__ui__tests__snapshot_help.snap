@@ -10,12 +10,12 @@ expression: "render_to_string(&app, 100, 40)"
 ╰──────────────│    ↑2              commits ahead of upstream                       │──────────────╯
 ╭ Repositories │    ↓5              commits behind upstream                         │──────────────╮
 │    Repo      │    ·               even with upstream                              │              │
-│              │    —               no upstream (local only)                        │              │
-│▌   legacy-bil│    ● ● ●           CI: pass / fail / pending                       │ion denied)   │
-│    payments  │    2pr             open pull requests                              │              │
-│    web-app   │    3               changed files, all staged                       │              │
-│    infra     │    3               changed files, some unstaged                    │              │
-│    auth-servi│    s1              stash entries                                   │              │
+│▌   legacy-bil│    —               no upstream (local only)                        │ion denied)   │
+│    payments  │    ● ● ●           CI: pass / fail / pending                       │              │
+│    web-app   │    2pr             open pull requests                              │              │
+│    infra     │    3               changed files, all staged                       │              │
+│    auth-servi│    3               changed files, some unstaged                    │              │
+│              │    s1              stash entries                                   │              │
 │              │    name            row: clean                                      │              │
 │              │    name            row: needs attention                            │              │
 │              │    ●               row: marked for a bulk action                   │              │

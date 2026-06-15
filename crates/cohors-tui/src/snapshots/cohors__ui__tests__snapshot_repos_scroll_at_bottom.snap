@@ -9,9 +9,9 @@ expression: "render_to_string(&app, 100, 18)"
 │ 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│                                             ↑ 6 more                                             │
 │    Repo              Branch         Sync         Changes  Last commit                            │
-│                                                                                                  │
+│                                             ↑ 5 more                                             │
+│    web-app           feat/checkout  ↓5 ● 1pr     7        20m  wip: cart drawer animation        │
 │    data-pipeline     main           ↓3 ●         ·         5h  fix: backfill job off-by-one windo│
 │    experiments       @9f8e7d6       —            7         1y  spike: try wgpu for the renderer  │
 │    infra             @a1b2c3d       —            4         1w  build: pin terraform provider vers│

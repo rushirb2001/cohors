@@ -10,11 +10,11 @@ expression: "render_to_string(&app, 56, 22)"
 ╰──────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────╮
 │    Repo            Branch         Sync      Changes  │
-│                                                      │
 │▌   legacy-billing  error          ·         ·        │
 │    payments        main           ↑2 ● 2pr  4 s1     │
 │    web-app         feat/checkout  ↓5 ●      7        │
-│                      … 2 more ↓                      │
+│    infra           @a1b2c3d       —         4        │
+│    auth-service    main           ● 1pr     ·        │
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────
 ╭ select ────────╮ ╭ act ───────────╮ ╭ view ──────────╮

@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.39] — 2026-06-14
+
+### Changed
+
+- Removed the **blank line between the repository column headers and the rows**
+  (the header no longer carries a bottom margin).
+- The `↑ N more` overflow hint (shown when scrolled to the end) now sits **just
+  below the column headers** rather than above them, so the headers always stay
+  at the top. The header is rendered as its own row to make room for it.
+
 ## [0.3.38] — 2026-06-14
 
 ### Fixed

@@ -10,12 +10,12 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo              ╭ Confirm ───────────────────────────────────────────╮                      │
-│                      │ Stash changes in 2 repos?                          │                      │
-│▌   legacy-billing    │                                                    │(permission denied)   │
-│  ● payments          │ payments, web-app                                  │xx                    │
-│  ● web-app           │                                                    │r                     │
-│    infra             ╰────────────────────────────────────────────────────╯mage                  │
-│    auth-service      main           ● 1pr     ·         3d  chore: bump deps                     │
+│▌   legacy-billing    │ Stash changes in 2 repos?                          │(permission denied)   │
+│  ● payments          │                                                    │xx                    │
+│  ● web-app           │ payments, web-app                                  │r                     │
+│    infra             │                                                    │mage                  │
+│    auth-service      ╰────────────────────────────────────────────────────╯s                     │
+│                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

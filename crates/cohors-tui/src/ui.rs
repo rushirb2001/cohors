@@ -718,18 +718,17 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
 
     let view = app.view();
     let total = view.len();
-    // Does the fleet overflow the body (inner minus the header row + its margin)?
-    let overflow = total > inner.height.saturating_sub(2) as usize;
-
-    // When it overflows, one inner row is reserved for a scroll hint; the table
-    // gets the rest. Compute the scroll offset first (the reserved row count is 1
-    // wherever it lands), so we know which way the hidden repos are.
-    let table_h = if overflow {
-        inner.height.saturating_sub(1)
+    // The header is its own row (no blank margin); the data fills the rest. When
+    // the fleet overflows, one more row is reserved for a scroll hint.
+    let avail = inner.height.saturating_sub(1) as usize; // data rows with header only
+    let overflow = total > avail;
+    let viewport = if overflow {
+        avail.saturating_sub(1)
     } else {
-        inner.height
+        avail
     };
-    let viewport = (table_h as usize).saturating_sub(2);
+
+    // Compute the scroll offset first so we know which way the hidden repos are.
     let mut offset = app.repos_scroll.get();
     if app.selected < offset {
         offset = app.selected;
@@ -740,23 +739,29 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     app.repos_scroll.set(offset);
     let below = total.saturating_sub(offset + viewport);
 
-    // Put the hint at the bottom ("… N more ↓") while repos remain below, and at
-    // the top ("↑ N more") once you've scrolled to the end (the rest is above).
-    let (table_area, hint_area) = if !overflow {
-        (inner, None)
+    // header row, then the data, with the hint *below the header* (`↑ N more`)
+    // once scrolled to the end, or at the bottom (`… N more ↓`) while repos
+    // remain below.
+    let (header_area, data_area, hint_area) = if !overflow {
+        let [hd, dt] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
+        (hd, dt, None)
     } else if below > 0 {
-        let [t, h] = Layout::vertical([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
-        (t, Some(h))
+        let [hd, dt, hn] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
+        ])
+        .areas(inner);
+        (hd, dt, Some(hn))
     } else {
-        let [h, t] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
-        (t, Some(h))
+        let [hd, hn, dt] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(inner);
+        (hd, dt, Some(hn))
     };
-
-    // "Repo" is padded by 2 so it lines up with the names, which carry a 2-col
-    // selection gutter (`● ` / `  `) inside their cell.
-    let header = Row::new(["  Repo", "Branch", "Sync", "Changes", "Last commit"])
-        .style(Style::new().add_modifier(Modifier::BOLD))
-        .bottom_margin(1);
 
     let spin = spinner_frame(app.spinner);
     let rows: Vec<Row> = view
@@ -795,8 +800,23 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         Constraint::Fill(1),           // Last commit takes the remaining width
     ];
 
+    // The header, rendered manually (so the hint can sit between it and the data)
+    // but aligned to the data table: a 2-col reserve for the highlight symbol,
+    // then the same column widths/spacing. "Repo" is padded by 2 to line up with
+    // the names' selection gutter.
+    let header_style = Style::new().add_modifier(Modifier::BOLD);
+    let [_sym, header_cols] =
+        Layout::horizontal([Constraint::Length(2), Constraint::Min(0)]).areas(header_area);
+    let col_rects = Layout::horizontal(widths).spacing(2).split(header_cols);
+    for (rect, label) in
+        col_rects
+            .iter()
+            .zip(["  Repo", "Branch", "Sync", "Changes", "Last commit"])
+    {
+        frame.render_widget(Paragraph::new(Span::styled(label, header_style)), *rect);
+    }
+
     let table = Table::new(rows, widths)
-        .header(header)
         .column_spacing(2)
         .row_highlight_style(Style::new().add_modifier(Modifier::REVERSED))
         .highlight_symbol("▌ ");
@@ -808,7 +828,7 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     // Use the offset we computed above so the hint and the visible rows agree
     // (and the table doesn't re-scroll past our clamp).
     *state.offset_mut() = offset;
-    frame.render_stateful_widget(table, table_area, &mut state);
+    frame.render_stateful_widget(table, data_area, &mut state);
 
     // The scroll hint, centered on its own row inside the box: how many repos
     // are below the fold (or above, once scrolled to the bottom).
