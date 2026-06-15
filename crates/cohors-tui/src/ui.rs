@@ -184,17 +184,20 @@ fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Shield icon (left) · wordmark + tagline (right).
-    let [icon_area, text_area] = Layout::horizontal([Constraint::Length(3), Constraint::Min(0)])
+    // Spider mark (left) · wordmark + tagline (right). The mark is "pixel art":
+    // every cell is a solid block, the two eyes are gaps that show through to the
+    // terminal background, and the legs splay from the body's sides. Magenta (the
+    // app's "purple") is dropped under NO_COLOR, but the block shape still reads.
+    let [icon_area, text_area] = Layout::horizontal([Constraint::Length(9), Constraint::Min(0)])
         .spacing(2)
         .areas(inner);
 
-    let mark = theme.ahead().add_modifier(Modifier::BOLD);
+    let mark = theme.fg(Color::Magenta).add_modifier(Modifier::BOLD);
     frame.render_widget(
         Paragraph::new(Text::from(vec![
-            Line::from(Span::styled("▟█▙", mark)),
-            Line::from(Span::styled("▜█▛", mark)),
-            Line::from(Span::styled(" ▀ ", mark)),
+            Line::from(Span::styled("█ ▟███▙ █", mark)),
+            Line::from(Span::styled("███ █ ███", mark)),
+            Line::from(Span::styled("█ ▜███▛ █", mark)),
         ])),
         icon_area,
     );

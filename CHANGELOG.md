@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.52] — 2026-06-14
+
+### Changed
+
+- **The header mark is now a pixel-art spider** instead of the shield — a chunky
+  block-glyph body with two eyes and splayed legs, evoking a spider at the centre
+  of its web (every repo a thread it holds). It renders in the app's purple
+  (`Color::Magenta`) and stays `NO_COLOR`-safe: the eyes are gaps and the body is
+  solid blocks, so the silhouette reads even without colour.
+
 ## [0.3.51] — 2026-06-14
 
 ### Changed

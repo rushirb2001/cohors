@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▟█▙  cohors  vX.Y.Z                                                                             │
-│ ▜█▛  All your git repositories at a glance —                                                     │
-│  ▀   sta╭ payments  ·  main ───────────────────────────────────────────────────────────╮         │
+│ █ ▟███▙ █  cohors  vX.Y.Z                                                                       │
+│ ███ █ ███  All your git repositories at a glance —                                               │
+│ █ ▜███▛ ╭ payments  ·  main ───────────────────────────────────────────────────────────╮         │
 ╰─────────│ Recent commits (5)                                                           │─────────╯
 ╭ Attentio│ a1b2c3d    2h  fix: retry charge on 5xx from processor                       │─────────╮
 │ 1 unpush│ b2c3d4e    5h  test: cover partial-refund path                               │         │
