@@ -91,7 +91,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     // narrow, so no command is ever truncated.
     let footer_h = footer_height(app, area.width, &theme);
     let [header_area, body_area, footer_area] = Layout::vertical([
-        Constraint::Length(3),
+        Constraint::Length(5),
         Constraint::Min(0),
         Constraint::Length(footer_h),
     ])
@@ -173,25 +173,48 @@ fn dim_area(buf: &mut Buffer, area: Rect) {
     }
 }
 
-/// The branded header: a rounded box with the tool name + version and a one-line
-/// description — cohors's "business card". Transient feedback (scan progress,
-/// action results) lives in a self-dismissing toast, not here.
+/// The branded header: a logo lockup — a shield mark built from block glyphs
+/// beside the wordmark, version, and tagline. cohors's "business card."
+/// Transient feedback lives in a self-dismissing toast, not here.
 fn render_header(frame: &mut Frame, area: Rect, _app: &App, theme: &Theme) {
-    let name = Span::styled("cohors", theme.ahead().add_modifier(Modifier::BOLD));
-    let version = Span::styled(format!(" v{} ", env!("CARGO_PKG_VERSION")), theme.dim());
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
-        .title(Line::from(vec![Span::raw(" "), name, version]))
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+
+    // Shield icon (left) · wordmark + tagline (right).
+    let [icon_area, text_area] = Layout::horizontal([Constraint::Length(3), Constraint::Min(0)])
+        .spacing(2)
+        .areas(inner);
+
+    let mark = theme.ahead().add_modifier(Modifier::BOLD);
     frame.render_widget(
-        Paragraph::new(Span::styled(
-            "All your git repositories at a glance — status, fetch, pull & weekly standup.",
-            theme.dim(),
-        )),
-        inner,
+        Paragraph::new(Text::from(vec![
+            Line::from(Span::styled("▟█▙", mark)),
+            Line::from(Span::styled("▜█▛", mark)),
+            Line::from(Span::styled(" ▀ ", mark)),
+        ])),
+        icon_area,
+    );
+
+    frame.render_widget(
+        Paragraph::new(Text::from(vec![
+            Line::from(vec![
+                Span::styled("cohors", theme.ahead().add_modifier(Modifier::BOLD)),
+                Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
+            ]),
+            Line::from(Span::styled(
+                "All your git repositories at a glance —",
+                theme.dim(),
+            )),
+            Line::from(Span::styled(
+                "status · fetch · pull · weekly standup",
+                theme.dim(),
+            )),
+        ])),
+        text_area,
     );
 }
 

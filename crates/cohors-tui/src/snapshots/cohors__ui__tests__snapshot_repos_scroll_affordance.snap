@@ -2,8 +2,10 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
-╭ cohors vX.Y.Z ──────────────────────────────────────────────────────────────────────────────────╮
-│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▟█▙  cohors  vX.Y.Z                                                                             │
+│ ▜█▛  All your git repositories at a glance —                                                     │
+│  ▀   status · fetch · pull · weekly standup                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
 │ 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                             │
@@ -15,8 +17,6 @@ expression: "render_to_string(&app, 100, 18)"
 │    payments          main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from proc│
 │    analytics         main           ↑1 ●         · s2      4d  perf: precompute funnel rollups   │
 │    design-system     main           ↑1 ● 1pr     · s1      6h  feat: dark-mode tokens            │
-│    web-app           feat/checkout  ↓5 ● 1pr     7        20m  wip: cart drawer animation        │
-│    data-pipeline     main           ↓3 ●         ·         5h  fix: backfill job off-by-one windo│
-│                                             ↓ 5 more                                             │
+│                                             ↓ 7 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

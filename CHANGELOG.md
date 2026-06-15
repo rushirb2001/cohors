@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.51] — 2026-06-14
+
+### Changed
+
+- **The header is now a logo lockup** — a shield mark built from block glyphs
+  (`▟█▙ / ▜█▛ / ▀`) beside the `cohors` wordmark, version, and tagline. The box
+  grew to five rows to hold it; the mark renders in the accent colour and is
+  `NO_COLOR`-safe (no emoji, all monospace-stable glyphs).
+
 ## [0.3.50] — 2026-06-14
 
 ### Changed

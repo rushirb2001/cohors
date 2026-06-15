@@ -2,21 +2,21 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
-╭ cohors vX.Y.Z ──────────────────────────────────────────────────────────────────────────────────╮
-│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▟█▙  cohors  vX.Y.Z                                                                             │
+│ ▜█▛  All your git repositories at a glance —                                                     │
+│  ▀   status · fetch · pull · weekly standup                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              B╭ Open legacy-billing with… ───────────────────────╮                       │
-│▌   legacy-billing    e│ No editor CLI found on your PATH.                │ (permission denied)   │
-│    payments          m│ Install its shell command to list it here.       │5xx                    │
-│    web-app           f│ ▌ Reveal in file manager                         │er                     │
-│    infra             @│   Open in lazygit                                │image                  │
-│    auth-service      m╰──────────────────────────────────────────────────╯ps                     │
-│                                                                                                  │
-│                                                                                                  │
+╰───────────────────────╭ Open legacy-billing with… ───────────────────────╮───────────────────────╯
+╭ Repositories (5) · sor│ No editor CLI found on your PATH.                │───────────────────────╮
+│    Repo              B│ Install its shell command to list it here.       │                       │
+│▌   legacy-billing    e│ ▌ Reveal in file manager                         │ (permission denied)   │
+│    payments          m│   Open in lazygit                                │5xx                    │
+│    web-app           f╰──────────────────────────────────────────────────╯er                     │
+│    infra             @a1b2c3d       —         4         1w  build: pin ci image                  │
+│    auth-service      main           ● 1pr     ·         3d  chore: bump deps                     │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮

@@ -2,21 +2,21 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 28)"
 ---
-╭ cohors vX.Y.Z ──────────────────────────────────────────────────────────────────────────────────╮
-│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attentio╭ payments  ·  main ───────────────────────────────────────────────────────────╮─────────╮
-│ 1 unpush│ Recent commits (5)                                                           │         │
-╰─────────│ a1b2c3d    2h  fix: retry charge on 5xx from processor                       │─────────╯
-╭ Reposito│ b2c3d4e    5h  test: cover partial-refund path                               │─────────╮
-│    Repo │ c3d4e5f    1d  refactor: extract processor client                            │         │
-│▌   legac│ d4e5f60    3d  feat: idempotency keys on charge                              │enied)   │
-│    payme│ e5f6071    4d  chore: bump stripe sdk to 12.1                                │         │
-│    web-a│                                                                              │         │
-│    infra│ Changes (3)                                                                  │         │
-│    auth-│  M src/charge.rs                                                             │         │
-│         │  M src/refund.rs                                                             │         │
-│         │ ?? notes.md                                                                  │         │
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▟█▙  cohors  vX.Y.Z                                                                             │
+│ ▜█▛  All your git repositories at a glance —                                                     │
+│  ▀   sta╭ payments  ·  main ───────────────────────────────────────────────────────────╮         │
+╰─────────│ Recent commits (5)                                                           │─────────╯
+╭ Attentio│ a1b2c3d    2h  fix: retry charge on 5xx from processor                       │─────────╮
+│ 1 unpush│ b2c3d4e    5h  test: cover partial-refund path                               │         │
+╰─────────│ c3d4e5f    1d  refactor: extract processor client                            │─────────╯
+╭ Reposito│ d4e5f60    3d  feat: idempotency keys on charge                              │─────────╮
+│    Repo │ e5f6071    4d  chore: bump stripe sdk to 12.1                                │         │
+│▌   legac│                                                                              │enied)   │
+│    payme│ Changes (3)                                                                  │         │
+│    web-a│  M src/charge.rs                                                             │         │
+│    infra│  M src/refund.rs                                                             │         │
+│    auth-│ ?? notes.md                                                                  │         │
 │         │                                                                              │         │
 │         │ Branches (3)                                                                 │         │
 │         │ ● main                                                                       │         │

@@ -2,8 +2,10 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 56, 22)"
 ---
-╭ cohors vX.Y.Z ──────────────────────────────────────╮
-│ All your git repositories at a glance — status, fetc │
+╭──────────────────────────────────────────────────────╮
+│ ▟█▙  cohors  vX.Y.Z                                 │
+│ ▜█▛  All your git repositories at a glance —         │
+│  ▀   status · fetch · pull · weekly standup          │
 ╰──────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unre │
@@ -12,9 +14,7 @@ expression: "render_to_string(&app, 56, 22)"
 │    Repo            Branch         Sync      Changes  │
 │▌   legacy-billing  error          ·         ·        │
 │    payments        main           ↑2 ● 2pr  4 s1     │
-│    web-app         feat/checkout  ↓5 ●      7        │
-│    infra           @a1b2c3d       —         4        │
-│    auth-service    main           ● 1pr     ·        │
+│                       ↓ 3 more                       │
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────
 ╭ select ────────╮ ╭ act ───────────╮ ╭ view ──────────╮

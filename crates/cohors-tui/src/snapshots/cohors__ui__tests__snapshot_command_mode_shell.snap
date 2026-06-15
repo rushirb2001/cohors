@@ -2,21 +2,21 @@
 source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
-╭ cohors vX.Y.Z ──────────────────────────────────────────────────────────────────────────────────╮
-│ All your git repositories at a glance — status, fetch, pull & weekly standup.                    │
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▟█▙  cohors  vX.Y.Z                                                                             │
+│ ▜█▛  All your git repositories at a glance —                                                     │
+│  ▀   status · fetch · pull · weekly standup                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync      Changes  Last commit                               │
-│▌   legacy-b╭ Shell command ─────────────────────────────────────────────────────────╮n denied)   │
-│    payments│ : !git checkout main▏                                                  │            │
-│    web-app │ ────────────────────────────────────────────────────────────────────── │            │
-│    infra   │ ▌ :!<cmd>                  │ run any shell command across the targets  │            │
-│    auth-ser╰────────────────────────────────────────────────────────────────────────╯            │
-│                                                                                                  │
-│                                                                                                  │
+╭ Repositorie╭ Shell command ─────────────────────────────────────────────────────────╮────────────╮
+│    Repo    │ : !git checkout main▏                                                  │            │
+│▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │n denied)   │
+│    payments│ ▌ :!<cmd>                  │ run any shell command across the targets  │            │
+│    web-app ╰────────────────────────────────────────────────────────────────────────╯            │
+│    infra             @a1b2c3d       —         4         1w  build: pin ci image                  │
+│    auth-service      main           ● 1pr     ·         3d  chore: bump deps                     │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
