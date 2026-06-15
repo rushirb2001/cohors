@@ -232,8 +232,17 @@ pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool)
     let roots = scanner.roots();
     let config_path = scanner.config_path();
     let token = scanner.github_token();
+    let mcp_config = scanner.mcp_config();
     let scan = || scanner.scan();
-    crate::mcp::run(&scan, token.as_deref(), &roots, &config_path, caps)
+    crate::mcp::run(
+        &scan,
+        token.as_deref(),
+        &roots,
+        &config_path,
+        caps,
+        &mcp_config.run_allowlist,
+        mcp_config.max_action_targets,
+    )
 }
 
 #[cfg(test)]

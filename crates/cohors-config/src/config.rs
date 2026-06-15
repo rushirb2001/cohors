@@ -30,6 +30,30 @@ pub struct Config {
     pub stop_at_repo: bool,
     /// Follow symlinks during discovery.
     pub follow_symlinks: bool,
+    /// Safety knobs for the MCP server (ADR-025).
+    pub mcp: McpConfig,
+}
+
+/// MCP server safety settings (the `[mcp]` table).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct McpConfig {
+    /// Glob patterns restricting which commands `run` may execute. Empty allows
+    /// any command (still gated by `--allow-run` + `confirm`).
+    pub run_allowlist: Vec<String>,
+    /// Cap on how many repos an action may target *unless* the selector
+    /// explicitly says `{all: true}`. `0` disables the cap.
+    pub max_action_targets: usize,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            run_allowlist: Vec::new(),
+            // A guard against an accidental broad selector fanning out across a
+            // large fleet; `{all: true}` is the explicit escape hatch.
+            max_action_targets: 50,
+        }
+    }
 }
 
 impl Default for Config {
@@ -44,6 +68,7 @@ impl Default for Config {
             editor: None,
             stop_at_repo: true,
             follow_symlinks: false,
+            mcp: McpConfig::default(),
         }
     }
 }
@@ -67,6 +92,23 @@ struct RawConfig {
     editor: Option<String>,
     stop_at_repo: Option<bool>,
     follow_symlinks: Option<bool>,
+    mcp: Option<RawMcp>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct RawMcp {
+    run_allowlist: Option<Vec<String>>,
+    max_action_targets: Option<usize>,
+}
+
+impl RawMcp {
+    fn into_config(self) -> McpConfig {
+        let d = McpConfig::default();
+        McpConfig {
+            run_allowlist: self.run_allowlist.unwrap_or(d.run_allowlist),
+            max_action_targets: self.max_action_targets.unwrap_or(d.max_action_targets),
+        }
+    }
 }
 
 /// Recognized top-level keys, used to warn about anything else.
@@ -78,6 +120,7 @@ const KNOWN_KEYS: &[&str] = &[
     "editor",
     "stop_at_repo",
     "follow_symlinks",
+    "mcp",
 ];
 
 impl RawConfig {
@@ -91,6 +134,7 @@ impl RawConfig {
             editor: self.editor.or(d.editor),
             stop_at_repo: self.stop_at_repo.unwrap_or(d.stop_at_repo),
             follow_symlinks: self.follow_symlinks.unwrap_or(d.follow_symlinks),
+            mcp: self.mcp.map(RawMcp::into_config).unwrap_or(d.mcp),
         }
     }
 }
@@ -209,6 +253,14 @@ follow_symlinks = false
 # Optional pretty names, keyed by absolute path or repo dir name.
 [aliases]
 # "~/work/payments-service" = "payments"
+
+# Safety knobs for the `cohors mcp` agent server.
+[mcp]
+# Restrict the `run` tool to commands matching these globs (empty = any command,
+# still gated by --allow-run + confirm).
+# run_allowlist = ["pnpm *", "npm *", "cargo *", "git *", "rg *", "grep *"]
+# Cap on action targets unless the selector says {all = true}; 0 disables it.
+max_action_targets = 50
 "#;
 
 /// Render the starter config with a concrete `roots` line. Empty `roots` keeps

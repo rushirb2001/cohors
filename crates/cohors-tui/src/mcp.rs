@@ -51,16 +51,23 @@ struct Ctx<'a> {
     roots: &'a [String],
     config_path: &'a str,
     caps: Caps,
+    /// Glob patterns restricting `run` (empty = any command). ADR-025.
+    allowlist: &'a [String],
+    /// Action-target cap, bypassed by `{all: true}` (0 = no cap). ADR-025.
+    max_targets: usize,
 }
 
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
 /// message; each request gets exactly one response line, notifications none.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     scan: &ScanFn<'_>,
     token: Option<&str>,
     roots: &[String],
     config_path: &str,
     caps: Caps,
+    allowlist: &[String],
+    max_targets: usize,
 ) -> Result<()> {
     let ctx = Ctx {
         scan,
@@ -68,6 +75,8 @@ pub fn run(
         roots,
         config_path,
         caps,
+        allowlist,
+        max_targets,
     };
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
@@ -325,18 +334,20 @@ fn is_dry_run(args: &Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Resolve an action's target repos: the selector is required (an empty selector
-/// matches nothing — never "all"), scoped to the configured roots, with
-/// error/path-less repos excluded since they can't be acted on (ADR-019).
-fn action_targets(args: &Value, snaps: &[RepoSnapshot], now: i64) -> Vec<RepoSnapshot> {
-    let selector: Selector = args
-        .get("selector")
+/// Parse an action's selector (required — an empty selector matches nothing).
+fn action_selector(args: &Value) -> Selector {
+    args.get("selector")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// Resolve a parsed selector to action targets, scoped to the configured roots,
+/// with error/path-less repos excluded since they can't be acted on (ADR-019).
+fn resolve_targets(selector: &Selector, snaps: &[RepoSnapshot], now: i64) -> Vec<RepoSnapshot> {
     if selector.is_empty() {
         return Vec::new();
     }
-    let order = resolve(snaps, &selector, SortMode::DirtyFirst, now);
+    let order = resolve(snaps, selector, SortMode::DirtyFirst, now);
     let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
         snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
     order
@@ -345,6 +356,66 @@ fn action_targets(args: &Value, snaps: &[RepoSnapshot], now: i64) -> Vec<RepoSna
         .filter(|s| !s.has_error() && s.path.is_some())
         .cloned()
         .collect()
+}
+
+/// Enforce the action-target cap: too many targets without an explicit
+/// `{all: true}` is refused (ADR-025), so a fumbled selector can't fan out.
+fn within_cap(selector: &Selector, targets: &[RepoSnapshot], max: usize) -> Result<(), String> {
+    if max > 0 && !selector.all && targets.len() > max {
+        Err(format!(
+            "{} repos match — over the configured cap of {max}. Narrow the selector, or pass {{\"all\": true}} to act on the whole fleet deliberately.",
+            targets.len()
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Write a one-line audit record of an action to the log (`cohors.log`, ADR-025).
+fn audit(tool: &str, selector: &Selector, targets: &[RepoSnapshot], ok: usize) {
+    let ids: Vec<&str> = targets.iter().map(|s| s.id.0.as_str()).collect();
+    tracing::info!(
+        target: "cohors::audit",
+        tool,
+        selector = %serde_json::to_string(selector).unwrap_or_default(),
+        targets = targets.len(),
+        ok,
+        failed = targets.len() - ok,
+        ids = ?ids,
+        "mcp action",
+    );
+}
+
+/// Whether `cmd` is permitted by the allowlist (empty allows anything).
+fn command_allowed(cmd: &str, allowlist: &[String]) -> bool {
+    allowlist.is_empty() || allowlist.iter().any(|pat| command_matches(pat, cmd))
+}
+
+/// A small `*`-glob match for allowlist patterns like `cargo *` or `git *`.
+fn command_matches(pattern: &str, cmd: &str) -> bool {
+    let p: Vec<char> = pattern.chars().collect();
+    let t: Vec<char> = cmd.chars().collect();
+    let (mut pi, mut ti, mut star, mut resume) = (0usize, 0usize, None, 0usize);
+    while ti < t.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
+            pi += 1;
+            ti += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some(pi);
+            resume = ti;
+            pi += 1;
+        } else if let Some(s) = star {
+            pi = s + 1;
+            resume += 1;
+            ti = resume;
+        } else {
+            return false;
+        }
+    }
+    while pi < p.len() && p[pi] == '*' {
+        pi += 1;
+    }
+    pi == p.len()
 }
 
 /// The "you selected nothing" result — explicit, so the agent doesn't read an
@@ -369,21 +440,24 @@ fn dry_run_preview(action: Value, targets: &[RepoSnapshot]) -> Value {
 /// Run a per-repo git action (fetch / pull / stash) over the targets and collect
 /// `{repo, ok, message}` results.
 fn git_action(
+    tool: &str,
+    action: Value,
     args: &Value,
     ctx: &Ctx,
     now: i64,
-    action: Value,
     authorize: impl Fn() -> Result<(), String>,
     op: impl Fn(&camino::Utf8Path, &str) -> Result<String, String>,
 ) -> Result<Value, String> {
     let snaps = (ctx.scan)();
-    let targets = action_targets(args, &snaps, now);
+    let selector = action_selector(args);
+    let targets = resolve_targets(&selector, &snaps, now);
     if targets.is_empty() {
         return Ok(no_targets());
     }
-    // A dry run is side-effect-free, so it's allowed *before* any gate or
-    // confirm: an agent can preview the exact target set (even on a read-only
-    // server) for a human to approve, then enable the tier and act.
+    within_cap(&selector, &targets, ctx.max_targets)?;
+    // A dry run is side-effect-free, so it's allowed *before* the gate/confirm:
+    // an agent can preview the exact target set (even on a read-only server) for
+    // a human to approve, then enable the tier and act.
     if is_dry_run(args) {
         return Ok(dry_run_preview(action, &targets));
     }
@@ -398,15 +472,18 @@ fn git_action(
             }
         })
         .collect();
+    let ok = results.iter().filter(|r| r["ok"] == true).count();
+    audit(tool, &selector, &targets, ok);
     Ok(json!({ "targets": targets.len(), "results": results }))
 }
 
 fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     git_action(
+        "fetch",
+        json!("fetch"),
         args,
         ctx,
         now,
-        json!("fetch"),
         || require_writes(ctx, "fetch"),
         crate::action::fetch,
     )
@@ -414,10 +491,11 @@ fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
 
 fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     git_action(
+        "pull",
+        json!("pull --ff-only"),
         args,
         ctx,
         now,
-        json!("pull --ff-only"),
         || require_writes(ctx, "pull"),
         crate::action::pull_ff,
     )
@@ -425,10 +503,11 @@ fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
 
 fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     git_action(
+        "stash",
+        json!("stash push"),
         args,
         ctx,
         now,
-        json!("stash push"),
         || {
             require_writes(ctx, "stash")?;
             require_confirm(args, "stash")
@@ -452,22 +531,30 @@ fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         .to_string();
 
     let snaps = (ctx.scan)();
-    let targets = action_targets(args, &snaps, now);
+    let selector = action_selector(args);
+    let targets = resolve_targets(&selector, &snaps, now);
     if targets.is_empty() {
         return Ok(no_targets());
     }
+    within_cap(&selector, &targets, ctx.max_targets)?;
     // Side-effect-free preview is allowed before the gates (see `git_action`).
     if is_dry_run(args) {
         return Ok(dry_run_preview(json!({ "run": command }), &targets));
     }
 
-    // Real execution: the `run` tier and a deliberate confirm.
+    // Real execution: the `run` tier, a deliberate confirm, and the allowlist.
     if !ctx.caps.allow_run {
         return Err(
             "`run` is disabled: relaunch the server with `cohors mcp --allow-run` to enable arbitrary commands.".to_string(),
         );
     }
     require_confirm(args, "run")?;
+    if !command_allowed(&command, ctx.allowlist) {
+        return Err(format!(
+            "`{command}` is not permitted by the configured run_allowlist ({:?}).",
+            ctx.allowlist
+        ));
+    }
 
     let timeout = std::time::Duration::from_secs(
         args.get("timeout_secs")
@@ -490,6 +577,7 @@ fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         })
         .collect();
     let ok = results.iter().filter(|r| r["ok"] == true).count();
+    audit("run", &selector, &targets, ok);
     Ok(json!({
         "run_id": run_id, "command": command, "targets": targets.len(),
         "ok": ok, "failed": targets.len() - ok, "results": results
@@ -848,6 +936,8 @@ mod tests {
             roots: &roots,
             config_path: "(test)",
             caps: Caps::default(),
+            allowlist: &[],
+            max_targets: 0,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -862,6 +952,24 @@ mod tests {
             roots: &roots,
             config_path: "(test)",
             caps,
+            allowlist: &[],
+            max_targets: 0,
+        };
+        handle(&request, &ctx, NOW).expect("request expects a response")
+    }
+
+    /// Full control over caps, allowlist, and the action-target cap.
+    fn call_ctx(request: Value, caps: Caps, allowlist: &[String], max_targets: usize) -> Value {
+        let scan_fn = scan;
+        let roots = vec!["/demo".to_string()];
+        let ctx = Ctx {
+            scan: &scan_fn,
+            token: None,
+            roots: &roots,
+            config_path: "(test)",
+            caps,
+            allowlist,
+            max_targets,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -869,6 +977,17 @@ mod tests {
     fn payload(resp: &Value) -> Value {
         let text = resp["result"]["content"][0]["text"].as_str().unwrap();
         serde_json::from_str(text).unwrap()
+    }
+
+    fn is_error(resp: &Value) -> bool {
+        resp["result"]["isError"] == true
+    }
+
+    fn err_text(resp: &Value) -> String {
+        resp["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_string()
     }
 
     const WRITES: Caps = Caps {
@@ -909,6 +1028,8 @@ mod tests {
             roots: &[],
             config_path: "(test)",
             caps: Caps::default(),
+            allowlist: &[],
+            max_targets: 0,
         };
         let resp = handle(
             &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
@@ -1058,6 +1179,8 @@ mod tests {
             roots: &roots,
             config_path: "/cfg/config.toml",
             caps: Caps::default(),
+            allowlist: &[],
+            max_targets: 0,
         };
         let resp = handle(
             &json!({
@@ -1190,5 +1313,57 @@ mod tests {
                 "{tool} should note the missing token"
             );
         }
+    }
+
+    #[test]
+    fn cap_blocks_broad_selector_but_all_bypasses() {
+        // `name:*` matches the whole fleet but isn't an explicit {all:true}.
+        let over = act(
+            "fetch",
+            json!({ "selector": { "name": "*" }, "dry_run": true }),
+        );
+        let resp = call_ctx(over, WRITES, &[], 1);
+        assert!(is_error(&resp));
+        assert!(err_text(&resp).contains("cap"));
+
+        // {all:true} is the deliberate escape hatch — no cap error.
+        let all = act(
+            "fetch",
+            json!({ "selector": { "all": true }, "dry_run": true }),
+        );
+        let resp = call_ctx(all, WRITES, &[], 1);
+        assert_eq!(payload(&resp)["dry_run"], true);
+    }
+
+    #[test]
+    fn run_allowlist_blocks_then_permits() {
+        let allow = vec!["echo *".to_string()];
+        // A non-matching command is refused before executing.
+        let bad = act(
+            "run",
+            json!({ "command": "rm -rf x", "selector": { "all": true }, "confirm": true }),
+        );
+        let resp = call_ctx(bad, RUN, &allow, 0);
+        assert!(is_error(&resp));
+        assert!(err_text(&resp).contains("allowlist"));
+
+        // A matching command is allowed through (it then runs; demo paths are
+        // synthetic so per-repo runs just fail — the point is it wasn't blocked).
+        let ok = act(
+            "run",
+            json!({ "command": "echo hi", "selector": { "all": true }, "confirm": true }),
+        );
+        let resp = call_ctx(ok, RUN, &allow, 0);
+        assert!(!is_error(&resp));
+    }
+
+    #[test]
+    fn command_matches_globs() {
+        assert!(command_matches("cargo *", "cargo build --release"));
+        assert!(command_matches("git *", "git status -s"));
+        assert!(!command_matches("git *", "rm -rf /"));
+        assert!(command_matches("*", "anything goes"));
+        assert!(command_matches("exact", "exact"));
+        assert!(!command_matches("exact", "exactly"));
     }
 }

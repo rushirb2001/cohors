@@ -21,6 +21,23 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.3] — 2026-06-15
+
+### Added
+
+- **MCP action guardrails (ADR-033), via a new `[mcp]` config table.**
+  - `max_action_targets` (default 50): an action whose selector resolves to more
+    repos than the cap is refused unless the selector is an explicit
+    `{all: true}` — a fumbled broad selector can't fan out. `0` disables it.
+  - `run_allowlist` (default empty = any): restricts `run` to commands matching
+    `*`-glob patterns (e.g. `"cargo *"`, `"git *"`).
+  - **Audit log**: every executed action writes `{tool, selector, resolved_ids,
+    ok/failed}` to `cohors.log`.
+
+### Fixed
+
+- CI: bumped `actions/checkout` to v5 (v4's Node 20 runtime is deprecated).
+
 ## [0.4.2] — 2026-06-15
 
 ### Changed

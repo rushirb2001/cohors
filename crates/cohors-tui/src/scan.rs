@@ -88,6 +88,11 @@ impl Scanner {
     pub fn editor_command(&self) -> Option<String> {
         self.config.editor_command()
     }
+
+    /// MCP safety settings (`run` allowlist, action-target cap).
+    pub fn mcp_config(&self) -> cohors_config::McpConfig {
+        self.config.mcp.clone()
+    }
 }
 
 /// The user's configured git email (`git config user.email`), for the standup.
