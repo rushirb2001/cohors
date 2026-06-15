@@ -20,6 +20,7 @@
 
 pub mod attention;
 pub mod demo;
+pub mod detail;
 pub mod fuzzy;
 pub mod model;
 pub mod provider;
@@ -31,6 +32,7 @@ pub mod view;
 // Re-export the most-used types at the crate root so adapters can write
 // `use cohors_core::RepoSnapshot;` instead of reaching into modules.
 pub use attention::{Assessment, AttentionReason, FleetSummary, Severity, assess, fleet_summary};
+pub use detail::{ChangedFile, RepoDetail};
 pub use model::{
     Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoRef, RepoSnapshot, Upstream,
     WorktreeStatus,

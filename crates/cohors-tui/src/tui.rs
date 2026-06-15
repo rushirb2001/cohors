@@ -16,7 +16,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use cohors_core::{RepoId, RepoRef, RepoSnapshot, StandupCommit};
+use cohors_core::{RepoDetail, RepoId, RepoRef, RepoSnapshot, StandupCommit};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
@@ -29,7 +29,8 @@ use ratatui::crossterm::terminal::{
 
 use crate::action;
 use crate::app::{
-    App, Cmd, CommandRun, ConfirmAction, Mode, OpenWith, Opener, RunResult, RunState, StandupView,
+    App, Cmd, CommandRun, ConfirmAction, DetailView, Mode, OpenWith, Opener, RunResult, RunState,
+    StandupView,
 };
 use crate::scan::Scanner;
 use crate::ui;
@@ -64,6 +65,11 @@ enum BgMsg {
     RemoteEnriched(Vec<RepoSnapshot>),
     /// The user's commits for the current standup window (grouped in the view).
     StandupReady(Vec<StandupCommit>),
+    /// The drill-in detail for a repo finished loading (matched by id).
+    DetailReady {
+        id: RepoId,
+        detail: Box<RepoDetail>,
+    },
     /// One repo in a command run finished (or failed to spawn). `run_id` lets
     /// the loop discard a previous run's late results.
     RunRepoDone {
@@ -127,9 +133,18 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
                     Cmd::RunCommand => simulate_demo_run(&mut app),
                     Cmd::CopyRunOutput => copy_run_output(&mut app),
                     Cmd::CopyPath => copy_selected(&mut app),
+                    // The detail pane works for real, seeded from demo data.
+                    Cmd::OpenDetail => {
+                        if let Some(repo) = app.selected_repo() {
+                            let mut dv = DetailView::new(repo.id.clone(), repo.name.clone());
+                            dv.detail = Some(cohors_core::demo::detail(now));
+                            app.detail = Some(dv);
+                            app.mode = Mode::Detail;
+                        }
+                    }
                     // Show the picker (a real feature worth demoing); set-default
                     // persists harmlessly; the launch itself is stubbed.
-                    Cmd::OpenEditor | Cmd::OpenWith => {
+                    Cmd::OpenWith => {
                         open_with_picker(&mut app, crate::prefs::default_editor());
                     }
                     Cmd::OpenWithSetDefault => set_open_with_default(&mut app),
@@ -251,7 +266,7 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
                         start_action_targets(&mut app, &tx, ActionKind::Push, &mut batch)
                     }
                     Cmd::CopyPath => copy_selected(&mut app),
-                    Cmd::OpenEditor => open_editor(terminal, &mut app, &scanner, &tx)?,
+                    Cmd::OpenDetail => open_detail(&mut app, &tx),
                     Cmd::Lazygit => open_lazygit(terminal, &mut app, &scanner, &tx)?,
                     Cmd::OpenWith => open_with_picker(&mut app, resolve_default_editor(&scanner)),
                     Cmd::OpenWithAccept => accept_open_with(terminal, &mut app, &scanner, &tx)?,
@@ -348,6 +363,14 @@ fn drain_background(
             }
             BgMsg::StandupReady(commits) => {
                 app.standup = Some(StandupView::new(commits));
+            }
+            BgMsg::DetailReady { id, detail } => {
+                // Only apply if it's still the repo the pane is showing.
+                if let Some(d) = &mut app.detail
+                    && d.repo_id == id
+                {
+                    d.detail = Some(*detail);
+                }
             }
             BgMsg::RunRepoDone {
                 run_id,
@@ -525,24 +548,29 @@ fn reveal_selected(app: &mut App) {
     }
 }
 
-fn open_editor(
-    terminal: &mut Tui,
-    app: &mut App,
-    scanner: &Arc<Scanner>,
-    tx: &Sender<BgMsg>,
-) -> Result<()> {
-    let Some(path) = selected_path(app) else {
+/// Open the drill-in detail pane for the current repo and kick off its load.
+fn open_detail(app: &mut App, tx: &Sender<BgMsg>) {
+    let Some(repo) = app.selected_repo() else {
         app.status = Some("no repo selected".to_string());
-        return Ok(());
+        return;
     };
-    // First Enter with no default yet → open the picker so the user chooses one
-    // (and it's remembered); after that, Enter just opens the default.
-    let Some(editor) = resolve_default_editor(scanner) else {
-        open_with_picker(app, None);
-        return Ok(());
-    };
-    let argv = action::editor_argv(&editor, &path);
-    run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
+    let id = repo.id.clone();
+    let name = repo.name.clone();
+    let path = repo.path.clone();
+    app.detail = Some(DetailView::new(id.clone(), name));
+    app.mode = Mode::Detail;
+    // Read the git facts off-thread; the pane shows a "loading" state until they
+    // arrive (matched back by id, so a fast repo-switch can't show stale data).
+    if let Some(path) = path {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let detail = cohors_git::repo_detail(&path);
+            let _ = tx.send(BgMsg::DetailReady {
+                id,
+                detail: Box::new(detail),
+            });
+        });
+    }
 }
 
 /// The default editor command: the user's saved pick first (set via the picker),

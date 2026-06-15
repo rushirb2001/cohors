@@ -9,7 +9,7 @@
 use std::collections::HashSet;
 
 use cohors_core::{
-    RepoId, RepoSnapshot, SortMode, StandupCommit, StandupWindow, ViewParams, ViewRow,
+    RepoDetail, RepoId, RepoSnapshot, SortMode, StandupCommit, StandupWindow, ViewParams, ViewRow,
     compute_view, group_commits,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -32,6 +32,8 @@ pub enum Mode {
     Confirm,
     /// The "Open with…" picker (choose an editor / reveal / lazygit).
     OpenWith,
+    /// The per-repo drill-in detail pane (commits / files / branches / stashes).
+    Detail,
 }
 
 /// A side effect for the event loop to perform after a key is handled. Actions
@@ -50,8 +52,8 @@ pub enum Cmd {
     PullSelected,
     /// Push the selected repo's current branch to its upstream.
     PushSelected,
-    /// Open the selected repo in the editor.
-    OpenEditor,
+    /// Open the per-repo detail pane for the current repo (lazy-loads its data).
+    OpenDetail,
     /// Open the selected repo in lazygit.
     Lazygit,
     /// Copy the selected repo's path to the clipboard.
@@ -271,6 +273,37 @@ pub struct App {
     /// mutability, like the overlay scroll states) so the panel can show a
     /// "… N more" affordance when the list overflows the window.
     pub repos_scroll: std::cell::Cell<usize>,
+    /// The drill-in detail pane (`Some` ⇒ `Mode::Detail`).
+    pub detail: Option<DetailView>,
+}
+
+/// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
+pub struct DetailView {
+    /// Which repo this is for (to ignore late background results after a switch).
+    pub repo_id: RepoId,
+    pub repo_name: String,
+    /// `None` while the data is still being read in the background.
+    pub detail: Option<RepoDetail>,
+    /// Vertical scroll offset.
+    pub scroll: u16,
+    /// Max scroll, cached from the last render for clamp-without-viewport.
+    max_scroll: std::cell::Cell<u16>,
+}
+
+impl DetailView {
+    pub fn new(repo_id: RepoId, repo_name: String) -> Self {
+        Self {
+            repo_id,
+            repo_name,
+            detail: None,
+            scroll: 0,
+            max_scroll: std::cell::Cell::new(0),
+        }
+    }
+
+    pub fn set_max_scroll(&self, max: u16) {
+        self.max_scroll.set(max);
+    }
 }
 
 /// One choice in the "Open with…" picker.
@@ -334,6 +367,7 @@ impl App {
             hints_hidden: false,
             open_with: None,
             repos_scroll: std::cell::Cell::new(0),
+            detail: None,
         }
     }
 
@@ -444,7 +478,50 @@ impl App {
             Mode::CommandRun => self.on_key_command_run(key),
             Mode::Confirm => self.on_key_confirm(key),
             Mode::OpenWith => self.on_key_open_with(key),
+            Mode::Detail => self.on_key_detail(key),
         }
+    }
+
+    fn on_key_detail(&mut self, key: KeyEvent) -> Cmd {
+        let max = self.detail.as_ref().map_or(0, |d| d.max_scroll.get());
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') | KeyCode::Left => {
+                self.mode = Mode::Normal;
+                self.detail = None;
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(d) = &mut self.detail {
+                    d.scroll = d.scroll.saturating_add(1).min(max);
+                }
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(d) = &mut self.detail {
+                    d.scroll = d.scroll.saturating_sub(1);
+                }
+            }
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                if let Some(d) = &mut self.detail {
+                    d.scroll = d.scroll.saturating_add(10).min(max);
+                }
+            }
+            KeyCode::PageUp => {
+                if let Some(d) = &mut self.detail {
+                    d.scroll = d.scroll.saturating_sub(10);
+                }
+            }
+            KeyCode::Char('g') => {
+                if let Some(d) = &mut self.detail {
+                    d.scroll = 0;
+                }
+            }
+            KeyCode::Char('G') => {
+                if let Some(d) = &mut self.detail {
+                    d.scroll = max;
+                }
+            }
+            _ => {}
+        }
+        Cmd::None
     }
 
     fn on_key_open_with(&mut self, key: KeyEvent) -> Cmd {
@@ -511,7 +588,7 @@ impl App {
                 }
             }
             KeyCode::Char('S') => self.request_bulk_stash(),
-            KeyCode::Enter => return Cmd::OpenEditor,
+            KeyCode::Enter => return Cmd::OpenDetail,
             KeyCode::Char('o') => return Cmd::OpenWith,
             KeyCode::Char('L') => return Cmd::Lazygit,
             KeyCode::Char('y') => return Cmd::CopyPath,
@@ -1118,7 +1195,7 @@ mod tests {
         assert_eq!(app.on_key(key('y')), Cmd::CopyPath);
         assert_eq!(
             app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-            Cmd::OpenEditor
+            Cmd::OpenDetail
         );
     }
 

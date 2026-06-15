@@ -12,12 +12,14 @@
 //! bad repo can't crash the dashboard.
 #![forbid(unsafe_code)]
 
+mod detail;
 mod discover;
 mod error;
 mod provider;
 mod snapshot;
 mod standup;
 
+pub use detail::repo_detail;
 pub use discover::{DiscoveryOptions, discover};
 pub use error::GitError;
 pub use provider::LocalGitProvider;

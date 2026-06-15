@@ -8,6 +8,7 @@ mod action;
 mod app;
 mod cache;
 mod cli;
+mod command;
 mod commands;
 mod editors;
 mod logging;

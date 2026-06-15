@@ -21,6 +21,28 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.42] — 2026-06-14
+
+Tier 2: a repo detail pane — inspect before you act.
+
+### Added
+
+- **`Enter` now opens a per-repo detail pane** (read-only, scrollable) showing
+  the repo's recent commits (with colour-coded types), working-tree changes (with
+  porcelain status), local branches (current marked), and stashes. Data is read
+  off-thread, so the pane shows a brief "Reading repo…" state and never blocks the
+  UI; `cohors demo` seeds it with sample data. New pure `cohors_core::RepoDetail`
+  model + `cohors_git::repo_detail()` adapter. See ADR-027.
+- **Groundwork for command mode (`:`)**: a pure, unit-tested command parser
+  (`crate::command`) mapping `:fetch`/`:sort name`/`/wip`/`<repo>` etc. to typed
+  actions — wired into a `:` input in a later release.
+
+### Changed
+
+- **`Enter` no longer opens the editor** (it opens the detail pane); the editor
+  is reached via the **`o` "Open with…" picker**. Supersedes the `Enter` binding
+  from 0.3.21.
+
 ## [0.3.41] — 2026-06-14
 
 ### Changed

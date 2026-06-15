@@ -110,7 +110,7 @@ cohors                           # scan + launch the dashboard
 cohors scan                      # or: print snapshots as JSON (scriptable)
 ```
 
-Keys: `↑`/`↓` move · `Space` mark · `a` mark all · `Esc` clear · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Tab` weekly standup · `Enter` open in default editor · `o` open with… (auto-detected editors, reveal, lazygit — `d` sets a default) · `f`/`F` fetch selection/all · `p` pull (ff-only) · `!` run a command across the selection · `S` stash (confirms) · `L` lazygit · `y` copy path · `h` hide hints · `r` refresh · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
+Keys: `↑`/`↓` move · `Space` mark · `a` mark all · `Esc` clear · `/` fuzzy filter · `d` dirty-only · `s` cycle sort · `Tab` weekly standup · `Enter` inspect repo (detail pane: commits, changes, branches, stashes) · `o` open with… (auto-detected editors, reveal, lazygit — `d` sets a default) · `f`/`F` fetch selection/all · `p` pull (ff-only) · `!` run a command across the selection · `S` stash (confirms) · `L` lazygit · `y` copy path · `h` hide hints · `r` refresh · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked. Full keymap in [docs/TUI-DESIGN.md](docs/TUI-DESIGN.md).
 
 ## Documentation
 

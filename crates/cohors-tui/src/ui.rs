@@ -131,6 +131,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
             | Mode::CommandRun
             | Mode::Confirm
             | Mode::OpenWith
+            | Mode::Detail
     );
     if overlay_open {
         dim_area(frame.buffer_mut(), area);
@@ -153,6 +154,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::OpenWith {
         render_open_with(frame, area, app, &theme);
+    }
+    if app.mode == Mode::Detail {
+        render_detail(frame, area, app, now, &theme);
     }
 }
 
@@ -562,6 +566,10 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
             ],
         )],
         Mode::Confirm => vec![("", vec![("y", "confirm"), ("N / Esc", "cancel")])],
+        Mode::Detail => vec![(
+            "",
+            vec![("↑/↓", "scroll"), ("g/G", "top / bottom"), ("Esc", "close")],
+        )],
         Mode::OpenWith => vec![(
             "",
             vec![
@@ -1171,7 +1179,7 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         row(key("Tab"), "weekly standup"),
         Line::from(""),
         head("Act — on the marked repos, else the current one"),
-        row(key("⏎"), "open in default editor"),
+        row(key("⏎"), "inspect repo — commits, changes, branches"),
         row(key("o"), "open with… (editors, reveal, lazygit)"),
         row(key("f / F"), "fetch selection / all"),
         row(key("p"), "pull (fast-forward only)"),
@@ -1556,6 +1564,138 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     frame.render_stateful_widget(list, text_area, &mut list_state);
 
     if total > viewport {
+        let mut sb = ScrollbarState::new(total as usize)
+            .position(offset as usize)
+            .viewport_content_length(viewport as usize);
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
+            bar_area,
+            &mut sb,
+        );
+    }
+}
+
+/// A section header line inside the detail pane (blank spacer + bold title).
+fn detail_section(lines: &mut Vec<Line<'static>>, title: String) {
+    if !lines.is_empty() {
+        lines.push(Line::from(""));
+    }
+    lines.push(Line::from(Span::styled(
+        title,
+        Style::new().add_modifier(Modifier::BOLD),
+    )));
+}
+
+/// Colour for a porcelain status: untracked dim, staged green, unstaged yellow.
+fn changed_file_style(status: &str, theme: &Theme) -> Style {
+    if status.starts_with("??") {
+        theme.dim()
+    } else if !status.starts_with(' ') {
+        theme.staged()
+    } else {
+        theme.modified()
+    }
+}
+
+/// The per-repo drill-in detail pane: recent commits, working-tree changes,
+/// branches, and stashes for the current repo, scrollable. Shows a "loading"
+/// placeholder until the background read finishes.
+fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &Theme) {
+    let Some(dv) = &app.detail else {
+        return;
+    };
+    let area = centered_rect(80, 82, full);
+    frame.render_widget(Clear, area);
+
+    let branch = dv.detail.as_ref().and_then(|d| d.current_branch.clone());
+    let title = match &branch {
+        Some(b) => format!(" {}  ·  {b} ", dv.repo_name),
+        None => format!(" {} ", dv.repo_name),
+    };
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(title).bold())
+        .padding(Padding::new(1, 0, 0, 0));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let Some(d) = &dv.detail else {
+        frame.render_widget(
+            Paragraph::new(Span::styled("Reading repo…", theme.dim())),
+            inner,
+        );
+        return;
+    };
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    detail_section(
+        &mut lines,
+        format!("Recent commits ({})", d.recent_commits.len()),
+    );
+    for c in &d.recent_commits {
+        let mut spans = vec![
+            Span::styled(format!("{}  ", c.short_id), theme.ahead()),
+            Span::styled(
+                format!("{:>4}  ", time::relative(c.timestamp, now)),
+                theme.dim(),
+            ),
+        ];
+        spans.extend(commit_summary_spans(&c.summary, theme));
+        lines.push(Line::from(spans));
+    }
+
+    detail_section(&mut lines, format!("Changes ({})", d.changed_files.len()));
+    if d.changed_files.is_empty() {
+        lines.push(Line::from(Span::styled("clean", theme.dim())));
+    }
+    for f in &d.changed_files {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{} ", f.status),
+                changed_file_style(&f.status, theme),
+            ),
+            Span::raw(f.path.clone()),
+        ]));
+    }
+
+    detail_section(&mut lines, format!("Branches ({})", d.branches.len()));
+    for (i, b) in d.branches.iter().enumerate() {
+        let current = i == 0 && branch.as_deref() == Some(b.as_str());
+        let style = if current {
+            theme.ahead().add_modifier(Modifier::BOLD)
+        } else {
+            Style::new()
+        };
+        lines.push(Line::from(vec![
+            Span::styled(if current { "● " } else { "  " }, style),
+            Span::styled(b.clone(), style),
+        ]));
+    }
+
+    if !d.stashes.is_empty() {
+        detail_section(&mut lines, format!("Stashes ({})", d.stashes.len()));
+        for s in &d.stashes {
+            lines.push(Line::from(Span::raw(s.clone())));
+        }
+    }
+
+    // Scroll, with a scrollbar when it overflows.
+    let total = lines.len() as u16;
+    let viewport = inner.height;
+    let max_scroll = total.saturating_sub(viewport);
+    dv.set_max_scroll(max_scroll);
+    let offset = dv.scroll.min(max_scroll);
+
+    let [text_area, bar_area] =
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(inner);
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).scroll((offset, 0)),
+        text_area,
+    );
+    if max_scroll > 0 {
         let mut sb = ScrollbarState::new(total as usize)
             .position(offset as usize)
             .viewport_content_length(viewport as usize);
@@ -2102,6 +2242,19 @@ mod tests {
         // Far enough down that some repos are hidden above *and* below.
         app.selected = app.visible_len().saturating_sub(4);
         insta::assert_snapshot!(render_to_string(&app, 100, 18));
+    }
+
+    /// The drill-in detail pane renders its sections (commits/changes/branches).
+    #[test]
+    fn snapshot_detail() {
+        use crate::app::DetailView;
+        let mut app = demo_app();
+        app.mode = Mode::Detail;
+        let id = app.repos[0].id.clone();
+        let mut dv = DetailView::new(id, "payments".to_string());
+        dv.detail = Some(cohors_core::demo::detail(NOW));
+        app.detail = Some(dv);
+        insta::assert_snapshot!(render_to_string(&app, 100, 28));
     }
 
     /// The `cohors demo` fleet renders end-to-end (validates the demo data path).

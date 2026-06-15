@@ -9,6 +9,7 @@
 
 use camino::Utf8PathBuf;
 
+use crate::detail::{ChangedFile, RepoDetail};
 use crate::model::{
     Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, Upstream, WorktreeStatus,
 };
@@ -251,6 +252,50 @@ pub fn standup(now: i64) -> Vec<StandupCommit> {
             timestamp: now - age,
         })
         .collect()
+}
+
+/// A sample [`RepoDetail`] for the `cohors demo` drill-in pane.
+pub fn detail(now: i64) -> RepoDetail {
+    let commit = |short_id: &str, age: i64, summary: &str| CommitMeta {
+        short_id: short_id.to_string(),
+        author: "you".to_string(),
+        timestamp: now - age,
+        summary: summary.to_string(),
+    };
+    RepoDetail {
+        current_branch: Some("main".to_string()),
+        recent_commits: vec![
+            commit(
+                "a1b2c3d",
+                2 * HOUR,
+                "fix: retry charge on 5xx from processor",
+            ),
+            commit("b2c3d4e", 5 * HOUR, "test: cover partial-refund path"),
+            commit("c3d4e5f", 26 * HOUR, "refactor: extract processor client"),
+            commit("d4e5f60", 3 * DAY, "feat: idempotency keys on charge"),
+            commit("e5f6071", 4 * DAY, "chore: bump stripe sdk to 12.1"),
+        ],
+        changed_files: vec![
+            ChangedFile {
+                status: " M".to_string(),
+                path: "src/charge.rs".to_string(),
+            },
+            ChangedFile {
+                status: " M".to_string(),
+                path: "src/refund.rs".to_string(),
+            },
+            ChangedFile {
+                status: "??".to_string(),
+                path: "notes.md".to_string(),
+            },
+        ],
+        branches: vec![
+            "main".to_string(),
+            "feat/idempotency".to_string(),
+            "spike/webhooks".to_string(),
+        ],
+        stashes: vec!["WIP on main: dashboard tweaks".to_string()],
+    }
 }
 
 #[cfg(test)]
