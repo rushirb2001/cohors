@@ -855,7 +855,7 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     if let Some(bn) = bot_hint {
         frame.render_widget(
             Paragraph::new(
-                Line::from(Span::styled(format!("… {below} more ↓"), hint_style)).centered(),
+                Line::from(Span::styled(format!("↓ {below} more"), hint_style)).centered(),
             ),
             bn,
         );

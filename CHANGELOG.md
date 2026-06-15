@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.41] — 2026-06-14
+
+### Changed
+
+- Made the two repo-list overflow hints consistent: both now read `{arrow} N
+  more` (`↑ N more` / `↓ N more`), instead of the bottom one using a different
+  `… N more ↓` form.
+
 ## [0.3.40] — 2026-06-14
 
 ### Changed

@@ -12,7 +12,7 @@ expression: "render_to_string(&app, 100, 20)"
 │    Repo              Branch         Sync      Changes  Last commit                               │
 │▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
 │  ● payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
-│                                            … 3 more ↓                                            │
+│                                             ↓ 3 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
