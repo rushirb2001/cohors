@@ -32,6 +32,7 @@ use crate::app::{
     App, Cmd, CommandRun, ConfirmAction, DetailView, Mode, OpenWith, Opener, RunResult, RunState,
     StandupView,
 };
+use crate::cli::Cli;
 use crate::scan::Scanner;
 use crate::ui;
 
@@ -88,9 +89,9 @@ enum BgMsg {
 }
 
 /// Run the dashboard to completion, always restoring the terminal afterward.
-pub fn run(scanner: Arc<Scanner>, use_cache: bool, watch: bool) -> Result<()> {
+pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Result<()> {
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_loop(&mut terminal, scanner, use_cache, watch);
+    let result = run_loop(&mut terminal, scanner, cli, use_cache, watch);
     let _ = restore_terminal(&mut terminal);
     result
 }
@@ -168,7 +169,8 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
                         app.status =
                             Some("demo mode — install cohors to act on real repos".to_string());
                     }
-                    Cmd::None => {}
+                    // The demo fleet is never empty, so the rescue can't trigger.
+                    Cmd::UseSuggestedRoots | Cmd::None => {}
                 },
                 Event::Mouse(m) => match m.kind {
                     MouseEventKind::ScrollUp => app.on_mouse_scroll(true),
@@ -223,7 +225,13 @@ fn simulate_demo_run(app: &mut App) {
     app.command_input.clear();
 }
 
-fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool, watch: bool) -> Result<()> {
+fn run_loop(
+    terminal: &mut Tui,
+    mut scanner: Arc<Scanner>,
+    cli: &Cli,
+    use_cache: bool,
+    watch: bool,
+) -> Result<()> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
@@ -283,6 +291,7 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool, watch: b
                     Cmd::CopyStandup => copy_standup(&mut app),
                     Cmd::RunCommand => start_command_run(&mut app, &tx, &mut run_seq),
                     Cmd::CopyRunOutput => copy_run_output(&mut app),
+                    Cmd::UseSuggestedRoots => use_suggested_roots(&mut app, &mut scanner, cli, &tx),
                     Cmd::ConfirmAccept => {
                         if let Some(pending) = app.confirm.take() {
                             match pending.action {
@@ -331,6 +340,57 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool, watch: b
     Ok(())
 }
 
+/// Roots auto-detected elsewhere that aren't already being searched — the
+/// candidates the empty-state rescue offers. Bounded and shallow (see `detect`).
+fn suggest_roots(current: &[String]) -> Vec<String> {
+    let home = cohors_config::paths::home_dir().ok();
+    crate::detect::detect_roots(home.as_deref())
+        .into_iter()
+        .filter(|cand| {
+            let expanded = match &home {
+                Some(h) => cohors_config::expand_tilde(cand, h),
+                None => cand.clone(),
+            };
+            !current.iter().any(|c| c == &expanded || c == cand)
+        })
+        .collect()
+}
+
+/// Empty-state rescue: write the detected roots to the config (a confirmed
+/// `init`), rebuild the scanner from it, and rescan — so the fleet appears
+/// without restarting. On failure, keep the prompt so the user can retry.
+fn use_suggested_roots(app: &mut App, scanner: &mut Arc<Scanner>, cli: &Cli, tx: &Sender<BgMsg>) {
+    let roots = std::mem::take(&mut app.suggested_roots);
+    let path = cli
+        .config
+        .clone()
+        .map(camino::Utf8PathBuf::from)
+        .or_else(|| cohors_config::paths::config_file().ok());
+    let Some(path) = path else {
+        app.status = Some("couldn't resolve the config path".to_string());
+        app.suggested_roots = roots;
+        return;
+    };
+    if let Err(err) = cohors_config::write_starter(&path, true, &roots) {
+        app.status = Some(format!("couldn't write config: {err}"));
+        app.suggested_roots = roots;
+        return;
+    }
+    match Scanner::from_cli(cli) {
+        Ok(rebuilt) => {
+            *scanner = Arc::new(rebuilt);
+            app.roots = scanner.roots();
+            app.status = Some("config updated — scanning…".to_string());
+            app.scanning = true;
+            spawn_scan(scanner, tx.clone());
+        }
+        Err(err) => {
+            app.status = Some(format!("rescan failed: {err}"));
+            app.suggested_roots = roots;
+        }
+    }
+}
+
 /// Apply any background results that have arrived.
 fn drain_background(
     app: &mut App,
@@ -357,6 +417,13 @@ fn drain_background(
                 if app.status.as_deref() == Some("refreshing…") {
                     app.status = None;
                 }
+                // Empty fleet? Offer a first-run rescue: repos detected elsewhere
+                // that aren't already being searched (the empty-state picker).
+                app.suggested_roots = if app.repos.is_empty() {
+                    suggest_roots(&scanner.roots())
+                } else {
+                    Vec::new()
+                };
                 // Local data is painted; now fill in GitHub PR/CI in the
                 // background (cached + rate-limit-aware — never blocks local).
                 if let Some(token) = scanner.github_token() {

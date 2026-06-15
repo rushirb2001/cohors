@@ -1,0 +1,18 @@
+---
+source: crates/cohors-tui/src/ui.rs
+expression: "render_to_string(&app, 100, 14)"
+---
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects                          │
+│ ▟██▌█▐██▙  All your git repositories at a glance   │  config cfg                                 │
+│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active —                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                   No git repos under: ~/projects                                   
+────────────────────────────────────── press h to hide hints ───────────────────────────────────────
+╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
+│ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
+│ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │
+│ ───────────────────────────── │ │ p pull        │              │ │ ───────────────────────────── │
+│ Space mark repo               │ │ ──────────────────────────── │ │ d dirty-only                  │
+│                               │ │ ! run command                │ │ Tab standup                   │
+╰───────────────────────────────╯ ╰──────────────────────────────╯ ╰───────────────────────────────╯

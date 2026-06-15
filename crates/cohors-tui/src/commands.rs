@@ -220,7 +220,7 @@ fn expand_one(field: &mut Option<String>, home: &str) {
 /// Bare `cohors` — launch the interactive dashboard.
 pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = Arc::new(Scanner::from_cli(cli)?);
-    crate::tui::run(scanner, !cli.no_cache, cli.watch)
+    crate::tui::run(scanner, cli, !cli.no_cache, cli.watch)
 }
 
 /// `cohors demo` — launch the dashboard on a built-in sample fleet. No config,

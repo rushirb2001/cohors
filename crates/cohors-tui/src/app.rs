@@ -76,6 +76,8 @@ pub enum Cmd {
     OpenWithAccept,
     /// Remember the picker's highlighted editor as the default.
     OpenWithSetDefault,
+    /// Adopt the auto-detected roots from the empty-state rescue prompt.
+    UseSuggestedRoots,
 }
 
 /// A destructive bulk action awaiting confirmation.
@@ -277,6 +279,9 @@ pub struct App {
     pub repos_scroll: std::cell::Cell<usize>,
     /// The drill-in detail pane (`Some` ⇒ `Mode::Detail`).
     pub detail: Option<DetailView>,
+    /// Repos auto-detected elsewhere when the configured roots came up empty —
+    /// drives the first-run rescue prompt in the empty state. Empty otherwise.
+    pub suggested_roots: Vec<String>,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -371,7 +376,14 @@ impl App {
             open_with: None,
             repos_scroll: std::cell::Cell::new(0),
             detail: None,
+            suggested_roots: Vec::new(),
         }
+    }
+
+    /// True when the fleet is empty but we detected repos elsewhere, so the
+    /// empty state offers a one-key rescue.
+    pub fn empty_picker_active(&self) -> bool {
+        self.repos.is_empty() && !self.scanning && !self.suggested_roots.is_empty()
     }
 
     /// The ordered, filtered rows to render this frame.
@@ -556,6 +568,10 @@ impl App {
     fn on_key_normal(&mut self, key: KeyEvent) -> Cmd {
         match key.code {
             KeyCode::Char('q') => return Cmd::Quit,
+            // First-run rescue: adopt the auto-detected roots (empty state only).
+            KeyCode::Char('u') if self.empty_picker_active() => {
+                return Cmd::UseSuggestedRoots;
+            }
             // Movement is arrow-keys only (Home/End jump to top/bottom).
             KeyCode::Down => self.move_down(),
             KeyCode::Up => self.move_up(),
@@ -1261,6 +1277,20 @@ mod tests {
             app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
             Cmd::OpenDetail
         );
+    }
+
+    #[test]
+    fn empty_picker_offers_use_suggested() {
+        let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
+        // Empty fleet, not scanning, repos detected elsewhere → rescue is live.
+        app.suggested_roots = vec!["~/code".to_string()];
+        assert!(app.empty_picker_active());
+        assert_eq!(app.on_key(key('u')), Cmd::UseSuggestedRoots);
+
+        // No suggestions → the picker is inactive and `u` is inert.
+        app.suggested_roots.clear();
+        assert!(!app.empty_picker_active());
+        assert_eq!(app.on_key(key('u')), Cmd::None);
     }
 
     #[test]

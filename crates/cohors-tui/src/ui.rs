@@ -985,13 +985,33 @@ fn render_loading(frame: &mut Frame, area: Rect, app: &App) {
 }
 
 fn render_empty(frame: &mut Frame, area: Rect, app: &App) {
-    let text = Text::from(vec![
-        Line::from(format!("No git repos found under: {}", roots_label(app))),
-        Line::from(""),
-        Line::from("Run `cohors init` — it auto-detects your repos — or pass --root <dir>."),
-    ]);
+    // First-run rescue: we found repos elsewhere — offer to adopt them in one key.
+    let text = if app.empty_picker_active() {
+        Text::from(vec![
+            Line::from(format!("No git repos under: {}", roots_label(app))),
+            Line::from(""),
+            Line::from(format!(
+                "Found repos under: {}",
+                app.suggested_roots.join(", ")
+            )),
+            Line::from(""),
+            Line::from(vec![
+                Span::styled("[u]", Style::new().add_modifier(Modifier::BOLD)),
+                Span::raw(" use these  ·  "),
+                Span::styled("[q]", Style::new().add_modifier(Modifier::BOLD)),
+                Span::raw(" quit"),
+            ]),
+        ])
+    } else {
+        Text::from(vec![
+            Line::from(format!("No git repos found under: {}", roots_label(app))),
+            Line::from(""),
+            Line::from("Run `cohors init` — it auto-detects your repos — or pass --root <dir>."),
+        ])
+    };
+    let height = text.lines.len() as u16;
     let para = Paragraph::new(text).alignment(Alignment::Center);
-    frame.render_widget(para, center_v(area, 3));
+    frame.render_widget(para, center_v(area, height));
 }
 
 fn roots_label(app: &App) -> String {
@@ -2793,6 +2813,14 @@ mod tests {
     fn snapshot_empty() {
         let app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
         insta::assert_snapshot!(render_to_string(&app, 100, 12));
+    }
+
+    /// Empty fleet, but repos detected elsewhere: the first-run rescue prompt.
+    #[test]
+    fn snapshot_empty_picker() {
+        let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
+        app.suggested_roots = vec!["~/code".to_string(), "~/work".to_string()];
+        insta::assert_snapshot!(render_to_string(&app, 100, 14));
     }
 
     #[test]

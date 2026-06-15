@@ -21,6 +21,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.6] — 2026-06-15
+
+### Added
+
+- **Interactive first-run rescue (ADR-035).** When the dashboard finds no repos
+  under your configured roots, the empty state now detects repos elsewhere and
+  offers `[u] use these · [q] quit` — pressing `u` writes those roots to your
+  config and rescans live, no restart. It's a confirmed `init`: detect → show →
+  write only on a keypress, never silently. (`cohors scan` keeps its clean
+  stdout + stderr hint; the picker lives only in the interactive launch.)
+
 ## [0.4.5] — 2026-06-15
 
 ### Changed
