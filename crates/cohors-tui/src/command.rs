@@ -99,7 +99,10 @@ mod tests {
         );
         assert_eq!(parse("/WIP"), Some(Command::Filter("WIP".into())));
         assert_eq!(parse("cohors"), Some(Command::Jump("cohors".into())));
-        assert_eq!(parse(":!git status"), Some(Command::Run("git status".into())));
+        assert_eq!(
+            parse(":!git status"),
+            Some(Command::Run("git status".into()))
+        );
         assert_eq!(parse("   "), None);
         assert_eq!(parse("sort sideways"), None);
     }

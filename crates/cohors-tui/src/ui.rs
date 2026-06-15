@@ -106,17 +106,16 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
             render_empty(frame, body_area, app);
         }
     } else {
-        // A strip on top — a one-line input while filtering or in command mode,
-        // otherwise the Attention panel — then the Repositories panel below.
-        let compact_strip = matches!(app.mode, Mode::Filter | Mode::Command);
-        let strip_height = if compact_strip { 1 } else { 3 };
+        // A strip on top — the fuzzy input while filtering, otherwise the
+        // Attention panel — then the Repositories panel fills the rest.
+        let strip_height = if app.mode == Mode::Filter { 1 } else { 3 };
         let [strip, list] =
             Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
                 .areas(body_area);
-        match app.mode {
-            Mode::Filter => render_filter_input(frame, strip, app),
-            Mode::Command => render_command_line(frame, strip, app, &theme),
-            _ => render_attention_panel(frame, strip, app, now, &theme),
+        if app.mode == Mode::Filter {
+            render_filter_input(frame, strip, app);
+        } else {
+            render_attention_panel(frame, strip, app, now, &theme);
         }
         render_repos_panel(frame, list, app, now, &theme);
     }
@@ -128,6 +127,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         app.mode,
         Mode::Help
             | Mode::Standup
+            | Mode::Command
             | Mode::CommandInput
             | Mode::CommandRun
             | Mode::Confirm
@@ -143,6 +143,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::Standup {
         render_standup(frame, area, app, &theme);
+    }
+    if app.mode == Mode::Command {
+        render_command_box(frame, area, app, &theme);
     }
     if app.mode == Mode::CommandInput {
         render_command_input(frame, area, app, &theme);
@@ -680,14 +683,23 @@ fn render_filter_input(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(line), area);
 }
 
-/// The `:`-command input line (vim/k9s-style), shown in the top strip.
-fn render_command_line(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+/// The `:`-command palette: a centered boxed overlay mirroring the `!` runner,
+/// with a `:` prompt. Verbs/aliases live on the footer.
+fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let area = centered_rect(70, 20, full);
+    frame.render_widget(Clear, area);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(" Command ").bold())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
     let line = Line::from(vec![
-        Span::styled(":", theme.ahead().add_modifier(Modifier::BOLD)),
+        Span::styled(": ", theme.ahead().add_modifier(Modifier::BOLD)),
         Span::raw(app.command_line.clone()),
         Span::raw("▏"),
     ]);
-    frame.render_widget(Paragraph::new(line), area);
+    frame.render_widget(Paragraph::new(line), inner);
 }
 
 fn render_loading(frame: &mut Frame, area: Rect, app: &App) {
@@ -1195,7 +1207,10 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         row(key("a"), "mark all (again to clear)"),
         row(key("Esc"), "clear the selection"),
         row(key("/"), "fuzzy filter (Esc clears)"),
-        row(key(":"), "command mode (:fetch, :!cmd shell, :sort, :jump …)"),
+        row(
+            key(":"),
+            "command mode (:fetch, :!cmd shell, :sort, :jump …)",
+        ),
         row(key("d"), "toggle dirty-only"),
         row(key("s"), "cycle sort mode"),
         row(key("Tab"), "weekly standup"),
@@ -2272,7 +2287,7 @@ mod tests {
         let mut app = demo_app();
         app.mode = Mode::Command;
         app.command_line = "sort name".to_string();
-        insta::assert_snapshot!(render_to_string(&app, 100, 14));
+        insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }
 
     /// The drill-in detail pane renders its sections (commits/changes/branches).

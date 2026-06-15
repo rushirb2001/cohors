@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.46] — 2026-06-14
+
+### Changed
+
+- The `:` command palette now renders as a **centered boxed overlay** (a
+  " Command " box with a `:` prompt over the dimmed dashboard), matching the `!`
+  command-runner's design, instead of a bare line in the top strip. The two
+  command surfaces now look consistent.
+
 ## [0.3.45] — 2026-06-14
 
 ### Added
