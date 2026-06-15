@@ -1,0 +1,27 @@
+---
+source: crates/cohors-tui/src/ui.rs
+assertion_line: 2529
+expression: "render_to_string(&app, 56, 22)"
+---
+╭──────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                            │
+│ ▟██▌█▐██▙  ~/projects (+1)                           │
+│ ▀▐▖▀█▀▗▌▀                                            │
+╰──────────────────────────────────────────────────────╯
+╭ Attention (4 of 5 repositories) ─────────────────────╮
+│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unre │
+╰──────────────────────────────────────────────────────╯
+╭ Repositories (5) · sort: dirty-first ────────────────╮
+│    Repo            Branch         Sync      Changes  │
+│▌   legacy-billing  error          ·         ·        │
+│    payments        main           ↑2 ● 2pr  4 s1     │
+│                       ↓ 3 more                       │
+╰──────────────────────────────────────────────────────╯
+──────────────── press h to hide hints ─────────────────
+╭ select ────────╮ ╭ act ───────────╮ ╭ view ──────────╮
+│ a mark │ Esc c │ │ ⏎ open │ P pus │ │ ↑/↓ mo │ ? hel │
+│ / filt │       │ │ f fetc │ S sta │ │ s sort │ q qui │
+│ ────────────── │ │ p pull │       │ │ ────────────── │
+│ Space mark rep │ │ ────────────── │ │ d dirty-only   │
+│                │ │ ! run command  │ │ Tab standup    │
+╰────────────────╯ ╰ legacy-billing ╯ ╰────────────────╯

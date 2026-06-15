@@ -21,6 +21,30 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.0] — 2026-06-15
+
+**Milestone: the agent surface.** `cohors mcp` exposes the fleet to a coding
+agent over the Model Context Protocol — the same core the dashboard uses. This
+release marks the v0.4 milestone, delivered incrementally across 0.3.58–0.3.63:
+
+- **Selectors** — a serializable fleet predicate with a pure `resolve()` shared
+  by the CLI (`scan --select`), the TUI, and MCP (ADR-024).
+- **`cohors mcp` stdio server** — hand-rolled sync JSON-RPC, no new dependency
+  (ADR-028). Read tools `list_repos`, `get_repo`, `fleet_summary`, `repo_path`,
+  `search`, `list_prs`, `ci_status`; results in the `cohors scan` shape plus a
+  per-repo `assessment` and a top-level `fleet`.
+- **Cross-fleet `search`** — content (ripgrep → git grep → in-process fallback)
+  and metadata (path/name/branch), selector-scoped.
+- **Action tools** `fetch`, `pull` (ff-only), `stash`, `run` behind the ADR-025
+  safety tiers — read-only by default, `--allow-writes`/`--allow-run`, per-call
+  `confirm`, side-effect-free `dry_run`, and a `run` timeout.
+- **Fail-loud reads** — every read carries `roots`/`config_path`/`total`/
+  `errored` and a `note`, and discovery falls back to the current directory, so
+  an empty fleet explains itself instead of looking "all clear" (ADR-029).
+
+No code changes since 0.3.63 — this is the version marker for the completed
+milestone.
+
 ## [0.3.63] — 2026-06-15
 
 ### Added

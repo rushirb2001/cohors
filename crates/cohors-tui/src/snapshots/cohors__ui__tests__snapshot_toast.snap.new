@@ -1,0 +1,25 @@
+---
+source: crates/cohors-tui/src/ui.rs
+assertion_line: 2487
+expression: "render_to_string(&app, 100, 20)"
+---
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
+│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
+│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
+│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────── ✓ pushed 3 repos ╮
+│    Repo              Branch         Sync      Changes  Last commit                               │
+│                                             ↓ 4 more                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+────────────────────────────────────── press h to hide hints ───────────────────────────────────────
+╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
+│ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
+│ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │
+│ ───────────────────────────── │ │ p pull        │              │ │ ───────────────────────────── │
+│ Space mark repo               │ │ ──────────────────────────── │ │ d dirty-only                  │
+│                               │ │ ! run command                │ │ Tab standup                   │
+╰───────────────────────────────╯ ╰──────────── → legacy-billing ╯ ╰───────────────────────────────╯

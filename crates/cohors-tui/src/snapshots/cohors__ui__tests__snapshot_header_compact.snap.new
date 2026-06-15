@@ -1,0 +1,21 @@
+---
+source: crates/cohors-tui/src/ui.rs
+assertion_line: 2469
+expression: "render_to_string(&app, 60, 16)"
+---
+╭──────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                │
+│ ▟██▌█▐██▙  ~/projects (+1)                               │
+│ ▀▐▖▀█▀▗▌▀                                                │
+╰──────────────────────────────────────────────────────────╯
+╭ Attention (4 of 5 repositories) ─────────────────────────╮
+│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadab │
+╰──────────────────────────────────────────────────────────╯
+────────────────── press h to hide hints ───────────────────
+╭ select ─────────╮ ╭ act ─────────────╮ ╭ view ───────────╮
+│ a mark │ Esc cl │ │ ⏎ open  │ P push │ │ ↑/↓ mo │ ? help │
+│ / filt │        │ │ f fetch │ S stas │ │ s sort │ q quit │
+│ ─────────────── │ │ p pull  │        │ │ ─────────────── │
+│ Space mark repo │ │ ──────────────── │ │ d dirty-only    │
+│                 │ │ ! run command    │ │ Tab standup     │
+╰─────────────────╯ ╰ → legacy-billing ╯ ╰─────────────────╯

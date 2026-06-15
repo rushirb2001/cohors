@@ -1,0 +1,29 @@
+---
+source: crates/cohors-tui/src/ui.rs
+assertion_line: 2781
+expression: "render_to_string(&app, 50, 24)"
+---
+╭────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                      │
+│ ▟██▌█▐██▙  ~/projects (+1)                     │
+│ ▀▐╭ Standup · this week ───────────────────╮   │
+╰───│                                        │───╯
+╭ At│ You authored 11 commits this week      │───╮
+│ 1 │ across 2 repos, shipping 8 features    │·  │
+╰───│ and fixing 3 bugs.                     │───╯
+╭ Re│                                        │───╮
+│   │ ╭ Repos ─────────────────────────────╮ │s  │
+│▌  │ │ payments  8                        │ │   │
+│   │ │ web-app  3                         │ │   │
+│   │ │                                    │ │   │
+│   │ │                                    │ │   │
+│   │ │                                    │ │   │
+│   │ │                                    │ │   │
+│   │ ╰────────────────────────────────────╯ │   │
+│   │                                        │   │
+│   │ ╭ payments  ·  8 commits ────────────╮ │   │
+╰───╰────────────────── 11 commits · 2 repos ╯───╯
+╭────────────────────────────────────────────────╮
+│ ↑/↓ repo · →/⏎ view commits · w window · y     │
+│ copy · q close                                 │
+╰────────────────────────────────────────────────╯
