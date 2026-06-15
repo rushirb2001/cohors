@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.4] — 2026-06-15
+
+### Changed
+
+- **`run` fans out concurrently (ADR-034).** The MCP `run` tool now executes
+  across its target repos over a bounded thread pool (8), instead of one at a
+  time — a fleet-wide command finishes in about the slowest repo's time, not the
+  sum. Results stay in target order; per-repo timeouts are unchanged. This closes
+  the v0.4 MCP hardening backlog.
+
 ## [0.4.3] — 2026-06-15
 
 ### Added

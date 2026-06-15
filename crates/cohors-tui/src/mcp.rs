@@ -563,19 +563,10 @@ fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
             .max(1),
     );
     let run_id = next_run_id();
-    let results: Vec<Value> = targets
-        .iter()
-        .map(|s| {
-            let path = s.path.as_ref().expect("action targets have a path");
-            let out = crate::action::run_command_timeout(path, &command, timeout);
-            let (stdout, t1) = cap_output(out.stdout);
-            let (stderr, t2) = cap_output(out.stderr);
-            json!({
-                "repo": s.id.0, "ok": out.code == 0 && !out.timed_out, "exit_code": out.code,
-                "stdout": stdout, "stderr": stderr, "truncated": t1 || t2, "timed_out": out.timed_out
-            })
-        })
-        .collect();
+    // Fan out across a bounded pool (ADR-020) so a large fleet finishes fast
+    // without spawning a process per repo at once. `par_iter().collect()`
+    // preserves target order.
+    let results: Vec<Value> = run_each(&targets, &command, timeout);
     let ok = results.iter().filter(|r| r["ok"] == true).count();
     audit("run", &selector, &targets, ok);
     Ok(json!({
@@ -602,6 +593,35 @@ fn next_run_id() -> u64 {
     use std::sync::atomic::{AtomicU64, Ordering};
     static COUNTER: AtomicU64 = AtomicU64::new(1);
     COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
+/// How many repos `run` executes concurrently (ADR-020).
+const RUN_POOL_SIZE: usize = 8;
+
+/// Run `command` in each target's directory over a bounded thread pool, returning
+/// per-repo `{repo, ok, exit_code, stdout, stderr, truncated, timed_out}` results
+/// in target order. Falls back to sequential if the pool can't be built.
+fn run_each(targets: &[RepoSnapshot], command: &str, timeout: std::time::Duration) -> Vec<Value> {
+    use rayon::prelude::*;
+
+    let exec = |s: &RepoSnapshot| {
+        let path = s.path.as_ref().expect("action targets have a path");
+        let out = crate::action::run_command_timeout(path, command, timeout);
+        let (stdout, t1) = cap_output(out.stdout);
+        let (stderr, t2) = cap_output(out.stderr);
+        json!({
+            "repo": s.id.0, "ok": out.code == 0 && !out.timed_out, "exit_code": out.code,
+            "stdout": stdout, "stderr": stderr, "truncated": t1 || t2, "timed_out": out.timed_out
+        })
+    };
+
+    match rayon::ThreadPoolBuilder::new()
+        .num_threads(RUN_POOL_SIZE)
+        .build()
+    {
+        Ok(pool) => pool.install(|| targets.par_iter().map(exec).collect()),
+        Err(_) => targets.iter().map(exec).collect(),
+    }
 }
 
 // ── Remote read tools (GitHub enrichment) ────────────────────────────────────
