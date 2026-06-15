@@ -26,8 +26,6 @@ pub enum Mode {
     Help,
     /// The weekly-standup view is open.
     Standup,
-    /// Typing the command to run across the target repos.
-    CommandInput,
     /// The per-repo command-run results view.
     CommandRun,
     /// A yes/no confirmation modal for a destructive bulk action.
@@ -480,7 +478,6 @@ impl App {
                 Cmd::None
             }
             Mode::Standup => self.on_key_standup(key),
-            Mode::CommandInput => self.on_key_command_input(key),
             Mode::CommandRun => self.on_key_command_run(key),
             Mode::Confirm => self.on_key_confirm(key),
             Mode::OpenWith => self.on_key_open_with(key),
@@ -589,13 +586,11 @@ impl App {
             KeyCode::Char('F') => return Cmd::FetchAll,
             KeyCode::Char('p') => return Cmd::PullSelected,
             KeyCode::Char('P') => return Cmd::PushSelected,
+            // `!` is the shell shortcut into the unified command palette:
+            // open it pre-seeded with `!` so the next keystroke starts the command.
             KeyCode::Char('!') => {
-                if self.action_targets().is_empty() {
-                    self.status = Some("no repos selected".to_string());
-                } else {
-                    self.mode = Mode::CommandInput;
-                    self.command_input.clear();
-                }
+                self.mode = Mode::Command;
+                self.command_line = "!".to_string();
             }
             KeyCode::Char('S') => self.request_bulk_stash(),
             KeyCode::Enter => return Cmd::OpenDetail,
@@ -822,27 +817,6 @@ impl App {
             }
             s.commit_cursor = (s.commit_cursor as isize + delta).clamp(0, n as isize - 1) as usize;
         }
-    }
-
-    fn on_key_command_input(&mut self, key: KeyEvent) -> Cmd {
-        match key.code {
-            KeyCode::Esc => {
-                self.mode = Mode::Normal;
-                self.command_input.clear();
-            }
-            KeyCode::Enter => {
-                if !self.command_input.trim().is_empty() {
-                    self.mode = Mode::CommandRun;
-                    return Cmd::RunCommand;
-                }
-            }
-            KeyCode::Backspace => {
-                self.command_input.pop();
-            }
-            KeyCode::Char(c) => self.command_input.push(c),
-            _ => {}
-        }
-        Cmd::None
     }
 
     fn on_key_command_run(&mut self, key: KeyEvent) -> Cmd {
@@ -1123,10 +1097,11 @@ mod tests {
     }
 
     #[test]
-    fn bang_enters_command_input_with_targets() {
+    fn bang_opens_command_palette_prefilled() {
         let mut app = app_with(&[("a", false)]);
         app.on_key(key('!'));
-        assert_eq!(app.mode, Mode::CommandInput);
+        assert_eq!(app.mode, Mode::Command);
+        assert_eq!(app.command_line, "!");
     }
 
     #[test]
@@ -1143,12 +1118,12 @@ mod tests {
     }
 
     #[test]
-    fn command_input_empty_enter_is_noop() {
+    fn bang_then_empty_enter_cancels() {
         let mut app = app_with(&[("a", false)]);
         app.on_key(key('!'));
         let cmd = app.on_key(code(KeyCode::Enter));
         assert_eq!(cmd, Cmd::None);
-        assert_eq!(app.mode, Mode::CommandInput);
+        assert_eq!(app.mode, Mode::Normal);
     }
 
     fn run_result(name: &str, state: RunState) -> RunResult {

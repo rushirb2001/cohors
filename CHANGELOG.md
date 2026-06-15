@@ -21,6 +21,23 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.48] — 2026-06-14
+
+### Changed
+
+- **Unified the two command surfaces into one.** The separate `!` "Run command"
+  modal is gone; pressing `!` now just opens the single `:` command palette
+  pre-seeded with `!` (the shell shortcut). One command line drives built-in
+  verbs *and* shell.
+- **Redesigned the palette as a proper two-column table** — a `:` prompt, a
+  horizontal divider, then `command │ description` rows separated by a vertical
+  divider (verbs in accent, descriptions dim). Much clearer than the previous
+  flat hint rows.
+
+### Removed
+
+- The `CommandInput` mode and its modal (folded into the `:` palette).
+
 ## [0.3.47] — 2026-06-14
 
 ### Changed

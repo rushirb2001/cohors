@@ -128,7 +128,6 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         Mode::Help
             | Mode::Standup
             | Mode::Command
-            | Mode::CommandInput
             | Mode::CommandRun
             | Mode::Confirm
             | Mode::OpenWith
@@ -146,9 +145,6 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::Command {
         render_command_box(frame, area, app, &theme);
-    }
-    if app.mode == Mode::CommandInput {
-        render_command_input(frame, area, app, &theme);
     }
     if app.mode == Mode::CommandRun {
         render_command_run(frame, area, app, &theme);
@@ -557,7 +553,6 @@ fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static st
                 )]
             }
         }
-        Mode::CommandInput => vec![("", vec![("⏎", "run"), ("Esc", "cancel")])],
         Mode::CommandRun => vec![(
             "",
             vec![
@@ -689,64 +684,47 @@ fn centered_modal(full: Rect, pct_w: u16, h: u16) -> Rect {
 fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let cmd = |t: &str| Span::styled(t.to_string(), theme.ahead().add_modifier(Modifier::BOLD));
     let dim = |t: &str| Span::styled(t.to_string(), theme.dim());
-    // A labelled row: a dim 9-col label, then the (already-styled) spans.
-    let row = |label: &str, mut spans: Vec<Span<'static>>| -> Line<'static> {
-        let mut out = vec![Span::styled(format!("{label:<9}"), theme.dim())];
-        out.append(&mut spans);
-        Line::from(out)
-    };
-
-    let lines = vec![
-        Line::from(vec![
-            cmd(":"),
-            Span::raw(" "),
-            Span::raw(app.command_line.clone()),
-            Span::raw("▏"),
-        ]),
-        Line::from(""),
-        row(
-            "act",
+    // (command spans, description) — a structured two-column cheat sheet.
+    let rows: Vec<(Vec<Span<'static>>, &str)> = vec![
+        (
             vec![
                 cmd(":fetch"),
-                dim("  "),
+                dim(" "),
                 cmd(":pull"),
-                dim("  "),
+                dim(" "),
                 cmd(":push"),
             ],
+            "sync the targets with their remotes",
         ),
-        row(
-            "shell",
-            vec![
-                cmd(":!<cmd>"),
-                dim("   run a command across the target repos"),
-            ],
+        (
+            vec![cmd(":!"), dim("<cmd>")],
+            "run any shell command across the targets",
         ),
-        row(
-            "view",
-            vec![
-                cmd(":sort"),
-                dim(" <name·dirty·recent>   "),
-                cmd(":dirty"),
-                dim("   "),
-                cmd("/<text>"),
-                dim(" filter"),
-            ],
+        (
+            vec![cmd(":sort"), dim(" <name·dirty·recent>")],
+            "change the sort order",
         ),
-        row(
-            "go",
+        (
+            vec![cmd(":dirty"), dim("   "), cmd("/<text>")],
+            "dirty-only · fuzzy filter",
+        ),
+        (
+            vec![cmd(":jump"), dim(" <repo>")],
+            "move the cursor to a repo",
+        ),
+        (
             vec![
-                cmd(":jump"),
-                dim(" <repo>   "),
                 cmd(":standup"),
-                dim("   "),
+                dim(" "),
                 cmd(":refresh"),
-                dim("   "),
+                dim(" "),
                 cmd(":quit"),
             ],
+            "standup · rescan · exit",
         ),
     ];
 
-    let area = centered_modal(full, 74, lines.len() as u16 + 2);
+    let area = centered_modal(full, 74, rows.len() as u16 + 4);
     frame.render_widget(Clear, area);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -754,7 +732,52 @@ fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
+
+    // Prompt · horizontal divider · the two-column grid.
+    let [prompt_area, hr_area, grid_area] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(inner);
+
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            cmd(":"),
+            Span::raw(" "),
+            Span::raw(app.command_line.clone()),
+            Span::raw("▏"),
+        ])),
+        prompt_area,
+    );
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "─".repeat(hr_area.width as usize),
+            theme.dim(),
+        ))),
+        hr_area,
+    );
+
+    // Commands │ descriptions, with a vertical divider between the columns.
+    let [cmd_col, div_col, desc_col] = Layout::horizontal([
+        Constraint::Length(26),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .spacing(1)
+    .areas(grid_area);
+    let cmd_lines: Vec<Line> = rows.iter().map(|(s, _)| Line::from(s.clone())).collect();
+    let div_lines: Vec<Line> = rows
+        .iter()
+        .map(|_| Line::from(Span::styled("│", theme.dim())))
+        .collect();
+    let desc_lines: Vec<Line> = rows
+        .iter()
+        .map(|(_, d)| Line::from(Span::styled(d.to_string(), theme.dim())))
+        .collect();
+    frame.render_widget(Paragraph::new(Text::from(cmd_lines)), cmd_col);
+    frame.render_widget(Paragraph::new(Text::from(div_lines)), div_col);
+    frame.render_widget(Paragraph::new(Text::from(desc_lines)), desc_col);
 }
 
 fn render_loading(frame: &mut Frame, area: Rect, app: &App) {
@@ -1276,7 +1299,7 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         row(key("f / F"), "fetch selection / all"),
         row(key("p"), "pull (fast-forward only)"),
         row(key("P"), "push (current branch upstream)"),
-        row(key("!"), "run a command across them"),
+        row(key("!"), "shell command (opens the : palette)"),
         row(key("S"), "stash (asks to confirm)"),
         row(key("L"), "open in lazygit"),
         row(key("y"), "copy path to clipboard"),
@@ -1799,45 +1822,6 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
             &mut sb,
         );
     }
-}
-
-/// The command-input overlay: a small box to type the command to run, showing
-/// how many repos it will run across.
-fn render_command_input(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let n = app.action_targets().len();
-    let dim = |t: &str| Span::styled(t.to_string(), theme.dim());
-    let ex = |t: &str| Span::raw(t.to_string());
-
-    let lines = vec![
-        Line::from(vec![
-            Span::styled("$ ", theme.ahead().add_modifier(Modifier::BOLD)),
-            Span::raw(app.command_input.clone()),
-            Span::raw("▏"),
-        ]),
-        Line::from(""),
-        Line::from(vec![dim(&format!(
-            "Runs concurrently across the {n} target repo{}, capturing per-repo output.",
-            if n == 1 { "" } else { "s" }
-        ))]),
-        Line::from(vec![
-            Span::styled(format!("{:<9}", "e.g."), theme.dim()),
-            ex("git checkout main"),
-            dim("   ·   "),
-            ex("npm ci"),
-            dim("   ·   "),
-            ex("rg TODO"),
-        ]),
-    ];
-
-    let area = centered_modal(full, 74, lines.len() as u16 + 2);
-    frame.render_widget(Clear, area);
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .title(Line::from(format!(" Run command · {n} repos ")).bold())
-        .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
 /// The command-run overlay: a left list of repos (status glyph + name, the
@@ -2407,14 +2391,6 @@ mod tests {
                 RepoId("web-app".to_string()),
             ]),
         });
-        insta::assert_snapshot!(render_to_string(&app, 100, 20));
-    }
-
-    #[test]
-    fn snapshot_command_input() {
-        let mut app = demo_app();
-        app.mode = Mode::CommandInput;
-        app.command_input = "git fetch --all".to_string();
         insta::assert_snapshot!(render_to_string(&app, 100, 20));
     }
 

@@ -8,16 +8,16 @@ expression: "render_to_string(&app, 100, 22)"
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo    ╭ Command ───────────────────────────────────────────────────────────────╮            │
-│▌   legacy-b│ : sort name▏                                                           │n denied)   │
-│    payments│                                                                        │            │
-│    web-app │ act      :fetch  :pull  :push                                          │            │
-│    infra   │ shell    :!<cmd>   run a command across the target repos               │            │
-│    auth-ser│ view     :sort <name·dirty·recent>   :dirty   /<text> filter           │            │
-│            │ go       :jump <repo>   :standup   :refresh   :quit                    │            │
+╭ Repositorie╭ Command ───────────────────────────────────────────────────────────────╮────────────╮
+│    Repo    │ : sort name▏                                                           │            │
+│▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │n denied)   │
+│    payments│ :fetch :pull :push         │ sync the targets with their remotes       │            │
+│    web-app │ :!<cmd>                    │ run any shell command across the targets  │            │
+│    infra   │ :sort <name·dirty·recent>  │ change the sort order                     │            │
+│    auth-ser│ :dirty   /<text>           │ dirty-only · fuzzy filter                 │            │
+│            │ :jump <repo>               │ move the cursor to a repo                 │            │
+│            │ :standup :refresh :quit    │ standup · rescan · exit                   │            │
 │            ╰────────────────────────────────────────────────────────────────────────╯            │
-│                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
