@@ -21,6 +21,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.37] — 2026-06-14
+
+### Changed
+
+- Added a blank gap row between the standup's description sentence and the panes,
+  so the text has breathing room above the Repos/commits boxes.
+
 ## [0.3.36] — 2026-06-14
 
 ### Changed

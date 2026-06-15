@@ -1290,8 +1290,8 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         })
         .unwrap_or(3)
         .clamp(6, 16) as u16;
-    // body + description(3) + pane border(2) + outer border(2) + top padding(1).
-    let h = (body + 8).min(full.height.saturating_sub(2)).max(12);
+    // body + description(3) + gap(1) + pane border(2) + outer border(2) + pad(1).
+    let h = (body + 9).min(full.height.saturating_sub(2)).max(12);
     let w = (full.width as u32 * 84 / 100) as u16;
     let area = Rect {
         x: full.x + full.width.saturating_sub(w) / 2,
@@ -1348,8 +1348,13 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .get(view.focus)
         .map(|(r, _)| r.as_str())
         .unwrap_or("");
-    let [desc_area, panes_area] =
-        Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(inner);
+    // The description (up to 3 wrapped lines), then a blank gap, then the panes.
+    let [desc_area, _gap, panes_area] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(inner);
 
     // A glance of *what you did*, as one flowing, wrapping sentence:
     // "You authored 130 commits this week across 5 repos, shipping 68 features,
