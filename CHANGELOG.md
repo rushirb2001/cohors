@@ -21,6 +21,21 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.58] — 2026-06-15
+
+### Added
+
+- **`Selector` + pure `resolve()` in `cohors-core` (ADR-024).** A serializable
+  predicate over the fleet — identity/scope, local state, remote, and `any_of`/
+  `not` combinators — that resolves to an ordered `Vec<RepoId>`. The empty
+  selector resolves to nothing (never "all"), so an action can't target the whole
+  fleet by omission. Pure and WASM-safe.
+- **`cohors scan --select <query>`.** Filter the JSON to a subset using the same
+  resolver, via JSON (`'{"behind":true}'`) or shorthand (`dirty`, `behind`,
+  `ahead`, `attention`, `clean`, `name:pay*`, `ci:failing`, `prs:1`, comma-separated
+  to AND them). `cohors scan --select behind` and a future MCP `list_repos` share
+  one resolver, so they return identical sets.
+
 ## [0.3.57] — 2026-06-14
 
 ### Changed

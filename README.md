@@ -91,6 +91,8 @@ cohors demo      # full UI on built-in sample data — no config, nothing writte
 cohors init      # write ~/.config/cohors/config.toml, then set: roots = ["~/projects", "~/work"]
 cohors           # scan your repositories and launch the dashboard
 cohors scan      # print repository snapshots as JSON (scriptable)
+cohors scan --select dirty          # filter the JSON to a subset
+cohors scan --select 'behind,name:pay*'   # combine predicates (or pass JSON)
 ```
 
 Inside the dashboard, the essentials are:

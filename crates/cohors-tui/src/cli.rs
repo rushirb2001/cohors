@@ -35,7 +35,14 @@ pub enum Command {
         force: bool,
     },
     /// Discover and snapshot all repos, printing JSON to stdout (no TUI).
-    Scan,
+    Scan {
+        /// Only include repos matching a selector — JSON (`'{"behind":true}'`)
+        /// or shorthand (`dirty`, `behind`, `ahead`, `attention`, `name:pay*`,
+        /// `ci:failing`, comma-separated to AND them). Results print in
+        /// dirty-first order. Omit to print the whole fleet.
+        #[arg(long, value_name = "QUERY")]
+        select: Option<String>,
+    },
     /// Launch the dashboard on a built-in sample fleet — no config, no scanning.
     ///
     /// A zero-setup way to try cohors: every column and view is populated with
