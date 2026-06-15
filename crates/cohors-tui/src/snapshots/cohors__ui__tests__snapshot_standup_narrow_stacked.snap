@@ -8,10 +8,11 @@ expression: "render_to_string(&app, 50, 24)"
 ╭ Attention (4 of 5 repositories) ───────────────╮
 │ 1 ╭ Standup · this week ───────────────────╮·  │
 ╰───│                                        │───╯
-╭ Re│ You authored 11 commits this week  —   │───╮
-│   │                                        │s  │
-│   │ ╭ Repos ─────────────────────────────╮ │   │
-│▌  │ │ payments  8                        │ │   │
+╭ Re│ You authored 11 commits this week      │───╮
+│   │ across 2 repos                         │s  │
+│   │ 8 feat  ·  3 fix                       │   │
+│▌  │ ╭ Repos ─────────────────────────────╮ │   │
+│   │ │ payments  8                        │ │   │
 │   │ │ web-app  3                         │ │   │
 │   │ │                                    │ │   │
 │   │ │                                    │ │   │
@@ -20,8 +21,7 @@ expression: "render_to_string(&app, 50, 24)"
 │   │ ╰────────────────────────────────────╯ │   │
 │   │                                        │   │
 │   │ ╭ payments  ·  8 commits ────────────╮ │   │
-│   ╰────────────────── 11 commits · 2 repos ╯   │
-╰────────────────────────────────────────────────╯
+╰───╰────────────────── 11 commits · 2 repos ╯───╯
 ╭────────────────────────────────────────────────╮
 │ ↑/↓ repo · →/⏎ view commits · w window · y     │
 │ copy · q close                                 │

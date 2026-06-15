@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.35] — 2026-06-14
+
+### Fixed
+
+- The standup description no longer overflows. It's now a proper two-line block —
+  a sentence (`You authored 129 commits this week across 5 repos`) above the
+  colour-coded type breakdown (`68 feat · 16 design · 15 chore · …`) — and both
+  **wrap** instead of clipping, with the breakdown capped at the top 6 types plus
+  a `+N more`.
+
 ## [0.3.34] — 2026-06-14
 
 ### Added

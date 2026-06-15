@@ -1257,8 +1257,8 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         })
         .unwrap_or(3)
         .clamp(6, 16) as u16;
-    // body + description(2) + pane border(2) + outer border(2) + top padding(1).
-    let h = (body + 7).min(full.height.saturating_sub(2)).max(10);
+    // body + description(3) + pane border(2) + outer border(2) + top padding(1).
+    let h = (body + 8).min(full.height.saturating_sub(2)).max(12);
     let w = (full.width as u32 * 84 / 100) as u16;
     let area = Rect {
         x: full.x + full.width.saturating_sub(w) / 2,
@@ -1316,30 +1316,47 @@ fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .map(|(r, _)| r.as_str())
         .unwrap_or("");
     let [desc_area, panes_area] =
-        Layout::vertical([Constraint::Length(2), Constraint::Min(0)]).areas(inner);
+        Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(inner);
 
-    // A glance of *what you did*: total commits + the top commit types, each
-    // coloured by kind.
-    let mut desc = vec![
+    // A glance of *what you did*: a one-line sentence, then the commit-type
+    // breakdown coloured by kind on its own line — both wrap so nothing clips.
+    let sentence = Line::from(vec![
         Span::styled("You authored ", theme.dim()),
         Span::styled(
             format!("{total} commit{}", if total == 1 { "" } else { "s" }),
             theme.ahead().add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!(" {window}"), theme.dim()),
-    ];
-    let counts = commit_type_counts(&view.commits);
-    for (i, (kind, n)) in counts.iter().take(4).enumerate() {
-        desc.push(Span::styled(
-            if i == 0 { "  —  " } else { "  ·  " },
+        Span::styled(
+            format!(
+                " {window} across {repos} repo{}",
+                if repos == 1 { "" } else { "s" }
+            ),
             theme.dim(),
-        ));
-        desc.push(Span::styled(
+        ),
+    ]);
+    let counts = commit_type_counts(&view.commits);
+    let mut chips: Vec<Span> = Vec::new();
+    for (i, (kind, n)) in counts.iter().take(6).enumerate() {
+        if i > 0 {
+            chips.push(Span::styled("  ·  ", theme.dim()));
+        }
+        chips.push(Span::styled(
             format!("{n} {kind}"),
             commit_type_style(kind, theme).add_modifier(Modifier::BOLD),
         ));
     }
-    frame.render_widget(Paragraph::new(Line::from(desc)), desc_area);
+    if counts.len() > 6 {
+        chips.push(Span::styled(
+            format!("  ·  +{} more", counts.len() - 6),
+            theme.dim(),
+        ));
+    }
+    let desc = if chips.is_empty() {
+        Text::from(sentence)
+    } else {
+        Text::from(vec![sentence, Line::from(chips)])
+    };
+    frame.render_widget(Paragraph::new(desc).wrap(Wrap { trim: true }), desc_area);
 
     // A "Repos" box and a "{repo}" commits box: side-by-side when there's room,
     // stacked (repos on top) on a narrow terminal.
