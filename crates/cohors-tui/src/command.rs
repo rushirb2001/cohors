@@ -3,10 +3,6 @@
 //! Turns a raw input line (e.g. `:sort name`, `/wip`, `cohors`) into a typed
 //! [`Command`]. This module is intentionally pure — no I/O, no UI — so it can be
 //! unit-tested in isolation and wired into the TUI separately.
-//!
-//! Groundwork for the command-mode UI (a later step); allow dead code until the
-//! `:` input is wired into the dashboard.
-#![allow(dead_code)]
 
 use cohors_core::SortMode;
 

@@ -20,6 +20,8 @@ pub enum Mode {
     Normal,
     /// Typing into the fuzzy filter.
     Filter,
+    /// Typing a `:`-command (vim/k9s-style command line).
+    Command,
     /// The help overlay is open.
     Help,
     /// The weekly-standup view is open.
@@ -261,6 +263,8 @@ pub struct App {
     pub standup_window: StandupWindow,
     /// The command being typed in `CommandInput` mode (mirrors `filter`).
     pub command_input: String,
+    /// The `:`-command being typed in `Command` mode.
+    pub command_line: String,
     /// The in-flight / last command run, shown in `CommandRun` mode.
     pub run: Option<CommandRun>,
     /// The destructive action awaiting confirmation (`Some` ⇒ `Mode::Confirm`).
@@ -362,6 +366,7 @@ impl App {
             standup: None,
             standup_window: StandupWindow::Week,
             command_input: String::new(),
+            command_line: String::new(),
             run: None,
             confirm: None,
             hints_hidden: false,
@@ -469,6 +474,7 @@ impl App {
         match self.mode {
             Mode::Normal => self.on_key_normal(key),
             Mode::Filter => self.on_key_filter(key),
+            Mode::Command => self.on_key_command_mode(key),
             Mode::Help => {
                 self.on_key_help(key);
                 Cmd::None
@@ -563,6 +569,10 @@ impl App {
             KeyCode::Char('a') => self.select_all_visible(),
             KeyCode::Esc => self.selection.clear(),
             KeyCode::Char('/') => self.mode = Mode::Filter,
+            KeyCode::Char(':') => {
+                self.mode = Mode::Command;
+                self.command_line.clear();
+            }
             KeyCode::Char('d') => {
                 self.dirty_only = !self.dirty_only;
                 self.clamp_selection();
@@ -627,6 +637,75 @@ impl App {
         }
         self.clamp_selection();
         Cmd::None
+    }
+
+    fn on_key_command_mode(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Esc => {
+                self.mode = Mode::Normal;
+                self.command_line.clear();
+            }
+            KeyCode::Enter => {
+                let parsed = crate::command::parse(&self.command_line);
+                self.command_line.clear();
+                self.mode = Mode::Normal;
+                return self.apply_command(parsed);
+            }
+            KeyCode::Backspace => {
+                self.command_line.pop();
+            }
+            KeyCode::Char(c) => self.command_line.push(c),
+            _ => {}
+        }
+        Cmd::None
+    }
+
+    /// Apply a parsed `:`-command: state changes happen here; actions return a
+    /// `Cmd` for the event loop (reusing the same handlers as the keybindings).
+    fn apply_command(&mut self, parsed: Option<crate::command::Command>) -> Cmd {
+        use crate::command::Command as C;
+        match parsed {
+            Some(C::Fetch) => return Cmd::FetchSelected,
+            Some(C::Pull) => return Cmd::PullSelected,
+            Some(C::Push) => return Cmd::PushSelected,
+            Some(C::Refresh) => return Cmd::Refresh,
+            Some(C::Standup) => {
+                self.mode = Mode::Standup;
+                self.standup = None;
+                return Cmd::OpenStandup;
+            }
+            Some(C::Help) => self.mode = Mode::Help,
+            Some(C::Quit) => return Cmd::Quit,
+            Some(C::DirtyOnly) => {
+                self.dirty_only = !self.dirty_only;
+                self.clamp_selection();
+            }
+            Some(C::Sort(mode)) => {
+                self.sort = mode;
+                self.clamp_selection();
+            }
+            Some(C::Filter(f)) => {
+                self.filter = f;
+                self.selected = 0;
+                self.clamp_selection();
+            }
+            Some(C::Jump(name)) => self.jump_to(&name),
+            None => self.status = Some("unknown command".to_string()),
+        }
+        Cmd::None
+    }
+
+    /// Move the cursor to the first visible repo whose name contains `name`.
+    fn jump_to(&mut self, name: &str) {
+        let needle = name.to_lowercase();
+        let hit = self
+            .view()
+            .iter()
+            .position(|vr| self.repos[vr.index].name.to_lowercase().contains(&needle));
+        match hit {
+            Some(i) => self.selected = i,
+            None => self.status = Some(format!("no repo matching '{name}'")),
+        }
     }
 
     fn on_key_help(&mut self, key: KeyEvent) {

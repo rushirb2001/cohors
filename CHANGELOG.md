@@ -21,6 +21,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.43] — 2026-06-14
+
+Tier 3: command mode.
+
+### Added
+
+- **A `:` command mode** (vim/k9s-style). Press `:` to get a command line, then:
+  `:fetch` / `:pull` / `:push`, `:refresh`, `:standup`, `:sort name|dirty|recent`,
+  `:dirty`, `:filter <text>` (or `/<text>`), `:help`, `:quit`, or a bare repo name
+  to jump the cursor to it. Reuses the same handlers as the keybindings, so every
+  verb behaves identically to its key. Unknown input shows an "unknown command"
+  toast.
+
 ## [0.3.42] — 2026-06-14
 
 Tier 2: a repo detail pane — inspect before you act.

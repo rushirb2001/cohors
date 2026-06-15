@@ -29,6 +29,7 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    a               mark all (again to clear)                       │              │
 │              │    Esc             clear the selection                             │              │
 │              │    /               fuzzy filter (Esc clears)                       │              │
+│              │    :               command mode (:fetch, :sort name, :jump …)      │              │
 │              │    d               toggle dirty-only                               │              │
 │              │    s               cycle sort mode                                 │              │
 │              │    Tab             weekly standup                                  │              │
@@ -37,7 +38,6 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    ⏎               inspect repo — commits, changes, branches       │              │
 │              │    o               open with… (editors, reveal, lazygit)           │              │
 │              │    f / F           fetch selection / all                           │              │
-│              │    p               pull (fast-forward only)                        │              │
 ╰──────────────│                                                                    │──────────────╯
 ╭──────────────╰────────────────────────────────────────────────────────────────────╯──────────────╮
 │ ? / Esc close                                                                                    │
