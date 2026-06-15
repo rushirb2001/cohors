@@ -21,6 +21,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.44] — 2026-06-14
+
+Tier 4: watch mode.
+
+### Added
+
+- **`cohors --watch`** keeps the dashboard live: it re-scans automatically every
+  ~5 seconds while idle (not during a scan, an in-flight action, a command run,
+  or while you're in an overlay/command line), so the board stays current
+  hands-free.
+
 ## [0.3.43] — 2026-06-14
 
 Tier 3: command mode.

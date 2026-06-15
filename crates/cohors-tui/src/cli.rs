@@ -18,6 +18,10 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_cache: bool,
 
+    /// Keep the dashboard live: re-scan automatically every few seconds.
+    #[arg(long, global = true)]
+    pub watch: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }

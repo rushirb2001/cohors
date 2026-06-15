@@ -88,12 +88,15 @@ enum BgMsg {
 }
 
 /// Run the dashboard to completion, always restoring the terminal afterward.
-pub fn run(scanner: Arc<Scanner>, use_cache: bool) -> Result<()> {
+pub fn run(scanner: Arc<Scanner>, use_cache: bool, watch: bool) -> Result<()> {
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_loop(&mut terminal, scanner, use_cache);
+    let result = run_loop(&mut terminal, scanner, use_cache, watch);
     let _ = restore_terminal(&mut terminal);
     result
 }
+
+/// How often `--watch` re-scans while the dashboard is idle.
+const WATCH_INTERVAL: Duration = Duration::from_secs(5);
 
 /// Launch the dashboard on the built-in demo fleet. Mirrors [`run`] but seeds
 /// the app from `cohors_core::demo` and stubs every action, so nothing touches
@@ -220,7 +223,7 @@ fn simulate_demo_run(app: &mut App) {
     app.command_input.clear();
 }
 
-fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Result<()> {
+fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool, watch: bool) -> Result<()> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
@@ -246,6 +249,9 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
     let mut toast_seen: Option<String> = None;
     let mut toast_since = Instant::now();
     const TOAST_TTL: Duration = Duration::from_secs(4);
+
+    // `--watch`: re-scan on an interval while idle, so the board stays current.
+    let mut last_watch = Instant::now();
 
     loop {
         terminal.draw(|f| ui::render(f, &app, now_secs()))?;
@@ -314,6 +320,12 @@ fn run_loop(terminal: &mut Tui, scanner: Arc<Scanner>, use_cache: bool) -> Resul
         if idle && app.status.is_some() && toast_since.elapsed() >= TOAST_TTL {
             app.status = None;
             toast_seen = None;
+        }
+
+        // `--watch`: while idle and not mid-overlay, re-scan on the interval.
+        if watch && idle && app.mode == Mode::Normal && last_watch.elapsed() >= WATCH_INTERVAL {
+            start_refresh(&mut app, &scanner, &tx);
+            last_watch = Instant::now();
         }
     }
     Ok(())
