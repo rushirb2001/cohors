@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.49] — 2026-06-14
+
+### Changed
+
+- **Shell mode (opening the palette with `!`) is now visually distinct.** The box
+  title becomes " Shell command ", the border, prompt, and row switch to the
+  warning accent, and the cheat sheet **collapses to just the highlighted `:!<cmd>`
+  row** (with a `▌` marker) — so it's clear you're about to run a shell command,
+  not a built-in verb.
+
 ## [0.3.48] — 2026-06-14
 
 ### Changed

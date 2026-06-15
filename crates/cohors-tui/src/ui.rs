@@ -682,53 +682,76 @@ fn centered_modal(full: Rect, pct_w: u16, h: u16) -> Rect {
 /// The `:`-command palette: a centered boxed overlay (mirroring the `!` runner)
 /// with the `:` prompt and a structured, colour-coded cheat sheet of the verbs.
 fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let cmd = |t: &str| Span::styled(t.to_string(), theme.ahead().add_modifier(Modifier::BOLD));
+    // Shell mode (opened with `!`): the accent shifts to a warning colour and the
+    // sheet collapses to just the highlighted shell row.
+    let shell = app.command_line.starts_with('!');
+    let accent = if shell { theme.warn() } else { theme.ahead() };
+    let cmd = |t: &str| Span::styled(t.to_string(), accent.add_modifier(Modifier::BOLD));
     let dim = |t: &str| Span::styled(t.to_string(), theme.dim());
+
     // (command spans, description) — a structured two-column cheat sheet.
-    let rows: Vec<(Vec<Span<'static>>, &str)> = vec![
-        (
+    let rows: Vec<(Vec<Span<'static>>, &str)> = if shell {
+        vec![(
             vec![
-                cmd(":fetch"),
-                dim(" "),
-                cmd(":pull"),
-                dim(" "),
-                cmd(":push"),
+                Span::styled("▌ ", accent.add_modifier(Modifier::BOLD)),
+                cmd(":!"),
+                Span::styled("<cmd>", accent),
             ],
-            "sync the targets with their remotes",
-        ),
-        (
-            vec![cmd(":!"), dim("<cmd>")],
             "run any shell command across the targets",
-        ),
-        (
-            vec![cmd(":sort"), dim(" <name·dirty·recent>")],
-            "change the sort order",
-        ),
-        (
-            vec![cmd(":dirty"), dim("   "), cmd("/<text>")],
-            "dirty-only · fuzzy filter",
-        ),
-        (
-            vec![cmd(":jump"), dim(" <repo>")],
-            "move the cursor to a repo",
-        ),
-        (
-            vec![
-                cmd(":standup"),
-                dim(" "),
-                cmd(":refresh"),
-                dim(" "),
-                cmd(":quit"),
-            ],
-            "standup · rescan · exit",
-        ),
-    ];
+        )]
+    } else {
+        vec![
+            (
+                vec![
+                    cmd(":fetch"),
+                    dim(" "),
+                    cmd(":pull"),
+                    dim(" "),
+                    cmd(":push"),
+                ],
+                "sync the targets with their remotes",
+            ),
+            (
+                vec![cmd(":!"), dim("<cmd>")],
+                "run any shell command across the targets",
+            ),
+            (
+                vec![cmd(":sort"), dim(" <name·dirty·recent>")],
+                "change the sort order",
+            ),
+            (
+                vec![cmd(":dirty"), dim("   "), cmd("/<text>")],
+                "dirty-only · fuzzy filter",
+            ),
+            (
+                vec![cmd(":jump"), dim(" <repo>")],
+                "move the cursor to a repo",
+            ),
+            (
+                vec![
+                    cmd(":standup"),
+                    dim(" "),
+                    cmd(":refresh"),
+                    dim(" "),
+                    cmd(":quit"),
+                ],
+                "standup · rescan · exit",
+            ),
+        ]
+    };
+    let desc_style = if shell { accent } else { theme.dim() };
 
     let area = centered_modal(full, 74, rows.len() as u16 + 4);
     frame.render_widget(Clear, area);
+    let title = if shell {
+        " Shell command "
+    } else {
+        " Command "
+    };
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(" Command ").bold())
+        .border_style(if shell { accent } else { Style::new() })
+        .title(Line::from(title).bold())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -743,9 +766,11 @@ fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
 
     frame.render_widget(
         Paragraph::new(Line::from(vec![
-            cmd(":"),
-            Span::raw(" "),
-            Span::raw(app.command_line.clone()),
+            Span::styled(": ", accent.add_modifier(Modifier::BOLD)),
+            Span::styled(
+                app.command_line.clone(),
+                if shell { accent } else { Style::new() },
+            ),
             Span::raw("▏"),
         ])),
         prompt_area,
@@ -773,7 +798,7 @@ fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         .collect();
     let desc_lines: Vec<Line> = rows
         .iter()
-        .map(|(_, d)| Line::from(Span::styled(d.to_string(), theme.dim())))
+        .map(|(_, d)| Line::from(Span::styled(d.to_string(), desc_style)))
         .collect();
     frame.render_widget(Paragraph::new(Text::from(cmd_lines)), cmd_col);
     frame.render_widget(Paragraph::new(Text::from(div_lines)), div_col);
@@ -2345,6 +2370,15 @@ mod tests {
         let mut app = demo_app();
         app.mode = Mode::Command;
         app.command_line = "sort name".to_string();
+        insta::assert_snapshot!(render_to_string(&app, 100, 22));
+    }
+
+    /// Shell mode (opened with `!`) collapses the sheet to just the shell row.
+    #[test]
+    fn snapshot_command_mode_shell() {
+        let mut app = demo_app();
+        app.mode = Mode::Command;
+        app.command_line = "!git checkout main".to_string();
         insta::assert_snapshot!(render_to_string(&app, 100, 22));
     }
 
