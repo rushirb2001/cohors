@@ -21,6 +21,21 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.61] — 2026-06-15
+
+### Changed
+
+- **Zero-config discovery (ADR-029).** With no `roots` configured, cohors now
+  scans the current directory (like ripgrep/lazygit) instead of showing an empty
+  fleet. Resolution order: `--root` → config `roots` → current directory.
+
+### Added
+
+- **Fail-loud MCP reads.** `list_repos`, `fleet_summary`, and `search` now attach
+  a `meta` block — `roots`, `config_path`, `total`, `errored`, and a plain
+  `note` when the result is empty or partial — so an agent never mistakes a
+  misconfigured root (`total: 0`) for "all clear."
+
 ## [0.3.60] — 2026-06-15
 
 ### Added

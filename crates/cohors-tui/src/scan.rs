@@ -115,13 +115,23 @@ pub(crate) fn discovery_options(
     } else {
         root_overrides.to_vec()
     };
-    let roots = raw_roots
+    let mut roots: Vec<String> = raw_roots
         .iter()
         .map(|r| match home {
             Some(h) => expand_tilde(r, h),
             None => r.clone(),
         })
         .collect();
+
+    // Zero-config default: with no roots set, scan the current directory — so
+    // `cohors` "just works" anywhere (like ripgrep/lazygit) instead of showing an
+    // empty fleet. Explicit `--root`/config roots always win.
+    if roots.is_empty()
+        && let Ok(cwd) = std::env::current_dir()
+        && let Some(cwd) = cwd.to_str()
+    {
+        roots.push(cwd.to_string());
+    }
 
     DiscoveryOptions {
         roots,

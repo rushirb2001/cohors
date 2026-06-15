@@ -38,9 +38,26 @@ pub struct Caps {
 /// and the binary can supply a real scan.
 type ScanFn<'a> = dyn Fn() -> Vec<RepoSnapshot> + 'a;
 
+/// Everything a tool call needs: how to scan, *where* we're scanning + the
+/// config in effect (for the fail-loud diagnostics — see [`meta`]), and which
+/// tiers are enabled.
+struct Ctx<'a> {
+    scan: &'a ScanFn<'a>,
+    roots: &'a [String],
+    config_path: &'a str,
+    #[allow(dead_code)] // read by the action-tool gating in the next slice.
+    caps: Caps,
+}
+
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
 /// message; each request gets exactly one response line, notifications none.
-pub fn run(scan: &ScanFn<'_>, caps: Caps) -> Result<()> {
+pub fn run(scan: &ScanFn<'_>, roots: &[String], config_path: &str, caps: Caps) -> Result<()> {
+    let ctx = Ctx {
+        scan,
+        roots,
+        config_path,
+        caps,
+    };
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
     let stdout = std::io::stdout();
@@ -57,7 +74,7 @@ pub fn run(scan: &ScanFn<'_>, caps: Caps) -> Result<()> {
             continue;
         }
         let response = match serde_json::from_str::<Value>(trimmed) {
-            Ok(request) => handle(&request, scan, caps, now_secs()),
+            Ok(request) => handle(&request, &ctx, now_secs()),
             // A malformed line gets a JSON-RPC parse error (id unknown ⇒ null).
             Err(_) => Some(error_response(Value::Null, -32700, "parse error")),
         };
@@ -72,7 +89,7 @@ pub fn run(scan: &ScanFn<'_>, caps: Caps) -> Result<()> {
 
 /// Dispatch one JSON-RPC request. Returns `None` for notifications (no `id`),
 /// which take no response.
-fn handle(request: &Value, scan: &ScanFn<'_>, caps: Caps, now: i64) -> Option<Value> {
+fn handle(request: &Value, ctx: &Ctx, now: i64) -> Option<Value> {
     let method = request.get("method").and_then(Value::as_str).unwrap_or("");
     let id = request.get("id").cloned();
     let params = request.get("params").cloned().unwrap_or(Value::Null);
@@ -101,7 +118,7 @@ fn handle(request: &Value, scan: &ScanFn<'_>, caps: Caps, now: i64) -> Option<Va
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let args = params.get("arguments").cloned().unwrap_or(json!({}));
-            match call_tool(name, &args, scan, caps, now) {
+            match call_tool(name, &args, ctx, now) {
                 Ok(value) => result_response(id, tool_content(&value, false)),
                 Err(message) => result_response(id, tool_content(&json!(message), true)),
             }
@@ -175,23 +192,21 @@ fn tool_catalog() -> Value {
 /// Execute a read tool, returning the JSON payload to embed (or an error message
 /// for an `isError` tool result). Unknown tools and bad arguments are tool-level
 /// errors, not protocol errors.
-fn call_tool(
-    name: &str,
-    args: &Value,
-    scan: &ScanFn<'_>,
-    _caps: Caps,
-    now: i64,
-) -> Result<Value, String> {
+fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     match name {
-        "list_repos" => Ok(list_repos(args, scan, now)),
-        "get_repo" => get_repo(args, scan, now),
+        "list_repos" => Ok(list_repos(args, ctx, now)),
+        "get_repo" => get_repo(args, ctx, now),
         "fleet_summary" => {
-            let snaps = scan();
-            serde_json::to_value(fleet_summary(&snaps, now))
-                .map_err(|e| format!("serializing fleet summary: {e}"))
+            let snaps = (ctx.scan)();
+            let mut value = serde_json::to_value(fleet_summary(&snaps, now))
+                .map_err(|e| format!("serializing fleet summary: {e}"))?;
+            if let Value::Object(map) = &mut value {
+                map.insert("meta".to_string(), meta(ctx, &snaps));
+            }
+            Ok(value)
         }
-        "repo_path" => repo_path(args, scan),
-        "search" => search(args, scan, now),
+        "repo_path" => repo_path(args, ctx),
+        "search" => search(args, ctx, now),
         "fetch" | "pull" | "stash" | "run" | "open" => Err(format!(
             "`{name}` is not available: this build of the cohors MCP server is read-only."
         )),
@@ -199,8 +214,8 @@ fn call_tool(
     }
 }
 
-fn list_repos(args: &Value, scan: &ScanFn<'_>, now: i64) -> Value {
-    let snaps = scan();
+fn list_repos(args: &Value, ctx: &Ctx, now: i64) -> Value {
+    let snaps = (ctx.scan)();
 
     // Reads default to the whole fleet; only actions require an explicit selector.
     let mut selector: Selector = args
@@ -235,20 +250,20 @@ fn list_repos(args: &Value, scan: &ScanFn<'_>, now: i64) -> Value {
         .map(|snap| project(repo_json(snap, now), fields.as_deref()))
         .collect();
 
-    json!({ "fleet": fleet_summary(&snaps, now), "repos": repos })
+    json!({ "fleet": fleet_summary(&snaps, now), "repos": repos, "meta": meta(ctx, &snaps) })
 }
 
-fn get_repo(args: &Value, scan: &ScanFn<'_>, now: i64) -> Result<Value, String> {
+fn get_repo(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let key = repo_arg(args)?;
-    let snaps = scan();
+    let snaps = (ctx.scan)();
     find_repo(&snaps, &key)
         .map(|snap| repo_json(snap, now))
         .ok_or_else(|| format!("no repository matching `{key}`"))
 }
 
-fn repo_path(args: &Value, scan: &ScanFn<'_>) -> Result<Value, String> {
+fn repo_path(args: &Value, ctx: &Ctx) -> Result<Value, String> {
     let key = repo_arg(args)?;
-    let snaps = scan();
+    let snaps = (ctx.scan)();
     let snap = find_repo(&snaps, &key).ok_or_else(|| format!("no repository matching `{key}`"))?;
     match &snap.path {
         Some(path) => Ok(json!({ "path": path })),
@@ -258,7 +273,7 @@ fn repo_path(args: &Value, scan: &ScanFn<'_>) -> Result<Value, String> {
 
 /// `search` — content grep (via the git adapter) or snapshot metadata match,
 /// scoped by an optional selector (reads default to the whole fleet).
-fn search(args: &Value, scan: &ScanFn<'_>, now: i64) -> Result<Value, String> {
+fn search(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let query = args
         .get("query")
         .and_then(Value::as_str)
@@ -284,7 +299,7 @@ fn search(args: &Value, scan: &ScanFn<'_>, now: i64) -> Result<Value, String> {
         selector.all = true;
     }
 
-    let snaps = scan();
+    let snaps = (ctx.scan)();
     let order = resolve(&snaps, &selector, SortMode::DirtyFirst, now);
     let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
         snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
@@ -327,7 +342,33 @@ fn search(args: &Value, scan: &ScanFn<'_>, now: i64) -> Result<Value, String> {
         }
     }
 
-    Ok(json!({ "hits": hits, "truncated": truncated }))
+    Ok(json!({ "hits": hits, "truncated": truncated, "meta": meta(ctx, &snaps) }))
+}
+
+/// Fail-loud diagnostics attached to every read: where we looked, the config in
+/// effect, and whether the result is empty or partial — so an agent never reads
+/// `total: 0` as "all clear" (the failure mode that turns a misconfigured root
+/// into a confident wrong answer).
+fn meta(ctx: &Ctx, snaps: &[RepoSnapshot]) -> Value {
+    let total = snaps.len();
+    let errored = snaps.iter().filter(|s| s.has_error()).count();
+    let mut m = json!({
+        "roots": ctx.roots,
+        "config_path": ctx.config_path,
+        "total": total,
+        "errored": errored,
+    });
+    if total == 0 {
+        m["note"] = json!(format!(
+            "No repositories found under {:?}. Point cohors at your code: set `roots` in {}, pass --root, or run it where your repos live.",
+            ctx.roots, ctx.config_path
+        ));
+    } else if errored > 0 {
+        m["note"] = json!(format!(
+            "{errored} of {total} repositories could not be read (each carries an `error`); results are partial."
+        ));
+    }
+    m
 }
 
 /// Read the required `repo` string argument.
@@ -427,7 +468,14 @@ mod tests {
     /// Drive one request through the dispatcher with the demo fleet.
     fn call(request: Value) -> Value {
         let scan_fn = scan;
-        handle(&request, &scan_fn, Caps::default(), NOW).expect("request expects a response")
+        let roots = vec!["/demo".to_string()];
+        let ctx = Ctx {
+            scan: &scan_fn,
+            roots: &roots,
+            config_path: "(test)",
+            caps: Caps::default(),
+        };
+        handle(&request, &ctx, NOW).expect("request expects a response")
     }
 
     #[test]
@@ -443,10 +491,16 @@ mod tests {
 
     #[test]
     fn notifications_get_no_response() {
+        let scan_fn = scan;
+        let ctx = Ctx {
+            scan: &scan_fn,
+            roots: &[],
+            config_path: "(test)",
+            caps: Caps::default(),
+        };
         let resp = handle(
             &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
-            &(scan as fn() -> Vec<RepoSnapshot>),
-            Caps::default(),
+            &ctx,
             NOW,
         );
         assert!(resp.is_none());
@@ -566,5 +620,47 @@ mod tests {
         let payload: Value = serde_json::from_str(text).unwrap();
         assert!(payload["hits"].is_array());
         assert!(payload["truncated"].is_boolean());
+    }
+
+    #[test]
+    fn reads_carry_meta_with_roots_and_config() {
+        let resp = call(json!({
+            "jsonrpc": "2.0", "id": 12, "method": "tools/call",
+            "params": { "name": "list_repos", "arguments": {} }
+        }));
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        let payload: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(payload["meta"]["roots"][0], "/demo");
+        assert_eq!(payload["meta"]["config_path"], "(test)");
+        assert!(payload["meta"]["total"].as_u64().unwrap() >= 1);
+    }
+
+    #[test]
+    fn empty_fleet_explains_itself() {
+        // A misconfigured/empty fleet must say *why* it's empty, not look "all clear".
+        let empty = || Vec::<RepoSnapshot>::new();
+        let roots = vec!["~/projects".to_string()];
+        let ctx = Ctx {
+            scan: &empty,
+            roots: &roots,
+            config_path: "/cfg/config.toml",
+            caps: Caps::default(),
+        };
+        let resp = handle(
+            &json!({
+                "jsonrpc": "2.0", "id": 13, "method": "tools/call",
+                "params": { "name": "fleet_summary", "arguments": {} }
+            }),
+            &ctx,
+            NOW,
+        )
+        .unwrap();
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        let payload: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(payload["meta"]["total"], 0);
+        assert_eq!(payload["meta"]["roots"][0], "~/projects");
+        let note = payload["meta"]["note"].as_str().unwrap();
+        assert!(note.contains("No repositories"));
+        assert!(note.contains("/cfg/config.toml"));
     }
 }

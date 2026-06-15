@@ -220,8 +220,10 @@ pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool)
         allow_run,
         allow_open,
     };
+    let roots = scanner.roots();
+    let config_path = scanner.config_path();
     let scan = || scanner.scan();
-    crate::mcp::run(&scan, caps)
+    crate::mcp::run(&scan, &roots, &config_path, caps)
 }
 
 #[cfg(test)]
