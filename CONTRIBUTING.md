@@ -10,7 +10,7 @@ cohors is open source (MIT) and built in public. Issues, ideas, and PRs are welc
 ## Dev setup
 
 ```sh
-git clone <repo-url> cohors && cd cohors
+git clone https://github.com/rushirb2001/cohors && cd cohors
 rustup toolchain install stable        # or whatever rust-toolchain.toml pins
 cargo build
 cargo run -p cohors-tui                 # launch the dashboard

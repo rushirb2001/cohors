@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛡️ cohors
+# 🕷️ cohors
 
 **Mission control for all your git repos.**
 
@@ -8,8 +8,8 @@ A fast, beautiful terminal dashboard — and web app — that shows the live sta
 
 <sub><i>cohors</i> · Latin for "cohort" — a Roman legion's core battle unit of ~480. Every repo, marshalled into one cohort under your command.</sub>
 
-[![CI](https://github.com/rushirbhavsar/cohors/actions/workflows/ci.yml/badge.svg)](https://github.com/rushirbhavsar/cohors/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-v0.1%20·%20local%20dashboard-brightgreen)](docs/ROADMAP.md)
+[![CI](https://github.com/rushirb2001/cohors/actions/workflows/ci.yml/badge.svg)](https://github.com/rushirb2001/cohors/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-v0.3%20·%20bulk%20actions-brightgreen)](docs/ROADMAP.md)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
 
@@ -75,14 +75,14 @@ Because the core is data-source- and front-end-agnostic, the *exact same* analys
 **v0.1 — from source.** Needs [Rust](https://rustup.rs) (the version is pinned in `rust-toolchain.toml`) and `git` on your `PATH`:
 
 ```sh
-git clone https://github.com/rushirbhavsar/cohors && cd cohors
+git clone https://github.com/rushirb2001/cohors && cd cohors
 cargo install --path crates/cohors-tui   # installs the `cohors` binary
 ```
 
 Or straight from git, without cloning:
 
 ```sh
-cargo install --git https://github.com/rushirbhavsar/cohors cohors-tui
+cargo install --git https://github.com/rushirb2001/cohors cohors-tui
 ```
 
 > Crates.io (`cargo install cohors`), `cargo binstall`, a Homebrew tap, and prebuilt binaries on every GitHub Release are planned — see [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
@@ -117,7 +117,6 @@ Keys: `↑`/`↓` move · `Space` mark · `a` mark all · `Esc` clear · `/` fuz
 | Doc | What's in it |
 |---|---|
 | [VISION](docs/VISION.md) | Who it's for, the thesis, success metrics |
-| [COMPETITIVE-ANALYSIS](docs/COMPETITIVE-ANALYSIS.md) | Every competitor, feature matrix, our wedge |
 | [ARCHITECTURE](docs/ARCHITECTURE.md) | Crate layout, the core+adapters design, dependencies |
 | [ROADMAP](docs/ROADMAP.md) | v0.1 → v0.4 milestones with acceptance criteria |
 | [MVP-SPEC](docs/MVP-SPEC.md) | The detailed spec for v0.1 (build this first) |
