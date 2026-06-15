@@ -14,7 +14,9 @@
 use std::io::{BufRead, Write};
 
 use anyhow::Result;
-use cohors_core::{RepoSnapshot, Selector, SortMode, assess, fleet_summary, resolve};
+use cohors_core::{
+    RepoSnapshot, SearchKind, Selector, SortMode, assess, fleet_summary, resolve, search_metadata,
+};
 use serde_json::{Value, json};
 
 /// The MCP protocol version we implement. We echo the client's requested
@@ -123,7 +125,7 @@ fn tool_catalog() -> Value {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "selector": selector_schema,
+                    "selector": selector_schema.clone(),
                     "sort": { "type": "string", "enum": ["dirty-first", "recent", "name", "ahead-behind"] },
                     "fields": { "type": "array", "items": { "type": "string" }, "description": "Project each repo to these top-level fields (id and name always kept)." },
                     "limit": { "type": "integer", "minimum": 1 }
@@ -143,6 +145,20 @@ fn tool_catalog() -> Value {
             "name": "fleet_summary",
             "description": "Fleet-wide counts: total, needs-attention, unpushed, behind, dirty, stashed, errors. The cheapest 'anything on fire?' call.",
             "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "search",
+            "description": "Search across the fleet. kind=content greps file contents (ripgrep/git grep/fallback, fixed-string); kind=path/name/branch matches snapshot metadata. Scope with an optional selector. The entry point for cross-repo refactors.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" },
+                    "kind": { "type": "string", "enum": ["content", "path", "name", "branch"] },
+                    "selector": selector_schema.clone(),
+                    "max_results": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["query"]
+            }
         },
         {
             "name": "repo_path",
@@ -175,6 +191,7 @@ fn call_tool(
                 .map_err(|e| format!("serializing fleet summary: {e}"))
         }
         "repo_path" => repo_path(args, scan),
+        "search" => search(args, scan, now),
         "fetch" | "pull" | "stash" | "run" | "open" => Err(format!(
             "`{name}` is not available: this build of the cohors MCP server is read-only."
         )),
@@ -237,6 +254,80 @@ fn repo_path(args: &Value, scan: &ScanFn<'_>) -> Result<Value, String> {
         Some(path) => Ok(json!({ "path": path })),
         None => Err(format!("repository `{key}` has no local path")),
     }
+}
+
+/// `search` — content grep (via the git adapter) or snapshot metadata match,
+/// scoped by an optional selector (reads default to the whole fleet).
+fn search(args: &Value, scan: &ScanFn<'_>, now: i64) -> Result<Value, String> {
+    let query = args
+        .get("query")
+        .and_then(Value::as_str)
+        .filter(|q| !q.is_empty())
+        .ok_or("missing required argument `query`")?
+        .to_string();
+    let kind: SearchKind = args
+        .get("kind")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or(SearchKind::Content);
+    let max_results = args
+        .get("max_results")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(200)
+        .max(1);
+
+    let mut selector: Selector = args
+        .get("selector")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+    if selector.is_empty() {
+        selector.all = true;
+    }
+
+    let snaps = scan();
+    let order = resolve(&snaps, &selector, SortMode::DirtyFirst, now);
+    let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
+        snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
+    let selected: Vec<&RepoSnapshot> = order
+        .iter()
+        .filter_map(|id| by_id.get(id.0.as_str()).copied())
+        .collect();
+
+    let mut hits: Vec<Value> = Vec::new();
+    let mut truncated = false;
+
+    if kind == SearchKind::Content {
+        for snap in &selected {
+            if hits.len() >= max_results {
+                truncated = true;
+                break;
+            }
+            let Some(path) = &snap.path else {
+                continue;
+            };
+            let remaining = max_results - hits.len();
+            for hit in cohors_git::search_content(path, &query, remaining + 1) {
+                if hits.len() >= max_results {
+                    truncated = true;
+                    break;
+                }
+                hits.push(json!({
+                    "repo": snap.id.0, "path": hit.path, "line": hit.line, "text": hit.text
+                }));
+            }
+        }
+    } else {
+        let owned: Vec<RepoSnapshot> = selected.iter().map(|s| (*s).clone()).collect();
+        for hit in search_metadata(&owned, &query, kind) {
+            if hits.len() >= max_results {
+                truncated = true;
+                break;
+            }
+            hits.push(serde_json::to_value(hit).unwrap_or(Value::Null));
+        }
+    }
+
+    Ok(json!({ "hits": hits, "truncated": truncated }))
 }
 
 /// Read the required `repo` string argument.
@@ -442,5 +533,38 @@ mod tests {
     fn unknown_method_is_protocol_error() {
         let resp = call(json!({ "jsonrpc": "2.0", "id": 8, "method": "frobnicate" }));
         assert_eq!(resp["error"]["code"], -32601);
+    }
+
+    #[test]
+    fn search_is_in_catalog() {
+        let resp = call(json!({ "jsonrpc": "2.0", "id": 9, "method": "tools/list" }));
+        let names: Vec<&str> = resp["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        assert!(names.contains(&"search"));
+    }
+
+    #[test]
+    fn search_requires_a_query() {
+        let resp = call(json!({
+            "jsonrpc": "2.0", "id": 10, "method": "tools/call",
+            "params": { "name": "search", "arguments": { "kind": "name" } }
+        }));
+        assert_eq!(resp["result"]["isError"], true);
+    }
+
+    #[test]
+    fn search_metadata_returns_hits_and_truncated_shape() {
+        let resp = call(json!({
+            "jsonrpc": "2.0", "id": 11, "method": "tools/call",
+            "params": { "name": "search", "arguments": { "query": "a", "kind": "name" } }
+        }));
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        let payload: Value = serde_json::from_str(text).unwrap();
+        assert!(payload["hits"].is_array());
+        assert!(payload["truncated"].is_boolean());
     }
 }

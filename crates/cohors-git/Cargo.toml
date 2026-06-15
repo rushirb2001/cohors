@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 cohors-core = { workspace = true }
+serde = { workspace = true }
 gix = { workspace = true }
 ignore = { workspace = true }
 globset = { workspace = true }

@@ -24,6 +24,7 @@ pub mod detail;
 pub mod fuzzy;
 pub mod model;
 pub mod provider;
+pub mod search;
 pub mod select;
 pub mod sort;
 pub mod standup;
@@ -39,6 +40,7 @@ pub use model::{
     WorktreeStatus,
 };
 pub use provider::RepoProvider;
+pub use search::{SearchHit, SearchKind, search_metadata};
 pub use select::{AttentionLevel, Selector, resolve};
 pub use sort::SortMode;
 pub use standup::{StandupCommit, StandupWindow, group_commits, to_markdown};

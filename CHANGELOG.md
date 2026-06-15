@@ -21,6 +21,20 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.60] — 2026-06-15
+
+### Added
+
+- **Cross-fleet `search`, exposed as an MCP tool.** `kind=content` greps file
+  contents across the selected repos (ripgrep → `git grep` → an in-process
+  `ignore`-walk fallback, fixed-string match, so there's no hard external
+  dependency); `kind=path`/`name`/`branch` match snapshot metadata. Results are
+  selector-scoped and capped (`max_results`), with a `truncated` flag. This is
+  the agent's entry point for cross-repo refactors.
+- Metadata search (`search_metadata`, path/name/branch) lives in the pure,
+  WASM-safe `cohors-core`; content search (`search_content`) lives in the
+  `cohors-git` adapter where the file I/O belongs.
+
 ## [0.3.59] — 2026-06-15
 
 ### Added

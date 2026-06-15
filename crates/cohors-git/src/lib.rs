@@ -16,6 +16,7 @@ mod detail;
 mod discover;
 mod error;
 mod provider;
+mod search;
 mod snapshot;
 mod standup;
 
@@ -23,5 +24,6 @@ pub use detail::repo_detail;
 pub use discover::{DiscoveryOptions, discover};
 pub use error::GitError;
 pub use provider::LocalGitProvider;
+pub use search::{ContentHit, search_content};
 pub use snapshot::snapshot_repo;
 pub use standup::collect_commits;
