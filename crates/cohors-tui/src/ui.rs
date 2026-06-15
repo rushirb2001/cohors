@@ -988,7 +988,7 @@ fn render_empty(frame: &mut Frame, area: Rect, app: &App) {
     let text = Text::from(vec![
         Line::from(format!("No git repos found under: {}", roots_label(app))),
         Line::from(""),
-        Line::from("Run `cohors init` to create a config, or pass --root <dir>."),
+        Line::from("Run `cohors init` — it auto-detects your repos — or pass --root <dir>."),
     ]);
     let para = Paragraph::new(text).alignment(Alignment::Center);
     frame.render_widget(para, center_v(area, 3));

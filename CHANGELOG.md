@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.5] — 2026-06-15
+
+### Changed
+
+- **`cohors scan` no longer goes silent on an empty fleet.** stdout stays a clean
+  `[]` (the scriptable JSON contract is untouched), but a one-line hint now goes
+  to **stderr** — "no git repositories found under …; run `cohors init` or pass
+  --root" — so a human isn't left guessing while pipelines ignore it.
+- The TUI empty state notes that `cohors init` auto-detects your repos.
+
 ## [0.4.4] — 2026-06-15
 
 ### Changed

@@ -42,6 +42,16 @@ pub fn scan(cli: &Cli, select: Option<&str>) -> Result<()> {
     let scanner = Scanner::from_cli(cli)?;
     let mut snapshots = scanner.scan();
 
+    // An empty fleet is cryptic on the scriptable surface. Keep stdout a clean
+    // `[]` (the JSON contract), but nudge a human via stderr so they aren't left
+    // guessing why nothing came back. Scripts piping `scan` ignore stderr.
+    if snapshots.is_empty() {
+        eprintln!(
+            "cohors: no git repositories found under {}.\n  Run `cohors init` to detect your repos, or pass --root <dir>.",
+            scanner.roots().join(", ")
+        );
+    }
+
     if let Some(query) = select {
         let selector = parse_selector(query)?;
         let order = cohors_core::resolve(&snapshots, &selector, SortMode::DirtyFirst, now_secs());
