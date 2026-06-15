@@ -222,7 +222,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &The
                 Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
             ]),
             Line::from(Span::styled(
-                "All your git repositories at a glance —",
+                "All your git repositories at a glance",
                 theme.dim(),
             )),
             Line::from(Span::styled(
@@ -249,42 +249,35 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &The
     );
 }
 
-/// The header's right-hand info column: where we're watching plus a one-glance
-/// fleet summary. Three aligned `label value` rows that fit `width`.
+/// The header's right-hand info column: session orientation that isn't shown
+/// elsewhere — where we're watching, the config in effect, and the fleet's most
+/// recent activity. Three aligned `label value` rows trimmed to `width`.
 fn header_info(app: &App, now: i64, width: u16, theme: &Theme) -> Text<'static> {
-    let s = fleet_summary(&app.repos, now);
+    let val = width.saturating_sub(7) as usize;
 
-    // Directory row — the configured root(s), home-abbreviated and tail-trimmed.
+    // Where — the configured root(s), home-abbreviated and tail-trimmed.
     let dir = match app.roots.as_slice() {
         [] => "(no roots)".to_string(),
         [one] => abbrev_home(one),
         [first, rest @ ..] => format!("{} (+{})", abbrev_home(first), rest.len()),
     };
-    let dir = truncate_tail(&dir, width.saturating_sub(7) as usize);
+    let dir = truncate_tail(&dir, val);
 
-    // Repo / dirty counts (the "repos" label carries the noun, so the value is
-    // just the number plus a dirty tally).
-    let mut count = vec![Span::styled(format!("{}", s.total), Style::new())];
-    if s.dirty > 0 {
-        count.push(Span::styled("  ·  ", theme.dim()));
-        count.push(Span::styled(format!("{} dirty", s.dirty), theme.modified()));
-    }
+    // Which config is in effect.
+    let config = truncate_tail(&abbrev_home(&app.config_path), val);
 
-    // Status row — needs-attention count, or an all-clear.
-    let status = if s.needs_attention > 0 {
-        Span::styled(
-            format!("{} need attention", s.needs_attention),
-            theme.highlight(),
-        )
-    } else {
-        Span::styled("all up to date", theme.ok())
+    // The fleet's pulse — the single most recent commit across every repo.
+    let latest = app.repos.iter().filter_map(|r| r.last_commit_time()).max();
+    let active = match latest {
+        Some(ts) => time::relative(ts, now),
+        None => "—".to_string(),
     };
 
     let label = |t: &'static str| Span::styled(format!("{t:<6} "), theme.dim());
     Text::from(vec![
         Line::from(vec![label("dir"), Span::styled(dir, Style::new())]),
-        Line::from([vec![label("repos")], count].concat()),
-        Line::from(vec![label("status"), status]),
+        Line::from(vec![label("config"), Span::styled(config, theme.dim())]),
+        Line::from(vec![label("active"), Span::styled(active, Style::new())]),
     ])
 }
 

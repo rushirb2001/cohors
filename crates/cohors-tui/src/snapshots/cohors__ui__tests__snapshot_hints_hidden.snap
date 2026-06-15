@@ -4,8 +4,8 @@ expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ █ ▟███▙ █  cohors  vX.Y.Z                                 │  dir    ~/projects (+1)             │
-│ ███ █ ███  All your git repositories at a glance —         │  repos  5  ·  3 dirty               │
-│ █ ▜███▛ █  status · fetch · pull · weekly standup          │  status 4 need attention            │
+│ ███ █ ███  All your git repositories at a glance           │  config ….config/cohors/config.toml │
+│ █ ▜███▛ █  status · fetch · pull · weekly standup          │  active 20m                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │

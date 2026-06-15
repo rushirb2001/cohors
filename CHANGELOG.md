@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.54] — 2026-06-14
+
+### Changed
+
+- **The header info column now shows session orientation instead of fleet counts**
+  (which already live in the Attention panel right below). The three rows are the
+  watched directory, the active config path, and the fleet's most recent commit
+  (`active 2h ago`) — context that isn't shown anywhere else.
+- Dropped the trailing em-dash from the header tagline.
+
 ## [0.3.53] — 2026-06-14
 
 ### Changed

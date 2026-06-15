@@ -4,7 +4,7 @@ expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ █ ▟███▙ █  cohors  vX.Y.Z                                 │  dir    ~/projects (+1)             │
-│ ███ █ ███  All your git repositories at a glance —         │  repos  5  ·  3 dirty               │
+│ ███ █ ███  All your git repositories at a glance           │  config ….config/cohors/config.toml │
 │ █ ▜███▛ ╭ payments  ·  main ───────────────────────────────────────────────────────────╮         │
 ╰─────────│ Recent commits (5)                                                           │─────────╯
 ╭ Attentio│ a1b2c3d    2h  fix: retry charge on 5xx from processor                       │─────────╮
