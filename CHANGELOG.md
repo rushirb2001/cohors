@@ -21,6 +21,26 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.62] — 2026-06-15
+
+### Added
+
+- **MCP action tools (ADR-030): `fetch`, `pull` (ff-only), `stash`, `run`.** The
+  agent surface is now a control plane, not just a reader. Safety per ADR-025:
+  read-only by default; `fetch`/`pull` need `--allow-writes`; `stash` adds
+  `confirm: true`; `run` (arbitrary shell, per-repo `{exit_code, stdout, stderr,
+  truncated}` + a monotonic `run_id`) needs `--allow-run` + `confirm: true`.
+  Every action takes a required selector (empty matches nothing — never the whole
+  fleet), excludes error/path-less repos, and supports `dry_run` to preview the
+  exact target set with no side effects. Permission errors state the fix (e.g.
+  "relaunch with `cohors mcp --allow-writes`").
+
+### Deferred
+
+- For `run`: bounded-pool parallelism and `timeout_secs` enforcement (currently
+  sequential; the arg is accepted but not yet enforced), plus the config-driven
+  `max_action_targets` cap, `run_allowlist`, and audit log.
+
 ## [0.3.61] — 2026-06-15
 
 ### Changed

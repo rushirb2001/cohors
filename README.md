@@ -96,11 +96,19 @@ cohors scan --select 'behind,name:pay*'   # combine predicates (or pass JSON)
 cohors mcp       # expose the fleet to a coding agent over MCP (read-only)
 ```
 
-Register the MCP server with a compatible agent (read-only by default):
+Register the MCP server with a compatible agent. It's **read-only by default**;
+opt into actions with flags:
 
 ```sh
-claude mcp add cohors -- cohors mcp
+claude mcp add cohors -- cohors mcp                          # read-only
+claude mcp add cohors -- cohors mcp --allow-writes           # + fetch / pull / stash
+claude mcp add cohors -- cohors mcp --allow-writes --allow-run   # + run (arbitrary shell)
 ```
+
+Read tools: `list_repos`, `get_repo`, `fleet_summary`, `search`, `repo_path`.
+Action tools (`fetch`, `pull`, `stash`, `run`) are gated by the flags above,
+require `confirm: true` for destructive ones, and support `dry_run` to preview
+the target set before acting.
 
 Inside the dashboard, the essentials are:
 

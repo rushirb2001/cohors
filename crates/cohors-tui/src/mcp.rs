@@ -7,9 +7,11 @@
 //! adds no new dependency. The tool layer is deliberately transport-agnostic, so
 //! swapping in `rmcp` later is contained to [`run`].
 //!
-//! This slice ships the **read tools** (`list_repos`, `get_repo`,
-//! `fleet_summary`, `repo_path`). Gated write/run tools and the remote/search
-//! tools follow; until then they are simply absent from `tools/list`.
+//! Tools: reads (`list_repos`, `get_repo`, `fleet_summary`, `repo_path`,
+//! `search`) are always on; actions (`fetch`, `pull`, `stash`, `run`) sit behind
+//! the ADR-025 tiers — `--allow-writes`, `--allow-run`, per-call `confirm`, and
+//! `dry_run`. The remote read tools (`list_prs`, `ci_status`) are the remaining
+//! gap. Every read carries fail-loud diagnostics (see [`meta`]).
 
 use std::io::{BufRead, Write};
 
@@ -27,10 +29,10 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 /// Read tools are always on; everything else is opt-in. (No action tools exist
 /// yet — these are threaded through for the next slice.)
 #[derive(Debug, Clone, Copy, Default)]
-#[allow(dead_code)] // read by the action-tool gating in the next slice.
 pub struct Caps {
     pub allow_writes: bool,
     pub allow_run: bool,
+    #[allow(dead_code)] // the local-only `open` tool is deferred.
     pub allow_open: bool,
 }
 
@@ -45,7 +47,6 @@ struct Ctx<'a> {
     scan: &'a ScanFn<'a>,
     roots: &'a [String],
     config_path: &'a str,
-    #[allow(dead_code)] // read by the action-tool gating in the next slice.
     caps: Caps,
 }
 
@@ -185,6 +186,56 @@ fn tool_catalog() -> Value {
                 "properties": { "repo": { "type": "string" } },
                 "required": ["repo"]
             }
+        },
+        {
+            "name": "fetch",
+            "description": "git fetch across the selected repos (non-destructive). Requires the server launched with --allow-writes. Pass dry_run:true to preview the target set without acting.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean" } },
+                "required": ["selector"]
+            }
+        },
+        {
+            "name": "pull",
+            "description": "git pull --ff-only across the selected repos — never merges or rebases, so it can't lose work. Requires --allow-writes. Pass dry_run:true to preview.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "selector": selector_schema.clone(),
+                    "mode": { "type": "string", "enum": ["ff-only"] },
+                    "dry_run": { "type": "boolean" }
+                },
+                "required": ["selector"]
+            }
+        },
+        {
+            "name": "stash",
+            "description": "git stash push (tracked changes) across the selected repos. Requires --allow-writes AND confirm:true. Pass dry_run:true to preview.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "selector": selector_schema.clone(),
+                    "confirm": { "type": "boolean" },
+                    "dry_run": { "type": "boolean" }
+                },
+                "required": ["selector"]
+            }
+        },
+        {
+            "name": "run",
+            "description": "Run a shell command in each selected repo; returns per-repo {exit_code, stdout, stderr, truncated}. The fleet codemod/audit/test primitive. Requires --allow-run AND confirm:true. Pass dry_run:true to preview the targets. (timeout_secs is accepted but not yet enforced.)",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "command": { "type": "string" },
+                    "selector": selector_schema.clone(),
+                    "confirm": { "type": "boolean" },
+                    "dry_run": { "type": "boolean" },
+                    "timeout_secs": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["command", "selector"]
+            }
         }
     ])
 }
@@ -207,11 +258,209 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         }
         "repo_path" => repo_path(args, ctx),
         "search" => search(args, ctx, now),
-        "fetch" | "pull" | "stash" | "run" | "open" => Err(format!(
-            "`{name}` is not available: this build of the cohors MCP server is read-only."
-        )),
+        "fetch" => fetch_tool(args, ctx, now),
+        "pull" => pull_tool(args, ctx, now),
+        "stash" => stash_tool(args, ctx, now),
+        "run" => run_tool(args, ctx, now),
+        "open" => Err("`open` is not available in this build (local-desktop tool).".to_string()),
         other => Err(format!("unknown tool `{other}`")),
     }
+}
+
+// ── Action tools (ADR-025 safety tiers) ──────────────────────────────────────
+
+/// `--allow-writes` gate, with a message that tells the agent how to enable it.
+fn require_writes(ctx: &Ctx, tool: &str) -> Result<(), String> {
+    if ctx.caps.allow_writes {
+        Ok(())
+    } else {
+        Err(format!(
+            "`{tool}` is disabled: this server is read-only. Relaunch it with `cohors mcp --allow-writes` to enable write tools."
+        ))
+    }
+}
+
+/// `confirm: true` gate for the destructive / arbitrary-shell tools.
+fn require_confirm(args: &Value, tool: &str) -> Result<(), String> {
+    if args.get("confirm").and_then(Value::as_bool) == Some(true) {
+        Ok(())
+    } else {
+        Err(format!(
+            "`{tool}` needs a deliberate `confirm`: pass \"confirm\": true (preview first with \"dry_run\": true)."
+        ))
+    }
+}
+
+fn is_dry_run(args: &Value) -> bool {
+    args.get("dry_run")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+}
+
+/// Resolve an action's target repos: the selector is required (an empty selector
+/// matches nothing — never "all"), scoped to the configured roots, with
+/// error/path-less repos excluded since they can't be acted on (ADR-019).
+fn action_targets(args: &Value, snaps: &[RepoSnapshot], now: i64) -> Vec<RepoSnapshot> {
+    let selector: Selector = args
+        .get("selector")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+    if selector.is_empty() {
+        return Vec::new();
+    }
+    let order = resolve(snaps, &selector, SortMode::DirtyFirst, now);
+    let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
+        snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
+    order
+        .iter()
+        .filter_map(|id| by_id.get(id.0.as_str()).copied())
+        .filter(|s| !s.has_error() && s.path.is_some())
+        .cloned()
+        .collect()
+}
+
+/// The "you selected nothing" result — explicit, so the agent doesn't read an
+/// empty action as "done."
+fn no_targets() -> Value {
+    json!({
+        "targets": 0,
+        "results": [],
+        "note": "Selector resolved to 0 repos. An empty selector matches nothing — pass predicates or {\"all\": true}. (Repos that errored or have no local path are excluded from actions.)"
+    })
+}
+
+/// A `dry_run` preview: the exact target set + the action, with no side effects.
+fn dry_run_preview(action: Value, targets: &[RepoSnapshot]) -> Value {
+    let repos: Vec<Value> = targets
+        .iter()
+        .map(|s| json!({ "repo": s.id.0, "name": s.name, "path": s.path }))
+        .collect();
+    json!({ "dry_run": true, "action": action, "targets": repos.len(), "repos": repos })
+}
+
+/// Run a per-repo git action (fetch / pull / stash) over the targets and collect
+/// `{repo, ok, message}` results.
+fn git_action(
+    args: &Value,
+    ctx: &Ctx,
+    now: i64,
+    action: Value,
+    op: impl Fn(&camino::Utf8Path, &str) -> Result<String, String>,
+) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
+    let targets = action_targets(args, &snaps, now);
+    if targets.is_empty() {
+        return Ok(no_targets());
+    }
+    if is_dry_run(args) {
+        return Ok(dry_run_preview(action, &targets));
+    }
+    let results: Vec<Value> = targets
+        .iter()
+        .map(|s| {
+            let path = s.path.as_ref().expect("action targets have a path");
+            match op(path, &s.name) {
+                Ok(message) => json!({ "repo": s.id.0, "ok": true, "message": message }),
+                Err(message) => json!({ "repo": s.id.0, "ok": false, "message": message }),
+            }
+        })
+        .collect();
+    Ok(json!({ "targets": targets.len(), "results": results }))
+}
+
+fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    require_writes(ctx, "fetch")?;
+    git_action(args, ctx, now, json!("fetch"), crate::action::fetch)
+}
+
+fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    require_writes(ctx, "pull")?;
+    git_action(
+        args,
+        ctx,
+        now,
+        json!("pull --ff-only"),
+        crate::action::pull_ff,
+    )
+}
+
+fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    require_writes(ctx, "stash")?;
+    require_confirm(args, "stash")?;
+    git_action(
+        args,
+        ctx,
+        now,
+        json!("stash push"),
+        crate::action::stash_push,
+    )
+}
+
+/// Maximum captured output per stream per repo (matches the TUI runner, ADR-020).
+const RUN_OUTPUT_CAP: usize = 64 * 1024;
+
+fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    if !ctx.caps.allow_run {
+        return Err(
+            "`run` is disabled: relaunch the server with `cohors mcp --allow-run` to enable arbitrary commands.".to_string(),
+        );
+    }
+    require_confirm(args, "run")?;
+    let command = args
+        .get("command")
+        .and_then(Value::as_str)
+        .filter(|c| !c.trim().is_empty())
+        .ok_or("missing required argument `command`")?
+        .to_string();
+
+    let snaps = (ctx.scan)();
+    let targets = action_targets(args, &snaps, now);
+    if targets.is_empty() {
+        return Ok(no_targets());
+    }
+    if is_dry_run(args) {
+        return Ok(dry_run_preview(json!({ "run": command }), &targets));
+    }
+
+    let run_id = next_run_id();
+    let results: Vec<Value> = targets
+        .iter()
+        .map(|s| {
+            let path = s.path.as_ref().expect("action targets have a path");
+            let (code, stdout, stderr) = crate::action::run_command(path, &command);
+            let (stdout, t1) = cap_output(stdout);
+            let (stderr, t2) = cap_output(stderr);
+            json!({
+                "repo": s.id.0, "ok": code == 0, "exit_code": code,
+                "stdout": stdout, "stderr": stderr, "truncated": t1 || t2
+            })
+        })
+        .collect();
+    let ok = results.iter().filter(|r| r["ok"] == true).count();
+    Ok(json!({
+        "run_id": run_id, "command": command, "targets": targets.len(),
+        "ok": ok, "failed": targets.len() - ok, "results": results
+    }))
+}
+
+/// Truncate a captured stream to [`RUN_OUTPUT_CAP`] bytes on a char boundary.
+fn cap_output(mut s: String) -> (String, bool) {
+    if s.len() <= RUN_OUTPUT_CAP {
+        return (s, false);
+    }
+    let mut end = RUN_OUTPUT_CAP;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    s.truncate(end);
+    (s, true)
+}
+
+/// Monotonic, process-global run id (ADR-020).
+fn next_run_id() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(1);
+    COUNTER.fetch_add(1, Ordering::Relaxed)
 }
 
 fn list_repos(args: &Value, ctx: &Ctx, now: i64) -> Value {
@@ -478,6 +727,42 @@ mod tests {
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
 
+    /// Like [`call`], but with explicit capability tiers.
+    fn call_caps(request: Value, caps: Caps) -> Value {
+        let scan_fn = scan;
+        let roots = vec!["/demo".to_string()];
+        let ctx = Ctx {
+            scan: &scan_fn,
+            roots: &roots,
+            config_path: "(test)",
+            caps,
+        };
+        handle(&request, &ctx, NOW).expect("request expects a response")
+    }
+
+    fn payload(resp: &Value) -> Value {
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        serde_json::from_str(text).unwrap()
+    }
+
+    const WRITES: Caps = Caps {
+        allow_writes: true,
+        allow_run: false,
+        allow_open: false,
+    };
+    const RUN: Caps = Caps {
+        allow_writes: false,
+        allow_run: true,
+        allow_open: false,
+    };
+
+    fn act(name: &str, arguments: Value) -> Value {
+        json!({
+            "jsonrpc": "2.0", "id": 99, "method": "tools/call",
+            "params": { "name": name, "arguments": arguments }
+        })
+    }
+
     #[test]
     fn initialize_reports_server_info() {
         let resp = call(json!({
@@ -662,5 +947,87 @@ mod tests {
         let note = payload["meta"]["note"].as_str().unwrap();
         assert!(note.contains("No repositories"));
         assert!(note.contains("/cfg/config.toml"));
+    }
+
+    #[test]
+    fn write_tool_is_gated_without_allow_writes() {
+        let resp = call(act("fetch", json!({ "selector": { "all": true } })));
+        assert_eq!(resp["result"]["isError"], true);
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("--allow-writes"));
+    }
+
+    #[test]
+    fn dry_run_previews_targets_without_acting() {
+        let resp = call_caps(
+            act(
+                "fetch",
+                json!({ "selector": { "all": true }, "dry_run": true }),
+            ),
+            WRITES,
+        );
+        let p = payload(&resp);
+        assert_eq!(p["dry_run"], true);
+        assert!(p["targets"].as_u64().unwrap() >= 1);
+        assert!(p["repos"].is_array());
+    }
+
+    #[test]
+    fn stash_requires_confirm_even_with_writes() {
+        let resp = call_caps(act("stash", json!({ "selector": { "all": true } })), WRITES);
+        assert_eq!(resp["result"]["isError"], true);
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("confirm"));
+    }
+
+    #[test]
+    fn run_is_gated_without_allow_run() {
+        // Even with writes, `run` needs its own flag.
+        let resp = call_caps(
+            act(
+                "run",
+                json!({ "command": "echo hi", "selector": { "all": true }, "confirm": true }),
+            ),
+            WRITES,
+        );
+        assert_eq!(resp["result"]["isError"], true);
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("--allow-run"));
+    }
+
+    #[test]
+    fn run_requires_confirm() {
+        let resp = call_caps(
+            act(
+                "run",
+                json!({ "command": "echo hi", "selector": { "all": true } }),
+            ),
+            RUN,
+        );
+        assert_eq!(resp["result"]["isError"], true);
+        let text = resp["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(text.contains("confirm"));
+    }
+
+    #[test]
+    fn empty_selector_action_is_no_targets() {
+        let resp = call_caps(act("fetch", json!({})), WRITES);
+        let p = payload(&resp);
+        assert_eq!(p["targets"], 0);
+        assert!(p["note"].as_str().unwrap().contains("empty selector"));
+    }
+
+    #[test]
+    fn action_tools_appear_in_catalog() {
+        let resp = call(json!({ "jsonrpc": "2.0", "id": 100, "method": "tools/list" }));
+        let names: Vec<&str> = resp["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+        for tool in ["fetch", "pull", "stash", "run"] {
+            assert!(names.contains(&tool), "missing {tool}");
+        }
     }
 }
