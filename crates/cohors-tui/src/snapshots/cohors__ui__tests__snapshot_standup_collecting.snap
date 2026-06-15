@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ █ ▟███╭ Standup · this week ─────────────────────────────────────────────────────────────╮       │
-│ ███ █ │                                                                                  │g.toml │
-│ █ ▜███│ Collecting your commits for this week…                                           │       │
+│ ▖▗    ╭ Standup · this week ─────────────────────────────────────────────────────────────╮       │
+│   ▝██▘│                                                                                  │g.toml │
+│ ▘▝    │ Collecting your commits for this week…                                           │       │
 ╰───────│                                                                                  │───────╯
 ╭ Attent│                                                                                  │───────╮
 │ 1 unpu│                                                                                  │       │

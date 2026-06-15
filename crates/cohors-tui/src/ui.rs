@@ -191,7 +191,7 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &The
     // Layout: spider mark · wordmark/tagline · a vertical divider · an info
     // column (where we are + fleet stats), mirroring a terminal welcome banner.
     let [icon_area, text_area, div_area, info_area] = Layout::horizontal([
-        Constraint::Length(9),
+        Constraint::Length(8),
         Constraint::Min(10),
         Constraint::Length(1),
         Constraint::Length(34),
@@ -199,15 +199,15 @@ fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &The
     .spacing(2)
     .areas(inner);
 
-    // The mark is "pixel art": every cell is a solid block, the two eyes are gaps
-    // that show through to the terminal background, and the legs splay from the
-    // body's sides. The purple is dropped under NO_COLOR, but the shape still reads.
+    // A small spider: a compact body with eight legs splaying to the corners,
+    // each leg a solid quadrant block (no thin lines). The purple is dropped
+    // under NO_COLOR, but the silhouette still reads.
     let mark = theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD);
     frame.render_widget(
         Paragraph::new(Text::from(vec![
-            Line::from(Span::styled("█ ▟███▙ █", mark)),
-            Line::from(Span::styled("███ █ ███", mark)),
-            Line::from(Span::styled("█ ▜███▛ █", mark)),
+            Line::from(Span::styled("▖▗    ▖▗", mark)),
+            Line::from(Span::styled("  ▝██▘  ", mark)),
+            Line::from(Span::styled("▘▝    ▘▝", mark)),
         ])),
         icon_area,
     );

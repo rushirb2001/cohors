@@ -21,6 +21,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.3.55] — 2026-06-14
+
+### Changed
+
+- **The spider mark is leggier and less "droid".** The body shrank from a
+  three-row block with two eyes to a single compact row, and eight quadrant-block
+  legs now splay to the corners — reading as a spider rather than a robot head.
+
 ## [0.3.54] — 2026-06-14
 
 ### Changed
