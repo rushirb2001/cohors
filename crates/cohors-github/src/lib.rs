@@ -154,7 +154,6 @@ enum FetchError {
 /// - `GET /search/issues?q=repo:{o}/{r}+is:pr+is:open` → open PR `total_count`
 /// - `GET /search/issues?...+review-requested:@me` → review-requested `total_count`
 /// - `GET /repos/{owner}/{repo}/commits/{branch}/check-runs` → Actions checks
-/// - `GET /repos/{owner}/{repo}/commits/{branch}/status` → legacy commit statuses
 fn fetch_remote(
     agent: &ureq::Agent,
     token: &str,
@@ -187,13 +186,12 @@ fn fetch_remote(
         }
     };
 
-    // 4) CI status of the default branch's latest commit. GitHub has *two*
-    //    surfaces here and a repo may use either: GitHub Actions report via the
-    //    Checks API (check runs), while older/third-party CI reports via the
-    //    legacy commit Status API. The legacy combined status returns "pending"
-    //    even when there are zero statuses — which is why Actions-only repos used
-    //    to look perpetually pending. So we read both and combine, trusting the
-    //    legacy state only when it actually has statuses.
+    // 4) CI status of the default branch's latest commit, from the **Checks API**
+    //    (GitHub Actions and other Checks-API integrations) only. We deliberately
+    //    do *not* read the legacy commit Status API: its combined endpoint reports
+    //    "pending" even when a repo posts zero statuses, which made Actions-only
+    //    repos look perpetually pending (and produced stale/broken signals). The
+    //    Checks API is the modern, accurate source.
     let ci = {
         let checks = match get_json::<CheckRunsResponse>(
             agent,
@@ -204,16 +202,7 @@ fn fetch_remote(
             Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
             Err(FetchError::Other(_)) => None,
         };
-        let status = match get_json::<StatusResponse>(
-            agent,
-            token,
-            &format!("/repos/{owner}/{repo}/commits/{default_branch}/status"),
-        ) {
-            Ok(s) => Some(s),
-            Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
-            Err(FetchError::Other(_)) => None,
-        };
-        combine_ci(checks.as_ref(), status.as_ref())
+        combine_ci(checks.as_ref())
     };
 
     Ok(RemoteInfo {
@@ -368,20 +357,6 @@ fn encode_query(q: &str) -> String {
     out
 }
 
-/// Map a GitHub combined-status `state` string onto [`CiStatus`].
-///
-/// `"success"` → `Passing`, `"failure"`/`"error"` → `Failing`, `"pending"` →
-/// `Pending`, and anything else (including `""` when no checks are configured)
-/// → `None`. Matching is case-insensitive.
-fn ci_status_from_state(state: &str) -> CiStatus {
-    match state.trim().to_ascii_lowercase().as_str() {
-        "success" => CiStatus::Passing,
-        "failure" | "error" => CiStatus::Failing,
-        "pending" => CiStatus::Pending,
-        _ => CiStatus::None,
-    }
-}
-
 /// `GET /repos/{owner}/{repo}` — we only need the default branch.
 #[derive(serde::Deserialize)]
 struct RepoResponse {
@@ -391,17 +366,6 @@ struct RepoResponse {
 /// `GET /search/issues` — we only need the result count.
 #[derive(serde::Deserialize)]
 struct SearchResponse {
-    total_count: u32,
-}
-
-/// `GET /repos/{owner}/{repo}/commits/{ref}/status` — combined legacy status.
-/// `total_count` is the number of underlying statuses: it's 0 (with
-/// `state: "pending"`) when a repo posts no commit statuses at all, which is the
-/// case for GitHub-Actions-only repos.
-#[derive(serde::Deserialize)]
-struct StatusResponse {
-    state: String,
-    #[serde(default)]
     total_count: u32,
 }
 
@@ -423,13 +387,12 @@ struct CheckRun {
     conclusion: Option<String>,
 }
 
-/// Combine the Checks API (Actions) and the legacy commit Status API into one
-/// [`CiStatus`]. A failing signal wins, then a still-running one, then a passing
-/// one; with no signal at all (no check runs and no commit statuses) it's
-/// [`CiStatus::None`] — "no CI", *not* pending. The legacy state is trusted only
-/// when it actually has statuses (`total_count > 0`), because the combined
-/// endpoint reports "pending" even for repos that post none.
-fn combine_ci(checks: Option<&CheckRunsResponse>, status: Option<&StatusResponse>) -> CiStatus {
+/// Fold the Checks API (GitHub Actions) results into one [`CiStatus`]. A failing
+/// run wins, then a still-running one, then a passing one; with no check runs at
+/// all it's [`CiStatus::None`] — "no CI", *not* pending. The legacy commit Status
+/// API is deliberately not consulted (it reported "pending" for repos that post
+/// no statuses, giving stale/broken signals).
+fn combine_ci(checks: Option<&CheckRunsResponse>) -> CiStatus {
     let (mut signal, mut fail, mut pending, mut pass) = (false, false, false, false);
 
     if let Some(c) = checks {
@@ -451,18 +414,6 @@ fn combine_ci(checks: Option<&CheckRunsResponse>, status: Option<&StatusResponse
                     _ => {}
                 }
             }
-        }
-    }
-
-    if let Some(s) = status
-        && s.total_count > 0
-    {
-        signal = true;
-        match ci_status_from_state(&s.state) {
-            CiStatus::Passing => pass = true,
-            CiStatus::Failing => fail = true,
-            CiStatus::Pending => pending = true,
-            CiStatus::None => {}
         }
     }
 
@@ -521,36 +472,6 @@ struct ReleaseResponse {
 mod tests {
     use super::*;
 
-    #[test]
-    fn ci_state_success_is_passing() {
-        assert_eq!(ci_status_from_state("success"), CiStatus::Passing);
-    }
-
-    #[test]
-    fn ci_state_failure_and_error_are_failing() {
-        assert_eq!(ci_status_from_state("failure"), CiStatus::Failing);
-        assert_eq!(ci_status_from_state("error"), CiStatus::Failing);
-    }
-
-    #[test]
-    fn ci_state_pending_is_pending() {
-        assert_eq!(ci_status_from_state("pending"), CiStatus::Pending);
-    }
-
-    #[test]
-    fn ci_state_empty_or_unknown_is_none() {
-        assert_eq!(ci_status_from_state(""), CiStatus::None);
-        assert_eq!(ci_status_from_state("unknown"), CiStatus::None);
-        // No combined-status checks configured can come back as "neutral"/etc.
-        assert_eq!(ci_status_from_state("neutral"), CiStatus::None);
-    }
-
-    #[test]
-    fn ci_state_is_case_insensitive_and_trims() {
-        assert_eq!(ci_status_from_state("SUCCESS"), CiStatus::Passing);
-        assert_eq!(ci_status_from_state("  Failure  "), CiStatus::Failing);
-    }
-
     fn check(status: &str, conclusion: Option<&str>) -> CheckRun {
         CheckRun {
             status: status.to_string(),
@@ -560,17 +481,11 @@ mod tests {
     fn checks(runs: Vec<CheckRun>) -> CheckRunsResponse {
         CheckRunsResponse { check_runs: runs }
     }
-    fn legacy(state: &str, total: u32) -> StatusResponse {
-        StatusResponse {
-            state: state.to_string(),
-            total_count: total,
-        }
-    }
 
     #[test]
     fn ci_actions_passing_is_passing() {
         let c = checks(vec![check("completed", Some("success"))]);
-        assert_eq!(combine_ci(Some(&c), None), CiStatus::Passing);
+        assert_eq!(combine_ci(Some(&c)), CiStatus::Passing);
     }
 
     #[test]
@@ -580,7 +495,7 @@ mod tests {
             check("completed", Some("failure")),
             check("in_progress", None),
         ]);
-        assert_eq!(combine_ci(Some(&c), None), CiStatus::Failing);
+        assert_eq!(combine_ci(Some(&c)), CiStatus::Failing);
     }
 
     #[test]
@@ -589,46 +504,21 @@ mod tests {
             check("completed", Some("success")),
             check("queued", None),
         ]);
-        assert_eq!(combine_ci(Some(&c), None), CiStatus::Pending);
+        assert_eq!(combine_ci(Some(&c)), CiStatus::Pending);
     }
 
     #[test]
     fn ci_actions_only_skipped_or_neutral_is_passing() {
         let c = checks(vec![check("completed", Some("skipped"))]);
-        assert_eq!(combine_ci(Some(&c), None), CiStatus::Passing);
+        assert_eq!(combine_ci(Some(&c)), CiStatus::Passing);
     }
 
     #[test]
-    fn ci_actions_repo_with_empty_legacy_status_is_not_pending() {
-        // The exact bug: an Actions-only repo. The legacy combined status reports
-        // "pending" with zero underlying statuses; trusting it made CI look stuck
-        // on pending. The passing check runs must win.
-        let c = checks(vec![check("completed", Some("success"))]);
-        let s = legacy("pending", 0);
-        assert_eq!(combine_ci(Some(&c), Some(&s)), CiStatus::Passing);
-    }
-
-    #[test]
-    fn ci_no_checks_and_no_statuses_is_none() {
-        // No CI configured at all — "no CI", not pending.
-        assert_eq!(
-            combine_ci(Some(&checks(vec![])), Some(&legacy("pending", 0))),
-            CiStatus::None
-        );
-        assert_eq!(combine_ci(None, None), CiStatus::None);
-    }
-
-    #[test]
-    fn ci_legacy_status_used_when_present() {
-        // Third-party CI via the Status API, no Actions: trust the legacy state.
-        assert_eq!(
-            combine_ci(None, Some(&legacy("success", 2))),
-            CiStatus::Passing
-        );
-        assert_eq!(
-            combine_ci(None, Some(&legacy("failure", 1))),
-            CiStatus::Failing
-        );
+    fn ci_no_check_runs_is_none() {
+        // No Actions checks at all — "no CI", not pending (the legacy Status API,
+        // which used to report a phantom "pending" here, is no longer consulted).
+        assert_eq!(combine_ci(Some(&checks(vec![]))), CiStatus::None);
+        assert_eq!(combine_ci(None), CiStatus::None);
     }
 
     #[test]

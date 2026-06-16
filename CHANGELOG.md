@@ -19,8 +19,23 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **CI status now comes only from the GitHub Checks (Actions) API.** The legacy
+  commit Status API is no longer consulted — it reported a phantom "pending" for
+  repos that post no commit statuses (and stale/broken signals generally), and
+  added a second request + failure mode per repo. `combine_ci` folds just the
+  check-runs (failing > running > passing; none ⇒ "no CI"). The TUI/CLI/MCP and
+  the web all enrich through this path, so all of them get the corrected signal
+  (ADR-043, narrowing ADR-040). PR counts already use the modern search/`pulls`
+  APIs — no legacy surface involved.
+
 ### Added
 
+- **The web detail aside surfaces sync + CI inline in its header.** Next to
+  `name · branch`, the drill-in header now shows the at-a-glance sync (cloud) and
+  CI status as badges — a running build animates the braille dot-spinner, same as
+  the table — so you see health without scanning the facts list below.
 - **`cohors web` is the local fleet in the browser — the same tool as the TUI
   (v0.5 slice 2).** `cohors web --root ~/code` scans **that folder's repos** and
   shows the exact same view the TUI does: local worktree status, ahead/behind,
