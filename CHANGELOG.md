@@ -19,7 +19,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **`cohors-web` — the web front-end begins (v0.5, slice 1).** A new WASM crate
+  renders the fleet in the browser with [Leptos](https://leptos.dev), reusing
+  `cohors-core` *verbatim* — the same `resolve`/sort, `assess`/attention, and
+  relative-time logic the TUI runs (ADR-002 / ADR-041). Slice 1 shows the
+  built-in demo fleet (the browser analog of `cohors demo`); GitHub data, OAuth,
+  and deployment follow in later slices. The crate is excluded from the native
+  workspace and built only for `wasm32-unknown-unknown` (served locally with
+  Trunk).
 
 ## [0.4.19] — 2026-06-16
 

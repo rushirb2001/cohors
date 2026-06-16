@@ -1,0 +1,32 @@
+# The web front-end (v0.5): `cohors-core` compiled to WASM, rendered with Leptos.
+#
+# This crate is intentionally **excluded** from the workspace (see the root
+# Cargo.toml `exclude`) so the native gates (`cargo test --all`, `clippy
+# --all-targets`) never try to build Leptos for the host. It is built only for
+# `wasm32-unknown-unknown`:
+#
+#   cargo build --manifest-path crates/cohors-web/Cargo.toml --target wasm32-unknown-unknown
+#
+# and served for local dev with Trunk (`cargo install trunk`, then `trunk serve`
+# from this directory).
+[package]
+name = "cohors-web"
+# Its own pre-release line — the web front-end isn't part of the workspace's
+# (TUI/CLI/MCP) version, and isn't published or installed yet.
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.96"
+license = "MIT"
+authors = ["Rushir Bhavsar <rbhavsa4@asu.edu>"]
+description = "cohors web dashboard — the same Rust core, in the browser (WASM, Leptos)"
+
+[dependencies]
+# The pure core, compiled to WASM: models, sort/filter (`resolve`), attention
+# (`assess`), relative time, and the demo fleet — all shared verbatim with the TUI.
+cohors-core = { path = "../cohors-core" }
+
+# All-Rust reactive UI (ADR-006). `csr` = client-side rendering (no server).
+leptos = { version = "0.8", features = ["csr"] }
+
+# Surface Rust panics in the browser console instead of an opaque "unreachable".
+console_error_panic_hook = "0.1"

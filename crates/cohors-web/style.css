@@ -1,0 +1,68 @@
+/* cohors web — a dark dashboard with the brand violet, echoing the TUI. */
+:root {
+  --bg: #0e0e12;
+  --panel: #16161d;
+  --border: #2a2a36;
+  --text: #e6e6ea;
+  --dim: #8a8a99;
+  --violet: #a855f7;
+  --green: #4ade80;
+  --yellow: #facc15;
+  --red: #f87171;
+  --cyan: #38bdf8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+.app { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+.brand .name { color: var(--violet); font-weight: 700; font-size: 1.4rem; }
+.brand .tag { color: var(--dim); }
+
+.fleet {
+  width: 100%;
+  margin-top: 1.5rem;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.fleet th, .fleet td {
+  text-align: left;
+  padding: 0.45rem 0.8rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.fleet th { color: var(--dim); font-weight: 700; }
+.fleet tbody tr:last-child td { border-bottom: none; }
+.fleet tbody tr:hover { background: var(--panel); }
+
+.name { font-weight: 600; }
+.name.clean { color: var(--dim); font-weight: 400; }
+.name.error { color: var(--red); }
+
+.ahead { color: var(--violet); }
+.behind { color: var(--yellow); }
+.dim { color: var(--dim); }
+.staged { color: var(--green); }
+.modified { color: var(--yellow); }
+
+.commit .age { color: var(--dim); margin-right: 0.6rem; }
+.status { color: var(--dim); }
+.status.notice { color: var(--cyan); }
+.status.warn { color: var(--yellow); }
+.status.risk { color: var(--red); }
+
+footer { margin-top: 1.2rem; color: var(--dim); font-size: 0.85rem; }

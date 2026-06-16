@@ -36,7 +36,7 @@ jobs:
         run: cargo test --all
 
   wasm:
-    name: wasm-core build
+    name: wasm build (core + web)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -46,6 +46,11 @@ jobs:
       # Guards the WASM-safety of cohors-core from day one.
       - name: Build core for wasm32
         run: cargo build -p cohors-core --target wasm32-unknown-unknown
+      # The web front-end is excluded from the workspace, so gate it explicitly.
+      - name: Clippy web (wasm32)
+        run: cargo clippy --manifest-path crates/cohors-web/Cargo.toml --target wasm32-unknown-unknown -- -D warnings
+      - name: Build web for wasm32
+        run: cargo build --manifest-path crates/cohors-web/Cargo.toml --target wasm32-unknown-unknown
 
   windows-build:
     name: windows build (best-effort)

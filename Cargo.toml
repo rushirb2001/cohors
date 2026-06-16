@@ -7,6 +7,11 @@ members = [
     "crates/cohors-github",
     "crates/cohors-tui",
 ]
+# The web front-end is WASM-only and pulls a heavy UI stack (Leptos). Keeping it
+# out of the workspace means the native gates (`cargo test --all`, `clippy
+# --all-targets`) never build it for the host; it's built explicitly for
+# `wasm32-unknown-unknown` (and served with Trunk) — see crates/cohors-web.
+exclude = ["crates/cohors-web"]
 
 # Shared package metadata. Each crate inherits these with `field.workspace = true`
 # so version/edition/license stay consistent across the workspace.
