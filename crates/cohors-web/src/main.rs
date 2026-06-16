@@ -460,7 +460,7 @@ fn repo_row(
 
 /// A faint, tooltipped default word for an empty/neutral cell.
 fn word(text: &'static str, tip: &'static str) -> AnyView {
-    view! { <span class="state" title=tip>{text}</span> }.into_any()
+    view! { <span class="muted" title=tip>{text}</span> }.into_any()
 }
 
 /// The braille dot-spinner for in-progress states (loading / CI running).
@@ -488,7 +488,7 @@ fn repo_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
 /// local-only branch, or `↑2 ↓5` ahead/behind arrows.
 fn sync_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     match &s.upstream {
-        None => iconw(cloud_off_icon(), "state", "no upstream — local branch"),
+        None => iconw(cloud_off_icon(), "muted", "no upstream — local branch"),
         Some(up) if up.ahead == 0 && up.behind == 0 => {
             iconw(cloud_icon(), "ok", "in sync with upstream")
         }
@@ -642,7 +642,7 @@ fn count_icon<V: IntoView>(n: u32, icon: V, color: &'static str, tip: String) ->
 
 /// A faint check for a cleared/good empty cell (clean, up to date), tooltipped.
 fn ok_glyph(tip: &'static str) -> AnyView {
-    iconw(check_icon(), "state", tip)
+    iconw(check_icon(), "muted", tip)
 }
 
 /// The Stash cell: a box icon + count (amber), or a faint box when there are none.
@@ -651,7 +651,7 @@ fn stash_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
         let tip = format!("{} stash entr{}", s.stash_count, if s.stash_count == 1 { "y" } else { "ies" });
         count_icon(s.stash_count, stash_icon(), "warn", tip)
     } else {
-        iconw(stash_icon(), "state", "no stashes")
+        iconw(stash_icon(), "muted", "no stashes")
     }
 }
 
@@ -660,8 +660,8 @@ fn stash_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
 fn prs_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
     match &s.remote {
         None if busy && s.remote_url.is_some() => spinner("checking pull requests…"),
-        None => iconw(pr_icon(), "state", "no remote data"),
-        Some(r) if r.open_prs == 0 => iconw(pr_icon(), "state", "no open pull requests"),
+        None => iconw(pr_icon(), "muted", "no remote data"),
+        Some(r) if r.open_prs == 0 => iconw(pr_icon(), "muted", "no open pull requests"),
         Some(r) => {
             let tip = format!("{} open pull request{}", r.open_prs, if r.open_prs == 1 { "" } else { "s" });
             count_icon(r.open_prs, pr_icon(), "pr", tip)

@@ -257,9 +257,10 @@ body {
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 
-/* Default states are plain words, not cryptic punctuation: a faint, tooltipped
-   word per column ("clean", "synced", "none", "local", "never", "up to date"). */
-.state { color: var(--faint); cursor: default; }
+/* Default states are plain words/icons, not cryptic punctuation: a faint,
+   tooltipped value per column ("clean", "none", "local", "never", "up to date").
+   Distinct from `.state` (the full-page async message), which is heavily padded. */
+.muted { color: var(--faint); cursor: default; }
 
 
 /* Braille dot-spinner for in-progress states (enriching, CI running). */

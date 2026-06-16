@@ -21,6 +21,11 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Fixed
 
+- **Web: fixed a tall empty gap in the detail header (and any cell with a
+  word-state).** The faint default states (`no CI`, `local`, `none`, …) reused the
+  CSS class `state`, which also styles the full-page async-loading message with
+  ~2.5rem padding — so e.g. a "no CI" badge inflated the header. Renamed the
+  default-state class to `muted` to remove the collision.
 - **CI status now comes only from the GitHub Checks (Actions) API.** The legacy
   commit Status API is no longer consulted — it reported a phantom "pending" for
   repos that post no commit statuses (and stale/broken signals generally), and
