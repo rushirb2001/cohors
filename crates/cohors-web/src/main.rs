@@ -328,6 +328,7 @@ fn dashboard(
                                     <th>"CI"</th>
                                     <th>"Last"</th>
                                     <th>"Status"</th>
+                                    <th class="spacer"></th>
                                 </tr>
                             </thead>
                             <tbody>{body}</tbody>
@@ -421,6 +422,7 @@ fn repo_row(
                 <td></td>
                 <td class="last"></td>
                 <td class="status risk">{reason}</td>
+                <td class="spacer"></td>
             </tr>
         }
         .into_any();
@@ -443,6 +445,7 @@ fn repo_row(
             <td>{ci_cell(s, busy)}</td>
             <td class="last">{last_cell(s, now)}</td>
             <td class="status">{status_cell(&a)}</td>
+            <td class="spacer"></td>
         </tr>
     }
     .into_any()

@@ -215,19 +215,22 @@ body {
 
 /* ── Fleet table ────────────────────────────────────────────────────────── */
 .fleet { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
-.fleet th, .fleet td { text-align: left; padding: 0.3rem 0.42rem; white-space: nowrap; }
-/* Narrow, centered data columns (icon-forward) so Repo/Status get the room. */
+.fleet th, .fleet td { text-align: left; padding: 0.3rem 0.7rem; white-space: nowrap; }
+/* Narrow, centered data columns (icon-forward); each hugs its content. */
 .fleet th:nth-child(2), .fleet td:nth-child(2),  /* Sync */
 .fleet th:nth-child(3), .fleet td:nth-child(3),  /* Changes */
 .fleet th:nth-child(4), .fleet td:nth-child(4),  /* Stash */
 .fleet th:nth-child(5), .fleet td:nth-child(5),  /* PRs */
 .fleet th:nth-child(6), .fleet td:nth-child(6) { /* CI */
   text-align: center;
-  width: 1%;
 }
-.fleet th:nth-child(7), .fleet td:nth-child(7) { text-align: right; width: 1%; } /* Last */
+.fleet th:nth-child(7), .fleet td:nth-child(7) { text-align: right; } /* Last */
 /* Repo (fused name @branch): cap and ellipsize, full text on hover. */
-.fleet td:nth-child(1) { max-width: 20rem; overflow: hidden; text-overflow: ellipsis; }
+.fleet td:nth-child(1) { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; }
+/* A trailing spacer column soaks up the leftover width, so every real column
+   hugs its content (no pooled whitespace in Status) and the table still fills
+   the card. */
+.fleet th.spacer, .fleet td.spacer { width: 100%; padding: 0; }
 
 /* Inline SVG state icons — text-sized, colored by the cell (currentColor). */
 .ic { width: 14px; height: 14px; vertical-align: -0.2em; flex: none; }
@@ -247,7 +250,6 @@ body {
 .fleet tbody tr:last-child { border-bottom: none; }
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-.fleet td:last-child { width: 99%; white-space: nowrap; }
 
 /* Default states are plain words, not cryptic punctuation: a faint, tooltipped
    word per column ("clean", "synced", "none", "local", "never", "up to date"). */

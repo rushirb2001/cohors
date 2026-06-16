@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-web"
-version = "0.4.11"
+version = "0.4.12"
 dependencies = [
  "cohors-core",
  "console_error_panic_hook",

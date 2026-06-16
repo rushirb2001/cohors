@@ -65,7 +65,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   "pending" for a running build). The **Repo and Branch columns are fused** into
   one `name @branch` cell, and long names/branches truncate with the full text on
   hover — so every row fits on one line without sideways scroll. Every glyph has a
-  tooltip.
+  tooltip. Columns hug their content (a trailing spacer soaks up the leftover
+  width), so there's no pooled whitespace in the Status column.
 - **The web app has a typeface now** — **Google Sans** (UI) and **Google Sans
   Code** (the data table / monospace), with **IBM Plex Sans** / **IBM Plex Mono**
   as the next fallback. They're loaded from the **Google Fonts CDN** (a `<link>`
