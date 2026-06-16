@@ -407,22 +407,22 @@ fn repo_row(
     let id_click = id.clone();
     let is_sel = move || selected.get().as_deref() == Some(id.as_str());
 
-    // A broken repo: red name + "error", reason in the Status column, dim dots
-    // for the data cells (matching the TUI's error row).
+    // A broken repo: red name, the reason in the Status column. The data cells are
+    // genuinely unknowable, so they're left blank rather than filled with noise.
     if let Some(reason) = &s.error {
         let name = s.name.clone();
         let reason = reason.clone();
         return view! {
             <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
                 <td class="name error">{name}</td>
-                <td class="risk">"error"</td>
-                <td class="dim">"·"</td>
-                <td class="dim">"·"</td>
-                <td class="dim">"·"</td>
-                <td class="dim">"·"</td>
-                <td class="dim">"·"</td>
-                <td class="dim">"·"</td>
-                <td class="risk">{reason}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td class="last"></td>
+                <td class="status risk">{reason}</td>
             </tr>
         }
         .into_any();
@@ -452,6 +452,23 @@ fn repo_row(
     .into_any()
 }
 
+// ── Default states ───────────────────────────────────────────────────────────
+//
+// The web never shows the terminal's cryptic `·`/`—`: every empty/default cell
+// is a plain, tooltipped *word* appropriate to its column ("clean", "synced",
+// "none", "local", "never", "up to date"), plus the braille dot-spinner for
+// in-progress states (enriching, CI running).
+
+/// A faint, tooltipped default word for an empty/neutral cell.
+fn word(text: &'static str, tip: &'static str) -> AnyView {
+    view! { <span class="state" title=tip>{text}</span> }.into_any()
+}
+
+/// The braille dot-spinner for in-progress states (loading / CI running).
+fn spinner(tip: &'static str) -> AnyView {
+    view! { <span class="spin" title=tip></span> }.into_any()
+}
+
 /// The Branch cell: branch name (long names truncated, full name on hover),
 /// `@sha` for detached, "unborn" for a fresh repo.
 fn branch_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
@@ -468,74 +485,123 @@ fn branch_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     }
 }
 
-/// The Sync cell (ahead/behind arrows): `↑2 ↓5`, `↑2`, `↓5`, `·` (even), `—` (no
-/// upstream) — mirroring the TUI's `ahead_behind_spans`.
+/// The Sync cell: `↑2 ↓5` ahead/behind arrows, "synced" when even, "local" when
+/// the branch has no upstream.
 fn sync_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     match &s.upstream {
-        None => view! { <span class="dim">"—"</span> }.into_any(),
-        Some(up) if up.ahead == 0 && up.behind == 0 => view! { <span class="dim">"·"</span> }.into_any(),
+        None => word("local", "no upstream — local branch"),
+        Some(up) if up.ahead == 0 && up.behind == 0 => word("synced", "in sync with upstream"),
         Some(up) => {
-            let ahead = (up.ahead > 0).then(|| view! { <span class="ahead">{format!("↑{}", up.ahead)}</span> });
+            let ahead = (up.ahead > 0).then(|| {
+                view! { <span class="ahead" title="commits to push">{format!("↑{}", up.ahead)}</span> }
+            });
             let sep = (up.ahead > 0 && up.behind > 0).then(|| view! { <span>" "</span> });
-            let behind = (up.behind > 0).then(|| view! { <span class="behind">{format!("↓{}", up.behind)}</span> });
+            let behind = (up.behind > 0).then(|| {
+                view! { <span class="behind" title="commits to pull">{format!("↓{}", up.behind)}</span> }
+            });
             view! { <span>{ahead}{sep}{behind}</span> }.into_any()
         }
     }
 }
 
-/// The Changes cell: changed-file count, green when all staged, amber when there's
-/// unstaged work; `·` when clean.
+/// The Changes cell: the count of uncommitted changes next to a pencil icon
+/// (green when all staged, amber when there's unstaged work), or "clean".
 fn changes_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     let w = &s.worktree;
     let total = w.staged + w.modified + w.untracked;
     if total == 0 {
-        view! { <span class="dim">"·"</span> }.into_any()
+        word("clean", "clean working tree")
     } else {
-        let cls = if w.modified > 0 || w.untracked > 0 { "modified" } else { "staged" };
-        view! { <span class=cls>{total.to_string()}</span> }.into_any()
+        let cls = format!("count {}", if w.modified > 0 || w.untracked > 0 { "modified" } else { "staged" });
+        let tip = format!(
+            "{} uncommitted change{} — {} staged · {} modified · {} untracked",
+            total,
+            if total == 1 { "" } else { "s" },
+            w.staged,
+            w.modified,
+            w.untracked
+        );
+        view! {
+            <span class=cls title=tip>
+                {total.to_string()}
+                {edit_icon()}
+            </span>
+        }
+        .into_any()
     }
 }
 
-/// The Stash cell: the stash count (amber), or `·` when there are none.
+/// A small pencil icon (inherits the cell's color via `currentColor`) — the
+/// visual shorthand for "uncommitted changes".
+fn edit_icon() -> impl IntoView {
+    view! {
+        <svg
+            class="ico-edit"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+        >
+            <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+            <path d="m15 5 4 4" />
+        </svg>
+    }
+}
+
+/// The Stash cell: the stash count (amber), or "none".
 fn stash_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     if s.stash_count > 0 {
-        view! { <span class="warn">{s.stash_count.to_string()}</span> }.into_any()
+        let tip = format!("{} stash entr{}", s.stash_count, if s.stash_count == 1 { "y" } else { "ies" });
+        view! { <span class="warn" title=tip>{s.stash_count.to_string()}</span> }.into_any()
     } else {
-        view! { <span class="dim">"·"</span> }.into_any()
+        word("none", "no stashes")
     }
 }
 
-/// The PRs cell: open-PR count — `·` on a remote with none, `—` off-remote. While
-/// remote enrichment is in flight, a GitHub repo not yet filled shows a spinner.
+/// The PRs cell: open-PR count, "none" on a remote with none, "local" off-remote.
+/// While remote enrichment is in flight, a GitHub repo not yet filled spins.
 fn prs_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
     match &s.remote {
-        None if busy && s.remote_url.is_some() => view! { <span class="spin"></span> }.into_any(),
-        None => view! { <span class="dim">"—"</span> }.into_any(),
-        Some(r) if r.open_prs == 0 => view! { <span class="dim">"·"</span> }.into_any(),
-        Some(r) => view! { <span class="ahead">{r.open_prs.to_string()}</span> }.into_any(),
-    }
-}
-
-/// The CI cell: the check status spelled out and colored; `—` off-remote, `·` on a
-/// remote with no CI signal. Shows a spinner while enrichment is still in flight.
-fn ci_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
-    match &s.remote {
-        None if busy && s.remote_url.is_some() => view! { <span class="spin"></span> }.into_any(),
-        None => view! { <span class="dim">"—"</span> }.into_any(),
+        None if busy && s.remote_url.is_some() => spinner("checking pull requests…"),
+        None => word("local", "no remote data"),
+        Some(r) if r.open_prs == 0 => word("none", "no open pull requests"),
         Some(r) => {
-            let (label, cls) = match r.ci {
-                CiStatus::Passing => ("passing", "ok"),
-                CiStatus::Failing => ("failing", "risk"),
-                CiStatus::Pending => ("pending", "warn"),
-                CiStatus::None => ("·", "dim"),
-            };
-            view! { <span class=cls>{label}</span> }.into_any()
+            let tip = format!("{} open pull request{}", r.open_prs, if r.open_prs == 1 { "" } else { "s" });
+            view! { <span class="ahead" title=tip>{r.open_prs.to_string()}</span> }.into_any()
         }
     }
 }
 
+/// The CI cell: "passing" / "failing" / a spinner+"pending" for a running build,
+/// "none" for a remote with no CI, "local" off-remote (or a spinner mid-enrich).
+fn ci_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
+    match &s.remote {
+        None if busy && s.remote_url.is_some() => spinner("checking CI…"),
+        None => word("local", "no remote data"),
+        Some(r) => match r.ci {
+            CiStatus::Passing => {
+                view! { <span class="ok" title="CI passing">"passing"</span> }.into_any()
+            }
+            CiStatus::Failing => {
+                view! { <span class="risk" title="CI failing">"failing"</span> }.into_any()
+            }
+            CiStatus::Pending => view! {
+                <span class="ci-pending" title="CI running">
+                    <span class="spin"></span>
+                    <span class="warn">"pending"</span>
+                </span>
+            }
+            .into_any(),
+            CiStatus::None => word("none", "no CI configured"),
+        },
+    }
+}
+
 /// The Last cell: the last commit's age only (mirroring the TUI dock — the commit
-/// subject lives in the detail aside, keeping the table compact). `—` when none.
+/// subject lives in the detail aside, keeping the table compact). "never" if none.
 fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
     match &s.last_commit {
         Some(c) => {
@@ -543,7 +609,7 @@ fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
             let summary = c.summary.clone();
             view! { <span class="age" title=summary>{age}</span> }.into_any()
         }
-        None => view! { <span class="dim">"—"</span> }.into_any(),
+        None => word("never", "no commits"),
     }
 }
 
@@ -558,14 +624,15 @@ fn ellipsize(s: &str, max: usize) -> String {
 }
 
 /// The Status cell: the primary attention reason, colored by severity (the same
-/// signal that drives the attention sort) — `·` when the repo wants nothing.
+/// signal that drives the attention sort) — a calm "✓ up to date" when nothing
+/// needs you.
 fn status_cell(a: &cohors_core::Assessment) -> impl IntoView + use<> {
     match &a.primary {
         Some(r) => {
             let cls = severity_class(r.severity());
             view! { <span class=cls>{r.label()}</span> }.into_any()
         }
-        None => view! { <span class="dim">"·"</span> }.into_any(),
+        None => word("up to date", "nothing needs attention"),
     }
 }
 
@@ -609,7 +676,7 @@ fn detail_panel(
         .last_commit
         .as_ref()
         .map(|c| format!("{} ago · {}", time::relative(c.timestamp, now), c.summary))
-        .unwrap_or_else(|| "—".to_string());
+        .unwrap_or_else(|| "never".to_string());
     let link = s.remote_url.clone();
 
     view! {
@@ -834,7 +901,7 @@ fn changes_text(s: &RepoSnapshot) -> String {
 
 fn ci_text(s: &RepoSnapshot) -> (&'static str, &'static str) {
     match &s.remote {
-        None => ("—", "dim"),
+        None => ("local", "dim"),
         Some(r) => match r.ci {
             CiStatus::Passing => ("passing", "ok"),
             CiStatus::Failing => ("failing", "risk"),
@@ -846,7 +913,7 @@ fn ci_text(s: &RepoSnapshot) -> (&'static str, &'static str) {
 
 fn prs_text(s: &RepoSnapshot) -> String {
     match &s.remote {
-        None => "—".to_string(),
+        None => "local".to_string(),
         Some(r) if r.open_prs == 0 => "none".to_string(),
         Some(r) => format!("{} open", r.open_prs),
     }

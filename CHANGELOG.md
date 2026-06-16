@@ -55,6 +55,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **Every web table cell now reads in plain language** — the terminal's cryptic
+  `·`/`—` placeholders are gone. Each empty/default state is a tooltipped word
+  for its column ("clean", "synced", "local", "none", "never", "up to date"), and
+  the Changes count sits next to a **pencil icon** that means *uncommitted*. CI
+  shows "passing/failing", and **in-progress states** (remote enrichment, a
+  running CI build) animate the **braille dot-spinner**. Every glyph has a hover
+  tooltip spelling out what it means.
 - **The web app has a typeface now** — **Google Sans** (UI) and **Google Sans
   Code** (the data table / monospace), with **IBM Plex Sans** / **IBM Plex Mono**
   as the next fallback. They're loaded from the **Google Fonts CDN** (a `<link>`

@@ -241,7 +241,16 @@ body {
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .fleet td:last-child { width: 99%; white-space: normal; }
-/* Braille dot-spinner for cells still enriching (echoes the TUI spinner). */
+
+/* Default states are plain words, not cryptic punctuation: a faint, tooltipped
+   word per column ("clean", "synced", "none", "local", "never", "up to date"). */
+.state { color: var(--faint); cursor: default; }
+
+/* A count paired with an icon (Changes column): the pencil = "uncommitted". */
+.count { display: inline-flex; align-items: center; gap: 0.25rem; }
+.ico-edit { width: 0.82em; height: 0.82em; flex: none; }
+
+/* Braille dot-spinner for in-progress states (enriching, CI running). */
 @keyframes cohors-spin {
   0%   { content: "⠋"; }
   11%  { content: "⠙"; }
@@ -260,6 +269,7 @@ body {
   color: var(--accent);
   animation: cohors-spin 0.8s steps(1, end) infinite;
 }
+.ci-pending { display: inline-flex; align-items: center; gap: 0.3rem; }
 
 .status { white-space: nowrap; }
 .about-detail { padding: 0.2rem 0.95rem 0.6rem; margin: 0; color: var(--text); font-family: var(--mono); font-size: 0.78rem; }
