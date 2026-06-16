@@ -1303,52 +1303,156 @@ fn render_dock(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    // A broken repo: just the error, in red — none of the facts below apply.
+    if let Some(reason) = &snap.error {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                format!("⚠ {reason}"),
+                theme.error(),
+            ))),
+            inner,
+        );
+        return;
+    }
+
+    // Labelled facts — each on its own row with a dim, fixed-width label so the
+    // pane reads as a small form, not a cryptic glyph soup. Everything is spelled
+    // out (no `s1`/`●`); colour carries urgency.
     let mut lines: Vec<Line> = Vec::new();
 
-    // Why this repo wants you — the same reasons that drive the dirty-first sort,
-    // spelled out here so the ordering never looks arbitrary.
-    if let Some(reason) = &snap.error {
-        lines.push(Line::from(Span::styled(
-            format!("⚠ {reason}"),
-            theme.error(),
-        )));
+    // Working tree — the staged/modified/untracked breakdown the row's count hides.
+    let w = &snap.worktree;
+    let changes_val = if w.staged + w.modified + w.untracked == 0 {
+        vec![Span::styled("clean", theme.dim())]
     } else {
-        let assessment = assess(snap, now);
-        if assessment.reasons.is_empty() {
-            lines.push(Line::from(Span::styled(
-                "clean — nothing needs you",
-                theme.ok(),
-            )));
-        } else {
-            for r in &assessment.reasons {
-                lines.push(Line::from(vec![
-                    Span::styled("• ", theme.dim()),
-                    Span::styled(r.label(), severity_style(r.severity(), theme)),
-                ]));
-            }
+        let mut parts = Vec::new();
+        if w.staged > 0 {
+            parts.push(format!("{} staged", w.staged));
         }
-    }
+        if w.modified > 0 {
+            parts.push(format!("{} modified", w.modified));
+        }
+        if w.untracked > 0 {
+            parts.push(format!("{} untracked", w.untracked));
+        }
+        let style = if w.modified > 0 || w.untracked > 0 {
+            theme.modified()
+        } else {
+            theme.staged()
+        };
+        vec![Span::styled(parts.join(" · "), style)]
+    };
+    dock_field(&mut lines, "Changes", changes_val, theme);
 
-    // A compact status line: working-tree changes + upstream/remote sync, reusing
-    // the table's own segment builders so the dock and the row never disagree.
-    let mut status: Vec<Span> = vec![Span::styled("changes ", theme.dim())];
-    status.extend(changes_spans(snap, theme));
-    status.push(Span::styled("    sync ", theme.dim()));
-    status.extend(sync_spans(snap, theme));
-    lines.push(Line::from(""));
-    lines.push(Line::from(status));
+    // Stash — count, and whether the newest is stale (a forgotten stash).
+    let stash_stale = assess(snap, now)
+        .reasons
+        .iter()
+        .any(|r| matches!(r, AttentionReason::Stash { stale: true, .. }));
+    let stash_val = if snap.stash_count == 0 {
+        vec![Span::styled("none", theme.dim())]
+    } else if stash_stale {
+        vec![Span::styled(
+            format!("{} · stale", snap.stash_count),
+            theme.warn(),
+        )]
+    } else {
+        vec![Span::raw(snap.stash_count.to_string())]
+    };
+    dock_field(&mut lines, "Stash", stash_val, theme);
 
-    // Last commit (age · summary), ellipsized to the pane width.
-    if let Some(c) = &snap.last_commit {
-        let prefix = format!("{}  ", time::relative(c.timestamp, now));
-        let avail = (inner.width as usize).saturating_sub(prefix.chars().count());
-        lines.push(Line::from(vec![
-            Span::styled(prefix, theme.dim()),
-            Span::raw(ellipsize(&c.summary, avail)),
-        ]));
-    }
+    // Upstream — even / ahead / behind / no upstream, naming the tracked branch.
+    let upstream_val = match &snap.upstream {
+        None => vec![Span::styled("no upstream", theme.dim())],
+        Some(up) if up.ahead == 0 && up.behind == 0 => {
+            vec![Span::styled(format!("even with {}", up.name), theme.dim())]
+        }
+        Some(up) => {
+            let mut spans = Vec::new();
+            if up.ahead > 0 {
+                spans.push(Span::styled(format!("{} ahead", up.ahead), theme.ahead()));
+            }
+            if up.ahead > 0 && up.behind > 0 {
+                spans.push(Span::styled(" · ", theme.dim()));
+            }
+            if up.behind > 0 {
+                spans.push(Span::styled(
+                    format!("{} behind", up.behind),
+                    theme.behind(),
+                ));
+            }
+            spans.push(Span::styled(format!("  ({})", up.name), theme.dim()));
+            spans
+        }
+    };
+    dock_field(&mut lines, "Upstream", upstream_val, theme);
+
+    // Remote — CI health, open PRs, and any awaiting the user's review.
+    let remote_val = match &snap.remote {
+        None => vec![Span::styled("no GitHub remote", theme.dim())],
+        Some(r) => {
+            let (ci_label, ci_style) = match r.ci {
+                CiStatus::Passing => ("CI passing", theme.ok()),
+                CiStatus::Failing => ("CI failing", theme.risk()),
+                CiStatus::Pending => ("CI pending", theme.warn()),
+                CiStatus::None => ("no CI", theme.dim()),
+            };
+            let prs = if r.open_prs == 0 {
+                "no open PRs".to_string()
+            } else {
+                format!(
+                    "{} open PR{}",
+                    r.open_prs,
+                    if r.open_prs == 1 { "" } else { "s" }
+                )
+            };
+            let mut spans = vec![
+                Span::styled(ci_label, ci_style),
+                Span::styled(format!("  ·  {prs}"), theme.dim()),
+            ];
+            if r.prs_awaiting_review > 0 {
+                spans.push(Span::styled(
+                    format!("  ·  {} awaiting your review", r.prs_awaiting_review),
+                    theme.warn(),
+                ));
+            }
+            spans
+        }
+    };
+    dock_field(&mut lines, "Remote", remote_val, theme);
+
+    // Last commit — age + the full message (the row no longer shows it),
+    // ellipsized to the remaining width.
+    let last_val = match &snap.last_commit {
+        Some(c) => {
+            let head = format!("{} ago — ", time::relative(c.timestamp, now));
+            let avail = (inner.width as usize).saturating_sub(DOCK_LABEL_W + head.chars().count());
+            vec![
+                Span::styled(head, theme.dim()),
+                Span::raw(ellipsize(&c.summary, avail)),
+            ]
+        }
+        None => vec![Span::styled("no commits", theme.dim())],
+    };
+    dock_field(&mut lines, "Last commit", last_val, theme);
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Width of the dim label column in the dock's labelled facts.
+const DOCK_LABEL_W: usize = 13;
+
+/// Push one labelled fact row into the dock: a dim, fixed-width label then the
+/// value spans.
+fn dock_field(
+    lines: &mut Vec<Line<'static>>,
+    label: &str,
+    value: Vec<Span<'static>>,
+    theme: &Theme,
+) {
+    let mut spans = vec![Span::styled(format!("{label:<DOCK_LABEL_W$}"), theme.dim())];
+    spans.extend(value);
+    lines.push(Line::from(spans));
 }
 
 /// The dock while a bulk action runs: the in-flight repos, each with a spinner.

@@ -21,6 +21,28 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.13] — 2026-06-16
+
+### Changed
+
+- **Redesigned the context pane as a labeled form (ADR-039 follow-up).** The dock
+  was an unreadable mix of a bulleted reason list and a cryptic `changes 3 s1
+  sync ●` line that restated it. It's now a small, scannable form — one dim,
+  fixed-width label per fact, everything spelled out (no `s1`/`●`), color for
+  urgency:
+
+  ```
+  Changes      3 modified · 1 untracked
+  Stash        1 · stale
+  Upstream     2 ahead  (origin/main)
+  Remote       CI passing  ·  2 open PRs
+  Last commit  2h ago — fix: retry on 5xx
+  ```
+
+  Changes now shows the staged/modified/untracked breakdown (which the table's
+  count hides), and the full commit message lives here (the row no longer shows
+  it). No more duplication between the pane and the row.
+
 ## [0.4.12] — 2026-06-16
 
 ### Changed

@@ -21,7 +21,7 @@ expression: "render_to_string(&app, 100, 28)"
 ╭ legacy│ │                                    ║ │ │                                      ││detail ╮
 │ ⚠ coul│ │ GitHub                             ║ │ │                                      ││       │
 │       │ │ 7 open issues  ·  latest v1.4.0    ║ │ │                                      ││       │
-│ change│ │                                    ║ │ │                                      ││       │
+│       │ │                                    ║ │ │                                      ││       │
 │       │ │ Pull requests (2)                  ║ │ │                                      ││       │
 │       │ │ #142 fix: retry charge on 5xx  @may║ │ │                                      ││       │
 │       │ │ #147 wip: webhook signatures  @sam ║ │ │                                      ││       │

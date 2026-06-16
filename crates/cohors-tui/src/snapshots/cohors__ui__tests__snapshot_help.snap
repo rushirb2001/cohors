@@ -33,7 +33,7 @@ expression: "render_to_string(&app, 100, 40)"
 ╭ legacy-billin│  :jump …)                                                          │: full detail ╮
 │ ⚠ could not r│    d               toggle dirty-only                               │              │
 │              │    s               cycle sort mode                                 │              │
-│ changes ·    │    Tab             weekly standup                                  │              │
+│              │    Tab             weekly standup                                  │              │
 │              │                                                                    │              │
 │              │  Act — on the marked repos, else the current one                   │              │
 │              │    ⏎               inspect repo — commits, changes, branches       │              │
