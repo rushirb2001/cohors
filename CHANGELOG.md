@@ -57,7 +57,7 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 - **The web fleet table is now icon-forward and tighter.** The terminal's cryptic
   `·`/`—` are gone, replaced by a small, color-coded SVG icon set (GitHub-style,
-  not emoji): a **cloud-check** for in-sync / **cloud-slash** for a local-only
+  not emoji): a green **cloud** for in-sync / **cloud-slash** for a local-only
   branch (or `↑↓` arrows when diverged); a **pencil + count** for uncommitted
   changes; a **box + count** for stashes; a **pull-request icon + count** for open
   PRs; and a per-state **Status** icon (pencil / arrows / box / branch / alert).

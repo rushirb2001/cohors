@@ -485,9 +485,9 @@ fn repo_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
 /// local-only branch, or `↑2 ↓5` ahead/behind arrows.
 fn sync_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     match &s.upstream {
-        None => iconw(cloud_dash_icon(), "state", "no upstream — local branch"),
+        None => iconw(cloud_off_icon(), "state", "no upstream — local branch"),
         Some(up) if up.ahead == 0 && up.behind == 0 => {
-            iconw(cloud_check_icon(), "ok", "in sync with upstream")
+            iconw(cloud_icon(), "ok", "in sync with upstream")
         }
         Some(up) => {
             let ahead = (up.ahead > 0).then(|| {
@@ -566,19 +566,18 @@ fn check_icon() -> impl IntoView {
     icon! { <path d="M20 6 9 17l-5-5" /> }
 }
 
-/// Cloud with a check — the branch is in sync with its upstream.
-fn cloud_check_icon() -> impl IntoView {
-    icon! {
-        <path d="M11 17H7A4 4 0 0 1 6.5 9a5.5 5.5 0 0 1 10.5 1.5 4 4 0 0 1 1.5 7.5" />
-        <path d="m13 16 2 2 4-4" />
-    }
+/// Cloud — the branch is in sync with its upstream (shown green; ahead/behind use
+/// arrows instead, so a cloud only ever means "synced").
+fn cloud_icon() -> impl IntoView {
+    icon! { <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /> }
 }
 
-/// Cloud with a slash — no upstream (the branch isn't tracking a remote).
-fn cloud_dash_icon() -> impl IntoView {
+/// Cloud-off (slashed) — no upstream (the branch isn't tracking a remote).
+fn cloud_off_icon() -> impl IntoView {
     icon! {
-        <path d="M11 17H7A4 4 0 0 1 6.5 9a5.5 5.5 0 0 1 10.5 1.5 4 4 0 0 1 .9 7.4" />
-        <path d="m3 3 18 18" />
+        <path d="m2 2 20 20" />
+        <path d="M5.782 5.782A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.307-.193" />
+        <path d="M21.532 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7.008 7.008 0 0 0 10 5.07" />
     }
 }
 
