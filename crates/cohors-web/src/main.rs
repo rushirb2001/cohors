@@ -622,6 +622,14 @@ fn alert_icon() -> impl IntoView {
     }
 }
 
+/// Clock — last activity.
+fn clock_icon() -> impl IntoView {
+    icon! {
+        <circle cx="12" cy="12" r="10" />
+        <polyline points="12 6 12 12 16 14" />
+    }
+}
+
 /// Wrap an icon in a tooltipped, colored span. `class` carries the color.
 fn iconw<V: IntoView>(icon: V, class: &'static str, tip: &'static str) -> AnyView {
     view! { <span class=class title=tip>{icon}</span> }.into_any()
@@ -762,12 +770,11 @@ fn detail_panel(
         }
     });
 
-    // Local facts pulled straight from the snapshot.
+    // Local facts pulled straight from the snapshot. Sync + CI live in the header
+    // now, so they're not repeated here.
     let branch = s.branch.label();
-    let sync = sync_text(s);
     let changes = changes_text(s);
     let stash = if s.stash_count > 0 { format!("{} stashed", s.stash_count) } else { "none".to_string() };
-    let (ci_label, ci_cls) = ci_text(s);
     let prs = prs_text(s);
     let last = s
         .last_commit
@@ -790,14 +797,28 @@ fn detail_panel(
                 </span>
             </div>
             <div class="scroll">
-                <dl class="facts">
-                    <dt>"Sync"</dt><dd>{sync}</dd>
-                    <dt>"Changes"</dt><dd>{changes}</dd>
-                    <dt>"Stash"</dt><dd>{stash}</dd>
-                    <dt>"CI"</dt><dd class=ci_cls>{ci_label}</dd>
-                    <dt>"PRs"</dt><dd>{prs}</dd>
-                    <dt>"Last"</dt><dd>{last}</dd>
-                </dl>
+                <div class="facts">
+                    <div class="fact">
+                        <span class="fi">{edit_icon()}</span>
+                        <span class="fl">"Changes"</span>
+                        <span class="fv">{changes}</span>
+                    </div>
+                    <div class="fact">
+                        <span class="fi">{stash_icon()}</span>
+                        <span class="fl">"Stash"</span>
+                        <span class="fv">{stash}</span>
+                    </div>
+                    <div class="fact">
+                        <span class="fi">{pr_icon()}</span>
+                        <span class="fl">"PRs"</span>
+                        <span class="fv">{prs}</span>
+                    </div>
+                    <div class="fact">
+                        <span class="fi">{clock_icon()}</span>
+                        <span class="fl">"Last"</span>
+                        <span class="fv">{last}</span>
+                    </div>
+                </div>
                 {reasons_block}
                 {move || rich_block(detail.get(), now)}
                 {link.map(|url| {
@@ -971,23 +992,6 @@ fn sort_button(sort: RwSignal<SortMode>, key: SortMode, label: &'static str) -> 
 
 // ── Text variants of the cells, for the detail facts list ────────────────────
 
-fn sync_text(s: &RepoSnapshot) -> String {
-    match &s.upstream {
-        None => "no upstream".to_string(),
-        Some(up) if up.ahead == 0 && up.behind == 0 => "in sync".to_string(),
-        Some(up) => {
-            let mut parts = Vec::new();
-            if up.ahead > 0 {
-                parts.push(format!("↑{} ahead", up.ahead));
-            }
-            if up.behind > 0 {
-                parts.push(format!("↓{} behind", up.behind));
-            }
-            parts.join(" · ")
-        }
-    }
-}
-
 fn changes_text(s: &RepoSnapshot) -> String {
     let w = &s.worktree;
     if w.staged + w.modified + w.untracked == 0 {
@@ -1004,18 +1008,6 @@ fn changes_text(s: &RepoSnapshot) -> String {
         parts.push(format!("{} untracked", w.untracked));
     }
     parts.join(" · ")
-}
-
-fn ci_text(s: &RepoSnapshot) -> (&'static str, &'static str) {
-    match &s.remote {
-        None => ("local", "dim"),
-        Some(r) => match r.ci {
-            CiStatus::Passing => ("passing", "ok"),
-            CiStatus::Failing => ("failing", "risk"),
-            CiStatus::Pending => ("pending", "warn"),
-            CiStatus::None => ("no CI", "dim"),
-        },
-    }
 }
 
 fn prs_text(s: &RepoSnapshot) -> String {

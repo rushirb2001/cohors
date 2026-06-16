@@ -316,15 +316,19 @@ body {
 .sec .reasons li { padding: 0.12rem 0; }
 .facts {
   margin: 0;
-  padding: 0.3rem 0.95rem 0.95rem;
+  padding: 0.45rem 0.95rem 0.95rem;
   display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.28rem 0.85rem;
+  grid-template-columns: auto max-content 1fr;
+  gap: 0.34rem 0.7rem;
+  align-items: baseline;
   font-family: var(--mono);
   font-size: 0.78rem;
 }
-.facts dt { color: var(--dim); font-weight: 600; }
-.facts dd { margin: 0; }
+/* Each fact contributes its icon · label · value to the three grid columns. */
+.fact { display: contents; }
+.fi { color: var(--faint); }
+.fl { color: var(--dim); font-weight: 600; }
+.fv { margin: 0; }
 
 /* ── Detail sections (About / commits / PRs / contributors / remote) ──────── */
 .rich-loading { padding: 0.6rem 0.95rem; color: var(--dim); font-family: var(--mono); font-size: 0.78rem; }

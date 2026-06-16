@@ -35,7 +35,10 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 - **The web detail aside surfaces sync + CI inline in its header.** Next to
   `name · branch`, the drill-in header now shows the at-a-glance sync (cloud) and
   CI status as badges — a running build animates the braille dot-spinner, same as
-  the table — so you see health without scanning the facts list below.
+  the table — so you see health without scanning the facts list below. The facts
+  list drops the now-redundant Sync/CI rows and gives the remaining facts
+  (**Changes · Stash · PRs · Last**) a leading icon each (pencil / box /
+  pull-request / clock).
 - **`cohors web` is the local fleet in the browser — the same tool as the TUI
   (v0.5 slice 2).** `cohors web --root ~/code` scans **that folder's repos** and
   shows the exact same view the TUI does: local worktree status, ahead/behind,
