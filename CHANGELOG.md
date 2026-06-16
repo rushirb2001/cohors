@@ -55,13 +55,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
-- **Every web table cell now reads in plain language** — the terminal's cryptic
-  `·`/`—` placeholders are gone. Each empty/default state is a tooltipped word
-  for its column ("clean", "synced", "local", "none", "never", "up to date"), and
-  the Changes count sits next to a **pencil icon** that means *uncommitted*. CI
-  shows "passing/failing", and **in-progress states** (remote enrichment, a
-  running CI build) animate the **braille dot-spinner**. Every glyph has a hover
-  tooltip spelling out what it means.
+- **The web fleet table is now icon-forward and tighter.** The terminal's cryptic
+  `·`/`—` are gone, replaced by a small, color-coded SVG icon set (GitHub-style,
+  not emoji): a **cloud-check** for in-sync / **cloud-slash** for a local-only
+  branch (or `↑↓` arrows when diverged); a **pencil + count** for uncommitted
+  changes; a **box + count** for stashes; a **pull-request icon + count** for open
+  PRs; and a per-state **Status** icon (pencil / arrows / box / branch / alert).
+  CI stays as **text** ("passing" / "failing", a braille **dot-spinner** +
+  "pending" for a running build). The **Repo and Branch columns are fused** into
+  one `name @branch` cell, and long names/branches truncate with the full text on
+  hover — so every row fits on one line without sideways scroll. Every glyph has a
+  tooltip.
 - **The web app has a typeface now** — **Google Sans** (UI) and **Google Sans
   Code** (the data table / monospace), with **IBM Plex Sans** / **IBM Plex Mono**
   as the next fallback. They're loaded from the **Google Fonts CDN** (a `<link>`

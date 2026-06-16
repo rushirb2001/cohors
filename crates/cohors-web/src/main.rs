@@ -13,8 +13,8 @@
 mod api;
 
 use cohors_core::{
-    Branch, CiStatus, RepoSnapshot, Severity, SortMode, ViewParams, assess, compute_view, demo,
-    fleet_summary, time,
+    AttentionReason, Branch, CiStatus, RepoSnapshot, Severity, SortMode, ViewParams, assess,
+    compute_view, demo, fleet_summary, time,
 };
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
@@ -321,7 +321,6 @@ fn dashboard(
                             <thead>
                                 <tr>
                                     <th>"Repo"</th>
-                                    <th>"Branch"</th>
                                     <th>"Sync"</th>
                                     <th>"Changes"</th>
                                     <th>"Stash"</th>
@@ -414,8 +413,7 @@ fn repo_row(
         let reason = reason.clone();
         return view! {
             <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
-                <td class="name error">{name}</td>
-                <td></td>
+                <td class="repo error">{name}</td>
                 <td></td>
                 <td></td>
                 <td></td>
@@ -430,16 +428,14 @@ fn repo_row(
 
     let a = assess(s, now);
     let name_class = match a.severity {
-        Severity::Ok | Severity::Info => "name dim",
-        Severity::Warn | Severity::Risk => "name strong",
-        Severity::Notice => "name",
+        Severity::Ok | Severity::Info => "repo dim",
+        Severity::Warn | Severity::Risk => "repo strong",
+        Severity::Notice => "repo",
     };
-    let name = s.name.clone();
 
     view! {
         <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
-            <td class=name_class>{name}</td>
-            <td>{branch_cell(s)}</td>
+            <td class=name_class>{repo_cell(s)}</td>
             <td>{sync_cell(s)}</td>
             <td>{changes_cell(s)}</td>
             <td>{stash_cell(s)}</td>
@@ -469,28 +465,30 @@ fn spinner(tip: &'static str) -> AnyView {
     view! { <span class="spin" title=tip></span> }.into_any()
 }
 
-/// The Branch cell: branch name (long names truncated, full name on hover),
-/// `@sha` for detached, "unborn" for a fresh repo.
-fn branch_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
-    match &s.branch {
-        Branch::Named(b) => {
-            let full = b.clone();
-            view! { <span class="branch" title=full>{ellipsize(b, 22)}</span> }.into_any()
-        }
-        Branch::Detached(id) => {
-            let short: String = id.chars().take(7).collect();
-            view! { <span class="detached">{format!("@{short}")}</span> }.into_any()
-        }
-        Branch::Unborn => view! { <span class="dim">"unborn"</span> }.into_any(),
+/// The fused Repo cell: the repo name followed by a dim `@branch` (e.g.
+/// `intern_challenge @main`), `@sha` for detached, `unborn` for a fresh repo.
+fn repo_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    let name = s.name.clone();
+    let branch = match &s.branch {
+        Branch::Named(b) => format!("@{b}"),
+        Branch::Detached(id) => format!("@{}", id.chars().take(7).collect::<String>()),
+        Branch::Unborn => "unborn".to_string(),
+    };
+    let tip = format!("{} {branch}", s.name);
+    view! {
+        <span class="rname" title=tip.clone()>{name}</span>
+        <span class="rbranch" title=tip>{format!(" {branch}")}</span>
     }
 }
 
-/// The Sync cell: `↑2 ↓5` ahead/behind arrows, "synced" when even, "local" when
-/// the branch has no upstream.
+/// The Sync cell: a green cloud-check when in sync, a faint cloud-slash for a
+/// local-only branch, or `↑2 ↓5` ahead/behind arrows.
 fn sync_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     match &s.upstream {
-        None => word("local", "no upstream — local branch"),
-        Some(up) if up.ahead == 0 && up.behind == 0 => word("synced", "in sync with upstream"),
+        None => iconw(cloud_dash_icon(), "state", "no upstream — local branch"),
+        Some(up) if up.ahead == 0 && up.behind == 0 => {
+            iconw(cloud_check_icon(), "ok", "in sync with upstream")
+        }
         Some(up) => {
             let ahead = (up.ahead > 0).then(|| {
                 view! { <span class="ahead" title="commits to push">{format!("↑{}", up.ahead)}</span> }
@@ -510,9 +508,9 @@ fn changes_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     let w = &s.worktree;
     let total = w.staged + w.modified + w.untracked;
     if total == 0 {
-        word("clean", "clean working tree")
+        ok_glyph("clean working tree")
     } else {
-        let cls = format!("count {}", if w.modified > 0 || w.untracked > 0 { "modified" } else { "staged" });
+        let color = if w.modified > 0 || w.untracked > 0 { "modified" } else { "staged" };
         let tip = format!(
             "{} uncommitted change{} — {} staged · {} modified · {} untracked",
             total,
@@ -521,73 +519,155 @@ fn changes_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
             w.modified,
             w.untracked
         );
+        count_icon(total, edit_icon(), color, tip)
+    }
+}
+
+// ── Icon set ─────────────────────────────────────────────────────────────────
+//
+// Small stroked SVG icons (not emoji), inheriting the cell's color via
+// `currentColor`, so a state reads as a glyph at a glance and the table stays
+// compact. Each is paired with a `title` tooltip at the call site.
+
+/// `<svg class="ic">` wrapper around a path string — keeps the icon fns tiny.
+/// Explicit `width`/`height` so the glyph is always text-sized, not the SVG
+/// default; color comes from the cell via `currentColor`.
+macro_rules! icon {
+    ($($body:tt)*) => {
         view! {
-            <span class=cls title=tip>
-                {total.to_string()}
-                {edit_icon()}
-            </span>
+            <svg
+                class="ic"
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+            >
+                $($body)*
+            </svg>
         }
-        .into_any()
-    }
+    };
 }
 
-/// A small pencil icon (inherits the cell's color via `currentColor`) — the
-/// visual shorthand for "uncommitted changes".
+/// Pencil — uncommitted changes.
 fn edit_icon() -> impl IntoView {
-    view! {
-        <svg
-            class="ico-edit"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            aria-hidden="true"
-        >
-            <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
-            <path d="m15 5 4 4" />
-        </svg>
+    icon! {
+        <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+        <path d="m15 5 4 4" />
     }
 }
 
-/// The Stash cell: the stash count (amber), or "none".
+/// Check — a cleared/good state (clean tree, no stashes, up to date).
+fn check_icon() -> impl IntoView {
+    icon! { <path d="M20 6 9 17l-5-5" /> }
+}
+
+/// Cloud with a check — the branch is in sync with its upstream.
+fn cloud_check_icon() -> impl IntoView {
+    icon! {
+        <path d="M11 17H7A4 4 0 0 1 6.5 9a5.5 5.5 0 0 1 10.5 1.5 4 4 0 0 1 1.5 7.5" />
+        <path d="m13 16 2 2 4-4" />
+    }
+}
+
+/// Cloud with a slash — no upstream (the branch isn't tracking a remote).
+fn cloud_dash_icon() -> impl IntoView {
+    icon! {
+        <path d="M11 17H7A4 4 0 0 1 6.5 9a5.5 5.5 0 0 1 10.5 1.5 4 4 0 0 1 .9 7.4" />
+        <path d="m3 3 18 18" />
+    }
+}
+
+/// Git pull-request — open PRs.
+fn pr_icon() -> impl IntoView {
+    icon! {
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="18" cy="18" r="3" />
+        <path d="M13 6h3a2 2 0 0 1 2 2v7" />
+        <line x1="6" x2="6" y1="9" y2="21" />
+    }
+}
+
+/// Archive box — stashes.
+fn stash_icon() -> impl IntoView {
+    icon! {
+        <rect width="20" height="5" x="2" y="3" rx="1" />
+        <path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8" />
+        <path d="M10 12h4" />
+    }
+}
+
+/// Git branch — detached HEAD.
+fn branch_icon() -> impl IntoView {
+    icon! {
+        <line x1="6" x2="6" y1="3" y2="15" />
+        <circle cx="18" cy="6" r="3" />
+        <circle cx="6" cy="18" r="3" />
+        <path d="M18 9a9 9 0 0 1-9 9" />
+    }
+}
+
+/// Alert triangle — an unreadable repo.
+fn alert_icon() -> impl IntoView {
+    icon! {
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+    }
+}
+
+/// Wrap an icon in a tooltipped, colored span. `class` carries the color.
+fn iconw<V: IntoView>(icon: V, class: &'static str, tip: &'static str) -> AnyView {
+    view! { <span class=class title=tip>{icon}</span> }.into_any()
+}
+
+/// A count next to its column icon (e.g. `3 ✎`), colored by `color`.
+fn count_icon<V: IntoView>(n: u32, icon: V, color: &'static str, tip: String) -> AnyView {
+    view! { <span class=format!("count {color}") title=tip>{n.to_string()}{icon}</span> }.into_any()
+}
+
+/// A faint check for a cleared/good empty cell (clean, up to date), tooltipped.
+fn ok_glyph(tip: &'static str) -> AnyView {
+    iconw(check_icon(), "state", tip)
+}
+
+/// The Stash cell: a box icon + count (amber), or a faint box when there are none.
 fn stash_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     if s.stash_count > 0 {
         let tip = format!("{} stash entr{}", s.stash_count, if s.stash_count == 1 { "y" } else { "ies" });
-        view! { <span class="warn" title=tip>{s.stash_count.to_string()}</span> }.into_any()
+        count_icon(s.stash_count, stash_icon(), "warn", tip)
     } else {
-        word("none", "no stashes")
+        iconw(stash_icon(), "state", "no stashes")
     }
 }
 
-/// The PRs cell: open-PR count, "none" on a remote with none, "local" off-remote.
-/// While remote enrichment is in flight, a GitHub repo not yet filled spins.
+/// The PRs cell: a pull-request icon + count (open PRs), a faint PR icon when
+/// there are none / off-remote, a spinner while enrichment is in flight.
 fn prs_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
     match &s.remote {
         None if busy && s.remote_url.is_some() => spinner("checking pull requests…"),
-        None => word("local", "no remote data"),
-        Some(r) if r.open_prs == 0 => word("none", "no open pull requests"),
+        None => iconw(pr_icon(), "state", "no remote data"),
+        Some(r) if r.open_prs == 0 => iconw(pr_icon(), "state", "no open pull requests"),
         Some(r) => {
             let tip = format!("{} open pull request{}", r.open_prs, if r.open_prs == 1 { "" } else { "s" });
-            view! { <span class="ahead" title=tip>{r.open_prs.to_string()}</span> }.into_any()
+            count_icon(r.open_prs, pr_icon(), "pr", tip)
         }
     }
 }
 
-/// The CI cell: "passing" / "failing" / a spinner+"pending" for a running build,
-/// "none" for a remote with no CI, "local" off-remote (or a spinner mid-enrich).
+/// The CI cell: "passing" / "failing" as text, a spinner+"pending" for a running
+/// build, "no CI" for a remote with no CI, "local" off-remote (spinner mid-enrich).
 fn ci_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
     match &s.remote {
         None if busy && s.remote_url.is_some() => spinner("checking CI…"),
         None => word("local", "no remote data"),
         Some(r) => match r.ci {
-            CiStatus::Passing => {
-                view! { <span class="ok" title="CI passing">"passing"</span> }.into_any()
-            }
-            CiStatus::Failing => {
-                view! { <span class="risk" title="CI failing">"failing"</span> }.into_any()
-            }
+            CiStatus::Passing => view! { <span class="ok" title="CI passing">"passing"</span> }.into_any(),
+            CiStatus::Failing => view! { <span class="risk" title="CI failing">"failing"</span> }.into_any(),
             CiStatus::Pending => view! {
                 <span class="ci-pending" title="CI running">
                     <span class="spin"></span>
@@ -595,7 +675,7 @@ fn ci_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
                 </span>
             }
             .into_any(),
-            CiStatus::None => word("none", "no CI configured"),
+            CiStatus::None => word("no CI", "no CI configured"),
         },
     }
 }
@@ -613,26 +693,41 @@ fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
     }
 }
 
-/// Truncate `s` to at most `max` characters, adding an ellipsis when cut.
-fn ellipsize(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
-    out.push('…');
-    out
-}
-
-/// The Status cell: the primary attention reason, colored by severity (the same
-/// signal that drives the attention sort) — a calm "✓ up to date" when nothing
-/// needs you.
+/// The Status cell: the primary attention reason as a compact icon + count,
+/// severity-coloured, on a single line — the full sentence is in the tooltip. A
+/// faint check when nothing needs you.
 fn status_cell(a: &cohors_core::Assessment) -> impl IntoView + use<> {
     match &a.primary {
         Some(r) => {
-            let cls = severity_class(r.severity());
-            view! { <span class=cls>{r.label()}</span> }.into_any()
+            let cls = format!("st {}", severity_class(r.severity()));
+            let tip = r.label();
+            view! { <span class=cls title=tip>{reason_body(r)}</span> }.into_any()
         }
-        None => word("up to date", "nothing needs attention"),
+        None => ok_glyph("up to date — nothing needs attention"),
+    }
+}
+
+/// The icon + count for one attention reason (colour comes from the parent's
+/// severity class via `currentColor`).
+fn reason_body(r: &AttentionReason) -> AnyView {
+    use AttentionReason::*;
+    match r {
+        Unpushed { commits, .. } => view! { <span>{format!("↑{commits}")}</span> }.into_any(),
+        Behind { commits } => view! { <span>{format!("↓{commits}")}</span> }.into_any(),
+        Diverged { ahead, behind } => {
+            view! { <span>{format!("↑{ahead} ↓{behind}")}</span> }.into_any()
+        }
+        Uncommitted {
+            staged,
+            modified,
+            untracked,
+        } => {
+            let n = staged + modified + untracked;
+            view! { {edit_icon()}<span>{n.to_string()}</span> }.into_any()
+        }
+        Stash { count, .. } => view! { {stash_icon()}<span>{count.to_string()}</span> }.into_any(),
+        Detached => view! { {branch_icon()} }.into_any(),
+        Unreadable => view! { {alert_icon()} }.into_any(),
     }
 }
 

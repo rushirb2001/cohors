@@ -215,18 +215,25 @@ body {
 
 /* ── Fleet table ────────────────────────────────────────────────────────── */
 .fleet { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
-.fleet th, .fleet td { text-align: left; padding: 0.32rem 0.5rem; white-space: nowrap; }
-/* Narrow, fixed-feel data columns so Repo/Branch/Status get the room. */
-.fleet th:nth-child(3), .fleet td:nth-child(3),  /* Sync */
-.fleet th:nth-child(4), .fleet td:nth-child(4),  /* Changes */
-.fleet th:nth-child(5), .fleet td:nth-child(5),  /* Stash */
-.fleet th:nth-child(6), .fleet td:nth-child(6),  /* PRs */
-.fleet th:nth-child(8), .fleet td:nth-child(8) { /* Last */
-  text-align: right;
+.fleet th, .fleet td { text-align: left; padding: 0.3rem 0.42rem; white-space: nowrap; }
+/* Narrow, centered data columns (icon-forward) so Repo/Status get the room. */
+.fleet th:nth-child(2), .fleet td:nth-child(2),  /* Sync */
+.fleet th:nth-child(3), .fleet td:nth-child(3),  /* Changes */
+.fleet th:nth-child(4), .fleet td:nth-child(4),  /* Stash */
+.fleet th:nth-child(5), .fleet td:nth-child(5),  /* PRs */
+.fleet th:nth-child(6), .fleet td:nth-child(6) { /* CI */
+  text-align: center;
   width: 1%;
 }
-.fleet th:nth-child(7), .fleet td:nth-child(7) { width: 1%; } /* CI */
-.branch { display: inline-block; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
+.fleet th:nth-child(7), .fleet td:nth-child(7) { text-align: right; width: 1%; } /* Last */
+/* Repo (fused name @branch): cap and ellipsize, full text on hover. */
+.fleet td:nth-child(1) { max-width: 20rem; overflow: hidden; text-overflow: ellipsis; }
+
+/* Inline SVG state icons — text-sized, colored by the cell (currentColor). */
+.ic { width: 14px; height: 14px; vertical-align: -0.2em; flex: none; }
+/* A count paired with an icon (Changes/Stash/PRs), and the compact Status reason. */
+.count, .st { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
+.pr { color: var(--accent); }
 .fleet thead th {
   position: sticky;
   top: 0;
@@ -240,15 +247,12 @@ body {
 .fleet tbody tr:last-child { border-bottom: none; }
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-.fleet td:last-child { width: 99%; white-space: normal; }
+.fleet td:last-child { width: 99%; white-space: nowrap; }
 
 /* Default states are plain words, not cryptic punctuation: a faint, tooltipped
    word per column ("clean", "synced", "none", "local", "never", "up to date"). */
 .state { color: var(--faint); cursor: default; }
 
-/* A count paired with an icon (Changes column): the pencil = "uncommitted". */
-.count { display: inline-flex; align-items: center; gap: 0.25rem; }
-.ico-edit { width: 0.82em; height: 0.82em; flex: none; }
 
 /* Braille dot-spinner for in-progress states (enriching, CI running). */
 @keyframes cohors-spin {
@@ -274,12 +278,13 @@ body {
 .status { white-space: nowrap; }
 .about-detail { padding: 0.2rem 0.95rem 0.6rem; margin: 0; color: var(--text); font-family: var(--mono); font-size: 0.78rem; }
 
-/* Name weight tracks severity (mirroring the TUI): calm repos dim, warn/risk bold. */
-.name { font-weight: 600; }
-.name.dim { color: var(--dim); font-weight: 400; }
-.name.strong { color: var(--text); font-weight: 700; }
-.name.error { color: var(--red); font-weight: 600; }
-.detached { color: var(--blue); }
+/* Repo weight tracks severity (mirroring the TUI): calm repos dim, warn/risk bold.
+   The fused `@branch` is always dim/regular so the name leads. */
+.repo { font-weight: 600; }
+.repo.dim { color: var(--dim); font-weight: 400; }
+.repo.strong { color: var(--text); font-weight: 700; }
+.repo.error { color: var(--red); font-weight: 600; }
+.rbranch { color: var(--dim); font-weight: 400; }
 .ahead { color: var(--accent); }
 .behind { color: var(--amber); }
 .dim { color: var(--dim); }
