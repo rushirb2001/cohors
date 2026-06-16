@@ -34,10 +34,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   **demo fleet**.
 - **The web fleet table mirrors the TUI's columns** — Repo · Branch · Sync
   (↑ahead ↓behind) · Changes (staged/modified/untracked) · Stash · PRs · CI ·
-  Last (commit age + subject) · **Status** (the primary attention reason,
-  severity-coloured). The attention summary strip (`fleet_summary`), the
-  filter, the **needs-attention** toggle, and the **attention / recent / name /
-  sync** sorts all run `cohors-core` verbatim.
+  Last · **Status** (the primary attention reason, severity-coloured). Columns
+  are kept **compact** so the whole row (Status included) fits without sideways
+  scroll: the data columns are narrow, long branch names truncate (full name on
+  hover), and **Last shows just the commit age** (its subject is in the detail).
+  While the remote pass is still running, the PRs/CI cells of GitHub repos show a
+  **braille dot-spinner** instead of a dash. The attention summary strip
+  (`fleet_summary`), the filter, the **needs-attention** toggle, and the
+  **attention / recent / name / sync** sorts all run `cohors-core` verbatim.
 - **The web drill-in mirrors the TUI's `Enter` pane.** Selecting a repo fetches
   its detail on demand: every reason it wants attention, the local facts (Sync ·
   Changes · Stash · CI · PRs · Last), **recent commits**, the **working-tree**

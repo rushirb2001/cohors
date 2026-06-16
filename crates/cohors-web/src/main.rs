@@ -57,6 +57,9 @@ fn App() -> impl IntoView {
     let sort = RwSignal::new(SortMode::DirtyFirst);
     let selected = RwSignal::new(None::<String>);
     let roots = RwSignal::new(Vec::<String>::new());
+    // True while the remote-enrichment pass is in flight, so rows that *could* be
+    // GitHub (have a remote URL, no `remote` yet) show a spinner instead of "—".
+    let enriching = RwSignal::new(false);
 
     // Load the local scan (fast — local status only), then re-request enriched so
     // remote CI/PRs fold in without blocking first paint. With nothing to scan
@@ -64,6 +67,7 @@ fn App() -> impl IntoView {
     let load = move || {
         notice.set(None);
         selected.set(None);
+        enriching.set(false);
         mode.set(Mode::Loading);
         spawn_local(async move {
             match api::fetch_repos().await {
@@ -73,6 +77,7 @@ fn App() -> impl IntoView {
                     // Second pass: enrich with remote signals (one server call;
                     // the server fans out and caches). Merge by id so the local
                     // rows stay put and only `remote` fills in.
+                    enriching.set(true);
                     spawn_local(async move {
                         if let Ok(enriched) = api::fetch_enriched().await {
                             repos.update(|v| {
@@ -83,6 +88,7 @@ fn App() -> impl IntoView {
                                 }
                             });
                         }
+                        enriching.set(false);
                     });
                 }
                 Ok(_) => {
@@ -216,12 +222,20 @@ fn App() -> impl IntoView {
                     view! { <div class="state">"Scanning your repositories…"</div> }.into_any()
                 }
                 Mode::Demo => {
-                    dashboard(repos, DEMO_NOW, filter, dirty_only, sort, selected, detail).into_any()
-                }
-                Mode::Live => {
-                    dashboard(repos, real_now(), filter, dirty_only, sort, selected, detail)
+                    dashboard(repos, DEMO_NOW, filter, dirty_only, sort, selected, detail, enriching)
                         .into_any()
                 }
+                Mode::Live => dashboard(
+                    repos,
+                    real_now(),
+                    filter,
+                    dirty_only,
+                    sort,
+                    selected,
+                    detail,
+                    enriching,
+                )
+                .into_any(),
             }}
         </div>
     }
@@ -239,6 +253,7 @@ fn dashboard(
     sort: RwSignal<SortMode>,
     selected: RwSignal<Option<String>>,
     detail: RwSignal<DetailState>,
+    enriching: RwSignal<bool>,
 ) -> impl IntoView {
     let summary = move || summary_chips(&repos.get(), now);
     let visible = move || {
@@ -255,9 +270,10 @@ fn dashboard(
     };
     let body = move || {
         let r = repos.get();
+        let busy = enriching.get();
         visible()
             .into_iter()
-            .map(|i| repo_row(&r[i], selected, now))
+            .map(|i| repo_row(&r[i], selected, now, busy))
             .collect::<Vec<_>>()
     };
     let count = move || visible().len();
@@ -380,7 +396,13 @@ fn summary_chips(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
 }
 
 /// One fleet row, mirroring the TUI's dock columns. Clicking it selects the repo.
-fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> impl IntoView + use<> {
+/// `busy` is true while remote enrichment is in flight (drives the PRs/CI spinner).
+fn repo_row(
+    s: &RepoSnapshot,
+    selected: RwSignal<Option<String>>,
+    now: i64,
+    busy: bool,
+) -> impl IntoView + use<> {
     let id = s.id.0.clone();
     let id_click = id.clone();
     let is_sel = move || selected.get().as_deref() == Some(id.as_str());
@@ -421,8 +443,8 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
             <td>{sync_cell(s)}</td>
             <td>{changes_cell(s)}</td>
             <td>{stash_cell(s)}</td>
-            <td>{prs_cell(s)}</td>
-            <td>{ci_cell(s)}</td>
+            <td>{prs_cell(s, busy)}</td>
+            <td>{ci_cell(s, busy)}</td>
             <td class="last">{last_cell(s, now)}</td>
             <td class="status">{status_cell(&a)}</td>
         </tr>
@@ -430,10 +452,14 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
     .into_any()
 }
 
-/// The Branch cell: branch name, `@sha` for detached, "unborn" for a fresh repo.
+/// The Branch cell: branch name (long names truncated, full name on hover),
+/// `@sha` for detached, "unborn" for a fresh repo.
 fn branch_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     match &s.branch {
-        Branch::Named(b) => view! { <span>{b.clone()}</span> }.into_any(),
+        Branch::Named(b) => {
+            let full = b.clone();
+            view! { <span class="branch" title=full>{ellipsize(b, 22)}</span> }.into_any()
+        }
         Branch::Detached(id) => {
             let short: String = id.chars().take(7).collect();
             view! { <span class="detached">{format!("@{short}")}</span> }.into_any()
@@ -479,10 +505,11 @@ fn stash_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     }
 }
 
-/// The PRs cell: open-PR count — `·` on a remote with none, `—` off-remote or not
-/// yet enriched.
-fn prs_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+/// The PRs cell: open-PR count — `·` on a remote with none, `—` off-remote. While
+/// remote enrichment is in flight, a GitHub repo not yet filled shows a spinner.
+fn prs_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
     match &s.remote {
+        None if busy && s.remote_url.is_some() => view! { <span class="spin"></span> }.into_any(),
         None => view! { <span class="dim">"—"</span> }.into_any(),
         Some(r) if r.open_prs == 0 => view! { <span class="dim">"·"</span> }.into_any(),
         Some(r) => view! { <span class="ahead">{r.open_prs.to_string()}</span> }.into_any(),
@@ -490,9 +517,10 @@ fn prs_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
 }
 
 /// The CI cell: the check status spelled out and colored; `—` off-remote, `·` on a
-/// remote with no CI signal.
-fn ci_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+/// remote with no CI signal. Shows a spinner while enrichment is still in flight.
+fn ci_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
     match &s.remote {
+        None if busy && s.remote_url.is_some() => view! { <span class="spin"></span> }.into_any(),
         None => view! { <span class="dim">"—"</span> }.into_any(),
         Some(r) => {
             let (label, cls) = match r.ci {
@@ -506,17 +534,14 @@ fn ci_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     }
 }
 
-/// The Last cell: the last commit's age and subject (dim) — `—` when none.
+/// The Last cell: the last commit's age only (mirroring the TUI dock — the commit
+/// subject lives in the detail aside, keeping the table compact). `—` when none.
 fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
     match &s.last_commit {
         Some(c) => {
             let age = time::relative(c.timestamp, now);
-            let summary = ellipsize(&c.summary, 60);
-            view! {
-                <span class="age">{format!("{age}  ")}</span>
-                <span class="msg">{summary}</span>
-            }
-            .into_any()
+            let summary = c.summary.clone();
+            view! { <span class="age" title=summary>{age}</span> }.into_any()
         }
         None => view! { <span class="dim">"—"</span> }.into_any(),
     }

@@ -208,11 +208,22 @@ body {
 .card-title .hint { font-weight: 400; }
 
 /* The scroll region inside each card. */
-.scroll { flex: 1; min-height: 0; overflow-y: auto; }
+.scroll { flex: 1; min-height: 0; overflow: auto; }
 
 /* ── Fleet table ────────────────────────────────────────────────────────── */
-.fleet { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.8rem; }
-.fleet th, .fleet td { text-align: left; padding: 0.38rem 0.7rem; white-space: nowrap; }
+.fleet { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
+.fleet th, .fleet td { text-align: left; padding: 0.32rem 0.5rem; white-space: nowrap; }
+/* Narrow, fixed-feel data columns so Repo/Branch/Status get the room. */
+.fleet th:nth-child(3), .fleet td:nth-child(3),  /* Sync */
+.fleet th:nth-child(4), .fleet td:nth-child(4),  /* Changes */
+.fleet th:nth-child(5), .fleet td:nth-child(5),  /* Stash */
+.fleet th:nth-child(6), .fleet td:nth-child(6),  /* PRs */
+.fleet th:nth-child(8), .fleet td:nth-child(8) { /* Last */
+  text-align: right;
+  width: 1%;
+}
+.fleet th:nth-child(7), .fleet td:nth-child(7) { width: 1%; } /* CI */
+.branch { display: inline-block; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom; }
 .fleet thead th {
   position: sticky;
   top: 0;
@@ -271,10 +282,8 @@ body {
 .chip.notice { color: var(--blue); }
 .chip.ok { color: var(--green); }
 
-/* The "Last" cell: dim age + truncated commit subject, kept on one line. */
-.fleet td.last { max-width: 24rem; overflow: hidden; text-overflow: ellipsis; }
+/* The "Last" cell: just the commit age (subject is in the detail aside). */
 .last .age { color: var(--faint); }
-.last .msg { color: var(--dim); }
 
 /* ── Detail aside ───────────────────────────────────────────────────────── */
 .sec .reasons { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 0.8rem; }
