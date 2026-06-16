@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
+- **Real GitHub data in the web dashboard (v0.5 slice 2).** Paste a GitHub token
+  (the header's Connect field) and `cohors web` fetches your repositories over the
+  browser's `fetch` (a small WASM client in `cohors-web/src/github.rs` — the
+  browser can't use `cohors-github`'s native `ureq`), maps them onto the same
+  `cohors-core` models, and renders them through the exact same `compute_view` /
+  `assess` logic as the demo and the TUI (ADR-002). The token is remembered
+  (localStorage) so it reconnects on reload; **Demo** stays the zero-setup
+  fallback. Live data uses a real browser clock. Loading/error states included.
+  (Per-repo CI/PR enrichment and proper OAuth are the next slices; the pasted
+  token is the developer bridge until then.)
 - **The web dashboard is now a full, interactive page (light theme).** Beyond the
   bare demo table, `cohors web` now renders: the brand mark + header, an attention
   summary (fleet-wide counts), live **filter / sort / dirty-only** controls (all

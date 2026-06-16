@@ -1,12 +1,13 @@
-//! cohors web — the full fleet dashboard in the browser, driven entirely by the
-//! pure `cohors-core` crate compiled to WebAssembly (the browser analog of the
-//! TUI / `cohors demo`).
+//! cohors web — the fleet dashboard in the browser, driven by the pure
+//! `cohors-core` crate compiled to WebAssembly.
 //!
-//! Slice 1 of v0.5: the built-in demo fleet, with live filter / sort / dirty-only
-//! (all powered by `cohors-core::compute_view`), per-repo drill-in, and a weekly
-//! standup — no network, no auth. Everything that decides *what to show* and *in
-//! what order* is the exact same code the TUI runs (ADR-002). Later slices swap
-//! the demo fleet for real GitHub data, add OAuth, and deploy.
+//! v0.5: slice 1 rendered the built-in demo fleet; slice 2 adds *real GitHub
+//! data* — paste a personal-access token and it fetches your repositories over
+//! the browser's `fetch` (see [`github`]) and renders them with the exact same
+//! `compute_view` / `assess` logic the TUI runs (ADR-002). The demo fleet stays
+//! as the zero-setup fallback. Proper OAuth (no pasted token) is slice 3.
+
+mod github;
 
 use std::sync::Arc;
 
@@ -14,11 +15,28 @@ use cohors_core::{
     Branch, CiStatus, FleetSummary, RepoSnapshot, Severity, SortMode, ViewParams, assess,
     compute_view, demo, fleet_summary, group_commits, time,
 };
+use gloo_storage::Storage;
 use leptos::prelude::*;
+use wasm_bindgen_futures::spawn_local;
 
-/// A fixed clock for the demo fleet. The core takes `now` injected (ADR-010), so
-/// relative ages render deterministically; a live clock arrives with real data.
-const NOW: i64 = 1_700_000_000;
+/// Fixed clock for the *demo* fleet, so its relative ages stay sensible.
+const DEMO_NOW: i64 = 1_700_000_000;
+/// localStorage key for the saved token.
+const TOKEN_KEY: &str = "cohors_token";
+
+/// The browser's real wall clock (Unix seconds) — used for live GitHub data.
+fn real_now() -> i64 {
+    (js_sys::Date::now() / 1000.0) as i64
+}
+
+/// What the dashboard is currently showing.
+#[derive(Clone)]
+enum Fleet {
+    Demo(Arc<Vec<RepoSnapshot>>),
+    Loading,
+    Loaded(Arc<Vec<RepoSnapshot>>),
+    Error(String),
+}
 
 fn main() {
     console_error_panic_hook::set_once();
@@ -27,60 +45,49 @@ fn main() {
 
 #[component]
 fn App() -> impl IntoView {
-    // The fleet is computed once; the views below recompute order/filtering from
-    // it reactively. `Rc` lets several reactive closures share it cheaply.
-    let snaps = Arc::new(demo::fleet(NOW));
-    let summary = fleet_summary(&snaps, NOW);
+    let token_input = RwSignal::new(String::new());
+    let fleet = RwSignal::new(Fleet::Demo(Arc::new(demo::fleet(DEMO_NOW))));
 
+    // Control signals live here so they persist as the fleet changes.
     let filter = RwSignal::new(String::new());
     let sort = RwSignal::new(SortMode::DirtyFirst);
     let dirty_only = RwSignal::new(false);
     let selected = RwSignal::new(None::<String>);
 
-    // Resolve the current view (filter + sort + dirty-only) through the core.
-    let view_of = {
-        let snaps = snaps.clone();
-        move || {
-            let q = filter.get();
-            let params = ViewParams {
-                sort: sort.get(),
-                dirty_only: dirty_only.get(),
-                query: &q,
-            };
-            compute_view(&snaps, &params)
-                .into_iter()
-                .map(|vr| vr.index)
-                .collect::<Vec<_>>()
+    // Connect: persist the token, show loading, fetch in the background.
+    let connect = move |token: String| {
+        let token = token.trim().to_string();
+        if token.is_empty() {
+            return;
         }
+        let _ = gloo_storage::LocalStorage::set(TOKEN_KEY, &token);
+        selected.set(None);
+        fleet.set(Fleet::Loading);
+        spawn_local(async move {
+            match github::fetch_repos(&token).await {
+                Ok(repos) => fleet.set(Fleet::Loaded(Arc::new(repos))),
+                Err(e) => fleet.set(Fleet::Error(e)),
+            }
+        });
     };
 
-    let body = {
-        let snaps = snaps.clone();
-        let view_of = view_of.clone();
-        move || {
-            view_of()
-                .into_iter()
-                .map(|i| repo_row(&snaps[i], selected))
-                .collect::<Vec<_>>()
-        }
+    let to_demo = move || {
+        selected.set(None);
+        fleet.set(Fleet::Demo(Arc::new(demo::fleet(DEMO_NOW))));
     };
-    let visible_count = {
-        let view_of = view_of.clone();
-        move || view_of().len()
+    let use_demo = move |_| to_demo();
+    let disconnect = move |_| {
+        gloo_storage::LocalStorage::delete(TOKEN_KEY);
+        token_input.set(String::new());
+        to_demo();
     };
 
-    // The aside shows the selected repo's detail, or the weekly standup when none
-    // is selected.
-    let aside = {
-        let snaps = snaps.clone();
-        move || {
-            selected
-                .get()
-                .and_then(|id| snaps.iter().find(|s| s.id.0 == id).cloned())
-                .map(|s| detail_panel(&s).into_any())
-                .unwrap_or_else(|| standup_panel().into_any())
-        }
-    };
+    // Auto-connect with a previously saved token.
+    if let Ok(saved) = gloo_storage::LocalStorage::get::<String>(TOKEN_KEY)
+        && !saved.trim().is_empty()
+    {
+        connect(saved);
+    }
 
     view! {
         <div class="app">
@@ -97,14 +104,117 @@ fn App() -> impl IntoView {
                     </div>
                     <div class="tag">"All your git repositories at a glance"</div>
                 </div>
-                <div class="meta">
-                    <div class="big">{format!("{}", summary.total)}<span class="dim">" repos"</span></div>
-                    <div class="dim">"demo fleet · cohors-core in WebAssembly"</div>
+                <div class="conn">
+                    {move || match fleet.get() {
+                        Fleet::Loaded(_) => view! {
+                            <span class="src">"● GitHub"</span>
+                            <button class="ghost" on:click=disconnect>"disconnect"</button>
+                        }
+                        .into_any(),
+                        _ => view! {
+                            <input
+                                class="token"
+                                r#type="password"
+                                placeholder="GitHub token (repo scope)"
+                                prop:value=move || token_input.get()
+                                on:input=move |ev| token_input.set(event_target_value(&ev))
+                                on:keydown=move |ev| {
+                                    if ev.key() == "Enter" {
+                                        connect(token_input.get());
+                                    }
+                                }
+                            />
+                            <button class="primary" on:click=move |_| connect(token_input.get())>
+                                "Connect"
+                            </button>
+                            <button class="ghost" on:click=use_demo>"Demo"</button>
+                        }
+                        .into_any(),
+                    }}
                 </div>
             </header>
 
-            <section class="attention">{summary_chips(&summary)}</section>
+            {move || match fleet.get() {
+                Fleet::Demo(s) => dashboard(s, DEMO_NOW, filter, sort, dirty_only, selected, true).into_any(),
+                Fleet::Loaded(s) => dashboard(s, real_now(), filter, sort, dirty_only, selected, false).into_any(),
+                Fleet::Loading => view! {
+                    <div class="state">"Fetching your repositories from GitHub…"</div>
+                }
+                .into_any(),
+                Fleet::Error(e) => view! {
+                    <div class="state error">{format!("⚠ {e}")}</div>
+                    <div class="state sub">"Fix the token above, or click Demo for the sample fleet."</div>
+                }
+                .into_any(),
+            }}
+        </div>
+    }
+}
 
+/// The dashboard body for a given fleet + clock: the attention summary, the live
+/// filter/sort/dirty-only controls, the fleet table, and the detail / standup
+/// aside. `is_demo` only chooses the aside's default panel (the standup is demo
+/// data).
+fn dashboard(
+    snaps: Arc<Vec<RepoSnapshot>>,
+    now: i64,
+    filter: RwSignal<String>,
+    sort: RwSignal<SortMode>,
+    dirty_only: RwSignal<bool>,
+    selected: RwSignal<Option<String>>,
+    is_demo: bool,
+) -> impl IntoView {
+    let summary = fleet_summary(&snaps, now);
+
+    let view_of = {
+        let snaps = snaps.clone();
+        move || {
+            let q = filter.get();
+            let params = ViewParams {
+                sort: sort.get(),
+                dirty_only: dirty_only.get(),
+                query: &q,
+            };
+            compute_view(&snaps, &params)
+                .into_iter()
+                .map(|vr| vr.index)
+                .collect::<Vec<_>>()
+        }
+    };
+    let body = {
+        let snaps = snaps.clone();
+        let view_of = view_of.clone();
+        move || {
+            view_of()
+                .into_iter()
+                .map(|i| repo_row(&snaps[i], selected, now))
+                .collect::<Vec<_>>()
+        }
+    };
+    let visible_count = {
+        let view_of = view_of.clone();
+        move || view_of().len()
+    };
+    let aside = {
+        let snaps = snaps.clone();
+        move || {
+            selected
+                .get()
+                .and_then(|id| snaps.iter().find(|s| s.id.0 == id).cloned())
+                .map(|s| detail_panel(&s, now).into_any())
+                .unwrap_or_else(|| {
+                    if is_demo {
+                        standup_panel(now).into_any()
+                    } else {
+                        hint_panel().into_any()
+                    }
+                })
+        }
+    };
+
+    view! {
+        <>
+            <section class="attention">{summary_chips(&summary)}</section>
             <section class="controls">
                 <input
                     class="filter"
@@ -126,7 +236,6 @@ fn App() -> impl IntoView {
                     "dirty only"
                 </button>
             </section>
-
             <div class="grid">
                 <section class="card fleet-wrap">
                     <div class="card-title">
@@ -155,14 +264,17 @@ fn App() -> impl IntoView {
                 </section>
                 <aside class="side">{aside}</aside>
             </div>
-        </div>
+        </>
     }
 }
 
 /// The attention summary: one chip per fleet-wide count, coloured by urgency.
 fn summary_chips(s: &FleetSummary) -> impl IntoView + use<> {
     let mut chips: Vec<(String, &'static str)> = Vec::new();
-    chips.push((format!("{} of {} need attention", s.needs_attention, s.total), "accent"));
+    chips.push((
+        format!("{} of {} need attention", s.needs_attention, s.total),
+        "accent",
+    ));
     if s.unpushed > 0 {
         let aging = if s.unpushed_aging > 0 {
             format!(" ({} aging)", s.unpushed_aging)
@@ -204,8 +316,8 @@ fn sort_button(sort: RwSignal<SortMode>, mode: SortMode, label: &'static str) ->
 
 /// One fleet row — every cell built from `cohors-core` data + judgments. Clicking
 /// it selects the repo (driving the detail aside).
-fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>) -> impl IntoView + use<> {
-    let a = assess(s, NOW);
+fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> impl IntoView + use<> {
+    let a = assess(s, now);
     let id = s.id.0.clone();
     let id_click = id.clone();
     let is_sel = move || selected.get().as_deref() == Some(id.as_str());
@@ -278,22 +390,27 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>) -> impl IntoVi
     let age = s
         .last_commit
         .as_ref()
-        .map(|c| time::relative(c.timestamp, NOW))
+        .map(|c| time::relative(c.timestamp, now))
         .unwrap_or_else(|| "—".to_string());
+
+    let last = s
+        .last_commit
+        .as_ref()
+        .map(|c| c.summary.clone())
+        .unwrap_or_default();
 
     let (status, status_class) = if let Some(e) = &s.error {
         (e.clone(), "status risk".to_string())
     } else if let Some(r) = &a.primary {
         (r.label(), format!("status {}", sev_class(r.severity())))
+    } else if !last.is_empty() {
+        (last, "status dim".to_string())
     } else {
-        ("clean".to_string(), "status dim".to_string())
+        ("·".to_string(), "status dim".to_string())
     };
 
     view! {
-        <tr
-            class:selected=is_sel
-            on:click=move |_| selected.set(Some(id_click.clone()))
-        >
+        <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
             <td class=name_class>{name}</td>
             <td class="dim">{branch}</td>
             <td class=sync_class>{sync}</td>
@@ -307,10 +424,10 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>) -> impl IntoVi
     }
 }
 
-/// The per-repo detail aside: a labelled facts card, mirroring the TUI's context
-/// pane (everything spelled out, colour for urgency).
-fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
-    let a = assess(s, NOW);
+/// The per-repo detail aside: a labelled facts card mirroring the TUI's context
+/// pane.
+fn detail_panel(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
+    let a = assess(s, now);
     let branch = match &s.branch {
         Branch::Named(b) => b.clone(),
         Branch::Detached(id) => format!("@{}", id.chars().take(7).collect::<String>()),
@@ -318,7 +435,6 @@ fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
     };
     let name = s.name.clone();
 
-    // Attention reasons (or error).
     let reasons: Vec<_> = if let Some(e) = &s.error {
         vec![view! { <li class="risk">{format!("⚠ {e}")}</li> }]
     } else if a.reasons.is_empty() {
@@ -333,7 +449,6 @@ fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
             .collect()
     };
 
-    // Working tree breakdown.
     let w = &s.worktree;
     let changes = if w.staged + w.modified + w.untracked == 0 {
         "clean".to_string()
@@ -358,7 +473,7 @@ fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
     };
 
     let upstream = match &s.upstream {
-        None => "no upstream".to_string(),
+        None => "—".to_string(),
         Some(up) if up.ahead == 0 && up.behind == 0 => format!("even with {}", up.name),
         Some(up) => {
             let mut p = Vec::new();
@@ -373,7 +488,7 @@ fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
     };
 
     let remote = match &s.remote {
-        None => "no GitHub remote".to_string(),
+        None => "—".to_string(),
         Some(r) => {
             let ci = match r.ci {
                 CiStatus::Passing => "CI passing",
@@ -384,22 +499,30 @@ fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
             let prs = if r.open_prs == 0 {
                 "no open PRs".to_string()
             } else {
-                format!("{} open PR{}", r.open_prs, if r.open_prs == 1 { "" } else { "s" })
+                format!(
+                    "{} open PR{}",
+                    r.open_prs,
+                    if r.open_prs == 1 { "" } else { "s" }
+                )
             };
-            let review = if r.prs_awaiting_review > 0 {
-                format!("  ·  {} awaiting review", r.prs_awaiting_review)
-            } else {
-                String::new()
-            };
-            format!("{ci}  ·  {prs}{review}")
+            format!("{ci}  ·  {prs}")
         }
     };
 
     let last = s
         .last_commit
         .as_ref()
-        .map(|c| format!("{} ago — {}", time::relative(c.timestamp, NOW), c.summary))
-        .unwrap_or_else(|| "no commits".to_string());
+        .map(|c| {
+            let age = time::relative(c.timestamp, now);
+            if c.summary.is_empty() {
+                format!("{age} ago")
+            } else {
+                format!("{age} ago — {}", c.summary)
+            }
+        })
+        .unwrap_or_else(|| "—".to_string());
+
+    let link = s.remote_url.clone();
 
     view! {
         <div class="card detail">
@@ -411,17 +534,34 @@ fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
                     <dt>"Stash"</dt><dd>{stash}</dd>
                     <dt>"Upstream"</dt><dd>{upstream}</dd>
                     <dt>"Remote"</dt><dd>{remote}</dd>
-                    <dt>"Last commit"</dt><dd>{last}</dd>
+                    <dt>"Last"</dt><dd>{last}</dd>
                 </dl>
+                {link.map(|url| {
+                    let shown = url.clone();
+                    view! {
+                        <div class="link">
+                            <a href=url target="_blank" rel="noreferrer">{shown}</a>
+                        </div>
+                    }
+                })}
             </div>
         </div>
     }
 }
 
-/// The weekly-standup panel: the user's commits this week, grouped by repo (the
-/// browser version of the TUI's `Tab` standup).
-fn standup_panel() -> impl IntoView + use<> {
-    let commits = demo::standup(NOW);
+/// The aside's default panel for real data: a quiet hint.
+fn hint_panel() -> impl IntoView {
+    view! {
+        <div class="card">
+            <div class="card-title">"Detail"</div>
+            <div class="scroll"><p class="empty">"Select a repository to inspect it."</p></div>
+        </div>
+    }
+}
+
+/// The weekly-standup panel (demo data): commits this week, grouped by repo.
+fn standup_panel(now: i64) -> impl IntoView + use<> {
+    let commits = demo::standup(now);
     let groups = group_commits(&commits);
     let total = commits.len();
 
@@ -433,7 +573,7 @@ fn standup_panel() -> impl IntoView + use<> {
                 .map(|c| {
                     view! {
                         <li>
-                            <span class="age dim">{time::relative(c.timestamp, NOW)}</span>
+                            <span class="age dim">{time::relative(c.timestamp, now)}</span>
                             <span class="sha dim">{c.short_id.clone()}</span>
                             {c.summary.clone()}
                         </li>

@@ -70,9 +70,51 @@ body {
   letter-spacing: 1px;
 }
 .tag { color: var(--dim); font-size: 0.85rem; }
-.meta { text-align: right; }
-.meta .big { font-size: 1.1rem; font-weight: 600; }
-.meta .dim { font-size: 0.76rem; }
+
+/* ── Connect (GitHub token) ─────────────────────────────────────────────── */
+.conn { display: flex; align-items: center; gap: 0.4rem; }
+.token {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  width: 220px;
+  padding: 0.38rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel);
+  color: var(--text);
+}
+.token:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.primary {
+  font-size: 0.8rem;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  padding: 0.38rem 0.8rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.primary:hover { filter: brightness(1.05); }
+.ghost {
+  font-size: 0.8rem;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--dim);
+  padding: 0.38rem 0.7rem;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.ghost:hover { color: var(--text); }
+.src { font-family: var(--mono); font-size: 0.8rem; color: var(--green); }
+
+/* ── Async states ───────────────────────────────────────────────────────── */
+.state { padding: 2.5rem 1rem; text-align: center; color: var(--dim); font-family: var(--mono); }
+.state.error { color: var(--red); }
+.state.sub { padding: 0 1rem 2.5rem; }
+
+.link { padding: 0.2rem 0.95rem 0.9rem; font-family: var(--mono); font-size: 0.74rem; }
+.link a { color: var(--blue); text-decoration: none; word-break: break-all; }
+.link a:hover { text-decoration: underline; }
+.empty { padding: 1.2rem 0.95rem; color: var(--faint); font-size: 0.82rem; }
 
 /* ── Attention chips (quiet: muted text, no coloured fills) ─────────────── */
 .attention { display: flex; flex-wrap: wrap; gap: 0.45rem; }

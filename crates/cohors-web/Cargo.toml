@@ -13,7 +13,7 @@
 name = "cohors-web"
 # Its own pre-release line — the web front-end isn't part of the workspace's
 # (TUI/CLI/MCP) version, and isn't published or installed yet.
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -30,3 +30,11 @@ leptos = { version = "0.8", features = ["csr"] }
 
 # Surface Rust panics in the browser console instead of an opaque "unreachable".
 console_error_panic_hook = "0.1"
+
+# Real GitHub data (slice 2): the browser can't use cohors-github's `ureq`
+# (native-only), so we fetch via the WASM HTTP client and map onto core models.
+gloo-net = { version = "0.6", features = ["http"] }
+gloo-storage = "0.3"            # persist the token in localStorage
+js-sys = "0.3"                 # Date: a real clock + robust ISO-8601 parsing
+serde = { version = "1", features = ["derive"] }
+wasm-bindgen-futures = "0.4"   # spawn the async fetch
