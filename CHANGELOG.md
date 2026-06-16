@@ -29,7 +29,10 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   Changes · Stash · PRs · CI · Last · Status), a **click-to-drill-in detail aside**
   (per-repo facts, mirroring the TUI's context pane), and a **weekly standup**
   panel. Light theme, monospace data, severity colour — echoing the TUI. Still
-  the demo fleet (slice 1); real GitHub data is next.
+  the demo fleet (slice 1); real GitHub data is next. The page is
+  **viewport-locked** (each panel scrolls internally, sticky table header) with a
+  calm, **professional palette** — muted greys, one restrained accent, quiet
+  chips, subtle borders.
 
 ## [0.4.21] — 2026-06-16
 

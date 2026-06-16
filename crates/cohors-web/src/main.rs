@@ -134,29 +134,27 @@ fn App() -> impl IntoView {
                         <span class="dim">{move || format!("({})", visible_count())}</span>
                         <span class="dim hint">"  ·  click a row for detail"</span>
                     </div>
-                    <table class="fleet">
-                        <thead>
-                            <tr>
-                                <th>"Repo"</th>
-                                <th>"Branch"</th>
-                                <th>"Sync"</th>
-                                <th>"Changes"</th>
-                                <th>"Stash"</th>
-                                <th>"PRs"</th>
-                                <th>"CI"</th>
-                                <th>"Last"</th>
-                                <th>"Status"</th>
-                            </tr>
-                        </thead>
-                        <tbody>{body}</tbody>
-                    </table>
+                    <div class="scroll">
+                        <table class="fleet">
+                            <thead>
+                                <tr>
+                                    <th>"Repo"</th>
+                                    <th>"Branch"</th>
+                                    <th>"Sync"</th>
+                                    <th>"Changes"</th>
+                                    <th>"Stash"</th>
+                                    <th>"PRs"</th>
+                                    <th>"CI"</th>
+                                    <th>"Last"</th>
+                                    <th>"Status"</th>
+                                </tr>
+                            </thead>
+                            <tbody>{body}</tbody>
+                        </table>
+                    </div>
                 </section>
                 <aside class="side">{aside}</aside>
             </div>
-
-            <footer class="foot">
-                "cohors web · v0.5 slice 1 · one Rust core, many front-ends"
-            </footer>
         </div>
     }
 }
@@ -406,14 +404,16 @@ fn detail_panel(s: &RepoSnapshot) -> impl IntoView + use<> {
     view! {
         <div class="card detail">
             <div class="card-title">{name}<span class="dim">{format!("  ·  {branch}")}</span></div>
-            <ul class="reasons">{reasons}</ul>
-            <dl class="facts">
-                <dt>"Changes"</dt><dd>{changes}</dd>
-                <dt>"Stash"</dt><dd>{stash}</dd>
-                <dt>"Upstream"</dt><dd>{upstream}</dd>
-                <dt>"Remote"</dt><dd>{remote}</dd>
-                <dt>"Last commit"</dt><dd>{last}</dd>
-            </dl>
+            <div class="scroll">
+                <ul class="reasons">{reasons}</ul>
+                <dl class="facts">
+                    <dt>"Changes"</dt><dd>{changes}</dd>
+                    <dt>"Stash"</dt><dd>{stash}</dd>
+                    <dt>"Upstream"</dt><dd>{upstream}</dd>
+                    <dt>"Remote"</dt><dd>{remote}</dd>
+                    <dt>"Last commit"</dt><dd>{last}</dd>
+                </dl>
+            </div>
         </div>
     }
 }
@@ -455,7 +455,7 @@ fn standup_panel() -> impl IntoView + use<> {
                 "This week "
                 <span class="dim">{format!("· {total} commits")}</span>
             </div>
-            {blocks}
+            <div class="scroll">{blocks}</div>
         </div>
     }
 }
