@@ -21,6 +21,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.14] — 2026-06-16
+
+### Fixed
+
+- **The context pane now stays on your repo across a `--watch` re-scan.** The
+  cursor was anchored to a row *index*, so when a re-scan re-sorted the fleet
+  (e.g. a repo you pushed went from "ahead" to clean and dropped down the
+  dirty-first list) the cursor — and the detail dock — ended up pointing at a
+  different repo, making the pane look like it hadn't updated. The cursor is now
+  keyed to the selected repo's id and restored to its new position after every
+  re-scan, so the pane keeps following the repo you were on (matching how the
+  marked selection and busy set already survive re-sorts).
+
 ## [0.4.13] — 2026-06-16
 
 ### Changed

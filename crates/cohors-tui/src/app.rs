@@ -473,7 +473,24 @@ impl App {
 
     /// Replace the repo set (e.g. after a scan) and keep the selection in range.
     pub fn set_repos(&mut self, repos: Vec<RepoSnapshot>) {
+        // Keep the cursor on the *same repo* across a re-scan, not the same row
+        // index. A `--watch` re-scan re-sorts the fleet (e.g. a repo you just
+        // pushed goes from "ahead" to clean and drops down the dirty-first list);
+        // anchoring to the index would leave the cursor — and the detail dock —
+        // pointing at a different repo. We remember the selected repo's id and
+        // restore the cursor to its new position. Marked selection + busy already
+        // survive re-sorts because they're keyed by id; this gives the cursor the
+        // same stability.
+        let keep = self.selected_repo().map(|r| r.id.clone());
         self.repos = repos;
+        if let Some(id) = keep
+            && let Some(pos) = self
+                .view()
+                .iter()
+                .position(|row| self.repos[row.index].id == id)
+        {
+            self.selected = pos;
+        }
         self.clamp_selection();
     }
 
@@ -1017,6 +1034,19 @@ mod tests {
         let mut app = App::new(vec![], String::new());
         app.set_repos(names.iter().map(|(n, d)| snap(n, *d)).collect());
         app
+    }
+
+    #[test]
+    fn cursor_follows_the_same_repo_across_a_rescan() {
+        // `beta` is dirty, so it sorts to the top and is selected.
+        let mut app = app_with(&[("alpha", false), ("beta", true)]);
+        assert_eq!(app.selected_repo().unwrap().name, "beta");
+
+        // A `--watch` re-scan flips the dirty states, re-sorting the fleet. The
+        // cursor must stay on `beta` (so the dock keeps showing it), not on the
+        // repo that now happens to sit at the old row index.
+        app.set_repos(vec![snap("alpha", true), snap("beta", false)]);
+        assert_eq!(app.selected_repo().unwrap().name, "beta");
     }
 
     #[test]
