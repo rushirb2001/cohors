@@ -120,16 +120,23 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
             render_attention_panel(frame, strip, app, now, &theme);
         }
         // The dock turns a sparse fleet's empty space into a cockpit (the
-        // selected repo at a glance, or live action progress). It only appears
-        // when it won't starve the list; on short terminals it vanishes and the
-        // list takes the whole area, exactly as before.
-        const DOCK_H: u16 = 10;
-        let dock_h = if rest.height >= DOCK_H + 7 { DOCK_H } else { 0 };
-        let [list, dock] =
+        // selected repo at a glance, or live action progress). It collapses to
+        // its content (no trailing blank rows) and only appears when it won't
+        // starve the list; on short terminals it vanishes and the list takes the
+        // whole area.
+        let dock_inner_w = rest.width.saturating_sub(4) as usize; // 2 borders + 2 h-padding
+        let dock = build_dock(app, now, &theme, dock_inner_w);
+        let dock_h = dock.as_ref().map_or(0, |d| {
+            let want = d.lines.len() as u16 + 3; // content + top padding + 2 borders
+            if rest.height >= want + 6 { want } else { 0 }
+        });
+        let [list, dock_area] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(dock_h)]).areas(rest);
         render_repos_panel(frame, list, app, now, dock_h > 0, &theme);
-        if dock_h > 0 {
-            render_dock(frame, dock, app, now, &theme);
+        if dock_h > 0
+            && let Some(d) = dock
+        {
+            render_dock_box(frame, dock_area, d, &theme);
         }
     }
 
@@ -1272,50 +1279,76 @@ fn render_repos_panel(
     }
 }
 
-/// The docked context pane below the list: the selected repo at a glance when
-/// idle, or live progress while a bulk action runs. It fills the space a short
-/// fleet would otherwise leave empty and makes the dashboard a cockpit — move
-/// the cursor and the pane follows. Cheap by design: it reads the snapshot we
-/// already have (no background fetches); the full remote-enriched view still
-/// lives behind `Enter`.
-fn render_dock(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+/// A pre-built docked context pane, laid out before the pane is sized so the box
+/// can collapse to its content (no trailing blank rows).
+struct DockBox {
+    /// Left title, e.g. ` payments  ·  main ` or ` Working — 2 repo(s) `.
+    title: String,
+    /// Right-aligned title hint (the idle pane's `Enter: full detail`).
+    right: Option<&'static str>,
+    /// Border colour — dim when idle, accent while an action runs.
+    border: Style,
+    /// Content rows, already laid out for the given inner width.
+    lines: Vec<Line<'static>>,
+}
+
+/// The most message lines the dock shows before truncating with `…`, so one huge
+/// commit can't make the collapsing pane dominate the screen.
+const DOCK_MSG_MAX: usize = 3;
+
+/// Build the docked context pane's content for inner width `inner_w`: the
+/// selected repo at a glance when idle, or live progress while a bulk action
+/// runs. `None` when there's nothing to show. It fills the space a short fleet
+/// would otherwise leave empty and makes the dashboard a cockpit — move the
+/// cursor and the pane follows. Cheap by design: it reads the snapshot we already
+/// have (no background fetches); the full remote-enriched view lives behind
+/// `Enter`.
+fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> Option<DockBox> {
     // While a bulk fetch/pull/push/stash runs, the dock shows what's in flight
     // rather than the cursor's repo.
     if !app.busy.is_empty() {
-        render_dock_action(frame, area, app, theme);
-        return;
+        let spin = spinner_frame(app.spinner);
+        let lines: Vec<Line> = app
+            .repos
+            .iter()
+            .filter(|r| app.busy.contains(&r.id))
+            .map(|r| {
+                Line::from(vec![
+                    Span::styled(format!("{spin} "), theme.ahead()),
+                    Span::raw(r.name.clone()),
+                ])
+            })
+            .collect();
+        return Some(DockBox {
+            title: format!(" Working — {} repo(s) ", app.busy.len()),
+            right: None,
+            border: theme.ahead(),
+            lines,
+        });
     }
-    let Some(snap) = app.selected_repo() else {
-        return;
-    };
 
+    let snap = app.selected_repo()?;
     let branch = match &snap.branch {
         Branch::Named(b) => b.clone(),
         Branch::Detached(id) => format!("@{}", id.chars().take(7).collect::<String>()),
         Branch::Unborn => "unborn".to_string(),
     };
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim())
-        .title(Line::from(format!(" {}  ·  {branch} ", snap.name)).bold())
-        .title(Line::from(Span::styled(" Enter: full detail ", theme.dim())).right_aligned())
-        .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
+    let title = format!(" {}  ·  {branch} ", snap.name);
 
     // A broken repo: just the error, in red — none of the facts below apply.
     if let Some(reason) = &snap.error {
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
+        return Some(DockBox {
+            title,
+            right: Some(" Enter: full detail "),
+            border: theme.dim(),
+            lines: vec![Line::from(Span::styled(
                 format!("⚠ {reason}"),
                 theme.error(),
-            ))),
-            inner,
-        );
-        return;
+            ))],
+        });
     }
 
-    // Labelled facts — each on its own row with a dim, fixed-width label so the
+    // Labelled facts — each on its own row with a purple, fixed-width label so the
     // pane reads as a small form, not a cryptic glyph soup. Everything is spelled
     // out (no `s1`/`●`); colour carries urgency.
     let mut lines: Vec<Line> = Vec::new();
@@ -1432,7 +1465,6 @@ fn render_dock(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
         ),
         Some(c) => {
             let head = format!("{} ago — ", time::relative(c.timestamp, now));
-            let inner_w = inner.width as usize;
             // First message line shares its row with the label + age; wrapped
             // continuation lines sit under the value column.
             let first_w = inner_w
@@ -1441,11 +1473,10 @@ fn render_dock(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
             let rest_w = inner_w.saturating_sub(DOCK_LABEL_W).max(1);
             let mut wrapped = word_wrap(&c.summary, first_w, rest_w);
 
-            // Cap to the rows left in the pane; mark the cut with an ellipsis.
-            let budget = (inner.height as usize).saturating_sub(lines.len()).max(1);
-            if wrapped.len() > budget {
-                wrapped.truncate(budget);
-                let w = if budget == 1 { first_w } else { rest_w };
+            // Cap to a few lines; mark the cut with an ellipsis.
+            if wrapped.len() > DOCK_MSG_MAX {
+                wrapped.truncate(DOCK_MSG_MAX);
+                let w = if DOCK_MSG_MAX == 1 { first_w } else { rest_w };
                 if let Some(last) = wrapped.last_mut() {
                     let mut s: String = last.chars().take(w.saturating_sub(1)).collect();
                     s.push('…');
@@ -1472,7 +1503,12 @@ fn render_dock(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
         }
     }
 
-    frame.render_widget(Paragraph::new(lines), inner);
+    Some(DockBox {
+        title,
+        right: Some(" Enter: full detail "),
+        border: theme.dim(),
+        lines,
+    })
 }
 
 /// Greedy word-wrap: split `text` on whitespace into lines that fit `first`
@@ -1511,37 +1547,28 @@ fn dock_field(
     value: Vec<Span<'static>>,
     theme: &Theme,
 ) {
-    let mut spans = vec![Span::styled(format!("{label:<DOCK_LABEL_W$}"), theme.dim())];
+    let mut spans = vec![Span::styled(
+        format!("{label:<DOCK_LABEL_W$}"),
+        theme.fg(SPIDER_PURPLE),
+    )];
     spans.extend(value);
     lines.push(Line::from(spans));
 }
 
-/// The dock while a bulk action runs: the in-flight repos, each with a spinner.
-fn render_dock_action(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    let n = app.busy.len();
-    let block = Block::bordered()
+/// Draw a pre-built [`DockBox`] into `area`, with a blank top-padding row above
+/// the content so it reads as a titled card.
+fn render_dock_box(frame: &mut Frame, area: Rect, dock: DockBox, theme: &Theme) {
+    let mut block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .border_style(theme.ahead())
-        .title(Line::from(format!(" Working — {n} repo(s) ",)).bold())
-        .padding(Padding::horizontal(1));
+        .border_style(dock.border)
+        .title(Line::from(dock.title).bold())
+        .padding(Padding::new(1, 1, 1, 0)); // left, right, top, bottom — a gap above the content
+    if let Some(right) = dock.right {
+        block = block.title(Line::from(Span::styled(right, theme.dim())).right_aligned());
+    }
     let inner = block.inner(area);
     frame.render_widget(block, area);
-
-    let spin = spinner_frame(app.spinner);
-    // In stable fleet order, capped to the pane height so it never overflows.
-    let lines: Vec<Line> = app
-        .repos
-        .iter()
-        .filter(|r| app.busy.contains(&r.id))
-        .take(inner.height as usize)
-        .map(|r| {
-            Line::from(vec![
-                Span::styled(format!("{spin} "), theme.ahead()),
-                Span::raw(r.name.clone()),
-            ])
-        })
-        .collect();
-    frame.render_widget(Paragraph::new(lines), inner);
+    frame.render_widget(Paragraph::new(dock.lines), inner);
 }
 
 /// Map an attention [`Severity`] to its accent style for the dock's reason chips.

@@ -17,16 +17,16 @@ expression: "render_to_string(&app, 100, 34)"
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ load-tester  ·  main ──────────────────────────────────────────────────────── Enter: full detail ╮
+│                                                                                                  │
 │ Changes      clean                                                                               │
 │ Stash        none                                                                                │
 │ Upstream     1 ahead  (origin/main)                                                              │
 │ Remote       no GitHub remote                                                                    │
 │ Last commit  1w ago — chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC   │
 │              pgbench) + ignore results and refresh the CI perf matrix                            │
-│                                                                                                  │
-│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮

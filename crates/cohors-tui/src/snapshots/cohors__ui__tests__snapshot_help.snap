@@ -28,16 +28,16 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    Space           mark / unmark the repo                          │              │
 │              │    a               mark all (again to clear)                       │              │
 │              │    Esc             clear the selection                             │              │
-╰──────────────│    /               fuzzy filter (Esc clears)                       │──────────────╯
-╭ legacy-billin│    :               command mode (:fetch, :!cmd shell, :sort,       │: full detail ╮
-│ ⚠ could not r│  :jump …)                                                          │              │
+│              │    /               fuzzy filter (Esc clears)                       │              │
+│              │    :               command mode (:fetch, :!cmd shell, :sort,       │              │
+│              │  :jump …)                                                          │              │
 │              │    d               toggle dirty-only                               │              │
 │              │    s               cycle sort mode                                 │              │
 │              │    Tab             weekly standup                                  │              │
-│              │                                                                    │              │
-│              │  Act — on the marked repos, else the current one                   │              │
+╰──────────────│                                                                    │──────────────╯
+╭ legacy-billin│  Act — on the marked repos, else the current one                   │: full detail ╮
 │              │    ⏎               inspect repo — commits, changes, branches       │              │
-│              │    o               open with… (editors, reveal, lazygit)           │              │
+│ ⚠ could not r│    o               open with… (editors, reveal, lazygit)           │              │
 ╰──────────────│                                                                    │──────────────╯
 ╭──────────────╰────────────────────────────────────────────────────────────────────╯──────────────╮
 │ ? / Esc close                                                                                    │

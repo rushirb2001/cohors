@@ -11,14 +11,14 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync      Changes  Last commit                               │
-│▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
-│    payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
-│    web-app           feat/checkout  ↓5 ●      7        20m  wip: cart drawer                     │
-│    infra             @a1b2c3d       —         4         1w  build: pin ci image                  │
-│    auth-service      main           ● 1pr     ·         3d  chore: bump deps                     │
+│    Repo              Branch         Sync  Changes  Stash  PRs  CI       Last  Status             │
+│▌   legacy-billing    error          ·     ·        ·      ·    ·        ·     could not read .gi…│
+│    payments          main           ↑2    4        1      2    passing    2h  ↑2 unpushed        │
+│    web-app           feat/checkout  ↓5    7        ·      ·    failing   20m  ↓5 behind — pull   │
+│                                             ↓ 2 more                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail ╮
 │                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
+│ ⚠ could not read .git (permission denied)                                                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

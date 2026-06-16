@@ -15,17 +15,17 @@ expression: "render_to_string(&app, 100, 28)"
 │▌   leg│ │ ● main                             █ │ │                                      ││ad .gi…│
 │    pay│ │   feat/idempotency                 █ │ │                                      ││       │
 │    web│ │   spike/webhooks                   █ │ │                                      ││pull   │
-│       │ │                                    █ │ │                                      ││       │
-╰───────│ │ Stashes (1)                        ║ │ │                                      ││───────╯
-╭ legacy│ │ WIP on main: dashboard tweaks      ║ │ │                                      ││detail ╮
-│ ⚠ coul│ │                                    ║ │ │                                      ││       │
+│    inf│ │                                    █ │ │                                      ││d chan…│
+│    aut│ │ Stashes (1)                        ║ │ │                                      ││       │
+│       │ │ WIP on main: dashboard tweaks      ║ │ │                                      ││       │
+│       │ │                                    ║ │ │                                      ││       │
 │       │ │ GitHub                             ║ │ │                                      ││       │
 │       │ │ 7 open issues  ·  latest v1.4.0    ║ │ │                                      ││       │
 │       │ │                                    ║ │ │                                      ││       │
-│       │ │ Pull requests (2)                  ║ │ │                                      ││       │
-│       │ │ #142 fix: retry charge on 5xx  @may║ │ │                                      ││       │
+╰───────│ │ Pull requests (2)                  ║ │ │                                      ││───────╯
+╭ legacy│ │ #142 fix: retry charge on 5xx  @may║ │ │                                      ││detail ╮
 │       │ │ #147 wip: webhook signatures  @sam ║ │ │                                      ││       │
-│       │ │                                    ║ │ │                                      ││       │
+│ ⚠ coul│ │                                    ║ │ │                                      ││       │
 ╰───────│ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│───────╯
 ╭───────╰──────────────────────────────────────────────────────────────────────────────────╯───────╮
 │ ↑/↓ scroll · g/G top / bottom · Esc close                                                        │

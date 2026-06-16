@@ -21,6 +21,26 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.16] — 2026-06-16
+
+### Fixed
+
+- **CI status is now accurate for GitHub Actions repos (ADR-040).** It was read
+  only from the legacy commit Status API, which returns "pending" for repos that
+  post no commit statuses — i.e. every Actions-only repo, forever (and the wrong
+  value was cached across restarts). CI is now derived from the **Checks API**
+  (where Actions report) combined with commit statuses: failing wins, then
+  pending, then passing; with no checks *and* no statuses it's "no CI" — a real,
+  distinct state, not a false pending. It self-corrects on the next scan/`--watch`
+  refresh.
+
+### Changed
+
+- **Context pane: collapses to content, purple labels, top padding (ADR-039).**
+  The pane no longer reserves a fixed height with trailing blank rows — it sizes
+  to its content. Field labels (`Changes`, `Stash`, …) are now brand-purple, and
+  there's a blank padding row above the first fact.
+
 ## [0.4.15] — 2026-06-16
 
 ### Changed
