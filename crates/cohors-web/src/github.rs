@@ -11,9 +11,13 @@
 //! machine with no GitHub login), `/gh/...` fails and the app falls back to the
 //! demo fleet.
 
-use cohors_core::{Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, WorktreeStatus};
+use cohors_core::{
+    Branch, CiStatus, CommitMeta, Contributor, PullRequest, RemoteInfo, RepoId, RepoSnapshot,
+    WorktreeStatus,
+};
 use gloo_net::http::Request;
 use serde::Deserialize;
+use serde::de::DeserializeOwned;
 
 /// Same-origin path proxied to the GitHub REST API by the local `cohors web`
 /// server, which injects the token.
@@ -194,6 +198,174 @@ pub async fn enrich(full_name: &str, branch: &str) -> Option<RemoteInfo> {
         open_prs,
         prs_awaiting_review: 0,
         ci,
+    })
+}
+
+// ── On-demand per-repo detail (the web's inspection window) ───────────────────
+
+/// The rich, drill-in detail for one repo — the browser analog of the TUI's
+/// `Enter` view (everything fetchable from GitHub).
+#[derive(Clone, Default)]
+pub struct RepoDetail {
+    pub commits: Vec<CommitMeta>,
+    pub prs: Vec<PullRequest>,
+    pub contributors: Vec<Contributor>,
+    pub open_issues: u32,
+    pub latest_release: Option<String>,
+    pub stars: u32,
+    pub language: Option<String>,
+}
+
+/// Fetch a repo's full detail via the proxy. Each section is best-effort (a
+/// failed/absent section is just empty), so the panel always renders. Called
+/// on-demand when a repo is selected.
+pub async fn fetch_detail(full_name: &str, branch: &str) -> RepoDetail {
+    let mut d = RepoDetail::default();
+    let Some((owner, repo)) = full_name.split_once('/') else {
+        return d;
+    };
+
+    if let Some(m) = get_json::<RepoMeta>(&format!("{PROXY}/repos/{owner}/{repo}")).await {
+        d.stars = m.stargazers_count;
+        d.language = m.language;
+    }
+    if let Some(cs) = get_json::<Vec<CommitResponse>>(&format!(
+        "{PROXY}/repos/{owner}/{repo}/commits?sha={branch}&per_page=10"
+    ))
+    .await
+    {
+        d.commits = cs.into_iter().map(map_commit).collect();
+    }
+    if let Some(prs) = get_json::<Vec<PrResponse>>(&format!(
+        "{PROXY}/repos/{owner}/{repo}/pulls?state=open&per_page=20"
+    ))
+    .await
+    {
+        d.prs = prs.into_iter().map(map_pr).collect();
+    }
+    if let Some(cs) = get_json::<Vec<ContributorResponse>>(&format!(
+        "{PROXY}/repos/{owner}/{repo}/contributors?per_page=8"
+    ))
+    .await
+    {
+        d.contributors = cs.into_iter().filter_map(map_contributor).collect();
+    }
+    if let Some(s) = get_json::<SearchResponse>(&format!(
+        "{PROXY}/search/issues?q=repo:{owner}/{repo}+is:issue+is:open&per_page=1"
+    ))
+    .await
+    {
+        d.open_issues = s.total_count;
+    }
+    if let Some(r) =
+        get_json::<ReleaseResponse>(&format!("{PROXY}/repos/{owner}/{repo}/releases/latest")).await
+    {
+        d.latest_release = Some(r.tag_name);
+    }
+    d
+}
+
+/// GET a proxied path and decode JSON, or `None` on any failure (best-effort).
+async fn get_json<T: DeserializeOwned>(path: &str) -> Option<T> {
+    let resp = Request::get(path).send().await.ok()?;
+    if !resp.ok() {
+        return None;
+    }
+    resp.json::<T>().await.ok()
+}
+
+#[derive(Deserialize)]
+struct RepoMeta {
+    #[serde(default)]
+    stargazers_count: u32,
+    language: Option<String>,
+}
+#[derive(Deserialize)]
+struct SearchResponse {
+    #[serde(default)]
+    total_count: u32,
+}
+#[derive(Deserialize)]
+struct ReleaseResponse {
+    tag_name: String,
+}
+#[derive(Deserialize)]
+struct CommitResponse {
+    sha: String,
+    commit: CommitBody,
+    author: Option<UserLogin>,
+}
+#[derive(Deserialize)]
+struct CommitBody {
+    #[serde(default)]
+    message: String,
+    author: Option<GitAuthor>,
+}
+#[derive(Deserialize)]
+struct GitAuthor {
+    #[serde(default)]
+    name: String,
+    #[serde(default)]
+    date: String,
+}
+#[derive(Deserialize)]
+struct UserLogin {
+    login: String,
+}
+#[derive(Deserialize)]
+struct PrResponse {
+    number: u32,
+    #[serde(default)]
+    title: String,
+    user: Option<UserLogin>,
+    #[serde(default)]
+    draft: bool,
+    head: Option<HeadRef>,
+    #[serde(default)]
+    html_url: String,
+}
+#[derive(Deserialize)]
+struct HeadRef {
+    #[serde(rename = "ref", default)]
+    r#ref: String,
+}
+#[derive(Deserialize)]
+struct ContributorResponse {
+    login: Option<String>,
+    #[serde(default)]
+    contributions: u32,
+}
+
+fn map_commit(c: CommitResponse) -> CommitMeta {
+    let date = c.commit.author.as_ref().map(|a| a.date.as_str()).unwrap_or("");
+    let author = c
+        .author
+        .map(|u| u.login)
+        .or_else(|| c.commit.author.as_ref().map(|a| a.name.clone()))
+        .unwrap_or_default();
+    CommitMeta {
+        short_id: c.sha.chars().take(7).collect(),
+        author,
+        timestamp: parse_iso(date).unwrap_or(0),
+        summary: c.commit.message.lines().next().unwrap_or("").to_string(),
+    }
+}
+
+fn map_pr(p: PrResponse) -> PullRequest {
+    PullRequest {
+        number: p.number,
+        title: p.title,
+        author: p.user.map(|u| u.login).unwrap_or_default(),
+        draft: p.draft,
+        branch: p.head.map(|h| h.r#ref).unwrap_or_default(),
+        url: p.html_url,
+    }
+}
+
+fn map_contributor(c: ContributorResponse) -> Option<Contributor> {
+    c.login.map(|login| Contributor {
+        login,
+        contributions: c.contributions,
     })
 }
 

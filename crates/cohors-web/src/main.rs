@@ -39,6 +39,14 @@ enum SortKey {
     Prs,
 }
 
+/// The drill-in detail's load state for the selected repo.
+#[derive(Clone)]
+enum DetailState {
+    Idle,
+    Loading,
+    Loaded(github::RepoDetail),
+}
+
 fn main() {
     console_error_panic_hook::set_once();
     leptos::mount::mount_to_body(App);
@@ -110,6 +118,41 @@ fn App() -> impl IntoView {
     let reload = move |_| load();
     load();
 
+    // Drill-in: when a repo is selected (live data only), fetch its rich detail
+    // — recent commits, open PRs, contributors, issues, release — on demand.
+    let detail = RwSignal::new(DetailState::Idle);
+    Effect::new(move |_| {
+        let Some(id) = selected.get() else {
+            detail.set(DetailState::Idle);
+            return;
+        };
+        if mode.get_untracked() != Mode::Live {
+            detail.set(DetailState::Idle);
+            return;
+        }
+        let branch = repos
+            .get_untracked()
+            .iter()
+            .find(|s| s.id.0 == id)
+            .and_then(|s| match &s.branch {
+                Branch::Named(b) => Some(b.clone()),
+                _ => None,
+            });
+        let Some(branch) = branch else {
+            detail.set(DetailState::Idle);
+            return;
+        };
+        detail.set(DetailState::Loading);
+        let full = id.clone();
+        spawn_local(async move {
+            let d = github::fetch_detail(&full, &branch).await;
+            // Ignore a stale result if the selection moved on.
+            if selected.get_untracked().as_deref() == Some(full.as_str()) {
+                detail.set(DetailState::Loaded(d));
+            }
+        });
+    });
+
     view! {
         <div class="app">
             <header class="topbar">
@@ -150,8 +193,12 @@ fn App() -> impl IntoView {
                     view! { <div class="state">"Fetching your repositories from GitHub…"</div> }
                         .into_any()
                 }
-                Mode::Demo => dashboard(repos, DEMO_NOW, filter, sort, selected).into_any(),
-                Mode::Live => dashboard(repos, real_now(), filter, sort, selected).into_any(),
+                Mode::Demo => {
+                    dashboard(repos, DEMO_NOW, filter, sort, selected, detail).into_any()
+                }
+                Mode::Live => {
+                    dashboard(repos, real_now(), filter, sort, selected, detail).into_any()
+                }
             }}
         </div>
     }
@@ -166,6 +213,7 @@ fn dashboard(
     filter: RwSignal<String>,
     sort: RwSignal<SortKey>,
     selected: RwSignal<Option<String>>,
+    detail: RwSignal<DetailState>,
 ) -> impl IntoView {
     let summary = move || summary_chips(&repos.get(), now);
     let visible = move || view_indices(&repos.get(), &filter.get(), sort.get(), now);
@@ -181,7 +229,7 @@ fn dashboard(
         selected
             .get()
             .and_then(|id| repos.get().into_iter().find(|s| s.id.0 == id))
-            .map(|s| detail_panel(&s, now).into_any())
+            .map(|s| detail_panel(&s, now, detail).into_any())
             .unwrap_or_else(|| hint_panel().into_any())
     };
 
@@ -393,8 +441,13 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
     }
 }
 
-/// The per-repo detail aside: the remote facts this dashboard knows.
-fn detail_panel(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
+/// The per-repo detail aside: the at-a-glance remote facts, plus the on-demand
+/// rich detail (commits, PRs, contributors, issues, release) once it loads.
+fn detail_panel(
+    s: &RepoSnapshot,
+    now: i64,
+    detail: RwSignal<DetailState>,
+) -> impl IntoView + use<> {
     let branch = match &s.branch {
         Branch::Named(b) => b.clone(),
         Branch::Detached(id) => format!("@{}", id.chars().take(7).collect::<String>()),
@@ -450,6 +503,7 @@ fn detail_panel(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
                     <dt>"Activity"</dt><dd>{last}</dd>
                 </dl>
                 {about.map(|d| view! { <p class="about-detail">{d}</p> })}
+                {move || rich_block(detail.get(), now)}
                 {link.map(|url| {
                     let shown = url.clone();
                     view! {
@@ -459,6 +513,121 @@ fn detail_panel(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
                     }
                 })}
             </div>
+        </div>
+    }
+}
+
+/// The on-demand rich detail under the at-a-glance facts. Idle (or demo mode)
+/// renders nothing; `Loading` shows the dots spinner; `Loaded` shows the
+/// sections. Reactive — re-runs when the `detail` signal changes.
+fn rich_block(state: DetailState, now: i64) -> AnyView {
+    match state {
+        DetailState::Idle => ().into_any(),
+        DetailState::Loading => view! {
+            <div class="rich-loading"><span class="spin"></span>" loading detail…"</div>
+        }
+        .into_any(),
+        DetailState::Loaded(d) => rich_sections(d, now).into_any(),
+    }
+}
+
+/// Render the loaded drill-in: a GitHub stats line, then sections for recent
+/// commits, open PRs, and top contributors. Empty sections are omitted.
+fn rich_sections(d: github::RepoDetail, now: i64) -> impl IntoView {
+    // Stats line: stars · language · open issues · latest release.
+    let mut stats: Vec<String> = vec![format!("★ {}", d.stars)];
+    if let Some(lang) = &d.language {
+        stats.push(lang.clone());
+    }
+    stats.push(format!(
+        "{} open issue{}",
+        d.open_issues,
+        if d.open_issues == 1 { "" } else { "s" }
+    ));
+    if let Some(rel) = &d.latest_release {
+        stats.push(format!("release {rel}"));
+    }
+    let stats_line = stats.join("  ·  ");
+
+    let commits_view = (!d.commits.is_empty()).then(|| {
+        let rows = d
+            .commits
+            .clone()
+            .into_iter()
+            .map(|c| {
+                let age = time::relative(c.timestamp, now);
+                view! {
+                    <li>
+                        <span class="sha">{c.short_id}</span>
+                        <span class="msg">{c.summary}</span>
+                        <span class="age">{format!("{} · {age} ago", c.author)}</span>
+                    </li>
+                }
+            })
+            .collect::<Vec<_>>();
+        view! {
+            <div class="sec">
+                <div class="sec-h">"Recent commits"</div>
+                <ul class="rows">{rows}</ul>
+            </div>
+        }
+    });
+
+    let prs_view = (!d.prs.is_empty()).then(|| {
+        let rows = d
+            .prs
+            .clone()
+            .into_iter()
+            .map(|p| {
+                let draft = p.draft.then(|| view! { <span class="badge">"draft"</span> });
+                view! {
+                    <li>
+                        <a class="sha" href=p.url target="_blank" rel="noreferrer">
+                            {format!("#{}", p.number)}
+                        </a>
+                        <span class="msg">{p.title}</span>
+                        {draft}
+                        <span class="age">{p.author}</span>
+                    </li>
+                }
+            })
+            .collect::<Vec<_>>();
+        view! {
+            <div class="sec">
+                <div class="sec-h">"Open PRs"</div>
+                <ul class="rows">{rows}</ul>
+            </div>
+        }
+    });
+
+    let contrib_view = (!d.contributors.is_empty()).then(|| {
+        let rows = d
+            .contributors
+            .clone()
+            .into_iter()
+            .map(|c| {
+                view! {
+                    <li>
+                        <span class="msg">{c.login}</span>
+                        <span class="age">{format!("{} commits", c.contributions)}</span>
+                    </li>
+                }
+            })
+            .collect::<Vec<_>>();
+        view! {
+            <div class="sec">
+                <div class="sec-h">"Top contributors"</div>
+                <ul class="rows">{rows}</ul>
+            </div>
+        }
+    });
+
+    view! {
+        <div class="rich">
+            <div class="stats">{stats_line}</div>
+            {commits_view}
+            {prs_view}
+            {contrib_view}
         </div>
     }
 }

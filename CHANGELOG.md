@@ -38,6 +38,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
+- **The web drill-in is now rich — the browser analog of the TUI's `Enter`
+  view.** Selecting a repo fetches its full detail on demand through the proxy
+  and renders, under the at-a-glance facts: a **stats line** (stars · language ·
+  open issues · latest release), **recent commits** (sha · summary · author ·
+  age), **open PRs** (number · title · draft badge · author, each linking to
+  GitHub), and **top contributors** (login · commit count). Each section is
+  best-effort, so the panel always renders even if one request fails, and a dots
+  spinner shows while the detail loads.
 - **Real GitHub data in the web dashboard — zero setup (v0.5 slice 2).**
   `cohors web` now shows *your* repositories automatically, using the **same
   GitHub login the TUI uses** (`gh auth token` / `$GITHUB_TOKEN`). The browser is
