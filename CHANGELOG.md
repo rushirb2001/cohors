@@ -21,6 +21,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.11] — 2026-06-16
+
+### Changed
+
+- **The repository table stops repeating the commit message when the dock shows
+  it (ADR-039 follow-up).** With the dock up, the trailing column splits into
+  **Last** (commit age) and **Why** — the repo's primary attention reason,
+  colored by severity (`↑2 unpushed`, `↓5 behind — pull`, …) — so the
+  dirty-first ordering is now self-explaining on every row, not just the selected
+  one. On short terminals (no dock) the full "Last commit" column is kept, so no
+  information is lost.
+
 ## [0.4.10] — 2026-06-15
 
 ### Added

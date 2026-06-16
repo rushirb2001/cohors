@@ -3,7 +3,8 @@
 //! No state is mutated here.
 
 use cohors_core::{
-    Branch, CiStatus, RepoSnapshot, Severity, StandupCommit, assess, fleet_summary, time,
+    AttentionReason, Branch, CiStatus, RepoSnapshot, Severity, StandupCommit, assess,
+    fleet_summary, time,
 };
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -126,7 +127,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         let dock_h = if rest.height >= DOCK_H + 7 { DOCK_H } else { 0 };
         let [list, dock] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(dock_h)]).areas(rest);
-        render_repos_panel(frame, list, app, now, &theme);
+        render_repos_panel(frame, list, app, now, dock_h > 0, &theme);
         if dock_h > 0 {
             render_dock(frame, dock, app, now, &theme);
         }
@@ -1048,7 +1049,14 @@ fn keep_visible(prev: usize, selected: usize, viewport: usize, total: usize) -> 
     off.min(total.saturating_sub(viewport))
 }
 
-fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+fn render_repos_panel(
+    frame: &mut Frame,
+    area: Rect,
+    app: &App,
+    now: i64,
+    dock_visible: bool,
+    theme: &Theme,
+) {
     // The list's view state lives in its own title: the (visible) count in bold,
     // then the sort mode (and the dirty-only filter, when on) in dim.
     let mut title = vec![Span::styled(
@@ -1137,22 +1145,65 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         .unwrap_or(0)
         .clamp(7, 12);
 
-    let widths = [
-        Constraint::Length(18),        // Repo (incl. 2-col selection gutter)
-        Constraint::Length(13),        // Branch
-        Constraint::Length(sync_w),    // Sync (ahead/behind + remote CI/PRs)
-        Constraint::Length(changes_w), // Changes (working tree + stash)
-        Constraint::Fill(1),           // Last commit takes the remaining width
-    ];
+    // When the dock is up it carries the selected repo's commit message, so the
+    // table drops the message and instead spends that width on a tight age column
+    // ("Last") and a "Why" column — the primary attention reason, which finally
+    // makes the dirty-first ordering self-explaining at a glance. When the dock
+    // is hidden (short terminal) the table keeps the full "Last commit" so no
+    // information is ever lost.
+    let age_w = if dock_visible {
+        view.iter()
+            .map(|vr| match &app.repos[vr.index].last_commit {
+                Some(c) => time::relative(c.timestamp, now).chars().count(),
+                None => 1,
+            })
+            .max()
+            .unwrap_or(0)
+            .clamp(4, 6)
+    } else {
+        0
+    };
 
-    // The width left for the "Last commit" column, so its message can be
-    // ellipsized cleanly rather than hard-clipped at the frame. Mirrors the
-    // table's own arithmetic: the inner width, minus the 2-col highlight-symbol
-    // reserve, the fixed columns, and the four 2-col gaps between five columns.
-    let last_w = (inner.width as usize)
-        .saturating_sub(2 + 18 + 13 + sync_w as usize + changes_w as usize + 2 * 4);
-    let summary_max = last_w.saturating_sub(5); // age is `{:>3}  ` = 5 columns
+    let widths: Vec<Constraint> = if dock_visible {
+        vec![
+            Constraint::Length(18),           // Repo (incl. 2-col selection gutter)
+            Constraint::Length(13),           // Branch
+            Constraint::Length(sync_w),       // Sync (ahead/behind + remote CI/PRs)
+            Constraint::Length(changes_w),    // Changes (working tree + stash)
+            Constraint::Length(age_w as u16), // Last (commit age)
+            Constraint::Fill(1),              // Why (primary attention reason)
+        ]
+    } else {
+        vec![
+            Constraint::Length(18),
+            Constraint::Length(13),
+            Constraint::Length(sync_w),
+            Constraint::Length(changes_w),
+            Constraint::Fill(1), // Last commit (age + message)
+        ]
+    };
 
+    // Mirror the table's own arithmetic to size the trailing Fill column, so its
+    // text can be ellipsized cleanly rather than hard-clipped at the frame: the
+    // inner width, minus the 2-col highlight-symbol reserve, the fixed columns,
+    // and the 2-col gaps between columns.
+    let fixed = 2 + 18 + 13 + sync_w as usize + changes_w as usize;
+    let (reason_max, summary_max) = if dock_visible {
+        // 6 columns ⇒ 5 gaps; Last(age_w) is fixed too.
+        let why_w = (inner.width as usize).saturating_sub(fixed + age_w + 2 * 5);
+        (why_w, 0)
+    } else {
+        // 5 columns ⇒ 4 gaps; age prefix in the cell is `{:>3}  ` = 5 columns.
+        let last_w = (inner.width as usize).saturating_sub(fixed + 2 * 4);
+        (0, last_w.saturating_sub(5))
+    };
+
+    let fmt = RowFmt {
+        dock: dock_visible,
+        summary_max,
+        reason_max,
+        age_w,
+    };
     let spin = spinner_frame(app.spinner);
     let rows: Vec<Row> = view
         .iter()
@@ -1160,15 +1211,7 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
             let snap = &app.repos[vr.index];
             let busy = app.busy.contains(&snap.id).then_some(spin);
             let marked = app.selection.contains(&snap.id);
-            repo_row(
-                snap,
-                &vr.name_highlights,
-                now,
-                summary_max,
-                theme,
-                busy,
-                marked,
-            )
+            repo_row(snap, &vr.name_highlights, now, theme, busy, marked, &fmt)
         })
         .collect();
 
@@ -1176,16 +1219,19 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     // but aligned to the data table: a 2-col reserve for the highlight symbol,
     // then the same column widths/spacing. "Repo" is padded by 2 to line up with
     // the names' selection gutter.
+    let labels: &[&str] = if dock_visible {
+        &["  Repo", "Branch", "Sync", "Changes", "Last", "Why"]
+    } else {
+        &["  Repo", "Branch", "Sync", "Changes", "Last commit"]
+    };
     let header_style = Style::new().add_modifier(Modifier::BOLD);
     let [_sym, header_cols] =
         Layout::horizontal([Constraint::Length(2), Constraint::Min(0)]).areas(header_area);
-    let col_rects = Layout::horizontal(widths).spacing(2).split(header_cols);
-    for (rect, label) in
-        col_rects
-            .iter()
-            .zip(["  Repo", "Branch", "Sync", "Changes", "Last commit"])
-    {
-        frame.render_widget(Paragraph::new(Span::styled(label, header_style)), *rect);
+    let col_rects = Layout::horizontal(widths.clone())
+        .spacing(2)
+        .split(header_cols);
+    for (rect, label) in col_rects.iter().zip(labels.iter()) {
+        frame.render_widget(Paragraph::new(Span::styled(*label, header_style)), *rect);
     }
 
     let table = Table::new(rows, widths)
@@ -1341,22 +1387,36 @@ fn severity_style(sev: Severity, theme: &Theme) -> Style {
     }
 }
 
+/// How to render a row's trailing columns, which depend on whether the dock is
+/// showing the commit message for us.
+struct RowFmt {
+    /// Dock up ⇒ trailing columns are Last (age) + Why (reason); else one wide
+    /// "Last commit" (age + message).
+    dock: bool,
+    /// Max chars for the commit summary (the non-dock "Last commit" column).
+    summary_max: usize,
+    /// Max chars for the reason label (the dock "Why" column).
+    reason_max: usize,
+    /// Width of the age column, for right-aligning the age (the dock layout).
+    age_w: usize,
+}
+
 fn repo_row<'a>(
     snap: &'a RepoSnapshot,
     highlights: &[u32],
     now: i64,
-    summary_max: usize,
     theme: &Theme,
     busy: Option<&str>,
     marked: bool,
+    fmt: &RowFmt,
 ) -> Row<'a> {
     if let Some(reason) = &snap.error {
-        // A broken repo: a red name + an "error" marker and the reason in the
-        // wide last column. The data columns get a dim "·" (no data to report);
-        // they must be non-empty or the table collapses them and misaligns.
-        // The leading "  " keeps the name aligned with the selection gutter.
+        // A broken repo: a red name + an "error" marker, the reason in the wide
+        // trailing column. The data columns get a dim "·" (no data to report);
+        // they must be non-empty or the table collapses them and misaligns. The
+        // leading "  " keeps the name aligned with the selection gutter.
         let dot = || Cell::from(Span::styled("·", theme.dim()));
-        return Row::new(vec![
+        let mut cells = vec![
             Cell::from(Line::from(vec![
                 Span::raw("  "),
                 Span::styled(snap.name.clone(), theme.error()),
@@ -1364,23 +1424,66 @@ fn repo_row<'a>(
             Cell::from(Span::styled("error", theme.risk())),
             dot(),
             dot(),
-            Cell::from(Span::styled(reason.clone(), theme.dim())),
-        ]);
+        ];
+        if fmt.dock {
+            cells.push(dot()); // Last (age) — no readable commit
+            cells.push(Cell::from(Span::styled(
+                ellipsize(reason, fmt.reason_max),
+                theme.dim(),
+            )));
+        } else {
+            cells.push(Cell::from(Span::styled(reason.clone(), theme.dim())));
+        }
+        return Row::new(cells);
     }
 
-    let severity = assess(snap, now).severity;
+    let assessment = assess(snap, now);
+    let severity = assessment.severity;
     // While an action runs, the Sync cell shows a spinner instead.
     let sync = match busy {
         Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
         None => sync_cell(snap, theme),
     };
-    Row::new(vec![
+    let mut cells = vec![
         name_cell(&snap.name, highlights, severity, marked, theme),
         branch_cell(snap, severity, theme),
         sync,
         changes_cell(snap, theme),
-        last_commit_cell(snap, now, summary_max, theme),
-    ])
+    ];
+    if fmt.dock {
+        cells.push(age_cell(snap, now, fmt.age_w, theme));
+        cells.push(reason_cell(
+            assessment.primary.as_ref(),
+            fmt.reason_max,
+            theme,
+        ));
+    } else {
+        cells.push(last_commit_cell(snap, now, fmt.summary_max, theme));
+    }
+    Row::new(cells)
+}
+
+/// The "Last" column: the commit age alone, right-aligned (the message lives in
+/// the dock when this layout is active).
+fn age_cell<'a>(snap: &RepoSnapshot, now: i64, age_w: usize, theme: &Theme) -> Cell<'a> {
+    let age = match &snap.last_commit {
+        Some(c) => time::relative(c.timestamp, now),
+        None => "—".to_string(),
+    };
+    Cell::from(Span::styled(format!("{age:>age_w$}"), theme.dim()))
+}
+
+/// The "Why" column: the repo's primary attention reason, colored by severity —
+/// the same signal that drives the dirty-first sort, made visible per row. A dim
+/// "·" when the repo wants nothing.
+fn reason_cell<'a>(primary: Option<&AttentionReason>, max: usize, theme: &Theme) -> Cell<'a> {
+    match primary {
+        Some(r) => Cell::from(Span::styled(
+            ellipsize(&r.label(), max),
+            severity_style(r.severity(), theme),
+        )),
+        None => Cell::from(Span::styled("·", theme.dim())),
+    }
 }
 
 /// The remote sub-part of the Sync column: a status dot colored by CI health —
