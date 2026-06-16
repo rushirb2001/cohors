@@ -2497,22 +2497,22 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
     let Some(dv) = &app.detail else {
         return;
     };
-    let area = centered_rect(84, 84, full);
-    frame.render_widget(Clear, area);
-
     let branch = dv.detail.as_ref().and_then(|d| d.current_branch.clone());
     let title = match &branch {
         Some(b) => format!(" {}  ·  {b} ", dv.repo_name),
         None => format!(" {} ", dv.repo_name),
     };
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .title(Line::from(title).bold())
-        .padding(Padding::new(1, 0, 0, 0));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
 
+    // Still loading: a small centred box, not a full-size empty one.
     let Some(d) = &dv.detail else {
+        let area = detail_rect(full, 1);
+        frame.render_widget(Clear, area);
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .title(Line::from(title).bold())
+            .padding(Padding::new(1, 0, 0, 0));
+        let inner = block.inner(area);
+        frame.render_widget(block, area);
         frame.render_widget(
             Paragraph::new(Span::styled("Reading repo…", theme.dim())),
             inner,
@@ -2520,20 +2520,8 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
         return;
     };
 
-    // Two panes (like the standup): repo state on the left, commits on the right.
-    let [left_area, right_area] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .spacing(1)
-            .areas(inner);
-
-    // Right pane: recent commits.
-    let commits_block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim())
-        .title(Line::from(format!(" Commits ({}) ", d.recent_commits.len())).bold())
-        .padding(Padding::horizontal(1));
-    let commits_inner = commits_block.inner(right_area);
-    frame.render_widget(commits_block, right_area);
+    // Build both panes' content up front so the modal can size to it (and so the
+    // panes can scroll). Right pane: recent commits.
     let mut clines: Vec<Line> = Vec::new();
     for c in &d.recent_commits {
         let mut spans = vec![
@@ -2546,20 +2534,9 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
         spans.extend(commit_summary_spans(&c.summary, theme));
         clines.push(Line::from(spans));
     }
-    cap_lines(&mut clines, commits_inner.height as usize, theme);
-    frame.render_widget(Paragraph::new(Text::from(clines)), commits_inner);
 
     // Left pane: changes · branches · stashes · PRs · contributors.
-    let state_block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim())
-        .title(Line::from(" Changes · branches · PRs ").bold())
-        .padding(Padding::horizontal(1));
-    let state_inner = state_block.inner(left_area);
-    frame.render_widget(state_block, left_area);
-
     let mut lines: Vec<Line> = Vec::new();
-
     detail_section(&mut lines, format!("Changes ({})", d.changed_files.len()));
     if d.changed_files.is_empty() {
         lines.push(Line::from(Span::styled("clean", theme.dim())));
@@ -2573,7 +2550,6 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
             Span::raw(f.path.clone()),
         ]));
     }
-
     detail_section(&mut lines, format!("Branches ({})", d.branches.len()));
     for (i, b) in d.branches.iter().enumerate() {
         let current = i == 0 && branch.as_deref() == Some(b.as_str());
@@ -2587,31 +2563,99 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
             Span::styled(b.clone(), style),
         ]));
     }
-
     if !d.stashes.is_empty() {
         detail_section(&mut lines, format!("Stashes ({})", d.stashes.len()));
         for s in &d.stashes {
             lines.push(Line::from(Span::raw(s.clone())));
         }
     }
-
-    // GitHub: open PRs + top contributors.
     render_remote_sections(&mut lines, dv, theme);
 
-    // Scroll the (denser) left pane, with a scrollbar when it overflows.
-    let total = lines.len() as u16;
-    let viewport = state_inner.height;
-    let max_scroll = total.saturating_sub(viewport);
-    dv.set_max_scroll(max_scroll);
-    let offset = dv.scroll.min(max_scroll);
+    // Collapse the modal to the taller pane's content (its rows + the pane's own
+    // border) rather than a fixed 84% box, so short repos don't show acres of
+    // whitespace. `detail_rect` caps it at 84% of the screen.
+    let content_rows = clines.len().max(lines.len()) as u16;
+    let area = detail_rect(full, content_rows);
+    frame.render_widget(Clear, area);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(title).bold())
+        .padding(Padding::new(1, 0, 0, 0));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
 
-    let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(state_inner);
+    // Two panes (like the standup): repo state on the left, commits on the right.
+    let [left_area, right_area] =
+        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .spacing(1)
+            .areas(inner);
+
+    // Both panes share `dv.scroll`, each clamped to its own overflow — so a short
+    // pane stops while the longer one keeps scrolling, and either shows a
+    // scrollbar only when it actually overflows.
+    let commits_inner = render_pane_block(
+        frame,
+        right_area,
+        format!(" Commits ({}) ", d.recent_commits.len()),
+        theme,
+    );
+    let state_inner = render_pane_block(
+        frame,
+        left_area,
+        " Changes · branches · PRs ".to_string(),
+        theme,
+    );
+    let c_max = (clines.len() as u16).saturating_sub(commits_inner.height);
+    let l_max = (lines.len() as u16).saturating_sub(state_inner.height);
+    dv.set_max_scroll(c_max.max(l_max));
+
+    render_scrolling_pane(frame, commits_inner, clines, dv.scroll.min(c_max));
+    render_scrolling_pane(frame, state_inner, lines, dv.scroll.min(l_max));
+}
+
+/// A centred detail-modal rect sized to `content_rows` of pane content (plus the
+/// pane border + the outer border), at 84% width, and capped at 84% of the
+/// screen height with a sensible floor.
+fn detail_rect(full: Rect, content_rows: u16) -> Rect {
+    let max_h = (full.height * 84 / 100).max(7);
+    let h = (content_rows + 4).clamp(7, max_h); // +2 pane border, +2 outer border
+    let w = (full.width * 84 / 100).max(20);
+    Rect {
+        x: full.x + full.width.saturating_sub(w) / 2,
+        y: full.y + full.height.saturating_sub(h) / 2,
+        width: w,
+        height: h,
+    }
+}
+
+/// Draw a detail sub-pane's bordered block and return its inner area.
+fn render_pane_block(frame: &mut Frame, area: Rect, title: String, theme: &Theme) -> Rect {
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .title(Line::from(title).bold())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    inner
+}
+
+/// Render `lines` into `inner` scrolled by `offset`, reserving the rightmost
+/// column for a scrollbar when the content overflows the pane.
+fn render_scrolling_pane(frame: &mut Frame, inner: Rect, lines: Vec<Line<'static>>, offset: u16) {
+    let total = lines.len() as u16;
+    let viewport = inner.height;
+    let overflow = total > viewport;
+    let [text_area, bar_area] = if overflow {
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(inner)
+    } else {
+        [inner, Rect { width: 0, ..inner }]
+    };
     frame.render_widget(
         Paragraph::new(Text::from(lines)).scroll((offset, 0)),
         text_area,
     );
-    if max_scroll > 0 {
+    if overflow {
         let mut sb = ScrollbarState::new(total as usize)
             .position(offset as usize)
             .viewport_content_length(viewport as usize);
@@ -2698,19 +2742,6 @@ fn render_remote_sections(
         }
         (None, _) => {}
     }
-}
-
-/// Truncate `lines` to `height`, replacing the overflow with a dim "↓ N more".
-fn cap_lines(lines: &mut Vec<Line<'static>>, height: usize, theme: &Theme) {
-    if height == 0 || lines.len() <= height {
-        return;
-    }
-    let hidden = lines.len() - (height - 1);
-    lines.truncate(height - 1);
-    lines.push(Line::from(Span::styled(
-        format!("↓ {hidden} more"),
-        theme.dim(),
-    )));
 }
 
 /// The command-run overlay: a left list of repos (status glyph + name, the

@@ -21,6 +21,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.18] — 2026-06-16
+
+### Changed
+
+- **The full detail view (`Enter`) collapses to its content and the commits pane
+  gets a scrollbar.** It was a fixed 84%-height modal, so a repo with little to
+  show left acres of whitespace, and the commits pane truncated with a "↓ N more"
+  instead of scrolling. The modal now sizes to the taller pane's content (capped
+  at 84% of the screen), and both panes scroll — each with a scrollbar that
+  appears only when it overflows — sharing one scroll position, each clamped to
+  its own length.
+
 ## [0.4.17] — 2026-06-16
 
 ### Changed

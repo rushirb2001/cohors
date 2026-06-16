@@ -4,29 +4,29 @@ expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
-│ ▟██▌█▐╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
-│ ▀▐▖▀█▀│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│       │
-╰───────│ │ Changes (3)                          │ │ a1b2c3d    2h  fix: retry charge on  ││───────╯
-╭ Attent│ │  M src/charge.rs                     │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
-│ 1 unpu│ │  M src/refund.rs                     │ │ c3d4e5f    1d  refactor: extract pro ││       │
-╰───────│ │ ?? notes.md                          │ │ d4e5f60    3d  feat: idempotency key ││───────╯
-╭ Reposi│ │                                      │ │ e5f6071    4d  chore: bump stripe sd ││───────╮
-│    Rep│ │ Branches (3)                         │ │                                      ││       │
-│▌   leg│ │ ● main                               │ │                                      ││ad .gi…│
-│    pay│ │   feat/idempotency                   │ │                                      ││       │
-│    web│ │   spike/webhooks                     │ │                                      ││pull   │
-│    inf│ │                                      │ │                                      ││d chan…│
-│    aut│ │ Stashes (1)                          │ │                                      ││       │
+│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
+│ ▀▐▖▀█▀╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
+╰───────│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│───────╯
+╭ Attent│ │ Changes (3)                          │ │ a1b2c3d    2h  fix: retry charge on  ││───────╮
+│ 1 unpu│ │  M src/charge.rs                     │ │ b2c3d4e    5h  test: cover partial-r ││       │
+╰───────│ │  M src/refund.rs                     │ │ c3d4e5f    1d  refactor: extract pro ││───────╯
+╭ Reposi│ │ ?? notes.md                          │ │ d4e5f60    3d  feat: idempotency key ││───────╮
+│    Rep│ │                                      │ │ e5f6071    4d  chore: bump stripe sd ││       │
+│▌   leg│ │ Branches (3)                         │ │                                      ││ad .gi…│
+│    pay│ │ ● main                               │ │                                      ││       │
+│    web│ │   feat/idempotency                   │ │                                      ││pull   │
+│    inf│ │   spike/webhooks                     │ │                                      ││d chan…│
+│    aut│ │                                      │ │                                      ││       │
+│       │ │ Stashes (1)                          │ │                                      ││       │
 │       │ │ WIP on main: dashboard tweaks        │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │
 │       │ │ Pull requests                        │ │                                      ││       │
 │       │ │ needs a GitHub remote + token        │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │
-│       │ │ Contributors                         │ │                                      ││       │
-│ legacy│ │                                      │ │                                      ││detail │
-│       │ │                                      │ │                                      ││       │
-│ ⚠ coul│ │                                      │ │                                      ││       │
-╰───────│ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│───────╯
-╭───────╰──────────────────────────────────────────────────────────────────────────────────╯───────╮
+│ legacy│ │ Contributors                         │ │                                      ││detail │
+│       │ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│       │
+│ ⚠ coul╰──────────────────────────────────────────────────────────────────────────────────╯       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ↑/↓ scroll · g/G top / bottom · Esc close                                                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
