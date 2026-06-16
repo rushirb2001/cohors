@@ -54,6 +54,11 @@ fn main() -> anyhow::Result<()> {
             command,
             timeout,
         }) => commands::run_command_action(&cli, &action.select, command, *timeout, action.dry_run),
+        Some(Command::Web {
+            port,
+            no_open,
+            no_install,
+        }) => commands::run_web(*port, !no_open, !no_install),
         Some(Command::Mcp {
             allow_writes,
             allow_run,

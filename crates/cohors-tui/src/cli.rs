@@ -75,6 +75,23 @@ pub enum Command {
         #[arg(long, default_value_t = 120)]
         timeout: u64,
     },
+    /// Build and serve the web dashboard, then open it in your browser.
+    ///
+    /// One command starts everything: it finds the `cohors-web` crate, makes sure
+    /// Trunk (the WASM bundler) is installed — installing it for you the first
+    /// time unless `--no-install` — then runs the dev server and prints the URL.
+    /// Run it from inside the cohors repository. Ctrl-C to stop.
+    Web {
+        /// Port to serve on.
+        #[arg(long, default_value_t = 8080)]
+        port: u16,
+        /// Don't open a browser window automatically.
+        #[arg(long)]
+        no_open: bool,
+        /// Fail with instructions instead of installing Trunk when it's missing.
+        #[arg(long)]
+        no_install: bool,
+    },
     /// Run as a Model Context Protocol server over stdio, so a coding agent can
     /// see and (opt-in) act on your fleet. Read-only by default.
     Mcp {

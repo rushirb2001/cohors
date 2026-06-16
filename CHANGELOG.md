@@ -19,6 +19,10 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.4.20] — 2026-06-16
+
 ### Added
 
 - **`cohors-web` — the web front-end begins (v0.5, slice 1).** A new WASM crate
@@ -27,8 +31,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   relative-time logic the TUI runs (ADR-002 / ADR-041). Slice 1 shows the
   built-in demo fleet (the browser analog of `cohors demo`); GitHub data, OAuth,
   and deployment follow in later slices. The crate is excluded from the native
-  workspace and built only for `wasm32-unknown-unknown` (served locally with
-  Trunk).
+  workspace and built only for `wasm32-unknown-unknown`.
+- **`cohors web` — one command to launch the dashboard.** It finds the
+  `cohors-web` crate, makes sure Trunk (the WASM bundler) is installed (installing
+  it for you the first time, unless `--no-install`), starts the dev server, waits
+  until it's actually listening, then opens a clean **branded local URL** —
+  `http://cohors.localhost:8080` (the reserved-loopback `*.localhost` TLD, so no
+  `/etc/hosts` edit and no privileges). `--port`, `--no-open`, `--no-install`.
+  Run it from inside the repository (Trunk builds the app from source).
 
 ## [0.4.19] — 2026-06-16
 

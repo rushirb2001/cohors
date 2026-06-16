@@ -359,6 +359,121 @@ fn expand_one(field: &mut Option<String>, home: &str) {
     }
 }
 
+/// The branded local host the dashboard is served at. `*.localhost` is reserved
+/// loopback (RFC 6761) — modern browsers resolve it to 127.0.0.1 with no
+/// `/etc/hosts` edit and no privileges — so `http://cohors.localhost:<port>` is a
+/// clean, device-local URL that just works.
+const WEB_HOST: &str = "cohors.localhost";
+
+/// `cohors web` — one command to build, serve, and open the web dashboard.
+///
+/// It locates the `cohors-web` crate, ensures Trunk (the WASM bundler) is
+/// installed, starts the dev server bound to loopback, waits until it's actually
+/// accepting connections, then prints + opens the branded local URL
+/// (`http://cohors.localhost:<port>`). Blocks until Ctrl-C. Must run from inside
+/// the cohors repository, since Trunk builds the app from source.
+pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
+    let web_dir = find_web_crate().context(
+        "couldn't find `crates/cohors-web` — run `cohors web` from inside the cohors repository",
+    )?;
+
+    if !trunk_available() {
+        if install {
+            eprintln!(
+                "Trunk (the WASM bundler the web app needs) isn't installed — installing it now.\n\
+                 This is a one-time `cargo install trunk` and can take a few minutes…"
+            );
+            let status = std::process::Command::new("cargo")
+                .args(["install", "trunk"])
+                .status()
+                .context("running `cargo install trunk`")?;
+            if !status.success() {
+                bail!("`cargo install trunk` failed — install it manually, then retry");
+            }
+        } else {
+            bail!(
+                "the web app needs Trunk (the WASM bundler). Install it with:\n\
+                 \n    cargo install trunk\n\n\
+                 …or just run `cohors web` (it installs Trunk for you unless you pass --no-install)."
+            );
+        }
+    }
+
+    let url = format!("http://{WEB_HOST}:{port}");
+    println!("Building cohors web — it will open at {url} when ready (Ctrl-C to stop)…");
+
+    // Start Trunk bound to loopback (so `cohors.localhost` reaches it), streaming
+    // its build log. We don't use Trunk's own `--open`: we open the *branded* URL
+    // ourselves, and only once the server is actually listening.
+    let mut child = std::process::Command::new("trunk")
+        .arg("serve")
+        .current_dir(&web_dir)
+        .args(["--address", "127.0.0.1", "--port", &port.to_string()])
+        .spawn()
+        .context("starting `trunk serve` (is Trunk installed and on PATH?)")?;
+
+    if open {
+        let url = url.clone();
+        std::thread::spawn(move || {
+            if wait_for_port(port, std::time::Duration::from_secs(120)) {
+                println!("\n  cohors web is live → {url}\n");
+                let _ = open_url(&url);
+            }
+        });
+    }
+
+    let status = child.wait().context("running `trunk serve`")?;
+    if !status.success() {
+        bail!("`trunk serve` exited with an error");
+    }
+    Ok(())
+}
+
+/// Walk up from the current directory to find the `cohors-web` crate.
+fn find_web_crate() -> Option<Utf8PathBuf> {
+    let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().ok()?).ok()?;
+    cwd.ancestors()
+        .map(|d| d.join("crates/cohors-web"))
+        .find(|d| d.join("Cargo.toml").exists())
+}
+
+/// Is the `trunk` CLI on PATH?
+fn trunk_available() -> bool {
+    std::process::Command::new("trunk")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Poll loopback `port` until it accepts a TCP connection (the server is up), or
+/// the timeout elapses. Used to open the browser only once the page will load.
+fn wait_for_port(port: u16, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    false
+}
+
+/// Open a URL in the user's default browser (best-effort, non-blocking).
+fn open_url(url: &str) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    let mut cmd = std::process::Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("cmd");
+        c.args(["/C", "start", ""]);
+        c
+    };
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let mut cmd = std::process::Command::new("xdg-open");
+    cmd.arg(url).spawn().map(|_| ())
+}
+
 /// Bare `cohors` — launch the interactive dashboard.
 pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = Arc::new(Scanner::from_cli(cli)?);
