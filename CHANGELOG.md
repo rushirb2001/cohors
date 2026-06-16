@@ -19,6 +19,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Changed
+
+- **Web enrichment is now concurrent.** Each repo's CI/PR fetch is fired in
+  parallel (rather than awaited in a queue), so the columns fill in seconds
+  instead of one-repo-at-a-time, and the proxy server runs more workers so it
+  doesn't bottleneck the burst.
+
 ### Fixed
 
 - **The web CI column reads "no CI" instead of a dash** when an (enriched) repo

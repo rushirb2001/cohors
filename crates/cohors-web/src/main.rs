@@ -72,14 +72,19 @@ fn App() -> impl IntoView {
                         .collect();
                     repos.set(list);
                     mode.set(Mode::Live);
+                    // Enrich every repo concurrently: spawn each fetch instead of
+                    // awaiting them in a queue, so all requests are in flight at
+                    // once and each row updates the moment its CI/PRs land.
                     for (id, branch) in targets {
-                        if let Some(info) = github::enrich(&id, &branch).await {
-                            repos.update(|v| {
-                                if let Some(s) = v.iter_mut().find(|s| s.id.0 == id) {
-                                    s.remote = Some(info);
-                                }
-                            });
-                        }
+                        spawn_local(async move {
+                            if let Some(info) = github::enrich(&id, &branch).await {
+                                repos.update(|v| {
+                                    if let Some(s) = v.iter_mut().find(|s| s.id.0 == id) {
+                                        s.remote = Some(info);
+                                    }
+                                });
+                            }
+                        });
                     }
                 }
                 Ok(_) => {

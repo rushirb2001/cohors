@@ -26,10 +26,11 @@ pub fn serve(dist_dir: &Utf8Path, port: u16, token: Option<String>) -> Result<()
     let dist = dist_dir.to_owned();
     let token = Arc::new(token);
 
-    // A few workers so a slow GitHub proxy call doesn't stall static assets (the
-    // page fires several requests at once).
+    // Enough workers that concurrent enrichment fetches don't queue: the page
+    // fires many at once (a browser opens ~6 connections per host), so a slow
+    // GitHub call mustn't stall the others — or the static assets.
     let mut workers = Vec::new();
-    for _ in 0..4 {
+    for _ in 0..8 {
         let server = server.clone();
         let dist = dist.clone();
         let token = token.clone();
