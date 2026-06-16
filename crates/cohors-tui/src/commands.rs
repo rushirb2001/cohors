@@ -373,28 +373,44 @@ const WEB_HOST: &str = "cohors.localhost";
 /// (`http://cohors.localhost:<port>`). Blocks until Ctrl-C. Must run from inside
 /// the cohors repository, since Trunk builds the app from source.
 pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
+    // `cohors web` builds the dashboard from source, so it needs the repo. This
+    // is the *developer* path. End users won't run this at all: once the
+    // dashboard is deployed (v0.5 slice 4), an installed `cohors web` outside a
+    // checkout will simply open the hosted URL — no local build, no Trunk, no
+    // Cargo. So Trunk is a dev-only dependency, never something a distributed
+    // binary must ship (TODO: wire the hosted-URL branch when we deploy).
     let web_dir = find_web_crate().context(
-        "couldn't find `crates/cohors-web` — run `cohors web` from inside the cohors repository",
+        "couldn't find `crates/cohors-web` — `cohors web` builds the dashboard from source, so \
+         run it inside the cohors repository (a hosted version arrives with the deploy milestone)",
     )?;
 
     if !trunk_available() {
-        if install {
+        if !install {
+            bail!(
+                "the web app needs Trunk (the WASM bundler). Install it with:\n\
+                 \n    cargo install trunk      # or: brew install trunk\n\n\
+                 …or just run `cohors web` (it installs Trunk for you unless you pass --no-install)."
+            );
+        }
+        // Devs have Cargo, so prefer it; otherwise point at a binary install.
+        if cargo_available() {
             eprintln!(
-                "Trunk (the WASM bundler the web app needs) isn't installed — installing it now.\n\
-                 This is a one-time `cargo install trunk` and can take a few minutes…"
+                "Trunk (the WASM bundler the web app needs) isn't installed — installing it with \
+                 `cargo install trunk` (one-time, a few minutes)…"
             );
             let status = std::process::Command::new("cargo")
                 .args(["install", "trunk"])
                 .status()
                 .context("running `cargo install trunk`")?;
             if !status.success() {
-                bail!("`cargo install trunk` failed — install it manually, then retry");
+                bail!(
+                    "`cargo install trunk` failed — install it manually (`brew install trunk`), then retry"
+                );
             }
         } else {
             bail!(
-                "the web app needs Trunk (the WASM bundler). Install it with:\n\
-                 \n    cargo install trunk\n\n\
-                 …or just run `cohors web` (it installs Trunk for you unless you pass --no-install)."
+                "the web app needs Trunk, and Cargo isn't available to install it automatically.\n\
+                 Install Trunk with `brew install trunk` (or see https://trunkrs.dev), then re-run `cohors web`."
             );
         }
     }
@@ -440,6 +456,17 @@ fn find_web_crate() -> Option<Utf8PathBuf> {
 /// Is the `trunk` CLI on PATH?
 fn trunk_available() -> bool {
     std::process::Command::new("trunk")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Is `cargo` on PATH? (Used to decide whether we can auto-install Trunk, or must
+/// point the user at a binary install instead — e.g. a non-Rust, prebuilt-binary
+/// distribution.)
+fn cargo_available() -> bool {
+    std::process::Command::new("cargo")
         .arg("--version")
         .output()
         .map(|o| o.status.success())

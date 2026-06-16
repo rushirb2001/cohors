@@ -21,6 +21,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.21] — 2026-06-16
+
+### Changed
+
+- **`cohors web` is distribution-aware about Trunk.** Trunk is a *developer*
+  dependency (it builds the WASM and runs the dev server), not something every
+  install must ship: `cohors web` auto-installs it via Cargo when missing, and if
+  Cargo isn't present (a prebuilt-binary, non-Rust install) it points at
+  `brew install trunk` instead of failing obscurely. End users won't need Trunk
+  at all — once the dashboard is deployed (v0.5 slice 4), an installed
+  `cohors web` outside a checkout will open the hosted URL (no local build).
+
 ## [0.4.20] — 2026-06-16
 
 ### Added
