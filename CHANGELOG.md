@@ -38,8 +38,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   exact same `compute_view`/`assess` logic as the demo and the TUI (ADR-002).
   With no GitHub login (or served without the proxy, e.g. plain `trunk serve`),
   it falls back to the **demo fleet** with a one-line note. Live data uses a real
-  browser clock. (Per-repo CI/PR enrichment and OAuth-for-the-hosted-version are
-  the next slices.)
+  browser clock. (OAuth for the hosted version is a later slice.)
+- **The web dashboard is now genuinely useful — real fleet health (v0.5 slice
+  2b).** After the repo list loads, each repo is **enriched live** through the
+  proxy with its **CI status** (GitHub Actions check-runs, combined per ADR-040)
+  and **open-PR count** — rows light up as the data arrives. The table is
+  reframed for the *remote* domain (the browser has no local working copy): it
+  drops the always-empty Sync/Changes/Stash columns and shows **Repo · PRs · CI ·
+  Last · About**. "Needs attention" now means something real — failing CI, open
+  PRs, or stale (no push in 3 months) — driving the summary chips and an
+  **attention-first sort** (failing CI floats to the top). The detail aside shows
+  CI / PRs / activity + the repo link.
 - **The web dashboard is now a full, interactive page (light theme).** Beyond the
   bare demo table, `cohors web` now renders: the brand mark + header, an attention
   summary (fleet-wide counts), live **filter / sort / dirty-only** controls (all

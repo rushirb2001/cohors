@@ -11,7 +11,7 @@
 //! machine with no GitHub login), `/gh/...` fails and the app falls back to the
 //! demo fleet.
 
-use cohors_core::{Branch, CommitMeta, RepoId, RepoSnapshot, WorktreeStatus};
+use cohors_core::{Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, WorktreeStatus};
 use gloo_net::http::Request;
 use serde::Deserialize;
 
@@ -131,5 +131,105 @@ fn parse_iso(s: &str) -> Option<i64> {
         None
     } else {
         Some((ms / 1000.0) as i64)
+    }
+}
+
+// ── Per-repo enrichment: CI status + open PRs (the fleet-health signals) ──────
+
+#[derive(Deserialize)]
+struct CheckRunsResponse {
+    #[serde(default)]
+    check_runs: Vec<CheckRun>,
+}
+
+#[derive(Deserialize)]
+struct CheckRun {
+    #[serde(default)]
+    status: String,
+    conclusion: Option<String>,
+}
+
+/// Minimal — we only count open PRs.
+#[derive(Deserialize)]
+struct PrRow {}
+
+/// Enrich one repo with its default-branch CI status and open-PR count, via the
+/// proxy. Best-effort: a failed sub-fetch degrades to `None`/`0`, never errors —
+/// enrichment must never break the fleet. Returns the `RemoteInfo` to attach to
+/// the snapshot.
+pub async fn enrich(full_name: &str, branch: &str) -> Option<RemoteInfo> {
+    let (owner, repo) = full_name.split_once('/')?;
+
+    // CI: combine GitHub Actions check runs on the default branch (ADR-040's
+    // logic, reimplemented for the browser).
+    let ci = {
+        let url = format!("{PROXY}/repos/{owner}/{repo}/commits/{branch}/check-runs?per_page=100");
+        match Request::get(&url).send().await {
+            Ok(resp) if resp.ok() => match resp.json::<CheckRunsResponse>().await {
+                Ok(c) => combine_ci(&c.check_runs),
+                Err(_) => CiStatus::None,
+            },
+            _ => CiStatus::None,
+        }
+    };
+
+    // Open PRs: the length of the open-pulls list (capped at a page).
+    let open_prs = {
+        let url = format!("{PROXY}/repos/{owner}/{repo}/pulls?state=open&per_page=100");
+        match Request::get(&url).send().await {
+            Ok(resp) if resp.ok() => resp
+                .json::<Vec<PrRow>>()
+                .await
+                .map(|v| v.len() as u32)
+                .unwrap_or(0),
+            _ => 0,
+        }
+    };
+
+    Some(RemoteInfo {
+        host: "github.com".to_string(),
+        owner: owner.to_string(),
+        repo: repo.to_string(),
+        default_branch: branch.to_string(),
+        open_prs,
+        prs_awaiting_review: 0,
+        ci,
+    })
+}
+
+/// Fold check runs into one status: failing wins, then pending, then passing;
+/// no runs ⇒ `None` ("no CI").
+fn combine_ci(runs: &[CheckRun]) -> CiStatus {
+    let (mut signal, mut fail, mut pending, mut pass) = (false, false, false, false);
+    for run in runs {
+        signal = true;
+        if !run.status.trim().eq_ignore_ascii_case("completed") {
+            pending = true;
+        } else {
+            match run
+                .conclusion
+                .as_deref()
+                .unwrap_or("")
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "failure" | "timed_out" | "cancelled" | "action_required" | "startup_failure" => {
+                    fail = true
+                }
+                "success" | "neutral" | "skipped" | "stale" => pass = true,
+                _ => {}
+            }
+        }
+    }
+    if !signal {
+        CiStatus::None
+    } else if fail {
+        CiStatus::Failing
+    } else if pending {
+        CiStatus::Pending
+    } else if pass {
+        CiStatus::Passing
+    } else {
+        CiStatus::None
     }
 }

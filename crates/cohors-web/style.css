@@ -227,6 +227,8 @@ body {
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .fleet td:last-child { width: 99%; white-space: normal; }
+.about { color: var(--dim); }
+.about-detail { padding: 0.2rem 0.95rem 0.6rem; margin: 0; color: var(--text); font-family: var(--mono); font-size: 0.78rem; }
 
 .name { font-weight: 600; }
 .name.clean { color: var(--dim); font-weight: 400; }
