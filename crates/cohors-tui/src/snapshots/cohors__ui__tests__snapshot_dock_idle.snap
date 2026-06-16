@@ -1,38 +1,38 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 34)"
+expression: "render_to_string(&app, 120, 34)"
 ---
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
-│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
-│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync      Changes  Last  Why                                 │
-│    legacy-billing    error          ·         ·        ·     could not read .git (permission den…│
-│▌   payments          main           ↑2 ● 2pr  4 s1       2h  ↑2 unpushed                         │
-│    web-app           feat/checkout  ↓5 ●      7         20m  ↓5 behind — pull                    │
-│    infra             @a1b2c3d       —         4          1w  4 uncommitted changes               │
-│    auth-service      main           ● 1pr     ·          3d  ·                                   │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ payments  ·  main ─────────────────────────────────────────────────────────── Enter: full detail ╮
-│ • ↑2 unpushed                                                                                    │
-│ • 4 uncommitted changes                                                                          │
-│ • 1 stash                                                                                        │
-│                                                                                                  │
-│ changes 4 s1    sync ↑2 ● 2pr                                                                    │
-│ 2h  fix: retry on 5xx                                                                            │
-│                                                                                                  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
-│ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
-│ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │
-│ ───────────────────────────── │ │ p pull        │              │ │ ───────────────────────────── │
-│ Space mark repo               │ │ ──────────────────────────── │ │ d dirty-only                  │
-│                               │ │ ! run command                │ │ Tab standup                   │
-╰───────────────────────────────╯ ╰────────────────── → payments ╯ ╰───────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                                         │
+│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml                             │
+│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────────────────────────╮
+│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                                           │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────────────────────────╮
+│    Repo              Branch         Sync  Changes  Stash  PRs  CI       Last  Status                                 │
+│    legacy-billing    error          ·     ·        ·      ·    ·        ·     could not read .git (permission denied)│
+│▌   payments          main           ↑2    4        1      2    passing    2h  ↑2 unpushed                            │
+│    web-app           feat/checkout  ↓5    7        ·      ·    failing   20m  ↓5 behind — pull                       │
+│    infra             @a1b2c3d       —     4        ·      —    —          1w  4 uncommitted changes                  │
+│    auth-service      main           —     ·        ·      1    pending    3d  ·                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ payments  ·  main ─────────────────────────────────────────────────────────────────────────────── Enter: full detail ╮
+│ • ↑2 unpushed                                                                                                        │
+│ • 4 uncommitted changes                                                                                              │
+│ • 1 stash                                                                                                            │
+│                                                                                                                      │
+│ changes 4 s1    sync ↑2 ● 2pr                                                                                        │
+│ 2h  fix: retry on 5xx                                                                                                │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+──────────────────────────────────────────────── press h to hide hints ─────────────────────────────────────────────────
+╭ select ─────────────────────────────╮ ╭ act ─────────────────────────────────╮ ╭ view ───────────────────────────────╮
+│ a mark all       │ Esc clear        │ │ ⏎ open            │ P push           │ │ ↑/↓ move         │ ? help           │
+│ / filter         │                  │ │ f fetch           │ S stash          │ │ s sort           │ q quit           │
+│ ─────────────────────────────────── │ │ p pull            │                  │ │ ─────────────────────────────────── │
+│ Space mark repo                     │ │ ──────────────────────────────────── │ │ d dirty-only                        │
+│                                     │ │ ! run command                        │ │ Tab standup                         │
+╰─────────────────────────────────────╯ ╰────────────────────────── → payments ╯ ╰─────────────────────────────────────╯

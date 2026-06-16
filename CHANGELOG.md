@@ -21,6 +21,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.12] — 2026-06-16
+
+### Changed
+
+- **Expanded, edge-to-edge table columns when the dock is up (ADR-039
+  follow-up).** The reclaimed width now goes to legible, separate columns instead
+  of compact fused glyphs: the old `Sync` (`↑2 ● 2pr`) splits into **Sync**
+  (ahead/behind), **PRs** (open count), and **CI** (spelled out:
+  `passing`/`failing`/`pending`); the old `Changes` (`4 s1`) splits into
+  **Changes** and **Stash**. The reason column is renamed **Status**, and the
+  table fills the full width. Short terminals keep the compact layout.
+
 ## [0.4.11] — 2026-06-16
 
 ### Changed

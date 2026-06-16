@@ -11,11 +11,11 @@ expression: "render_to_string(&app, 100, 40)"
 │ 1 unpushed · │    ↓5              commits behind upstream                         │              │
 ╰──────────────│    ·               even with upstream                              │──────────────╯
 ╭ Repositories │    —               no upstream (local only)                        │──────────────╮
-│    Repo      │    ● ● ●           CI: pass / fail / pending                       │              │
-│▌   legacy-bil│    2pr             open pull requests                              │ermission den…│
-│    payments  │    3               changed files, all staged                       │              │
-│    web-app   │    3               changed files, some unstaged                    │              │
-│    infra     │    s1              stash entries                                   │              │
+│    Repo      │    ● ● ●           CI: pass / fail / pending                       │s             │
+│▌   legacy-bil│    2pr             open pull requests                              │ not read .gi…│
+│    payments  │    3               changed files, all staged                       │pushed        │
+│    web-app   │    3               changed files, some unstaged                    │hind — pull   │
+│    infra     │    s1              stash entries                                   │ommitted chan…│
 │    auth-servi│    name            row: clean                                      │              │
 │              │    name            row: needs attention                            │              │
 │              │    ●               row: marked for a bulk action                   │              │
