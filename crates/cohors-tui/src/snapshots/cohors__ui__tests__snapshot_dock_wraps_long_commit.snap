@@ -3,28 +3,28 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 34)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
-│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
-│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    (demo)                              │
+│ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
+│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 1w                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
+╭ Attention (1 of 1 repositories) ─────────────────────────────────────────────────────────────────╮
+│ 1 unpushed (1 aging)                                                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync  Changes  Stash  PRs  CI       Last  Status             │
-│▌   legacy-billing    error          ·     ·        ·      ·    ·        ·     could not read .gi…│
-│    payments          main           ↑2    4        1      2    passing    2h  ↑2 unpushed        │
-│    web-app           feat/checkout  ⠋     7        ·      ·    failing   20m  ↓5 behind — pull   │
-│    infra             @a1b2c3d       —     4        ·      —    —          1w  4 uncommitted chan…│
-│    auth-service      main           ⠋     ·        ·      1    pending    3d  ·                  │
+╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
+│    Repo              Branch         Sync  Changes  Stash  PRs  CI  Last  Status                  │
+│▌   load-tester       main           ↑1    ·        ·      —    —     1w  ↑1 unpushed · aging     │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Working — 2 repo(s) ─────────────────────────────────────────────────────────────────────────────╮
-│ ⠋ web-app                                                                                        │
-│ ⠋ auth-service                                                                                   │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
+╭ load-tester  ·  main ──────────────────────────────────────────────────────── Enter: full detail ╮
+│ Changes      clean                                                                               │
+│ Stash        none                                                                                │
+│ Upstream     1 ahead  (origin/main)                                                              │
+│ Remote       no GitHub remote                                                                    │
+│ Last commit  1w ago — chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC   │
+│              pgbench) + ignore results and refresh the CI perf matrix                            │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -35,4 +35,4 @@ expression: "render_to_string(&app, 100, 34)"
 │ ───────────────────────────── │ │ p pull        │              │ │ ───────────────────────────── │
 │ Space mark repo               │ │ ──────────────────────────── │ │ d dirty-only                  │
 │                               │ │ ! run command                │ │ Tab standup                   │
-╰───────────────────────────────╯ ╰──────────── → legacy-billing ╯ ╰───────────────────────────────╯
+╰───────────────────────────────╯ ╰─────────────── → load-tester ╯ ╰───────────────────────────────╯

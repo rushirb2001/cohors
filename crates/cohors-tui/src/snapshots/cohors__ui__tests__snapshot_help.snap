@@ -28,10 +28,10 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    Space           mark / unmark the repo                          │              │
 │              │    a               mark all (again to clear)                       │              │
 │              │    Esc             clear the selection                             │              │
-│              │    /               fuzzy filter (Esc clears)                       │              │
-╰──────────────│    :               command mode (:fetch, :!cmd shell, :sort,       │──────────────╯
-╭ legacy-billin│  :jump …)                                                          │: full detail ╮
-│ ⚠ could not r│    d               toggle dirty-only                               │              │
+╰──────────────│    /               fuzzy filter (Esc clears)                       │──────────────╯
+╭ legacy-billin│    :               command mode (:fetch, :!cmd shell, :sort,       │: full detail ╮
+│ ⚠ could not r│  :jump …)                                                          │              │
+│              │    d               toggle dirty-only                               │              │
 │              │    s               cycle sort mode                                 │              │
 │              │    Tab             weekly standup                                  │              │
 │              │                                                                    │              │

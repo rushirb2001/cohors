@@ -17,7 +17,6 @@ expression: "render_to_string(&app, 120, 34)"
 │    web-app           feat/checkout  ↓5    7        ·      ·    failing   20m  ↓5 behind — pull                       │
 │    infra             @a1b2c3d       —     4        ·      —    —          1w  4 uncommitted changes                  │
 │    auth-service      main           —     ·        ·      1    pending    3d  ·                                      │
-│                                                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ payments  ·  main ─────────────────────────────────────────────────────────────────────────────── Enter: full detail ╮
 │ Changes      3 modified · 1 untracked                                                                                │
@@ -25,6 +24,7 @@ expression: "render_to_string(&app, 120, 34)"
 │ Upstream     2 ahead  (origin/main)                                                                                  │
 │ Remote       CI passing  ·  2 open PRs                                                                               │
 │ Last commit  2h ago — fix: retry on 5xx                                                                              │
+│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

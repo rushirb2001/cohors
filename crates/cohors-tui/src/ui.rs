@@ -123,7 +123,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         // selected repo at a glance, or live action progress). It only appears
         // when it won't starve the list; on short terminals it vanishes and the
         // list takes the whole area, exactly as before.
-        const DOCK_H: u16 = 9;
+        const DOCK_H: u16 = 10;
         let dock_h = if rest.height >= DOCK_H + 7 { DOCK_H } else { 0 };
         let [list, dock] =
             Layout::vertical([Constraint::Min(0), Constraint::Length(dock_h)]).areas(rest);
@@ -1422,21 +1422,82 @@ fn render_dock(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
     dock_field(&mut lines, "Remote", remote_val, theme);
 
     // Last commit — age + the full message (the row no longer shows it),
-    // ellipsized to the remaining width.
-    let last_val = match &snap.last_commit {
+    // word-wrapped across the lines left in the pane rather than truncated.
+    match &snap.last_commit {
+        None => dock_field(
+            &mut lines,
+            "Last commit",
+            vec![Span::styled("no commits", theme.dim())],
+            theme,
+        ),
         Some(c) => {
             let head = format!("{} ago — ", time::relative(c.timestamp, now));
-            let avail = (inner.width as usize).saturating_sub(DOCK_LABEL_W + head.chars().count());
-            vec![
-                Span::styled(head, theme.dim()),
-                Span::raw(ellipsize(&c.summary, avail)),
-            ]
+            let inner_w = inner.width as usize;
+            // First message line shares its row with the label + age; wrapped
+            // continuation lines sit under the value column.
+            let first_w = inner_w
+                .saturating_sub(DOCK_LABEL_W + head.chars().count())
+                .max(1);
+            let rest_w = inner_w.saturating_sub(DOCK_LABEL_W).max(1);
+            let mut wrapped = word_wrap(&c.summary, first_w, rest_w);
+
+            // Cap to the rows left in the pane; mark the cut with an ellipsis.
+            let budget = (inner.height as usize).saturating_sub(lines.len()).max(1);
+            if wrapped.len() > budget {
+                wrapped.truncate(budget);
+                let w = if budget == 1 { first_w } else { rest_w };
+                if let Some(last) = wrapped.last_mut() {
+                    let mut s: String = last.chars().take(w.saturating_sub(1)).collect();
+                    s.push('…');
+                    *last = s;
+                }
+            }
+
+            dock_field(
+                &mut lines,
+                "Last commit",
+                vec![
+                    Span::styled(head, theme.dim()),
+                    Span::raw(wrapped.first().cloned().unwrap_or_default()),
+                ],
+                theme,
+            );
+            let indent = " ".repeat(DOCK_LABEL_W);
+            for chunk in wrapped.iter().skip(1) {
+                lines.push(Line::from(vec![
+                    Span::raw(indent.clone()),
+                    Span::raw(chunk.clone()),
+                ]));
+            }
         }
-        None => vec![Span::styled("no commits", theme.dim())],
-    };
-    dock_field(&mut lines, "Last commit", last_val, theme);
+    }
 
     frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Greedy word-wrap: split `text` on whitespace into lines that fit `first`
+/// columns for the first line and `rest` for the others. A single word wider
+/// than the limit is left long (the cell clips it) rather than broken mid-word.
+fn word_wrap(text: &str, first: usize, rest: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    let mut width = first;
+    for word in text.split_whitespace() {
+        if cur.is_empty() {
+            cur.push_str(word);
+        } else if cur.chars().count() + 1 + word.chars().count() <= width {
+            cur.push(' ');
+            cur.push_str(word);
+        } else {
+            lines.push(std::mem::take(&mut cur));
+            width = rest;
+            cur.push_str(word);
+        }
+    }
+    if !cur.is_empty() {
+        lines.push(cur);
+    }
+    lines
 }
 
 /// Width of the dim label column in the dock's labelled facts.
@@ -3141,6 +3202,26 @@ mod tests {
         let mut app = demo_app();
         app.busy.insert(app.repos[1].id.clone());
         app.busy.insert(app.repos[2].id.clone());
+        insta::assert_snapshot!(render_to_string(&app, 100, 34));
+    }
+
+    /// A long commit message wraps across the dock's remaining lines instead of
+    /// being truncated with an ellipsis.
+    #[test]
+    fn snapshot_dock_wraps_long_commit() {
+        let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
+        app.set_repos(vec![snap(
+            "load-tester",
+            Branch::Named("main".to_string()),
+            Some(("origin/main", 1, 0)),
+            (0, 0, 0),
+            0,
+            Some((
+                NOW - 7 * 86_400,
+                "chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC pgbench) + ignore results and refresh the CI perf matrix",
+            )),
+            None,
+        )]);
         insta::assert_snapshot!(render_to_string(&app, 100, 34));
     }
 

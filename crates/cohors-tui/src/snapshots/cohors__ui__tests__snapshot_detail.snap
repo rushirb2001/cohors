@@ -15,11 +15,11 @@ expression: "render_to_string(&app, 100, 28)"
 │▌   leg│ │ ● main                               │ │                                      ││ad .gi…│
 │    pay│ │   feat/idempotency                   │ │                                      ││       │
 │    web│ │   spike/webhooks                     │ │                                      ││pull   │
-│    inf│ │                                      │ │                                      ││d chan…│
-│    aut│ │ Stashes (1)                          │ │                                      ││       │
-╰───────│ │ WIP on main: dashboard tweaks        │ │                                      ││───────╯
-╭ legacy│ │                                      │ │                                      ││detail ╮
-│ ⚠ coul│ │ Pull requests                        │ │                                      ││       │
+│       │ │                                      │ │                                      ││       │
+╰───────│ │ Stashes (1)                          │ │                                      ││───────╯
+╭ legacy│ │ WIP on main: dashboard tweaks        │ │                                      ││detail ╮
+│ ⚠ coul│ │                                      │ │                                      ││       │
+│       │ │ Pull requests                        │ │                                      ││       │
 │       │ │ needs a GitHub remote + token        │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │
 │       │ │ Contributors                         │ │                                      ││       │

@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.15] — 2026-06-16
+
+### Changed
+
+- **The context pane now word-wraps the last commit message** across the lines
+  left in the pane (continuation lines indented under the value column) instead
+  of truncating it with an ellipsis. If it's still longer than the pane, the last
+  visible line ends with `…`. The pane is one row taller to give the message room.
+
 ## [0.4.14] — 2026-06-16
 
 ### Fixed
