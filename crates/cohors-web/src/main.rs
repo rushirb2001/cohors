@@ -778,7 +778,17 @@ fn detail_panel(
 
     view! {
         <div class="card detail">
-            <div class="card-title">{name}<span class="dim">{format!("  ·  {branch}")}</span></div>
+            <div class="card-title detail-head">
+                <span class="dt-title">
+                    {name}<span class="dim">{format!("  ·  {branch}")}</span>
+                </span>
+                // At-a-glance status, inline in the header: sync + CI (a running
+                // build animates via the spinner, same as the table).
+                <span class="dt-badges">
+                    {sync_cell(s)}
+                    {ci_cell(s, false)}
+                </span>
+            </div>
             <div class="scroll">
                 <dl class="facts">
                     <dt>"Sync"</dt><dd>{sync}</dd>

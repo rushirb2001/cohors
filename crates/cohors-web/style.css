@@ -210,6 +210,12 @@ body {
 }
 .card-title .hint { font-weight: 400; }
 
+/* The detail aside's header: title on the left, at-a-glance status badges
+   (sync + CI) on the right. */
+.detail-head { display: flex; align-items: center; gap: 0.6rem; }
+.dt-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-badges { display: inline-flex; align-items: center; gap: 0.7rem; flex: none; font-family: var(--mono); font-weight: 400; font-size: 0.78rem; }
+
 /* The scroll region inside each card. */
 .scroll { flex: 1; min-height: 0; overflow: auto; }
 
