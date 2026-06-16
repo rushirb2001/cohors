@@ -12,8 +12,8 @@ use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style, Stylize};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{
-    Block, BorderType, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row, Scrollbar,
-    ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
+    Block, BorderType, Borders, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row,
+    Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
 };
 
 use crate::app::{App, ConfirmAction, Mode, Opener, RunState};
@@ -108,8 +108,8 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         }
     } else {
         // A strip on top — the fuzzy input while filtering, otherwise the
-        // Attention panel — then the Repositories panel, and (when the terminal
-        // is tall enough) a docked context pane below it.
+        // Attention panel — then the Repositories panel, which hosts the context
+        // pane inside its own box (bottom rows) when the terminal is tall enough.
         let strip_height = if app.mode == Mode::Filter { 1 } else { 3 };
         let [strip, rest] =
             Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
@@ -119,25 +119,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         } else {
             render_attention_panel(frame, strip, app, now, &theme);
         }
-        // The dock turns a sparse fleet's empty space into a cockpit (the
-        // selected repo at a glance, or live action progress). It collapses to
-        // its content (no trailing blank rows) and only appears when it won't
-        // starve the list; on short terminals it vanishes and the list takes the
-        // whole area.
-        let dock_inner_w = rest.width.saturating_sub(4) as usize; // 2 borders + 2 h-padding
-        let dock = build_dock(app, now, &theme, dock_inner_w);
-        let dock_h = dock.as_ref().map_or(0, |d| {
-            let want = d.lines.len() as u16 + 3; // content + top padding + 2 borders
-            if rest.height >= want + 6 { want } else { 0 }
-        });
-        let [list, dock_area] =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(dock_h)]).areas(rest);
-        render_repos_panel(frame, list, app, now, dock_h > 0, &theme);
-        if dock_h > 0
-            && let Some(d) = dock
-        {
-            render_dock_box(frame, dock_area, d, &theme);
-        }
+        render_repos_panel(frame, rest, app, now, &theme);
     }
 
     // Dim the whole frame behind a modal overlay so the background recedes and
@@ -1056,14 +1038,7 @@ fn keep_visible(prev: usize, selected: usize, viewport: usize, total: usize) -> 
     off.min(total.saturating_sub(viewport))
 }
 
-fn render_repos_panel(
-    frame: &mut Frame,
-    area: Rect,
-    app: &App,
-    now: i64,
-    dock_visible: bool,
-    theme: &Theme,
-) {
+fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
     // The list's view state lives in its own title: the (visible) count in bold,
     // then the sort mode (and the dirty-only filter, when on) in dim.
     let mut title = vec![Span::styled(
@@ -1088,12 +1063,27 @@ fn render_repos_panel(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    // The context pane lives *inside* this box. When the panel is tall enough,
+    // reserve its bottom rows (a divider rule + a blank pad + the content) for the
+    // selected repo's facts and lay the table out in what's left; on short panels
+    // it doesn't appear and the table uses the whole inner area. `dock_visible`
+    // also drives the table's expanded-column layout.
+    let dock = build_dock(app, now, theme, inner.width.saturating_sub(2) as usize);
+    let dock_reserve = match &dock {
+        // divider(1) + pad(1) + content, only if the table keeps ≥6 rows.
+        Some(d) if inner.height >= d.lines.len() as u16 + 2 + 6 => d.lines.len() as u16 + 2,
+        _ => 0,
+    };
+    let dock_visible = dock_reserve > 0;
+    let [table_inner, dock_area] =
+        Layout::vertical([Constraint::Min(0), Constraint::Length(dock_reserve)]).areas(inner);
+
     let view = app.view();
     let total = view.len();
     // The header is its own row (no blank margin); the data fills the rest. When
     // the fleet overflows, a scroll hint is reserved above and/or below the data —
     // both at once when repos are hidden in both directions.
-    let avail = inner.height.saturating_sub(1) as usize; // data rows with header only
+    let avail = table_inner.height.saturating_sub(1) as usize; // data rows with header only
     let overflow = total > avail;
 
     // First assume one hint row; if that still hides repos both above and below,
@@ -1120,17 +1110,19 @@ fn render_repos_panel(
     // both.
     let len1 = || Constraint::Length(1);
     let (header_area, data_area, top_hint, bot_hint) = if !overflow {
-        let [hd, dt] = Layout::vertical([len1(), Constraint::Min(0)]).areas(inner);
+        let [hd, dt] = Layout::vertical([len1(), Constraint::Min(0)]).areas(table_inner);
         (hd, dt, None, None)
     } else if above == 0 {
-        let [hd, dt, bn] = Layout::vertical([len1(), Constraint::Min(0), len1()]).areas(inner);
+        let [hd, dt, bn] =
+            Layout::vertical([len1(), Constraint::Min(0), len1()]).areas(table_inner);
         (hd, dt, None, Some(bn))
     } else if below == 0 {
-        let [hd, tn, dt] = Layout::vertical([len1(), len1(), Constraint::Min(0)]).areas(inner);
+        let [hd, tn, dt] =
+            Layout::vertical([len1(), len1(), Constraint::Min(0)]).areas(table_inner);
         (hd, dt, Some(tn), None)
     } else {
         let [hd, tn, dt, bn] =
-            Layout::vertical([len1(), len1(), Constraint::Min(0), len1()]).areas(inner);
+            Layout::vertical([len1(), len1(), Constraint::Min(0), len1()]).areas(table_inner);
         (hd, dt, Some(tn), Some(bn))
     };
 
@@ -1276,6 +1268,11 @@ fn render_repos_panel(
             ),
             bn,
         );
+    }
+
+    // The context pane, in the reserved bottom rows of this same box.
+    if let (true, Some(d)) = (dock_visible, dock.as_ref()) {
+        render_inbox_dock(frame, dock_area, d, theme);
     }
 }
 
@@ -1555,20 +1552,35 @@ fn dock_field(
     lines.push(Line::from(spans));
 }
 
-/// Draw a pre-built [`DockBox`] into `area`, with a blank top-padding row above
-/// the content so it reads as a titled card.
-fn render_dock_box(frame: &mut Frame, area: Rect, dock: DockBox, theme: &Theme) {
-    let mut block = Block::bordered()
-        .border_type(BorderType::Rounded)
+/// Render a pre-built [`DockBox`] inside the Repositories box, in the reserved
+/// bottom rows: a titled divider rule (the repo name·branch on the left, the
+/// `Enter` hint on the right), a blank pad row, then the laid-out facts.
+fn render_inbox_dock(frame: &mut Frame, area: Rect, dock: &DockBox, theme: &Theme) {
+    let [divider, _pad, content] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(area);
+
+    // A horizontal rule, drawn as a top border so it spans the box width and
+    // butts against the side borders; the titles ride on it.
+    let mut rule = Block::new()
+        .borders(Borders::TOP)
         .border_style(dock.border)
-        .title(Line::from(dock.title).bold())
-        .padding(Padding::new(1, 1, 1, 0)); // left, right, top, bottom — a gap above the content
+        .title(Line::from(dock.title.clone()).bold());
     if let Some(right) = dock.right {
-        block = block.title(Line::from(Span::styled(right, theme.dim())).right_aligned());
+        rule = rule.title(Line::from(Span::styled(right, theme.dim())).right_aligned());
     }
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    frame.render_widget(Paragraph::new(dock.lines), inner);
+    frame.render_widget(rule, divider);
+
+    // The facts, indented one column off the border.
+    let body = Rect {
+        x: content.x + 1,
+        width: content.width.saturating_sub(1),
+        ..content
+    };
+    frame.render_widget(Paragraph::new(dock.lines.clone()), body);
 }
 
 /// Map an attention [`Severity`] to its accent style for the dock's reason chips.

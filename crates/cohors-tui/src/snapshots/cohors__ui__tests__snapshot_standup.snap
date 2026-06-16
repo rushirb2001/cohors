@@ -15,9 +15,9 @@ expression: "render_to_string(&app, 100, 22)"
 │▌   leg│ │                        │  │ aa00012  feat: payments work item 12            ║│ │ad .gi…│
 │    pay│ │                        │  │ aa00013  feat: payments work item 13            █│ │       │
 │    web│ │                        │  │ aa00014  feat: payments work item 14            █│ │pull   │
-│       │ │                        │  │ aa00015  feat: payments work item 15            █│ │       │
-╰───────│ │                        │  │ aa00016  feat: payments work item 16            █│ │───────╯
-╭ legacy│ │                        │  │ aa00017  feat: payments work item 17            ║│ │detail ╮
+│    inf│ │                        │  │ aa00015  feat: payments work item 15            █│ │d chan…│
+│    aut│ │                        │  │ aa00016  feat: payments work item 16            █│ │       │
+│ legacy│ │                        │  │ aa00017  feat: payments work item 17            ║│ │detail │
 │       │ │                        │  │ aa00018  feat: payments work item 18            ║│ │       │
 │ ⚠ coul│ │                        │  │ aa00019  feat: payments work item 19            ║│ │       │
 ╰───────│ │                        │  │ aa00020  feat: payments work item 20            ║│ │───────╯

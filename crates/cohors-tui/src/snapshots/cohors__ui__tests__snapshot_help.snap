@@ -34,8 +34,8 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    d               toggle dirty-only                               │              │
 │              │    s               cycle sort mode                                 │              │
 │              │    Tab             weekly standup                                  │              │
-╰──────────────│                                                                    │──────────────╯
-╭ legacy-billin│  Act — on the marked repos, else the current one                   │: full detail ╮
+│              │                                                                    │              │
+│ legacy-billin│  Act — on the marked repos, else the current one                   │: full detail │
 │              │    ⏎               inspect repo — commits, changes, branches       │              │
 │ ⚠ could not r│    o               open with… (editors, reveal, lazygit)           │              │
 ╰──────────────│                                                                    │──────────────╯

@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.17] — 2026-06-16
+
+### Changed
+
+- **The context pane now lives inside the Repositories box** instead of being a
+  separate box below it. The panel reserves its bottom rows for a titled divider
+  rule (repo name·branch on the left, `Enter: full detail` on the right) and the
+  selected repo's facts, with the table laid out above — one border around both.
+  On short terminals it doesn't appear and the table uses the whole box.
+
 ## [0.4.16] — 2026-06-16
 
 ### Fixed
