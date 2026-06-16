@@ -13,7 +13,7 @@
 name = "cohors-web"
 # Its own pre-release line — the web front-end isn't part of the workspace's
 # (TUI/CLI/MCP) version, and isn't published or installed yet.
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"

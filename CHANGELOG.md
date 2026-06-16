@@ -19,7 +19,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- **The web dashboard is now a full, interactive page (light theme).** Beyond the
+  bare demo table, `cohors web` now renders: the brand mark + header, an attention
+  summary (fleet-wide counts), live **filter / sort / dirty-only** controls (all
+  powered by `cohors-core::compute_view`, so the browser uses the exact same
+  fuzzy/sort/filter logic as the TUI), the full fleet table (Repo · Branch · Sync ·
+  Changes · Stash · PRs · CI · Last · Status), a **click-to-drill-in detail aside**
+  (per-repo facts, mirroring the TUI's context pane), and a **weekly standup**
+  panel. Light theme, monospace data, severity colour — echoing the TUI. Still
+  the demo fleet (slice 1); real GitHub data is next.
 
 ## [0.4.21] — 2026-06-16
 

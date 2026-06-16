@@ -30,3 +30,6 @@
 /KICKOFF_PROMPT.md
 /CLAUDE.md
 /docs/
+
+# Trunk build output (cohors-web)
+dist/
