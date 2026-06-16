@@ -19,6 +19,12 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cohors web` survives a busy port.** If the requested port is already in use,
+  it steps to the next free one (scanning a small range) and serves there instead
+  of failing with "Address already in use".
+
 ### Added
 
 - **Real GitHub data in the web dashboard — zero setup (v0.5 slice 2).**

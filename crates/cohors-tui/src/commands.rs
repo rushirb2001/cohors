@@ -385,6 +385,14 @@ pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
     )?;
     ensure_trunk(install)?;
 
+    // If the requested port is busy (e.g. another `cohors web`), step to the next
+    // free one rather than failing.
+    let chosen = pick_port(port);
+    if chosen != port {
+        eprintln!("port {port} is in use — serving on {chosen} instead.");
+    }
+    let port = chosen;
+
     // The machine's GitHub token — the SAME one the TUI uses (`gh auth token` /
     // `$GITHUB_TOKEN`). We hold it here and inject it into the GitHub proxy, so
     // the browser uses your login with zero setup and never sees the token.
@@ -465,6 +473,15 @@ fn ensure_trunk(install: bool) -> Result<()> {
              Install Trunk with `brew install trunk` (or see https://trunkrs.dev), then re-run `cohors web`."
         )
     }
+}
+
+/// The first free loopback port at or after `preferred` (scanning a small range),
+/// so a busy port doesn't sink `cohors web`. Falls back to `preferred` if none
+/// in range bind (then the server reports the real error).
+fn pick_port(preferred: u16) -> u16 {
+    (preferred..preferred.saturating_add(20))
+        .find(|&p| std::net::TcpListener::bind(("127.0.0.1", p)).is_ok())
+        .unwrap_or(preferred)
 }
 
 /// Poll until `path` exists, or the timeout elapses (waiting for Trunk's first build).
