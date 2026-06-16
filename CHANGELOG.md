@@ -21,6 +21,25 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.8] — 2026-06-15
+
+### Added
+
+- **Open-issue count + latest release in detail (ADR-037).** The detail pane's
+  left column now leads its GitHub section with a one-line summary —
+  `N open issues  ·  latest vX` — fetched alongside the PRs and contributors.
+
+### Changed
+
+- **MCP `get_repo` returns the same remote detail as the TUI (ADR-037).**
+  Inspecting one repo is now consistent across surfaces: `get_repo` carries a
+  `remote_detail` field (open PRs, contributors, open-issue count, latest
+  release) via the same `cohors_github::fetch_repo_detail` the `Enter` pane uses,
+  when the repo has a remote and a token. The fleet-wide `list_prs` rollup is
+  unchanged — it answers a different (cross-repo triage) question. The control
+  surfaces remain CLI, TUI, and MCP, all sharing one `cohors-core` model and one
+  fetch path.
+
 ## [0.4.7] — 2026-06-15
 
 ### Added

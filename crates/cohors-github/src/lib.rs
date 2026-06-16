@@ -251,7 +251,33 @@ pub fn fetch_repo_detail(token: &str, remote_url: &str) -> Option<RemoteDetail> 
     })
     .unwrap_or_default();
 
-    Some(RemoteDetail { prs, contributors })
+    // Open issues (excluding PRs) via the search API; best-effort → 0.
+    let open_issues = {
+        let q = format!("repo:{owner}/{repo} is:issue is:open");
+        get_json::<SearchResponse>(
+            &agent,
+            token,
+            &format!("/search/issues?q={}&per_page=1", encode_query(&q)),
+        )
+        .map(|r| r.total_count)
+        .unwrap_or(0)
+    };
+
+    // Latest release tag (404 when the repo has none → `None`).
+    let latest_release = get_json::<ReleaseResponse>(
+        &agent,
+        token,
+        &format!("/repos/{owner}/{repo}/releases/latest"),
+    )
+    .ok()
+    .map(|r| r.tag_name);
+
+    Some(RemoteDetail {
+        prs,
+        contributors,
+        open_issues,
+        latest_release,
+    })
 }
 
 /// Issue a `GET {API_BASE}{path}` with the standard GitHub headers and decode
@@ -381,6 +407,12 @@ struct ContributorResponse {
     login: Option<String>,
     #[serde(default)]
     contributions: u32,
+}
+
+/// `GET /repos/{owner}/{repo}/releases/latest` — we only need the tag.
+#[derive(serde::Deserialize)]
+struct ReleaseResponse {
+    tag_name: String,
 }
 
 #[cfg(test)]

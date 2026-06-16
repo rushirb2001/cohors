@@ -170,6 +170,10 @@ pub struct Contributor {
 pub struct RemoteDetail {
     pub prs: Vec<PullRequest>,
     pub contributors: Vec<Contributor>,
+    /// Open issues (excluding PRs).
+    pub open_issues: u32,
+    /// Latest release tag, if the repo has one.
+    pub latest_release: Option<String>,
 }
 
 /// A full point-in-time view of one repo — the unit the dashboard renders.

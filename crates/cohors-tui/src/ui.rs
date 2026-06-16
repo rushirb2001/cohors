@@ -2071,6 +2071,16 @@ fn render_remote_sections(
     dv: &crate::app::DetailView,
     theme: &Theme,
 ) {
+    // A one-line GitHub summary (open issues + latest release) above the lists.
+    if let Some(r) = &dv.remote {
+        detail_section(lines, "GitHub".to_string());
+        let release = r.latest_release.clone().unwrap_or_else(|| "—".to_string());
+        lines.push(Line::from(vec![
+            Span::raw(format!("{} open issues", r.open_issues)),
+            Span::styled(format!("  ·  latest {release}"), theme.dim()),
+        ]));
+    }
+
     detail_section(
         lines,
         match dv.remote.as_ref().map(|r| r.prs.len()) {
@@ -2756,6 +2766,8 @@ mod tests {
                     contributions: 64,
                 },
             ],
+            open_issues: 7,
+            latest_release: Some("v1.4.0".to_string()),
         });
         app.detail = Some(dv);
         insta::assert_snapshot!(render_to_string(&app, 100, 28));

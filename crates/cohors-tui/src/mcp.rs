@@ -171,7 +171,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "get_repo",
-            "description": "Get one repository's full status by id, name, or path.",
+            "description": "Get one repository's full status by id, name, or path — the same inspect the TUI shows on Enter. Includes remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "repo": { "type": "string" } },
@@ -737,9 +737,20 @@ fn list_repos(args: &Value, ctx: &Ctx, now: i64) -> Value {
 fn get_repo(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let key = repo_arg(args)?;
     let snaps = (ctx.scan)();
-    find_repo(&snaps, &key)
-        .map(|snap| repo_json(snap, now))
-        .ok_or_else(|| format!("no repository matching `{key}`"))
+    let snap = find_repo(&snaps, &key).ok_or_else(|| format!("no repository matching `{key}`"))?;
+    let mut value = repo_json(snap, now);
+    // Same GitHub detail the TUI shows on Enter (PRs / contributors / issues /
+    // release), so inspecting a repo is consistent across the TUI and MCP.
+    if let (Some(url), Some(token)) = (snap.remote_url.as_deref(), ctx.token)
+        && let Some(detail) = cohors_github::fetch_repo_detail(token, url)
+        && let Value::Object(map) = &mut value
+    {
+        map.insert(
+            "remote_detail".to_string(),
+            serde_json::to_value(detail).unwrap_or(Value::Null),
+        );
+    }
+    Ok(value)
 }
 
 fn repo_path(args: &Value, ctx: &Ctx) -> Result<Value, String> {
