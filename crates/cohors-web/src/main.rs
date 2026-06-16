@@ -15,14 +15,11 @@ use cohors_core::{
     Branch, CiStatus, FleetSummary, RepoSnapshot, Severity, SortMode, ViewParams, assess,
     compute_view, demo, fleet_summary, group_commits, time,
 };
-use gloo_storage::Storage;
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 /// Fixed clock for the *demo* fleet, so its relative ages stay sensible.
 const DEMO_NOW: i64 = 1_700_000_000;
-/// localStorage key for the saved token.
-const TOKEN_KEY: &str = "cohors_token";
 
 /// The browser's real wall clock (Unix seconds) — used for live GitHub data.
 fn real_now() -> i64 {
@@ -35,7 +32,6 @@ enum Fleet {
     Demo(Arc<Vec<RepoSnapshot>>),
     Loading,
     Loaded(Arc<Vec<RepoSnapshot>>),
-    Error(String),
 }
 
 fn main() {
@@ -45,8 +41,8 @@ fn main() {
 
 #[component]
 fn App() -> impl IntoView {
-    let token_input = RwSignal::new(String::new());
-    let fleet = RwSignal::new(Fleet::Demo(Arc::new(demo::fleet(DEMO_NOW))));
+    let fleet = RwSignal::new(Fleet::Loading);
+    let notice = RwSignal::new(None::<String>);
 
     // Control signals live here so they persist as the fleet changes.
     let filter = RwSignal::new(String::new());
@@ -54,40 +50,37 @@ fn App() -> impl IntoView {
     let dirty_only = RwSignal::new(false);
     let selected = RwSignal::new(None::<String>);
 
-    // Connect: persist the token, show loading, fetch in the background.
-    let connect = move |token: String| {
-        let token = token.trim().to_string();
-        if token.is_empty() {
-            return;
-        }
-        let _ = gloo_storage::LocalStorage::set(TOKEN_KEY, &token);
+    // Load real repos through the local proxy (which injects the machine's GitHub
+    // token — no token in the browser). On any failure, fall back to the demo
+    // fleet with a short note explaining why.
+    let load = move || {
+        notice.set(None);
         selected.set(None);
         fleet.set(Fleet::Loading);
         spawn_local(async move {
-            match github::fetch_repos(&token).await {
-                Ok(repos) => fleet.set(Fleet::Loaded(Arc::new(repos))),
-                Err(e) => fleet.set(Fleet::Error(e)),
+            match github::fetch_repos().await {
+                Ok(repos) if !repos.is_empty() => fleet.set(Fleet::Loaded(Arc::new(repos))),
+                Ok(_) => {
+                    notice.set(Some("No repositories found on this account.".to_string()));
+                    fleet.set(Fleet::Loaded(Arc::new(Vec::new())));
+                }
+                Err(e) => {
+                    notice.set(Some(format!("{e} — showing the demo fleet.")));
+                    fleet.set(Fleet::Demo(Arc::new(demo::fleet(DEMO_NOW))));
+                }
             }
         });
     };
 
-    let to_demo = move || {
+    let show_demo = move |_| {
+        notice.set(Some("Showing the demo fleet.".to_string()));
         selected.set(None);
         fleet.set(Fleet::Demo(Arc::new(demo::fleet(DEMO_NOW))));
     };
-    let use_demo = move |_| to_demo();
-    let disconnect = move |_| {
-        gloo_storage::LocalStorage::delete(TOKEN_KEY);
-        token_input.set(String::new());
-        to_demo();
-    };
+    let reload = move |_| load();
 
-    // Auto-connect with a previously saved token.
-    if let Ok(saved) = gloo_storage::LocalStorage::get::<String>(TOKEN_KEY)
-        && !saved.trim().is_empty()
-    {
-        connect(saved);
-    }
+    // Fetch on startup — no setup, no token entry.
+    load();
 
     view! {
         <div class="app">
@@ -108,42 +101,27 @@ fn App() -> impl IntoView {
                     {move || match fleet.get() {
                         Fleet::Loaded(_) => view! {
                             <span class="src">"● GitHub"</span>
-                            <button class="ghost" on:click=disconnect>"disconnect"</button>
+                            <button class="ghost" on:click=reload>"reload"</button>
+                            <button class="ghost" on:click=show_demo>"demo"</button>
                         }
                         .into_any(),
-                        _ => view! {
-                            <input
-                                class="token"
-                                r#type="password"
-                                placeholder="GitHub token (repo scope)"
-                                prop:value=move || token_input.get()
-                                on:input=move |ev| token_input.set(event_target_value(&ev))
-                                on:keydown=move |ev| {
-                                    if ev.key() == "Enter" {
-                                        connect(token_input.get());
-                                    }
-                                }
-                            />
-                            <button class="primary" on:click=move |_| connect(token_input.get())>
-                                "Connect"
-                            </button>
-                            <button class="ghost" on:click=use_demo>"Demo"</button>
+                        Fleet::Demo(_) => view! {
+                            <span class="src demo">"demo"</span>
+                            <button class="ghost" on:click=reload>"connect GitHub"</button>
                         }
                         .into_any(),
+                        Fleet::Loading => view! { <span class="dim">"loading…"</span> }.into_any(),
                     }}
                 </div>
             </header>
+
+            {move || notice.get().map(|n| view! { <div class="banner">{n}</div> })}
 
             {move || match fleet.get() {
                 Fleet::Demo(s) => dashboard(s, DEMO_NOW, filter, sort, dirty_only, selected, true).into_any(),
                 Fleet::Loaded(s) => dashboard(s, real_now(), filter, sort, dirty_only, selected, false).into_any(),
                 Fleet::Loading => view! {
                     <div class="state">"Fetching your repositories from GitHub…"</div>
-                }
-                .into_any(),
-                Fleet::Error(e) => view! {
-                    <div class="state error">{format!("⚠ {e}")}</div>
-                    <div class="state sub">"Fix the token above, or click Demo for the sample fleet."</div>
                 }
                 .into_any(),
             }}

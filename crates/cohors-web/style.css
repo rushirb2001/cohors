@@ -105,6 +105,19 @@ body {
 }
 .ghost:hover { color: var(--text); }
 .src { font-family: var(--mono); font-size: 0.8rem; color: var(--green); }
+.src.demo { color: var(--dim); }
+
+/* A quiet inline notice (e.g. "no GitHub login — showing demo"). */
+.banner {
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--dim);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+}
 
 /* ── Async states ───────────────────────────────────────────────────────── */
 .state { padding: 2.5rem 1rem; text-align: center; color: var(--dim); font-family: var(--mono); }

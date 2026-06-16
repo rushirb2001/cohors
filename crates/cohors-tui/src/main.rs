@@ -18,6 +18,7 @@ mod prefs;
 mod scan;
 mod tui;
 mod ui;
+mod web;
 
 use clap::Parser;
 

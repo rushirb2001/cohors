@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cohors_core::{AttentionLevel, CiStatus, Selector, SortMode};
 
 use crate::cli::Cli;
@@ -383,66 +383,100 @@ pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
         "couldn't find `crates/cohors-web` — `cohors web` builds the dashboard from source, so \
          run it inside the cohors repository (a hosted version arrives with the deploy milestone)",
     )?;
+    ensure_trunk(install)?;
 
-    if !trunk_available() {
-        if !install {
-            bail!(
-                "the web app needs Trunk (the WASM bundler). Install it with:\n\
-                 \n    cargo install trunk      # or: brew install trunk\n\n\
-                 …or just run `cohors web` (it installs Trunk for you unless you pass --no-install)."
-            );
-        }
-        // Devs have Cargo, so prefer it; otherwise point at a binary install.
-        if cargo_available() {
-            eprintln!(
-                "Trunk (the WASM bundler the web app needs) isn't installed — installing it with \
-                 `cargo install trunk` (one-time, a few minutes)…"
-            );
-            let status = std::process::Command::new("cargo")
-                .args(["install", "trunk"])
-                .status()
-                .context("running `cargo install trunk`")?;
-            if !status.success() {
-                bail!(
-                    "`cargo install trunk` failed — install it manually (`brew install trunk`), then retry"
-                );
-            }
-        } else {
-            bail!(
-                "the web app needs Trunk, and Cargo isn't available to install it automatically.\n\
-                 Install Trunk with `brew install trunk` (or see https://trunkrs.dev), then re-run `cohors web`."
-            );
-        }
+    // The machine's GitHub token — the SAME one the TUI uses (`gh auth token` /
+    // `$GITHUB_TOKEN`). We hold it here and inject it into the GitHub proxy, so
+    // the browser uses your login with zero setup and never sees the token.
+    let token = cohors_github::discover_token();
+
+    // Build the WASM assets to dist/ and keep watching for rebuilds while we
+    // serve. (Our own server — not `trunk serve` — so we can proxy GitHub.)
+    println!("Building the dashboard…");
+    let mut watcher = std::process::Command::new("trunk")
+        .arg("watch")
+        .current_dir(&web_dir)
+        .spawn()
+        .context("starting `trunk watch` (is Trunk installed and on PATH?)")?;
+
+    let dist = web_dir.join("dist");
+    if !wait_for_file(
+        &dist.join("index.html"),
+        std::time::Duration::from_secs(240),
+    ) {
+        let _ = watcher.kill();
+        bail!("the WASM build didn't finish in time");
     }
 
     let url = format!("http://{WEB_HOST}:{port}");
-    println!("Building cohors web — it will open at {url} when ready (Ctrl-C to stop)…");
-
-    // Start Trunk bound to loopback (so `cohors.localhost` reaches it), streaming
-    // its build log. We don't use Trunk's own `--open`: we open the *branded* URL
-    // ourselves, and only once the server is actually listening.
-    let mut child = std::process::Command::new("trunk")
-        .arg("serve")
-        .current_dir(&web_dir)
-        .args(["--address", "127.0.0.1", "--port", &port.to_string()])
-        .spawn()
-        .context("starting `trunk serve` (is Trunk installed and on PATH?)")?;
-
+    let auth = if token.is_some() {
+        "using your GitHub login"
+    } else {
+        "no GitHub login found — showing demo data (run `gh auth login` for your repos)"
+    };
+    println!("\n  cohors web is live → {url}\n  {auth}\n  Ctrl-C to stop.\n");
     if open {
         let url = url.clone();
         std::thread::spawn(move || {
-            if wait_for_port(port, std::time::Duration::from_secs(120)) {
-                println!("\n  cohors web is live → {url}\n");
+            if wait_for_port(port, std::time::Duration::from_secs(15)) {
                 let _ = open_url(&url);
             }
         });
     }
 
-    let status = child.wait().context("running `trunk serve`")?;
-    if !status.success() {
-        bail!("`trunk serve` exited with an error");
+    // Serve until stopped; then tear down the watcher.
+    let result = crate::web::serve(&dist, port, token);
+    let _ = watcher.kill();
+    result
+}
+
+/// Make sure Trunk (the WASM bundler) is available, installing it via Cargo when
+/// missing (unless `install` is false). Falls back to pointing at a binary
+/// install when Cargo isn't present (a prebuilt-binary, non-Rust setup).
+fn ensure_trunk(install: bool) -> Result<()> {
+    if trunk_available() {
+        return Ok(());
     }
-    Ok(())
+    if !install {
+        bail!(
+            "the web app needs Trunk (the WASM bundler). Install it with:\n\
+             \n    cargo install trunk      # or: brew install trunk\n\n\
+             …or just run `cohors web` (it installs Trunk for you unless you pass --no-install)."
+        );
+    }
+    if cargo_available() {
+        eprintln!(
+            "Trunk (the WASM bundler the web app needs) isn't installed — installing it with \
+             `cargo install trunk` (one-time, a few minutes)…"
+        );
+        let status = std::process::Command::new("cargo")
+            .args(["install", "trunk"])
+            .status()
+            .context("running `cargo install trunk`")?;
+        if !status.success() {
+            bail!(
+                "`cargo install trunk` failed — install it manually (`brew install trunk`), then retry"
+            );
+        }
+        Ok(())
+    } else {
+        bail!(
+            "the web app needs Trunk, and Cargo isn't available to install it automatically.\n\
+             Install Trunk with `brew install trunk` (or see https://trunkrs.dev), then re-run `cohors web`."
+        )
+    }
+}
+
+/// Poll until `path` exists, or the timeout elapses (waiting for Trunk's first build).
+fn wait_for_file(path: &Utf8Path, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while std::time::Instant::now() < deadline {
+        if path.exists() {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+    false
 }
 
 /// Walk up from the current directory to find the `cohors-web` crate.

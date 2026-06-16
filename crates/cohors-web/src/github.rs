@@ -1,16 +1,23 @@
 //! The browser's GitHub data source (v0.5 slice 2).
 //!
-//! `cohors-github` talks to GitHub with `ureq` (blocking, native-only — ADR-016),
-//! which can't compile to WASM. So the web app has its own tiny fetch over the
-//! browser's `fetch` (via `gloo-net`) that returns the *same* `cohors-core`
-//! models, keeping the front-ends aligned (ADR-002). GitHub's REST API allows
-//! cross-origin browser requests, so this works directly from the page.
+//! The browser is sandboxed: it can't run `gh auth token` or read env vars like
+//! the native TUI. So `cohors web` (the native server) holds the token and
+//! proxies GitHub for us — the page calls a **same-origin** `/gh/<path>` and the
+//! server injects the `Authorization` header (see `cohors-tui/src/web.rs`). The
+//! token never reaches the browser, and the user does nothing. The responses map
+//! onto the same `cohors-core` models as the TUI (ADR-002).
+//!
+//! When the page is served *without* that proxy (e.g. plain `trunk serve`, or a
+//! machine with no GitHub login), `/gh/...` fails and the app falls back to the
+//! demo fleet.
 
 use cohors_core::{Branch, CommitMeta, RepoId, RepoSnapshot, WorktreeStatus};
 use gloo_net::http::Request;
 use serde::Deserialize;
 
-const API: &str = "https://api.github.com";
+/// Same-origin path proxied to the GitHub REST API by the local `cohors web`
+/// server, which injects the token.
+const PROXY: &str = "/gh";
 
 /// One repo as returned by `GET /user/repos`. Only the fields we render.
 #[derive(Deserialize)]
@@ -35,27 +42,25 @@ struct Owner {
     login: String,
 }
 
-/// Fetch the authenticated user's repositories (most-recently-pushed first) and
-/// map them onto `cohors-core` snapshots. Paginates up to 300 repos. Local-only
-/// fields (worktree, ahead/behind, stash) are empty — the browser has no working
-/// copy; the remote signals (CI/PRs) are enriched in a later slice.
-pub async fn fetch_repos(token: &str) -> Result<Vec<RepoSnapshot>, String> {
+/// Fetch the authenticated user's repositories (most-recently-pushed first) via
+/// the local proxy and map them onto `cohors-core` snapshots. Paginates up to 300
+/// repos. Local-only fields (worktree, ahead/behind, stash) are empty — the
+/// browser has no working copy; remote signals (CI/PRs) are enriched in a later
+/// slice.
+pub async fn fetch_repos() -> Result<Vec<RepoSnapshot>, String> {
     let mut out = Vec::new();
     for page in 1..=3u32 {
-        let url = format!("{API}/user/repos?per_page=100&sort=pushed&page={page}");
+        let url = format!("{PROXY}/user/repos?per_page=100&sort=pushed&page={page}");
         let resp = Request::get(&url)
-            .header("Authorization", &format!("Bearer {token}"))
-            .header("Accept", "application/vnd.github+json")
-            .header("X-GitHub-Api-Version", "2022-11-28")
             .send()
             .await
             .map_err(|e| format!("network error: {e}"))?;
 
         if !resp.ok() {
-            let status = resp.status();
-            return Err(match status {
-                401 => "GitHub rejected the token (401) — check it has `repo` scope".to_string(),
-                403 => "GitHub returned 403 — rate-limited or missing scope".to_string(),
+            return Err(match resp.status() {
+                401 => "not signed in to GitHub — run `gh auth login`".to_string(),
+                403 => "GitHub rate-limited the request (or the token lacks scope)".to_string(),
+                502 => "couldn't reach GitHub from the local server".to_string(),
                 other => format!("GitHub API returned HTTP {other}"),
             });
         }

@@ -16,7 +16,7 @@ exclude = ["crates/cohors-web"]
 # Shared package metadata. Each crate inherits these with `field.workspace = true`
 # so version/edition/license stay consistent across the workspace.
 [workspace.package]
-version = "0.4.21"
+version = "0.4.22"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -66,6 +66,10 @@ arboard = "3"
 
 # Remote adapter (cohors-github): blocking HTTP client with rustls TLS + JSON.
 ureq = { version = "2", features = ["json"] }
+
+# Tiny blocking HTTP server for `cohors web`: serves the built WASM assets and
+# proxies GitHub (injecting the local token) so the browser never sees it.
+tiny_http = "0.12"
 
 # Dev/test helpers.
 tempfile = "3"

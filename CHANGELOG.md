@@ -21,16 +21,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
-- **Real GitHub data in the web dashboard (v0.5 slice 2).** Paste a GitHub token
-  (the header's Connect field) and `cohors web` fetches your repositories over the
-  browser's `fetch` (a small WASM client in `cohors-web/src/github.rs` — the
-  browser can't use `cohors-github`'s native `ureq`), maps them onto the same
-  `cohors-core` models, and renders them through the exact same `compute_view` /
-  `assess` logic as the demo and the TUI (ADR-002). The token is remembered
-  (localStorage) so it reconnects on reload; **Demo** stays the zero-setup
-  fallback. Live data uses a real browser clock. Loading/error states included.
-  (Per-repo CI/PR enrichment and proper OAuth are the next slices; the pasted
-  token is the developer bridge until then.)
+- **Real GitHub data in the web dashboard — zero setup (v0.5 slice 2).**
+  `cohors web` now shows *your* repositories automatically, using the **same
+  GitHub login the TUI uses** (`gh auth token` / `$GITHUB_TOKEN`). The browser is
+  sandboxed and can't read that token, so the `cohors web` server **proxies**
+  GitHub for the page: the dashboard calls a same-origin `/gh/...`, and the
+  native server injects the `Authorization` header and forwards to GitHub. The
+  **token never reaches the browser** — no pasting, no token in storage. The
+  fetched repos map onto the same `cohors-core` models and render through the
+  exact same `compute_view`/`assess` logic as the demo and the TUI (ADR-002).
+  With no GitHub login (or served without the proxy, e.g. plain `trunk serve`),
+  it falls back to the **demo fleet** with a one-line note. Live data uses a real
+  browser clock. (Per-repo CI/PR enrichment and OAuth-for-the-hosted-version are
+  the next slices.)
 - **The web dashboard is now a full, interactive page (light theme).** Beyond the
   bare demo table, `cohors web` now renders: the brand mark + header, an attention
   summary (fleet-wide counts), live **filter / sort / dirty-only** controls (all
