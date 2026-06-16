@@ -320,7 +320,8 @@ fn view_indices(repos: &[RepoSnapshot], query: &str, sort: SortKey, now: i64) ->
     idx
 }
 
-/// One CI cell's (label, class).
+/// One CI cell's (label, class). `·` is "still enriching"; once enriched, a repo
+/// with no checks reads as "no CI" rather than an ambiguous dash.
 fn ci_view(s: &RepoSnapshot) -> (&'static str, &'static str) {
     match &s.remote {
         None => ("·", "dim"),
@@ -328,7 +329,7 @@ fn ci_view(s: &RepoSnapshot) -> (&'static str, &'static str) {
             CiStatus::Passing => ("passing", "staged"),
             CiStatus::Failing => ("failing", "risk"),
             CiStatus::Pending => ("pending", "warn"),
-            CiStatus::None => ("—", "dim"),
+            CiStatus::None => ("no CI", "dim"),
         },
     }
 }

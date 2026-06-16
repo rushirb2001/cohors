@@ -21,6 +21,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Fixed
 
+- **The web CI column reads "no CI" instead of a dash** when an (enriched) repo
+  has no checks configured — distinct from the `·` shown while still enriching.
 - **`cohors web` survives a busy port.** If the requested port is already in use,
   it steps to the next free one (scanning a small range) and serves there instead
   of failing with "Address already in use".
