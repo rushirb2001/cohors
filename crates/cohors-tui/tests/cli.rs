@@ -44,6 +44,11 @@ fn git(dir: &Path, args: &[&str]) {
 fn init_repo_with_commit(dir: &Path) {
     std::fs::create_dir_all(dir).unwrap();
     git(dir, &["-c", "init.defaultBranch=main", "init", "-q"]);
+    // Identity in the repo's *local* config, so a `git commit` spawned by the
+    // `cohors` binary (which doesn't inherit this test's GIT_AUTHOR_* env) still
+    // has an author — CI runners have no global gitconfig.
+    git(dir, &["config", "user.email", "dev@example.com"]);
+    git(dir, &["config", "user.name", "Dev"]);
     std::fs::write(dir.join("README.md"), "hi").unwrap();
     git(dir, &["add", "."]);
     git(dir, &["commit", "-q", "-m", "init"]);
