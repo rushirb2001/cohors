@@ -265,7 +265,7 @@ fn dashboard(
                                     <th>"PRs"</th>
                                     <th>"CI"</th>
                                     <th>"Last"</th>
-                                    <th>"About"</th>
+                                    <th>"Status"</th>
                                 </tr>
                             </thead>
                             <tbody>{body}</tbody>
@@ -407,13 +407,18 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
         view! { <span class="spin"></span> }.into_any()
     } else {
         match &s.remote {
-            Some(r) if r.open_prs == 0 => view! { <span class="dim">"·"</span> }.into_any(),
+            // 0 PRs is a real, enriched state — show a dim "0", not a bare dot
+            // (a dot now means only "still loading").
+            Some(r) if r.open_prs == 0 => view! { <span class="dim">"0"</span> }.into_any(),
             Some(r) => view! { <span class="ahead">{r.open_prs.to_string()}</span> }.into_any(),
-            None => view! { <span class="dim">"·"</span> }.into_any(),
+            None => view! { <span class="dim">"0"</span> }.into_any(),
         }
     };
     let ci = if enriching {
         view! { <span class="spin"></span> }.into_any()
+    } else if s.remote.as_ref().is_some_and(|r| r.ci == CiStatus::Pending) {
+        // Pending CI is itself a kind of loading — pair the label with a spinner.
+        view! { <span class="spin"></span><span class="warn">"pending"</span> }.into_any()
     } else {
         let (label, cls) = ci_view(s);
         view! { <span class=cls>{label}</span> }.into_any()
@@ -424,11 +429,6 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
         .as_ref()
         .map(|c| time::relative(c.timestamp, now))
         .unwrap_or_else(|| "—".to_string());
-    let about = s
-        .last_commit
-        .as_ref()
-        .map(|c| c.summary.clone())
-        .unwrap_or_default();
 
     view! {
         <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
@@ -436,8 +436,33 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
             <td>{prs}</td>
             <td>{ci}</td>
             <td class="dim">{age}</td>
-            <td class="about">{about}</td>
+            <td class="status">{status_view(s, now)}</td>
         </tr>
+    }
+}
+
+/// The "Status" cell: *why* a repo wants attention (or that it's calm) — failing
+/// CI, open PRs, CI running, or staleness, mirroring [`health_rank`]. Replaces the
+/// old commit-summary "About" column with something actionable.
+fn status_view(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
+    let Some(r) = s.remote.as_ref() else {
+        return view! { <span class="spin"></span><span class="dim">" checking…"</span> }.into_any();
+    };
+    let stale = s
+        .last_commit
+        .as_ref()
+        .is_some_and(|c| now - c.timestamp > STALE_SECS);
+    if r.ci == CiStatus::Failing {
+        view! { <span class="risk">"CI failing"</span> }.into_any()
+    } else if r.open_prs > 0 {
+        let label = format!("{} open PR{}", r.open_prs, if r.open_prs == 1 { "" } else { "s" });
+        view! { <span class="notice">{label}</span> }.into_any()
+    } else if r.ci == CiStatus::Pending {
+        view! { <span class="spin"></span><span class="warn">" CI running"</span> }.into_any()
+    } else if stale {
+        view! { <span class="dim">"stale — no recent pushes"</span> }.into_any()
+    } else {
+        view! { <span class="ok">"up to date"</span> }.into_any()
     }
 }
 
@@ -455,13 +480,16 @@ fn detail_panel(
     };
     let name = s.name.clone();
 
-    let (ci_label, ci_class) = match &s.remote {
-        None => ("enriching…", "dim"),
+    // CI as a header node (a pending build pairs its label with the spinner).
+    let ci_node = match &s.remote {
+        None => view! { <span class="dim">"enriching…"</span> }.into_any(),
         Some(r) => match r.ci {
-            CiStatus::Passing => ("passing", "ok"),
-            CiStatus::Failing => ("failing", "risk"),
-            CiStatus::Pending => ("pending", "warn"),
-            CiStatus::None => ("no CI", "dim"),
+            CiStatus::Passing => view! { <span class="ok">"passing"</span> }.into_any(),
+            CiStatus::Failing => view! { <span class="risk">"failing"</span> }.into_any(),
+            CiStatus::Pending => {
+                view! { <span class="spin"></span><span class="warn">"pending"</span> }.into_any()
+            }
+            CiStatus::None => view! { <span class="dim">"no CI"</span> }.into_any(),
         },
     };
     let prs = match &s.remote {
@@ -497,18 +525,30 @@ fn detail_panel(
         <div class="card detail">
             <div class="card-title">{name}<span class="dim">{format!("  ·  {branch}")}</span></div>
             <div class="scroll">
+                // ── Header: the at-a-glance facts (CI · PRs · Activity · Sync) ──
                 <dl class="facts">
-                    <dt>"CI"</dt><dd class=ci_class>{ci_label}</dd>
+                    <dt>"CI"</dt><dd>{ci_node}</dd>
                     <dt>"PRs"</dt><dd>{prs}</dd>
                     <dt>"Activity"</dt><dd>{last}</dd>
+                    <dt>"Sync"</dt><dd>{move || sync_dd(detail.get())}</dd>
                 </dl>
-                {about.map(|d| view! { <p class="about-detail">{d}</p> })}
-                {move || rich_block(detail.get(), now)}
+                // ── About: description + the GitHub stats line ──────────────────
+                <div class="sec">
+                    <div class="sec-h">"About"</div>
+                    {about.map(|d| view! { <p class="about-detail">{d}</p> })}
+                    <div class="stats">{move || stats_dd(detail.get())}</div>
+                </div>
+                // ── Recent commits · Open PRs · Top contributors (on demand) ────
+                {move || rich_sections_block(detail.get(), now)}
+                // ── Remote source ──────────────────────────────────────────────
                 {link.map(|url| {
                     let shown = url.clone();
                     view! {
-                        <div class="link">
-                            <a href=url target="_blank" rel="noreferrer">{shown}</a>
+                        <div class="sec">
+                            <div class="sec-h">"Remote source"</div>
+                            <div class="link">
+                                <a href=url target="_blank" rel="noreferrer">{shown}</a>
+                            </div>
                         </div>
                     }
                 })}
@@ -517,10 +557,55 @@ fn detail_panel(
     }
 }
 
-/// The on-demand rich detail under the at-a-glance facts. Idle (or demo mode)
-/// renders nothing; `Loading` shows the dots spinner; `Loaded` shows the
-/// sections. Reactive — re-runs when the `detail` signal changes.
-fn rich_block(state: DetailState, now: i64) -> AnyView {
+/// The "Sync" header value (reactive on `detail`): how far the default branch has
+/// moved past the latest release — the remote analog of local ahead/behind.
+fn sync_dd(state: DetailState) -> AnyView {
+    match state {
+        DetailState::Idle => view! { <span class="dim">"—"</span> }.into_any(),
+        DetailState::Loading => view! { <span class="spin"></span> }.into_any(),
+        DetailState::Loaded(d) => match (d.latest_release, d.commits_since_release) {
+            (None, _) => view! { <span class="dim">"no releases"</span> }.into_any(),
+            (Some(tag), Some(0)) => {
+                view! { <span class="ok">{format!("in sync · {tag}")}</span> }.into_any()
+            }
+            (Some(tag), Some(n)) => view! {
+                <span class="ahead">
+                    {format!("{n} commit{} ahead · {tag}", if n == 1 { "" } else { "s" })}
+                </span>
+            }
+            .into_any(),
+            (Some(tag), None) => view! { <span class="dim">{tag}</span> }.into_any(),
+        },
+    }
+}
+
+/// The "About" stats line (reactive on `detail`): stars · language · open issues
+/// · latest release.
+fn stats_dd(state: DetailState) -> AnyView {
+    match state {
+        DetailState::Idle => ().into_any(),
+        DetailState::Loading => view! { <span class="dim">"…"</span> }.into_any(),
+        DetailState::Loaded(d) => {
+            let mut parts = vec![format!("★ {}", d.stars)];
+            if let Some(lang) = d.language {
+                parts.push(lang);
+            }
+            parts.push(format!(
+                "{} open issue{}",
+                d.open_issues,
+                if d.open_issues == 1 { "" } else { "s" }
+            ));
+            if let Some(rel) = d.latest_release {
+                parts.push(format!("release {rel}"));
+            }
+            parts.join("  ·  ").into_any()
+        }
+    }
+}
+
+/// The on-demand drill-in sections (commits, PRs, contributors). `Loading` shows
+/// the dots spinner; `Idle` (demo) renders nothing.
+fn rich_sections_block(state: DetailState, now: i64) -> AnyView {
     match state {
         DetailState::Idle => ().into_any(),
         DetailState::Loading => view! {
@@ -531,24 +616,9 @@ fn rich_block(state: DetailState, now: i64) -> AnyView {
     }
 }
 
-/// Render the loaded drill-in: a GitHub stats line, then sections for recent
-/// commits, open PRs, and top contributors. Empty sections are omitted.
+/// Render the loaded drill-in: sections for recent commits, open PRs, and top
+/// contributors. Empty sections are omitted.
 fn rich_sections(d: github::RepoDetail, now: i64) -> impl IntoView {
-    // Stats line: stars · language · open issues · latest release.
-    let mut stats: Vec<String> = vec![format!("★ {}", d.stars)];
-    if let Some(lang) = &d.language {
-        stats.push(lang.clone());
-    }
-    stats.push(format!(
-        "{} open issue{}",
-        d.open_issues,
-        if d.open_issues == 1 { "" } else { "s" }
-    ));
-    if let Some(rel) = &d.latest_release {
-        stats.push(format!("release {rel}"));
-    }
-    let stats_line = stats.join("  ·  ");
-
     let commits_view = (!d.commits.is_empty()).then(|| {
         let rows = d
             .commits
@@ -624,7 +694,6 @@ fn rich_sections(d: github::RepoDetail, now: i64) -> impl IntoView {
 
     view! {
         <div class="rich">
-            <div class="stats">{stats_line}</div>
             {commits_view}
             {prs_view}
             {contrib_view}

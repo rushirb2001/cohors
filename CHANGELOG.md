@@ -36,6 +36,24 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   it steps to the next free one (scanning a small range) and serves there instead
   of failing with "Address already in use".
 
+### Changed
+
+- **The web detail aside is now a header-based structure.** The drill-in is laid
+  out as labelled sections separated by dividers: a **header** (CI · PRs ·
+  Activity · Sync, with the branch in the title), **About** (description + stars ·
+  language · open issues · latest release), **Recent commits**, **Open PRs**,
+  **Top contributors**, and **Remote source**. A new **Sync** fact shows how far
+  the default branch has moved past the latest release (`N commits ahead · tag`)
+  — the remote analog of the TUI's ahead/behind, since the browser has no local
+  clone to diff.
+- **The fleet table's "About" column is now "Status"** — instead of echoing the
+  repo description, it says *why* a repo wants attention (CI failing · N open PRs
+  · CI running · stale) or that it's up to date, mirroring the attention ranking.
+- **Pending CI now shows the dots spinner** (in both the table and the detail
+  header), since a running build is itself a loading state. The PRs column shows
+  a definite **"0"** when a repo is enriched with no open PRs — a bare dot now
+  means only "still loading".
+
 ### Added
 
 - **The web drill-in is now rich — the browser analog of the TUI's `Enter`

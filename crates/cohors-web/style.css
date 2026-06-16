@@ -247,7 +247,7 @@ body {
   animation: cohors-spin 0.8s steps(1, end) infinite;
 }
 
-.about { color: var(--dim); }
+.status { white-space: nowrap; }
 .about-detail { padding: 0.2rem 0.95rem 0.6rem; margin: 0; color: var(--text); font-family: var(--mono); font-size: 0.78rem; }
 
 .name { font-weight: 600; }
@@ -278,19 +278,14 @@ body {
 .facts dt { color: var(--dim); font-weight: 600; }
 .facts dd { margin: 0; }
 
-/* ── Rich drill-in (commits / PRs / contributors / stats) ─────────────────── */
+/* ── Detail sections (About / commits / PRs / contributors / remote) ──────── */
 .rich-loading { padding: 0.6rem 0.95rem; color: var(--dim); font-family: var(--mono); font-size: 0.78rem; }
-.rich { border-top: 1px solid var(--line); }
-.rich .stats {
-  padding: 0.6rem 0.95rem;
-  color: var(--dim);
-  font-family: var(--mono);
-  font-size: 0.74rem;
-  border-bottom: 1px solid var(--line);
-}
-.sec { padding: 0.55rem 0.95rem; border-bottom: 1px solid var(--line); }
-.sec:last-child { border-bottom: none; }
+.rich { display: contents; }
+.sec { padding: 0.6rem 0.95rem; border-top: 1px solid var(--line); }
 .sec-h { color: var(--dim); font-weight: 700; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+.sec .stats { color: var(--dim); font-family: var(--mono); font-size: 0.74rem; }
+.sec .about-detail { padding: 0; margin: 0 0 0.4rem; }
+.sec .link { padding: 0; }
 .sec .rows { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 0.76rem; }
 .sec .rows li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.16rem 0; }
 .sec .sha { color: var(--blue); text-decoration: none; flex: none; }

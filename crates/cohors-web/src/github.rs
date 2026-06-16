@@ -212,6 +212,10 @@ pub struct RepoDetail {
     pub contributors: Vec<Contributor>,
     pub open_issues: u32,
     pub latest_release: Option<String>,
+    /// Commits on the default branch since `latest_release` (remote analog of the
+    /// TUI's ahead/behind — the browser has no local clone to diff). `None` when
+    /// there's no release to compare against.
+    pub commits_since_release: Option<u32>,
     pub stars: u32,
     pub language: Option<String>,
 }
@@ -260,6 +264,15 @@ pub async fn fetch_detail(full_name: &str, branch: &str) -> RepoDetail {
     if let Some(r) =
         get_json::<ReleaseResponse>(&format!("{PROXY}/repos/{owner}/{repo}/releases/latest")).await
     {
+        // Sync = how far the branch has moved past the released tag (`ahead_by`).
+        if let Some(c) = get_json::<CompareResponse>(&format!(
+            "{PROXY}/repos/{owner}/{repo}/compare/{tag}...{branch}",
+            tag = r.tag_name
+        ))
+        .await
+        {
+            d.commits_since_release = Some(c.ahead_by);
+        }
         d.latest_release = Some(r.tag_name);
     }
     d
@@ -288,6 +301,11 @@ struct SearchResponse {
 #[derive(Deserialize)]
 struct ReleaseResponse {
     tag_name: String,
+}
+#[derive(Deserialize)]
+struct CompareResponse {
+    #[serde(default)]
+    ahead_by: u32,
 }
 #[derive(Deserialize)]
 struct CommitResponse {
