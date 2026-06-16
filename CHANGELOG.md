@@ -55,6 +55,11 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **The web app has a typeface now** — **Google Sans** (UI) and **Google Sans
+  Code** (the data table / monospace), with **IBM Plex Sans** / **IBM Plex Mono**
+  as the next fallback. They're loaded from the **Google Fonts CDN** (a `<link>`
+  in `index.html`), so distribution stays a single static bundle with no font
+  files to ship; the family stacks fall back to system fonts when offline.
 - **`cohors web` now takes `--root` (and the other global flags).** It builds its
   view from the same `Scanner` the TUI/CLI/MCP use, so `--root`, `--config`, and
   `--watch` all apply. It still builds the web app from source (run it from the

@@ -14,8 +14,11 @@
   --red: #b42318;
   --amber: #92610a;
   --blue: #1f5fcf;
-  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  /* Fonts are fetched from the Google Fonts CDN in index.html; the stacks fall
+     back to system fonts if it's unavailable (offline). Data/code uses the
+     monospace pair, UI prose the sans pair. */
+  --mono: "Google Sans Code", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Google Sans", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
