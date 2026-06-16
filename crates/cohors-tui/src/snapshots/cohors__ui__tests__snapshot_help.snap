@@ -3,7 +3,7 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 40)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐██▙  Al╭ Help ──────────────────────────────────────────────────────────────╮.toml         │
 │ ▀▐▖▀█▀▗▌▀  st│                                                                    │              │
 ╰──────────────│  Legend — what each column shows                                   │──────────────╯
@@ -29,11 +29,11 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    a               mark all (again to clear)                       │              │
 │              │    Esc             clear the selection                             │              │
 │              │    /               fuzzy filter (Esc clears)                       │              │
-│              │    :               command mode (:fetch, :!cmd shell, :sort,       │              │
-│              │  :jump …)                                                          │              │
-│              │    d               toggle dirty-only                               │              │
+╰──────────────│    :               command mode (:fetch, :!cmd shell, :sort,       │──────────────╯
+╭ legacy-billin│  :jump …)                                                          │: full detail ╮
+│ ⚠ could not r│    d               toggle dirty-only                               │              │
 │              │    s               cycle sort mode                                 │              │
-│              │    Tab             weekly standup                                  │              │
+│ changes ·    │    Tab             weekly standup                                  │              │
 │              │                                                                    │              │
 │              │  Act — on the marked repos, else the current one                   │              │
 │              │    ⏎               inspect repo — commits, changes, branches       │              │

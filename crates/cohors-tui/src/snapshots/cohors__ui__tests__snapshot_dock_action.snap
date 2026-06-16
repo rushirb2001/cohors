@@ -1,6 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 20)"
+expression: "render_to_string(&app, 100, 34)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
@@ -12,7 +12,21 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo              Branch         Sync      Changes  Last commit                               │
-│                                             ↓ 4 more                                             │
+│▌   legacy-billing    error          ·         ·        could not read .git (permission denied)   │
+│    payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
+│    web-app           feat/checkout  ⠋         7        20m  wip: cart drawer                     │
+│    infra             @a1b2c3d       —         4         1w  build: pin ci image                  │
+│    auth-service      main           ⠋         ·         3d  chore: bump deps                     │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Working — 2 repo(s) ─────────────────────────────────────────────────────────────────────────────╮
+│ ⠋ web-app                                                                                        │
+│ ⠋ auth-service                                                                                   │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮

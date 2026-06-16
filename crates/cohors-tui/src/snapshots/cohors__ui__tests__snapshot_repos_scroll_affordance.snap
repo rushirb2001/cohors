@@ -3,7 +3,7 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    (demo)                              │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    (demo)                              │
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -14,7 +14,7 @@ expression: "render_to_string(&app, 100, 18)"
 │    Repo              Branch         Sync         Changes  Last commit                            │
 │▌   legacy-billing    error          ·            ·        could not read .git (permission denied)│
 │    mobile-app        release/2.0    ↑4 ↓1 ● 3pr  4         9h  feat: biometric unlock            │
-│    payments          main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from proc│
+│    payments          main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from pro…│
 │    analytics         main           ↑1 ●         · s2      4d  perf: precompute funnel rollups   │
 │    design-system     main           ↑1 ● 1pr     · s1      6h  feat: dark-mode tokens            │
 │                                             ↓ 7 more                                             │

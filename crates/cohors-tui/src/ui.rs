@@ -107,9 +107,10 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         }
     } else {
         // A strip on top — the fuzzy input while filtering, otherwise the
-        // Attention panel — then the Repositories panel fills the rest.
+        // Attention panel — then the Repositories panel, and (when the terminal
+        // is tall enough) a docked context pane below it.
         let strip_height = if app.mode == Mode::Filter { 1 } else { 3 };
-        let [strip, list] =
+        let [strip, rest] =
             Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
                 .areas(body_area);
         if app.mode == Mode::Filter {
@@ -117,7 +118,18 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         } else {
             render_attention_panel(frame, strip, app, now, &theme);
         }
+        // The dock turns a sparse fleet's empty space into a cockpit (the
+        // selected repo at a glance, or live action progress). It only appears
+        // when it won't starve the list; on short terminals it vanishes and the
+        // list takes the whole area, exactly as before.
+        const DOCK_H: u16 = 9;
+        let dock_h = if rest.height >= DOCK_H + 7 { DOCK_H } else { 0 };
+        let [list, dock] =
+            Layout::vertical([Constraint::Min(0), Constraint::Length(dock_h)]).areas(rest);
         render_repos_panel(frame, list, app, now, &theme);
+        if dock_h > 0 {
+            render_dock(frame, dock, app, now, &theme);
+        }
     }
 
     // Dim the whole frame behind a modal overlay so the background recedes and
@@ -1107,17 +1119,6 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         (hd, dt, Some(tn), Some(bn))
     };
 
-    let spin = spinner_frame(app.spinner);
-    let rows: Vec<Row> = view
-        .iter()
-        .map(|vr| {
-            let snap = &app.repos[vr.index];
-            let busy = app.busy.contains(&snap.id).then_some(spin);
-            let marked = app.selection.contains(&snap.id);
-            repo_row(snap, &vr.name_highlights, now, theme, busy, marked)
-        })
-        .collect();
-
     // Size the Sync and Changes columns to their actual content so they stay
     // tight (a fleet with no PRs gets a narrow Sync, etc.) rather than always
     // reserving room for the widest possible case. The floor is the header label
@@ -1143,6 +1144,33 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         Constraint::Length(changes_w), // Changes (working tree + stash)
         Constraint::Fill(1),           // Last commit takes the remaining width
     ];
+
+    // The width left for the "Last commit" column, so its message can be
+    // ellipsized cleanly rather than hard-clipped at the frame. Mirrors the
+    // table's own arithmetic: the inner width, minus the 2-col highlight-symbol
+    // reserve, the fixed columns, and the four 2-col gaps between five columns.
+    let last_w = (inner.width as usize)
+        .saturating_sub(2 + 18 + 13 + sync_w as usize + changes_w as usize + 2 * 4);
+    let summary_max = last_w.saturating_sub(5); // age is `{:>3}  ` = 5 columns
+
+    let spin = spinner_frame(app.spinner);
+    let rows: Vec<Row> = view
+        .iter()
+        .map(|vr| {
+            let snap = &app.repos[vr.index];
+            let busy = app.busy.contains(&snap.id).then_some(spin);
+            let marked = app.selection.contains(&snap.id);
+            repo_row(
+                snap,
+                &vr.name_highlights,
+                now,
+                summary_max,
+                theme,
+                busy,
+                marked,
+            )
+        })
+        .collect();
 
     // The header, rendered manually (so the hint can sit between it and the data)
     // but aligned to the data table: a 2-col reserve for the highlight symbol,
@@ -1195,10 +1223,129 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     }
 }
 
+/// The docked context pane below the list: the selected repo at a glance when
+/// idle, or live progress while a bulk action runs. It fills the space a short
+/// fleet would otherwise leave empty and makes the dashboard a cockpit — move
+/// the cursor and the pane follows. Cheap by design: it reads the snapshot we
+/// already have (no background fetches); the full remote-enriched view still
+/// lives behind `Enter`.
+fn render_dock(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+    // While a bulk fetch/pull/push/stash runs, the dock shows what's in flight
+    // rather than the cursor's repo.
+    if !app.busy.is_empty() {
+        render_dock_action(frame, area, app, theme);
+        return;
+    }
+    let Some(snap) = app.selected_repo() else {
+        return;
+    };
+
+    let branch = match &snap.branch {
+        Branch::Named(b) => b.clone(),
+        Branch::Detached(id) => format!("@{}", id.chars().take(7).collect::<String>()),
+        Branch::Unborn => "unborn".to_string(),
+    };
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .title(Line::from(format!(" {}  ·  {branch} ", snap.name)).bold())
+        .title(Line::from(Span::styled(" Enter: full detail ", theme.dim())).right_aligned())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut lines: Vec<Line> = Vec::new();
+
+    // Why this repo wants you — the same reasons that drive the dirty-first sort,
+    // spelled out here so the ordering never looks arbitrary.
+    if let Some(reason) = &snap.error {
+        lines.push(Line::from(Span::styled(
+            format!("⚠ {reason}"),
+            theme.error(),
+        )));
+    } else {
+        let assessment = assess(snap, now);
+        if assessment.reasons.is_empty() {
+            lines.push(Line::from(Span::styled(
+                "clean — nothing needs you",
+                theme.ok(),
+            )));
+        } else {
+            for r in &assessment.reasons {
+                lines.push(Line::from(vec![
+                    Span::styled("• ", theme.dim()),
+                    Span::styled(r.label(), severity_style(r.severity(), theme)),
+                ]));
+            }
+        }
+    }
+
+    // A compact status line: working-tree changes + upstream/remote sync, reusing
+    // the table's own segment builders so the dock and the row never disagree.
+    let mut status: Vec<Span> = vec![Span::styled("changes ", theme.dim())];
+    status.extend(changes_spans(snap, theme));
+    status.push(Span::styled("    sync ", theme.dim()));
+    status.extend(sync_spans(snap, theme));
+    lines.push(Line::from(""));
+    lines.push(Line::from(status));
+
+    // Last commit (age · summary), ellipsized to the pane width.
+    if let Some(c) = &snap.last_commit {
+        let prefix = format!("{}  ", time::relative(c.timestamp, now));
+        let avail = (inner.width as usize).saturating_sub(prefix.chars().count());
+        lines.push(Line::from(vec![
+            Span::styled(prefix, theme.dim()),
+            Span::raw(ellipsize(&c.summary, avail)),
+        ]));
+    }
+
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// The dock while a bulk action runs: the in-flight repos, each with a spinner.
+fn render_dock_action(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let n = app.busy.len();
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.ahead())
+        .title(Line::from(format!(" Working — {n} repo(s) ",)).bold())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let spin = spinner_frame(app.spinner);
+    // In stable fleet order, capped to the pane height so it never overflows.
+    let lines: Vec<Line> = app
+        .repos
+        .iter()
+        .filter(|r| app.busy.contains(&r.id))
+        .take(inner.height as usize)
+        .map(|r| {
+            Line::from(vec![
+                Span::styled(format!("{spin} "), theme.ahead()),
+                Span::raw(r.name.clone()),
+            ])
+        })
+        .collect();
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// Map an attention [`Severity`] to its accent style for the dock's reason chips.
+fn severity_style(sev: Severity, theme: &Theme) -> Style {
+    match sev {
+        Severity::Ok => theme.ok(),
+        Severity::Info => theme.dim(),
+        Severity::Notice => theme.ahead(),
+        Severity::Warn => theme.warn(),
+        Severity::Risk => theme.risk(),
+    }
+}
+
 fn repo_row<'a>(
     snap: &'a RepoSnapshot,
     highlights: &[u32],
     now: i64,
+    summary_max: usize,
     theme: &Theme,
     busy: Option<&str>,
     marked: bool,
@@ -1232,7 +1379,7 @@ fn repo_row<'a>(
         branch_cell(snap, severity, theme),
         sync,
         changes_cell(snap, theme),
-        last_commit_cell(snap, now, theme),
+        last_commit_cell(snap, now, summary_max, theme),
     ])
 }
 
@@ -1274,10 +1421,14 @@ fn name_cell<'a>(
     marked: bool,
     theme: &Theme,
 ) -> Cell<'a> {
+    // Red is reserved for genuinely broken repos (the `snap.error` row); a repo
+    // that merely wants attention (aging unpushed, behind, dirty) is conveyed by
+    // weight here and by the coloured Sync/Changes cells — never an alarming red
+    // name (which, on the reversed selected row, became a red block).
     let base = match severity {
         Severity::Ok | Severity::Info => theme.dim(),
-        Severity::Risk => theme.risk(),
-        _ => Style::new(),
+        Severity::Warn | Severity::Risk => Style::new().add_modifier(Modifier::BOLD),
+        Severity::Notice => Style::new(),
     };
     let gutter = if marked {
         Span::styled("● ", theme.ahead())
@@ -1412,14 +1563,19 @@ fn line_width(spans: &[Span]) -> u16 {
 
 /// The Last commit column: the commit's age and subject. Why a repo needs the
 /// user is carried by the row's colors, not repeated here as text.
-fn last_commit_cell<'a>(snap: &'a RepoSnapshot, now: i64, theme: &Theme) -> Cell<'a> {
+fn last_commit_cell<'a>(
+    snap: &'a RepoSnapshot,
+    now: i64,
+    summary_max: usize,
+    theme: &Theme,
+) -> Cell<'a> {
     match &snap.last_commit {
         Some(commit) => Cell::from(Line::from(vec![
             Span::styled(
                 format!("{:>3}  ", time::relative(commit.timestamp, now)),
                 theme.dim(),
             ),
-            Span::raw(commit.summary.clone()),
+            Span::raw(ellipsize(&commit.summary, summary_max)),
         ])),
         None => Cell::from(Span::styled("—", theme.dim())),
     }
@@ -2660,6 +2816,26 @@ mod tests {
     fn snapshot_footer_compact() {
         let app = demo_app();
         insta::assert_snapshot!(render_to_string(&app, 56, 22));
+    }
+
+    /// On a tall terminal the docked context pane appears below the list and
+    /// shows the selected repo at a glance: why it wants attention, its
+    /// changes/sync, and the last commit.
+    #[test]
+    fn snapshot_dock_idle() {
+        let mut app = demo_app();
+        app.selected = 1; // skip the unreadable repo that sorts to the top
+        insta::assert_snapshot!(render_to_string(&app, 100, 34));
+    }
+
+    /// While a bulk action runs, the dock shows the in-flight repos with spinners
+    /// instead of the cursor's repo.
+    #[test]
+    fn snapshot_dock_action() {
+        let mut app = demo_app();
+        app.busy.insert(app.repos[1].id.clone());
+        app.busy.insert(app.repos[2].id.clone());
+        insta::assert_snapshot!(render_to_string(&app, 100, 34));
     }
 
     /// On a window too short for the whole fleet, the list shows a "… N more ↓"

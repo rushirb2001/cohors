@@ -21,6 +21,28 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.10] — 2026-06-15
+
+### Added
+
+- **Docked context pane — the dashboard is now a cockpit (ADR-039).** On a tall
+  terminal, a pane appears below the list and follows the cursor: idle, it shows
+  the selected repo at a glance — why it wants attention (the reasons that drive
+  the sort), its changes/sync, and the last commit; during a bulk action, it
+  shows the in-flight repos with spinners. It reads only the data already
+  scanned (no extra I/O); the full PRs/commits/contributors view still lives
+  behind `Enter`. On short terminals it simply doesn't appear and the list takes
+  the whole area.
+
+### Changed
+
+- **Commit messages ellipsize** (`…`) to the column width instead of being
+  hard-cut at the frame edge.
+- **A repo's name is no longer coloured red just for wanting attention** — red
+  is reserved for genuinely broken (`error`) repos. This also removes the red
+  block that appeared when an aging-unpushed repo was the selected (highlighted)
+  row.
+
 ## [0.4.9] — 2026-06-15
 
 ### Added

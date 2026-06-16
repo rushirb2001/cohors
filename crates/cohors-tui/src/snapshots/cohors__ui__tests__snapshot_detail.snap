@@ -3,7 +3,7 @@ source: crates/cohors-tui/src/ui.rs
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
 │ ▀▐▖▀█▀│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│       │
 ╰───────│ │ Changes (3)                          │ │ a1b2c3d    2h  fix: retry charge on  ││───────╯
@@ -17,11 +17,11 @@ expression: "render_to_string(&app, 100, 28)"
 │    web│ │   spike/webhooks                     │ │                                      ││       │
 │    inf│ │                                      │ │                                      ││       │
 │    aut│ │ Stashes (1)                          │ │                                      ││       │
-│       │ │ WIP on main: dashboard tweaks        │ │                                      ││       │
-│       │ │                                      │ │                                      ││       │
-│       │ │ Pull requests                        │ │                                      ││       │
+╰───────│ │ WIP on main: dashboard tweaks        │ │                                      ││───────╯
+╭ legacy│ │                                      │ │                                      ││detail ╮
+│ ⚠ coul│ │ Pull requests                        │ │                                      ││       │
 │       │ │ needs a GitHub remote + token        │ │                                      ││       │
-│       │ │                                      │ │                                      ││       │
+│ change│ │                                      │ │                                      ││       │
 │       │ │ Contributors                         │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │
