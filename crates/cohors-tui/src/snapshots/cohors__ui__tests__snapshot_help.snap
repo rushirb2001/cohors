@@ -1,23 +1,28 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 40)"
+expression: "render_to_string(&app, 100, 64)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
-│ ▟██▌█▐██▙  Al╭ Help ──────────────────────────────────────────────────────────────╮.toml         │
-│ ▀▐▖▀█▀▗▌▀  st│                                                                    │              │
-╰──────────────│  Legend — what each column shows                                   │──────────────╯
-╭ Attention (4 │    ↑2              commits ahead of upstream                       │──────────────╮
-│ 1 unpushed · │    ↓5              commits behind upstream                         │              │
-╰──────────────│    ·               even with upstream                              │──────────────╯
-╭ Repositories │    —               no upstream (local only)                        │──────────────╮
-│    Repo      │    ● ● ●           CI: pass / fail / pending                       │s             │
-│▌   legacy-bil│    2pr             open pull requests                              │ not read .gi…│
-│    payments  │    3               changed files, all staged                       │pushed        │
-│    web-app   │    3               changed files, some unstaged                    │hind — pull   │
-│    infra     │    s1              stash entries                                   │ommitted chan…│
-│    auth-servi│    name            row: clean                                      │              │
+│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
+│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
+│ 1 unpushed · ╭ Help ──────────────────────────────────────────────────────────────╮              │
+╰──────────────│                                                                    │──────────────╯
+╭ Repositories │  Legend — what each column shows                                   │──────────────╮
+│    Repo      │    ↑2              commits ahead of upstream                       │s             │
+│▌   legacy-bil│    ↓5              commits behind upstream                         │ not read .gi…│
+│    payments  │    ·               even with upstream                              │pushed        │
+│    web-app   │    —               no upstream (local only)                        │hind — pull   │
+│    infra     │    ● ● ●           CI: pass / fail / pending                       │ommitted chan…│
+│    auth-servi│    2pr             open pull requests                              │              │
+│              │    3               changed files, all staged                       │              │
+│              │    3               changed files, some unstaged                    │              │
+│              │    s1              stash entries                                   │              │
+│              │    name            row: clean                                      │              │
 │              │    name            row: needs attention                            │              │
+│              │    name            row: unreadable (error)                         │              │
 │              │    ●               row: marked for a bulk action                   │              │
 │              │                                                                    │              │
 │              │  Navigation                                                        │              │
@@ -35,10 +40,29 @@ expression: "render_to_string(&app, 100, 40)"
 │              │    s               cycle sort mode                                 │              │
 │              │    Tab             weekly standup                                  │              │
 │              │                                                                    │              │
-│ legacy-billin│  Act — on the marked repos, else the current one                   │: full detail │
+│              │  Act — on the marked repos, else the current one                   │              │
 │              │    ⏎               inspect repo — commits, changes, branches       │              │
-│ ⚠ could not r│    o               open with… (editors, reveal, lazygit)           │              │
-╰──────────────│                                                                    │──────────────╯
-╭──────────────╰────────────────────────────────────────────────────────────────────╯──────────────╮
+│              │    o               open with… (editors, reveal, lazygit)           │              │
+│              │    f / F           fetch selection / all                           │              │
+│              │    p               pull (fast-forward only)                        │              │
+│              │    P               push (current branch upstream)                  │              │
+│              │    !               shell command (opens the : palette)             │              │
+│              │    S               stash (asks to confirm)                         │              │
+│              │    L               open in lazygit                                 │              │
+│              │    y               copy path to clipboard                          │              │
+│              │                                                                    │              │
+│              │  App                                                               │              │
+│              │    r               refresh (re-scan)                               │              │
+│              │    h               show / hide the hint bar                        │              │
+│              │    ?               toggle this help                                │              │
+│              │    q / Ctrl-C      quit                                            │              │
+│              │                                                                    │              │
+│              │  cohors vX.Y.Z                                                    │              │
+│              │                                                                    │              │
+│ legacy-billin╰────────────────────────────────────────────────────────────────────╯: full detail │
+│                                                                                                  │
+│ ⚠ could not read .git (permission denied)                                                        │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ? / Esc close                                                                                    │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

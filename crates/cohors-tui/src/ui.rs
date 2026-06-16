@@ -2002,9 +2002,6 @@ fn ellipsize(s: &str, max: usize) -> String {
 }
 
 fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let area = centered_rect(70, 90, full);
-    frame.render_widget(Clear, area);
-
     let bold = Style::new().add_modifier(Modifier::BOLD);
     let s = |t: &str, st: Style| Span::styled(t.to_string(), st);
 
@@ -2049,7 +2046,8 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         ),
         row(vec![s("s1", theme.dim())], "stash entries"),
         row(vec![s("name", theme.dim())], "row: clean"),
-        row(vec![s("name", theme.risk())], "row: needs attention"),
+        row(vec![s("name", bold)], "row: needs attention"),
+        row(vec![s("name", theme.error())], "row: unreadable (error)"),
         row(vec![s("●", theme.ahead())], "row: marked for a bulk action"),
         Line::from(""),
         head("Navigation"),
@@ -2095,6 +2093,20 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
             theme.dim(),
         )),
     ];
+
+    // Collapse the box to its content (capped at 90% of the screen height) so the
+    // help doesn't sit in a tall, mostly-empty modal.
+    let want_h = lines.len() as u16 + 4; // top/bottom padding (2) + top/bottom border (2)
+    let h = want_h.min((full.height * 90 / 100).max(10));
+    let w = (full.width * 70 / 100).max(40);
+    let area = Rect {
+        x: full.x + full.width.saturating_sub(w) / 2,
+        y: full.y + full.height.saturating_sub(h) / 2,
+        width: w,
+        height: h,
+    };
+    frame.render_widget(Clear, area);
+
     let para = Paragraph::new(Text::from(lines))
         .block(
             Block::bordered()
@@ -3525,7 +3537,9 @@ mod tests {
     fn snapshot_help() {
         let mut app = demo_app();
         app.mode = Mode::Help;
-        insta::assert_snapshot!(render_to_string(&app, 100, 40));
+        // Tall enough that the whole help fits, so the box collapses to its
+        // content (no trailing whitespace) rather than being capped + clipped.
+        insta::assert_snapshot!(render_to_string(&app, 100, 64));
     }
 
     #[test]

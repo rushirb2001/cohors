@@ -21,6 +21,20 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.19] — 2026-06-16
+
+### Changed
+
+- **Help overlay collapses to its content** (capped at 90% of the screen) instead
+  of a fixed tall box with trailing whitespace.
+
+### Fixed
+
+- **Help legend matches the actual row colours.** It claimed a *red* name meant
+  "needs attention"; red is now reserved for unreadable (`error`) repos. The
+  legend now reads: dim name = clean, bold name = needs attention, red name =
+  unreadable.
+
 ## [0.4.18] — 2026-06-16
 
 ### Changed
