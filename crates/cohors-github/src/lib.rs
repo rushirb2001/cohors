@@ -153,7 +153,8 @@ enum FetchError {
 /// - `GET /repos/{owner}/{repo}` → `default_branch`
 /// - `GET /search/issues?q=repo:{o}/{r}+is:pr+is:open` → open PR `total_count`
 /// - `GET /search/issues?...+review-requested:@me` → review-requested `total_count`
-/// - `GET /repos/{owner}/{repo}/commits/{branch}/status` → combined `state`
+/// - `GET /repos/{owner}/{repo}/commits/{branch}/check-runs` → Actions checks
+/// - `GET /repos/{owner}/{repo}/commits/{branch}/status` → legacy commit statuses
 fn fetch_remote(
     agent: &ureq::Agent,
     token: &str,
@@ -186,11 +187,33 @@ fn fetch_remote(
         }
     };
 
-    // 4) Combined CI status of the default branch's latest commit.
+    // 4) CI status of the default branch's latest commit. GitHub has *two*
+    //    surfaces here and a repo may use either: GitHub Actions report via the
+    //    Checks API (check runs), while older/third-party CI reports via the
+    //    legacy commit Status API. The legacy combined status returns "pending"
+    //    even when there are zero statuses — which is why Actions-only repos used
+    //    to look perpetually pending. So we read both and combine, trusting the
+    //    legacy state only when it actually has statuses.
     let ci = {
-        let path = format!("/repos/{owner}/{repo}/commits/{default_branch}/status");
-        let res: StatusResponse = get_json(agent, token, &path)?;
-        ci_status_from_state(&res.state)
+        let checks = match get_json::<CheckRunsResponse>(
+            agent,
+            token,
+            &format!("/repos/{owner}/{repo}/commits/{default_branch}/check-runs?per_page=100"),
+        ) {
+            Ok(c) => Some(c),
+            Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
+            Err(FetchError::Other(_)) => None,
+        };
+        let status = match get_json::<StatusResponse>(
+            agent,
+            token,
+            &format!("/repos/{owner}/{repo}/commits/{default_branch}/status"),
+        ) {
+            Ok(s) => Some(s),
+            Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
+            Err(FetchError::Other(_)) => None,
+        };
+        combine_ci(checks.as_ref(), status.as_ref())
     };
 
     Ok(RemoteInfo {
@@ -371,10 +394,89 @@ struct SearchResponse {
     total_count: u32,
 }
 
-/// `GET /repos/{owner}/{repo}/commits/{ref}/status` — combined status state.
+/// `GET /repos/{owner}/{repo}/commits/{ref}/status` — combined legacy status.
+/// `total_count` is the number of underlying statuses: it's 0 (with
+/// `state: "pending"`) when a repo posts no commit statuses at all, which is the
+/// case for GitHub-Actions-only repos.
 #[derive(serde::Deserialize)]
 struct StatusResponse {
     state: String,
+    #[serde(default)]
+    total_count: u32,
+}
+
+/// `GET /repos/{owner}/{repo}/commits/{ref}/check-runs` — GitHub Actions (and
+/// other Checks-API) results for the commit.
+#[derive(serde::Deserialize)]
+struct CheckRunsResponse {
+    #[serde(default)]
+    check_runs: Vec<CheckRun>,
+}
+
+/// One check run. `status` is `queued`/`in_progress`/`completed`; `conclusion`
+/// (set once completed) is `success`/`failure`/`neutral`/`cancelled`/`skipped`/
+/// `timed_out`/`action_required`/`stale`/…
+#[derive(serde::Deserialize)]
+struct CheckRun {
+    #[serde(default)]
+    status: String,
+    conclusion: Option<String>,
+}
+
+/// Combine the Checks API (Actions) and the legacy commit Status API into one
+/// [`CiStatus`]. A failing signal wins, then a still-running one, then a passing
+/// one; with no signal at all (no check runs and no commit statuses) it's
+/// [`CiStatus::None`] — "no CI", *not* pending. The legacy state is trusted only
+/// when it actually has statuses (`total_count > 0`), because the combined
+/// endpoint reports "pending" even for repos that post none.
+fn combine_ci(checks: Option<&CheckRunsResponse>, status: Option<&StatusResponse>) -> CiStatus {
+    let (mut signal, mut fail, mut pending, mut pass) = (false, false, false, false);
+
+    if let Some(c) = checks {
+        for run in &c.check_runs {
+            signal = true;
+            if !run.status.trim().eq_ignore_ascii_case("completed") {
+                pending = true;
+            } else {
+                match run
+                    .conclusion
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+                    .as_str()
+                {
+                    "failure" | "timed_out" | "cancelled" | "action_required"
+                    | "startup_failure" => fail = true,
+                    "success" | "neutral" | "skipped" | "stale" => pass = true,
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    if let Some(s) = status
+        && s.total_count > 0
+    {
+        signal = true;
+        match ci_status_from_state(&s.state) {
+            CiStatus::Passing => pass = true,
+            CiStatus::Failing => fail = true,
+            CiStatus::Pending => pending = true,
+            CiStatus::None => {}
+        }
+    }
+
+    if !signal {
+        CiStatus::None
+    } else if fail {
+        CiStatus::Failing
+    } else if pending {
+        CiStatus::Pending
+    } else if pass {
+        CiStatus::Passing
+    } else {
+        CiStatus::None
+    }
 }
 
 /// `GET /repos/{owner}/{repo}/pulls` — the fields the detail pane shows.
@@ -447,6 +549,86 @@ mod tests {
     fn ci_state_is_case_insensitive_and_trims() {
         assert_eq!(ci_status_from_state("SUCCESS"), CiStatus::Passing);
         assert_eq!(ci_status_from_state("  Failure  "), CiStatus::Failing);
+    }
+
+    fn check(status: &str, conclusion: Option<&str>) -> CheckRun {
+        CheckRun {
+            status: status.to_string(),
+            conclusion: conclusion.map(str::to_string),
+        }
+    }
+    fn checks(runs: Vec<CheckRun>) -> CheckRunsResponse {
+        CheckRunsResponse { check_runs: runs }
+    }
+    fn legacy(state: &str, total: u32) -> StatusResponse {
+        StatusResponse {
+            state: state.to_string(),
+            total_count: total,
+        }
+    }
+
+    #[test]
+    fn ci_actions_passing_is_passing() {
+        let c = checks(vec![check("completed", Some("success"))]);
+        assert_eq!(combine_ci(Some(&c), None), CiStatus::Passing);
+    }
+
+    #[test]
+    fn ci_actions_failure_wins() {
+        let c = checks(vec![
+            check("completed", Some("success")),
+            check("completed", Some("failure")),
+            check("in_progress", None),
+        ]);
+        assert_eq!(combine_ci(Some(&c), None), CiStatus::Failing);
+    }
+
+    #[test]
+    fn ci_actions_running_is_pending() {
+        let c = checks(vec![
+            check("completed", Some("success")),
+            check("queued", None),
+        ]);
+        assert_eq!(combine_ci(Some(&c), None), CiStatus::Pending);
+    }
+
+    #[test]
+    fn ci_actions_only_skipped_or_neutral_is_passing() {
+        let c = checks(vec![check("completed", Some("skipped"))]);
+        assert_eq!(combine_ci(Some(&c), None), CiStatus::Passing);
+    }
+
+    #[test]
+    fn ci_actions_repo_with_empty_legacy_status_is_not_pending() {
+        // The exact bug: an Actions-only repo. The legacy combined status reports
+        // "pending" with zero underlying statuses; trusting it made CI look stuck
+        // on pending. The passing check runs must win.
+        let c = checks(vec![check("completed", Some("success"))]);
+        let s = legacy("pending", 0);
+        assert_eq!(combine_ci(Some(&c), Some(&s)), CiStatus::Passing);
+    }
+
+    #[test]
+    fn ci_no_checks_and_no_statuses_is_none() {
+        // No CI configured at all — "no CI", not pending.
+        assert_eq!(
+            combine_ci(Some(&checks(vec![])), Some(&legacy("pending", 0))),
+            CiStatus::None
+        );
+        assert_eq!(combine_ci(None, None), CiStatus::None);
+    }
+
+    #[test]
+    fn ci_legacy_status_used_when_present() {
+        // Third-party CI via the Status API, no Actions: trust the legacy state.
+        assert_eq!(
+            combine_ci(None, Some(&legacy("success", 2))),
+            CiStatus::Passing
+        );
+        assert_eq!(
+            combine_ci(None, Some(&legacy("failure", 1))),
+            CiStatus::Failing
+        );
     }
 
     #[test]
