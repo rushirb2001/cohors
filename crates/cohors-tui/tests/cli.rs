@@ -100,6 +100,80 @@ fn scan_empty_root_is_empty_json_array() {
 }
 
 #[test]
+fn action_requires_a_selector() {
+    // Bulk actions never silently hit the whole fleet — `--select` is required.
+    let cache = TempDir::new().unwrap();
+    cohors(cache.path())
+        .args(["fetch", "--config", MISSING_CONFIG])
+        .assert()
+        .failure();
+}
+
+#[test]
+fn fetch_dry_run_lists_targets_without_acting() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    init_repo_with_commit(&root.path().join("myrepo"));
+
+    let assert = cohors(cache.path())
+        .args([
+            "fetch",
+            "--select",
+            "all",
+            "--dry-run",
+            "--config",
+            MISSING_CONFIG,
+            "--root",
+        ])
+        .arg(root.path())
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("Would fetch"), "stdout: {stdout}");
+    assert!(stdout.contains("myrepo"), "stdout: {stdout}");
+}
+
+#[test]
+fn commit_creates_a_commit_across_selected_repos() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let repo = root.path().join("myrepo");
+    init_repo_with_commit(&repo);
+    // An uncommitted change for the bulk commit to capture.
+    std::fs::write(repo.join("new.txt"), "wip").unwrap();
+
+    let assert = cohors(cache.path())
+        .args([
+            "commit",
+            "--select",
+            "all",
+            "--message",
+            "snapshot wip",
+            "--config",
+            MISSING_CONFIG,
+            "--root",
+        ])
+        .arg(root.path())
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("committed myrepo"), "stdout: {stdout}");
+
+    // The change is now committed: the worktree is clean.
+    let status = StdCommand::new("git")
+        .current_dir(&repo)
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    assert!(
+        String::from_utf8_lossy(&status.stdout).trim().is_empty(),
+        "worktree should be clean after commit"
+    );
+}
+
+#[test]
 fn init_writes_config_then_respects_force() {
     let cache = TempDir::new().unwrap();
     let dir = TempDir::new().unwrap();

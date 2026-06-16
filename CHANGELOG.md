@@ -21,6 +21,32 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 _Nothing yet._
 
+## [0.4.9] — 2026-06-15
+
+### Added
+
+- **`commit` and `push` actions across every surface (ADR-038).** A new
+  `commit` action stages tracked + untracked changes (`git add -A`) and commits
+  them with a message ("nothing to commit" is a no-op; never amends). It joins
+  `push` so the full **edit → commit → push** loop is available to your agent
+  and your scripts, not just the TUI.
+  - **MCP:** new `push` tool (needs `--allow-writes`) and `commit` tool (needs
+    `--allow-writes` + `confirm:true` + a `message`), both with `dry_run`
+    previews. The agent can now finish a cross-repo change end-to-end.
+  - **CLI:** actions are now first-class subcommands —
+    `cohors fetch|pull|push|commit|stash|run` — each taking the same `--select`
+    selector language as `scan --select`, plus `--dry-run`. `commit` takes
+    `--message`; `run` takes a command and `--timeout`. A selector is required,
+    so an action never silently hits the whole fleet (pass `--select all`).
+
+### Safety
+
+- The CLI has no capability flags by design — the human running the command is
+  the consent, like `git push` itself. The agent-facing MCP server keeps the
+  full ADR-025 tiering. On every surface the shared action layer holds the same
+  guarantees: `pull` is fast-forward-only, `push` never force-pushes, and
+  `commit`/`stash` cannot lose work.
+
 ## [0.4.8] — 2026-06-15
 
 ### Added

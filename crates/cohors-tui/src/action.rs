@@ -64,6 +64,34 @@ pub fn push(path: &Utf8Path, name: &str) -> Result<String, String> {
     }
 }
 
+/// Stage everything (`git add -A`) and commit it with `message`. Stages tracked
+/// *and* untracked changes (a fleet-wide "snapshot my WIP"). "Nothing to commit"
+/// is a no-op success, not a failure (like [`stash_push`]). Never amends and
+/// never rewrites history. Returns a short status message.
+pub fn commit(path: &Utf8Path, name: &str, message: &str) -> Result<String, String> {
+    let add = run_git(path, &["add", "-A"])?;
+    if !add.status.success() {
+        return Err(format!("commit {name}: {}", first_line(&add.stderr)));
+    }
+    let out = run_git(path, &["commit", "-m", message])?;
+    if out.status.success() {
+        return Ok(format!("committed {name}"));
+    }
+    // `git commit` exits non-zero when there's nothing staged; it writes that to
+    // stdout, not stderr. Treat an empty index as a benign no-op.
+    let combined = format!(
+        "{} {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+    .to_lowercase();
+    if combined.contains("nothing to commit") || combined.contains("no changes added") {
+        Ok(format!("{name}: nothing to commit"))
+    } else {
+        Err(format!("commit {name}: {}", first_line(&out.stderr)))
+    }
+}
+
 /// Stash the repo's tracked changes (`git stash push`). Untracked files are
 /// left alone (predictable). "No local changes" is a no-op success, not a
 /// failure. Returns a short status message.
@@ -320,5 +348,41 @@ mod tests {
 
         let res = push(&work, "work");
         assert_eq!(res, Ok("pushed work".to_string()));
+    }
+
+    /// `commit` stages tracked + untracked and commits; a second call with a
+    /// clean tree reports "nothing to commit" as a no-op success.
+    #[test]
+    fn commit_stages_then_reports_nothing_to_commit() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let work = camino::Utf8Path::from_path(tmp.path()).unwrap();
+        let git = |args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(work.as_str())
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {out:?}");
+        };
+        Command::new("git")
+            .args(["init", "-b", "main", work.as_str()])
+            .output()
+            .unwrap();
+        git(&["config", "user.email", "t@example.com"]);
+        git(&["config", "user.name", "Tester"]);
+        std::fs::write(work.join("a.txt"), "1").unwrap();
+
+        // First commit stages the new (untracked) file and commits it.
+        assert_eq!(
+            commit(work, "work", "snap"),
+            Ok("committed work".to_string())
+        );
+        // Nothing changed since: a benign no-op, not an error.
+        assert_eq!(
+            commit(work, "work", "snap again"),
+            Ok("work: nothing to commit".to_string())
+        );
     }
 }

@@ -31,6 +31,29 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Init { force }) => commands::init(&cli, *force),
         Some(Command::Scan { select }) => commands::scan(&cli, select.as_deref()),
         Some(Command::Demo) => commands::run_demo(),
+        Some(Command::Fetch(a)) => {
+            commands::run_action(&cli, commands::CliAction::Fetch, &a.select, a.dry_run)
+        }
+        Some(Command::Pull(a)) => {
+            commands::run_action(&cli, commands::CliAction::Pull, &a.select, a.dry_run)
+        }
+        Some(Command::Push(a)) => {
+            commands::run_action(&cli, commands::CliAction::Push, &a.select, a.dry_run)
+        }
+        Some(Command::Commit { action, message }) => commands::run_action(
+            &cli,
+            commands::CliAction::Commit(message.clone()),
+            &action.select,
+            action.dry_run,
+        ),
+        Some(Command::Stash(a)) => {
+            commands::run_action(&cli, commands::CliAction::Stash, &a.select, a.dry_run)
+        }
+        Some(Command::Run {
+            action,
+            command,
+            timeout,
+        }) => commands::run_command_action(&cli, &action.select, command, *timeout, action.dry_run),
         Some(Command::Mcp {
             allow_writes,
             allow_run,

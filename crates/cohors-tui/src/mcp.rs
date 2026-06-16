@@ -245,6 +245,29 @@ fn tool_catalog() -> Value {
             }
         },
         {
+            "name": "push",
+            "description": "git push the current branch to its upstream across the selected repos. Never force-pushes, so it can't overwrite remote history (non-fast-forward pushes are rejected by git). Execution requires --allow-writes; dry_run:true previews the target set without it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean" } },
+                "required": ["selector"]
+            }
+        },
+        {
+            "name": "commit",
+            "description": "git add -A + git commit -m <message> across the selected repos (stages tracked and untracked changes; 'nothing to commit' is a no-op). Never amends or rewrites history. Pair with push to finish a cross-repo change. Execution requires --allow-writes and confirm:true; dry_run:true previews the target set with neither.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "selector": selector_schema.clone(),
+                    "message": { "type": "string", "description": "Commit message (required)." },
+                    "confirm": { "type": "boolean" },
+                    "dry_run": { "type": "boolean" }
+                },
+                "required": ["selector", "message"]
+            }
+        },
+        {
             "name": "stash",
             "description": "git stash push (tracked changes) across the selected repos. Execution requires --allow-writes and confirm:true; dry_run:true previews the target set with neither.",
             "inputSchema": {
@@ -297,6 +320,8 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         "ci_status" => Ok(ci_status(args, ctx, now)),
         "fetch" => fetch_tool(args, ctx, now),
         "pull" => pull_tool(args, ctx, now),
+        "push" => push_tool(args, ctx, now),
+        "commit" => commit_tool(args, ctx, now),
         "stash" => stash_tool(args, ctx, now),
         "run" => run_tool(args, ctx, now),
         "open" => Err("`open` is not available in this build (local-desktop tool).".to_string()),
@@ -498,6 +523,41 @@ fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         now,
         || require_writes(ctx, "pull"),
         crate::action::pull_ff,
+    )
+}
+
+fn push_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    git_action(
+        "push",
+        json!("push"),
+        args,
+        ctx,
+        now,
+        || require_writes(ctx, "push"),
+        crate::action::push,
+    )
+}
+
+fn commit_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    // Required, like `run`'s command — so a commit always carries a message,
+    // even on a dry-run preview.
+    let message = args
+        .get("message")
+        .and_then(Value::as_str)
+        .filter(|m| !m.trim().is_empty())
+        .ok_or("missing required argument `message`")?
+        .to_string();
+    git_action(
+        "commit",
+        json!({ "commit": message }),
+        args,
+        ctx,
+        now,
+        || {
+            require_writes(ctx, "commit")?;
+            require_confirm(args, "commit")
+        },
+        |path, name| crate::action::commit(path, name, &message),
     )
 }
 
@@ -1310,9 +1370,71 @@ mod tests {
             .collect();
         // Parity: every repo-targeting TUI verb has a matching MCP tool, plus the
         // remote read tools.
-        for tool in ["fetch", "pull", "stash", "run", "list_prs", "ci_status"] {
+        for tool in [
+            "fetch",
+            "pull",
+            "push",
+            "commit",
+            "stash",
+            "run",
+            "list_prs",
+            "ci_status",
+        ] {
             assert!(names.contains(&tool), "missing {tool}");
         }
+    }
+
+    #[test]
+    fn push_is_gated_without_writes() {
+        let resp = call(act("push", json!({ "selector": { "all": true } })));
+        assert!(is_error(&resp));
+        assert!(err_text(&resp).contains("--allow-writes"));
+    }
+
+    #[test]
+    fn commit_gates_writes_then_confirm_then_message() {
+        // Read-only server: blocked on the write tier first.
+        let resp = call(act(
+            "commit",
+            json!({ "selector": { "all": true }, "message": "x" }),
+        ));
+        assert!(is_error(&resp));
+        assert!(err_text(&resp).contains("--allow-writes"));
+
+        // Writes on, but no confirm: still blocked.
+        let resp = call_caps(
+            act(
+                "commit",
+                json!({ "selector": { "all": true }, "message": "x" }),
+            ),
+            WRITES,
+        );
+        assert!(is_error(&resp));
+        assert!(err_text(&resp).contains("confirm"));
+
+        // Writes + confirm but no message: a clear argument error.
+        let resp = call_caps(
+            act(
+                "commit",
+                json!({ "selector": { "all": true }, "confirm": true }),
+            ),
+            WRITES,
+        );
+        assert!(is_error(&resp));
+        assert!(err_text(&resp).contains("message"));
+    }
+
+    #[test]
+    fn commit_dry_run_previews_on_read_only_server() {
+        // Side-effect-free preview works with no tier and no confirm.
+        let resp = call(act(
+            "commit",
+            json!({ "selector": { "all": true }, "message": "x", "dry_run": true }),
+        ));
+        assert!(!is_error(&resp));
+        let p = payload(&resp);
+        assert_eq!(p["dry_run"], true);
+        assert!(p["targets"].as_u64().unwrap() >= 1);
     }
 
     #[test]

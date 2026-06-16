@@ -73,6 +73,148 @@ pub fn scan(cli: &Cli, select: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// A bulk git action issued from the CLI. Mirrors the TUI verbs and the MCP
+/// action tools — one core (`crate::action`), three surfaces.
+pub enum CliAction {
+    Fetch,
+    Pull,
+    Push,
+    Commit(String),
+    Stash,
+}
+
+impl CliAction {
+    /// The verb used in the human-facing summary lines.
+    fn verb(&self) -> &'static str {
+        match self {
+            CliAction::Fetch => "fetch",
+            CliAction::Pull => "pull",
+            CliAction::Push => "push",
+            CliAction::Commit(_) => "commit",
+            CliAction::Stash => "stash",
+        }
+    }
+}
+
+/// Resolve a `--select` query to the actionable repos: the matching, readable
+/// repos in dirty-first order, using the same [`cohors_core::resolve`] the
+/// dashboard and MCP use — so `cohors push --select behind` hits exactly what
+/// `scan --select behind` lists.
+fn action_targets<'a>(
+    snaps: &'a [cohors_core::RepoSnapshot],
+    select: &str,
+) -> Result<Vec<&'a cohors_core::RepoSnapshot>> {
+    let selector = parse_selector(select)?;
+    let order = cohors_core::resolve(snaps, &selector, SortMode::DirtyFirst, now_secs());
+    let by_id: HashMap<&str, &cohors_core::RepoSnapshot> =
+        snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
+    Ok(order
+        .iter()
+        .filter_map(|id| by_id.get(id.0.as_str()).copied())
+        .filter(|s| !s.has_error() && s.path.is_some())
+        .collect())
+}
+
+/// `cohors fetch|pull|push|commit|stash --select <q>` — run a bulk git action
+/// across the matching repos. The human typing the command is the consent, so
+/// there are no capability flags here (unlike the agent-facing MCP server);
+/// `--dry-run` previews the targets without acting. Safety still holds in the
+/// action layer: pull is ff-only, push never force-pushes, stash/commit can't
+/// lose work.
+pub fn run_action(cli: &Cli, action: CliAction, select: &str, dry_run: bool) -> Result<()> {
+    let scanner = Scanner::from_cli(cli)?;
+    let snapshots = scanner.scan();
+    let targets = action_targets(&snapshots, select)?;
+    let verb = action.verb();
+
+    if targets.is_empty() {
+        eprintln!("cohors: no repos match `{select}`.");
+        return Ok(());
+    }
+    if dry_run {
+        println!("Would {verb} {} repo(s):", targets.len());
+        for s in &targets {
+            println!("  {}  {}", s.name, s.path.as_ref().unwrap());
+        }
+        return Ok(());
+    }
+
+    let mut ok = 0usize;
+    for s in &targets {
+        let path = s.path.as_ref().unwrap();
+        let result = match &action {
+            CliAction::Fetch => crate::action::fetch(path, &s.name),
+            CliAction::Pull => crate::action::pull_ff(path, &s.name),
+            CliAction::Push => crate::action::push(path, &s.name),
+            CliAction::Commit(message) => crate::action::commit(path, &s.name, message),
+            CliAction::Stash => crate::action::stash_push(path, &s.name),
+        };
+        match result {
+            Ok(message) => {
+                ok += 1;
+                println!("  ✓ {message}");
+            }
+            Err(message) => println!("  ✗ {message}"),
+        }
+    }
+    println!("{verb}: {ok}/{} ok", targets.len());
+    Ok(())
+}
+
+/// `cohors run <command> --select <q>` — run a shell command in each matching
+/// repo, bounded per-repo by `timeout` seconds, printing each repo's output and
+/// a pass/fail summary. `--dry-run` previews the targets without running.
+pub fn run_command_action(
+    cli: &Cli,
+    select: &str,
+    command: &str,
+    timeout: u64,
+    dry_run: bool,
+) -> Result<()> {
+    let scanner = Scanner::from_cli(cli)?;
+    let snapshots = scanner.scan();
+    let targets = action_targets(&snapshots, select)?;
+
+    if targets.is_empty() {
+        eprintln!("cohors: no repos match `{select}`.");
+        return Ok(());
+    }
+    if dry_run {
+        println!("Would run `{command}` in {} repo(s):", targets.len());
+        for s in &targets {
+            println!("  {}  {}", s.name, s.path.as_ref().unwrap());
+        }
+        return Ok(());
+    }
+
+    let timeout = std::time::Duration::from_secs(timeout.max(1));
+    let mut ok = 0usize;
+    for s in &targets {
+        let path = s.path.as_ref().unwrap();
+        let out = crate::action::run_command_timeout(path, command, timeout);
+        let passed = out.code == 0 && !out.timed_out;
+        if passed {
+            ok += 1;
+        }
+        let tag = if out.timed_out {
+            "timed out"
+        } else if passed {
+            "ok"
+        } else {
+            "fail"
+        };
+        println!("── {} ({tag})", s.name);
+        if !out.stdout.trim().is_empty() {
+            print!("{}", out.stdout);
+        }
+        if !out.stderr.trim().is_empty() {
+            eprint!("{}", out.stderr);
+        }
+    }
+    println!("run: {ok}/{} ok", targets.len());
+    Ok(())
+}
+
 /// Current Unix time in seconds (for the clock-dependent `attention` predicate).
 fn now_secs() -> i64 {
     SystemTime::now()
