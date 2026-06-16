@@ -22,7 +22,9 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 ### Fixed
 
 - **The web CI column reads "no CI" instead of a dash** when an (enriched) repo
-  has no checks configured — distinct from the `·` shown while still enriching.
+  has no checks configured. While a row is still being enriched, its PRs/CI cells
+  show an animated **braille dot-spinner** (echoing the TUI) instead of a static
+  dot, so you can see enrichment in flight.
 - **`cohors web` survives a busy port.** If the requested port is already in use,
   it steps to the next free one (scanning a small range) and serves there instead
   of failing with "Address already in use".

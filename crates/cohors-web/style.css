@@ -227,6 +227,26 @@ body {
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .fleet td:last-child { width: 99%; white-space: normal; }
+/* Braille dot-spinner for cells still enriching (echoes the TUI spinner). */
+@keyframes cohors-spin {
+  0%   { content: "⠋"; }
+  11%  { content: "⠙"; }
+  22%  { content: "⠹"; }
+  33%  { content: "⠸"; }
+  44%  { content: "⠼"; }
+  55%  { content: "⠴"; }
+  66%  { content: "⠦"; }
+  77%  { content: "⠧"; }
+  88%  { content: "⠇"; }
+  100% { content: "⠏"; }
+}
+.spin::before {
+  content: "⠋";
+  display: inline-block;
+  color: var(--accent);
+  animation: cohors-spin 0.8s steps(1, end) infinite;
+}
+
 .about { color: var(--dim); }
 .about-detail { padding: 0.2rem 0.95rem 0.6rem; margin: 0; color: var(--text); font-family: var(--mono); font-size: 0.78rem; }
 

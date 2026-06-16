@@ -347,12 +347,24 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
     let name = s.name.clone();
     let name_class = if failing { "name risk" } else { "name" };
 
-    let (prs, prs_class) = match &s.remote {
-        None => ("·".to_string(), "dim"),
-        Some(r) if r.open_prs == 0 => ("·".to_string(), "dim"),
-        Some(r) => (r.open_prs.to_string(), "ahead"),
+    // While a repo is still being enriched its remote is None: show an animated
+    // braille dot-spinner (echoing the TUI's spinner) rather than a static dot.
+    let enriching = s.remote.is_none();
+    let prs = if enriching {
+        view! { <span class="spin"></span> }.into_any()
+    } else {
+        match &s.remote {
+            Some(r) if r.open_prs == 0 => view! { <span class="dim">"·"</span> }.into_any(),
+            Some(r) => view! { <span class="ahead">{r.open_prs.to_string()}</span> }.into_any(),
+            None => view! { <span class="dim">"·"</span> }.into_any(),
+        }
     };
-    let (ci, ci_class) = ci_view(s);
+    let ci = if enriching {
+        view! { <span class="spin"></span> }.into_any()
+    } else {
+        let (label, cls) = ci_view(s);
+        view! { <span class=cls>{label}</span> }.into_any()
+    };
 
     let age = s
         .last_commit
@@ -368,8 +380,8 @@ fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> i
     view! {
         <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
             <td class=name_class>{name}</td>
-            <td class=prs_class>{prs}</td>
-            <td class=ci_class>{ci}</td>
+            <td>{prs}</td>
+            <td>{ci}</td>
             <td class="dim">{age}</td>
             <td class="about">{about}</td>
         </tr>
