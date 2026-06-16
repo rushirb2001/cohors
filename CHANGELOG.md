@@ -19,85 +19,44 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-### Changed
-
-- **Web enrichment is now concurrent.** Each repo's CI/PR fetch is fired in
-  parallel (rather than awaited in a queue), so the columns fill in seconds
-  instead of one-repo-at-a-time, and the proxy server runs more workers so it
-  doesn't bottleneck the burst.
-
-### Fixed
-
-- **The web CI column reads "no CI" instead of a dash** when an (enriched) repo
-  has no checks configured. While a row is still being enriched, its PRs/CI cells
-  show an animated **braille dot-spinner** (echoing the TUI) instead of a static
-  dot, so you can see enrichment in flight.
-- **`cohors web` survives a busy port.** If the requested port is already in use,
-  it steps to the next free one (scanning a small range) and serves there instead
-  of failing with "Address already in use".
-
-### Changed
-
-- **The web detail aside is now a header-based structure.** The drill-in is laid
-  out as labelled sections separated by dividers: a **header** (CI · PRs ·
-  Activity · Sync, with the branch in the title), **About** (description + stars ·
-  language · open issues · latest release), **Recent commits**, **Open PRs**,
-  **Top contributors**, and **Remote source**. A new **Sync** fact shows how far
-  the default branch has moved past the latest release (`N commits ahead · tag`)
-  — the remote analog of the TUI's ahead/behind, since the browser has no local
-  clone to diff.
-- **The fleet table's "About" column is now "Status"** — instead of echoing the
-  repo description, it says *why* a repo wants attention (CI failing · N open PRs
-  · CI running · stale) or that it's up to date, mirroring the attention ranking.
-- **Pending CI now shows the dots spinner** (in both the table and the detail
-  header), since a running build is itself a loading state. The PRs column shows
-  a definite **"0"** when a repo is enriched with no open PRs — a bare dot now
-  means only "still loading".
-
 ### Added
 
-- **The web drill-in is now rich — the browser analog of the TUI's `Enter`
-  view.** Selecting a repo fetches its full detail on demand through the proxy
-  and renders, under the at-a-glance facts: a **stats line** (stars · language ·
-  open issues · latest release), **recent commits** (sha · summary · author ·
-  age), **open PRs** (number · title · draft badge · author, each linking to
-  GitHub), and **top contributors** (login · commit count). Each section is
-  best-effort, so the panel always renders even if one request fails, and a dots
-  spinner shows while the detail loads.
-- **Real GitHub data in the web dashboard — zero setup (v0.5 slice 2).**
-  `cohors web` now shows *your* repositories automatically, using the **same
-  GitHub login the TUI uses** (`gh auth token` / `$GITHUB_TOKEN`). The browser is
-  sandboxed and can't read that token, so the `cohors web` server **proxies**
-  GitHub for the page: the dashboard calls a same-origin `/gh/...`, and the
-  native server injects the `Authorization` header and forwards to GitHub. The
-  **token never reaches the browser** — no pasting, no token in storage. The
-  fetched repos map onto the same `cohors-core` models and render through the
-  exact same `compute_view`/`assess` logic as the demo and the TUI (ADR-002).
-  With no GitHub login (or served without the proxy, e.g. plain `trunk serve`),
-  it falls back to the **demo fleet** with a one-line note. Live data uses a real
-  browser clock. (OAuth for the hosted version is a later slice.)
-- **The web dashboard is now genuinely useful — real fleet health (v0.5 slice
-  2b).** After the repo list loads, each repo is **enriched live** through the
-  proxy with its **CI status** (GitHub Actions check-runs, combined per ADR-040)
-  and **open-PR count** — rows light up as the data arrives. The table is
-  reframed for the *remote* domain (the browser has no local working copy): it
-  drops the always-empty Sync/Changes/Stash columns and shows **Repo · PRs · CI ·
-  Last · About**. "Needs attention" now means something real — failing CI, open
-  PRs, or stale (no push in 3 months) — driving the summary chips and an
-  **attention-first sort** (failing CI floats to the top). The detail aside shows
-  CI / PRs / activity + the repo link.
-- **The web dashboard is now a full, interactive page (light theme).** Beyond the
-  bare demo table, `cohors web` now renders: the brand mark + header, an attention
-  summary (fleet-wide counts), live **filter / sort / dirty-only** controls (all
-  powered by `cohors-core::compute_view`, so the browser uses the exact same
-  fuzzy/sort/filter logic as the TUI), the full fleet table (Repo · Branch · Sync ·
-  Changes · Stash · PRs · CI · Last · Status), a **click-to-drill-in detail aside**
-  (per-repo facts, mirroring the TUI's context pane), and a **weekly standup**
-  panel. Light theme, monospace data, severity colour — echoing the TUI. Still
-  the demo fleet (slice 1); real GitHub data is next. The page is
-  **viewport-locked** (each panel scrolls internally, sticky table header) with a
-  calm, **professional palette** — muted greys, one restrained accent, quiet
-  chips, subtle borders.
+- **`cohors web` is the local fleet in the browser — the same tool as the TUI
+  (v0.5 slice 2).** `cohors web --root ~/code` scans **that folder's repos** and
+  shows the exact same view the TUI does: local worktree status, ahead/behind,
+  stash, and *why each repo needs you* (the `assess` attention reasons), enriched
+  with remote CI/PRs. The native server does the scan and serves `cohors-core`
+  snapshots as JSON (`/api/repos`, `/api/detail`, `/api/meta`); the browser
+  deserializes the same models and renders them through the same
+  `compute_view`/`assess`/`SortMode` logic — so the web and the TUI agree by
+  construction (ADR-042). The GitHub token stays on the server (it enriches
+  there) and never reaches the page. With nothing to scan, it falls back to the
+  **demo fleet**.
+- **The web fleet table mirrors the TUI's columns** — Repo · Branch · Sync
+  (↑ahead ↓behind) · Changes (staged/modified/untracked) · Stash · PRs · CI ·
+  Last (commit age + subject) · **Status** (the primary attention reason,
+  severity-coloured). The attention summary strip (`fleet_summary`), the
+  filter, the **needs-attention** toggle, and the **attention / recent / name /
+  sync** sorts all run `cohors-core` verbatim.
+- **The web drill-in mirrors the TUI's `Enter` pane.** Selecting a repo fetches
+  its detail on demand: every reason it wants attention, the local facts (Sync ·
+  Changes · Stash · CI · PRs · Last), **recent commits**, the **working-tree**
+  changes, and — when it's a GitHub remote — **open PRs**, **top contributors**,
+  open issues, and the latest release, plus the remote source link. Each section
+  is best-effort; a dots spinner shows while it loads.
+- **`cohors web --watch` keeps the page live.** With `--watch`, the dashboard
+  polls for a fresh scan so edits, commits, and pulls show up without a manual
+  rescan (re-scanning is cheap; remote stays server-cached). The header shows
+  which folder is being scanned.
+
+### Changed
+
+- **`cohors web` now takes `--root` (and the other global flags).** It builds its
+  view from the same `Scanner` the TUI/CLI/MCP use, so `--root`, `--config`, and
+  `--watch` all apply. It still builds the web app from source (run it from the
+  cohors checkout); a hosted, GitHub-account version is a later slice.
+- **`cohors-core`'s `RepoDetail`/`ChangedFile` are now (de)serializable**, so the
+  local drill-in can ship from the server to the browser unchanged.
 
 ## [0.4.21] — 2026-06-16
 

@@ -2,11 +2,13 @@
 //! the web app) shows when you inspect a single repo. Pure data — adapters
 //! (`cohors-git`) populate it; this crate just defines the shape.
 
+use serde::{Deserialize, Serialize};
+
 use crate::model::CommitMeta;
 
 /// Everything the detail pane renders for one repo. Best-effort: any section may
 /// be empty if it couldn't be read, but the struct itself is always produced.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepoDetail {
     /// The current branch name (or `None` for detached/unborn).
     pub current_branch: Option<String>,
@@ -21,7 +23,7 @@ pub struct RepoDetail {
 }
 
 /// One changed path in the working tree.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChangedFile {
     /// A short porcelain-style status, e.g. `" M"`, `"A "`, `"??"`.
     pub status: String,

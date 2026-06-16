@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
             port,
             no_open,
             no_install,
-        }) => commands::run_web(*port, !no_open, !no_install),
+        }) => commands::run_web(&cli, *port, !no_open, !no_install),
         Some(Command::Mcp {
             allow_writes,
             allow_run,

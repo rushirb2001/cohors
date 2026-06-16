@@ -1,25 +1,28 @@
-//! cohors web — a GitHub fleet-health dashboard in the browser, driven by
-//! `cohors-core` models compiled to WebAssembly.
+//! cohors web — the fleet dashboard in the browser, driven by `cohors-core`
+//! compiled to WebAssembly.
 //!
-//! `cohors web` (the native server) proxies GitHub with your existing login, so
-//! the page shows *your* repos with zero setup (see [`github`]). The browser has
-//! no local working copy, so — unlike the TUI's local view — this surfaces the
-//! *remote* signals that matter across a fleet: **CI status**, **open PRs**,
-//! activity, each enriched live after the list loads. The demo fleet is the
-//! offline fallback.
+//! The web app is *the same tool* as the TUI/CLI/MCP, in a different surface:
+//! `cohors web` (the native server) scans the repos under `--root`/config, builds
+//! `cohors-core` snapshots (local worktree status, ahead/behind, stash — and the
+//! *why-it-needs-you* judgment from `assess`), enriches them with remote CI/PRs,
+//! and serves them as JSON (see [`api`]). This page deserializes those same
+//! models and renders them through the same `assess`/`compute_view`/`sort` logic
+//! the TUI uses — local first, remote folded in. The demo fleet is the fallback
+//! when there's nothing to scan.
 
-mod github;
+mod api;
 
-use cohors_core::{Branch, CiStatus, RepoSnapshot, demo, time};
+use cohors_core::{
+    Branch, CiStatus, RepoSnapshot, Severity, SortMode, ViewParams, assess, compute_view, demo,
+    fleet_summary, time,
+};
 use leptos::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 
 /// Fixed clock for the *demo* fleet, so its relative ages stay sensible.
 const DEMO_NOW: i64 = 1_700_000_000;
-/// A repo with no push in this long reads as "stale".
-const STALE_SECS: i64 = 90 * 24 * 60 * 60;
 
-/// The browser's real wall clock (Unix seconds) — used for live GitHub data.
+/// The browser's real wall clock (Unix seconds) — used for live (scanned) data.
 fn real_now() -> i64 {
     (js_sys::Date::now() / 1000.0) as i64
 }
@@ -31,20 +34,12 @@ enum Mode {
     Demo,
 }
 
-#[derive(Clone, Copy, PartialEq)]
-enum SortKey {
-    Attention,
-    Recent,
-    Name,
-    Prs,
-}
-
 /// The drill-in detail's load state for the selected repo.
 #[derive(Clone)]
 enum DetailState {
     Idle,
     Loading,
-    Loaded(github::RepoDetail),
+    Loaded(api::RepoDetailResponse),
 }
 
 fn main() {
@@ -58,47 +53,44 @@ fn App() -> impl IntoView {
     let mode = RwSignal::new(Mode::Loading);
     let notice = RwSignal::new(None::<String>);
     let filter = RwSignal::new(String::new());
-    let sort = RwSignal::new(SortKey::Attention);
+    let dirty_only = RwSignal::new(false);
+    let sort = RwSignal::new(SortMode::DirtyFirst);
     let selected = RwSignal::new(None::<String>);
+    let roots = RwSignal::new(Vec::<String>::new());
 
-    // Load the repo list through the proxy, then enrich each repo (CI + PRs)
-    // progressively so rows light up as their health arrives. On failure, fall
-    // back to the demo fleet with a note.
+    // Load the local scan (fast — local status only), then re-request enriched so
+    // remote CI/PRs fold in without blocking first paint. With nothing to scan
+    // (or on error), fall back to the demo fleet with a note.
     let load = move || {
         notice.set(None);
         selected.set(None);
         mode.set(Mode::Loading);
         spawn_local(async move {
-            match github::fetch_repos().await {
+            match api::fetch_repos().await {
                 Ok(list) if !list.is_empty() => {
-                    let targets: Vec<(String, String)> = list
-                        .iter()
-                        .filter_map(|s| match &s.branch {
-                            Branch::Named(b) => Some((s.id.0.clone(), b.clone())),
-                            _ => None,
-                        })
-                        .collect();
                     repos.set(list);
                     mode.set(Mode::Live);
-                    // Enrich every repo concurrently: spawn each fetch instead of
-                    // awaiting them in a queue, so all requests are in flight at
-                    // once and each row updates the moment its CI/PRs land.
-                    for (id, branch) in targets {
-                        spawn_local(async move {
-                            if let Some(info) = github::enrich(&id, &branch).await {
-                                repos.update(|v| {
-                                    if let Some(s) = v.iter_mut().find(|s| s.id.0 == id) {
-                                        s.remote = Some(info);
+                    // Second pass: enrich with remote signals (one server call;
+                    // the server fans out and caches). Merge by id so the local
+                    // rows stay put and only `remote` fills in.
+                    spawn_local(async move {
+                        if let Ok(enriched) = api::fetch_enriched().await {
+                            repos.update(|v| {
+                                for e in enriched {
+                                    if let Some(s) = v.iter_mut().find(|s| s.id.0 == e.id.0) {
+                                        s.remote = e.remote;
                                     }
-                                });
-                            }
-                        });
-                    }
+                                }
+                            });
+                        }
+                    });
                 }
                 Ok(_) => {
-                    notice.set(Some("No repositories on this account.".to_string()));
-                    repos.set(Vec::new());
-                    mode.set(Mode::Live);
+                    notice.set(Some(
+                        "No git repositories found to scan — showing the demo fleet.".to_string(),
+                    ));
+                    repos.set(demo::fleet(DEMO_NOW));
+                    mode.set(Mode::Demo);
                 }
                 Err(e) => {
                     notice.set(Some(format!("{e} — showing the demo fleet.")));
@@ -118,8 +110,33 @@ fn App() -> impl IntoView {
     let reload = move |_| load();
     load();
 
-    // Drill-in: when a repo is selected (live data only), fetch its rich detail
-    // — recent commits, open PRs, contributors, issues, release — on demand.
+    // Pull the session metadata (which folder is being scanned), and — when the
+    // server was started with `--watch` — poll for a fresh scan so the page tracks
+    // the folder live (re-scanning is cheap; remote is server-cached). Skips while
+    // showing the demo fleet.
+    spawn_local(async move {
+        let meta = api::fetch_meta().await;
+        roots.set(meta.roots);
+        if !meta.watch {
+            return;
+        }
+        loop {
+            gloo_timers::future::TimeoutFuture::new(5_000).await;
+            if mode.get_untracked() != Mode::Live {
+                continue;
+            }
+            if let Ok(list) = api::fetch_enriched().await
+                && !list.is_empty()
+                && mode.get_untracked() == Mode::Live
+            {
+                repos.set(list);
+            }
+        }
+    });
+
+    // Drill-in: when a repo is selected in a live scan, fetch its detail — local
+    // recent commits / changed files / branches / stashes, plus remote PRs /
+    // contributors / issues / release — on demand.
     let detail = RwSignal::new(DetailState::Idle);
     Effect::new(move |_| {
         let Some(id) = selected.get() else {
@@ -130,24 +147,21 @@ fn App() -> impl IntoView {
             detail.set(DetailState::Idle);
             return;
         }
-        let branch = repos
-            .get_untracked()
-            .iter()
-            .find(|s| s.id.0 == id)
-            .and_then(|s| match &s.branch {
-                Branch::Named(b) => Some(b.clone()),
-                _ => None,
-            });
-        let Some(branch) = branch else {
+        let snap = repos.get_untracked().into_iter().find(|s| s.id.0 == id);
+        let Some(snap) = snap else {
             detail.set(DetailState::Idle);
             return;
         };
+        let Some(path) = snap.path.as_ref().map(|p| p.to_string()) else {
+            detail.set(DetailState::Idle);
+            return;
+        };
+        let url = snap.remote_url.clone();
         detail.set(DetailState::Loading);
-        let full = id.clone();
         spawn_local(async move {
-            let d = github::fetch_detail(&full, &branch).await;
+            let d = api::fetch_detail(&path, url.as_deref()).await;
             // Ignore a stale result if the selection moved on.
-            if selected.get_untracked().as_deref() == Some(full.as_str()) {
+            if selected.get_untracked().as_deref() == Some(id.as_str()) {
                 detail.set(DetailState::Loaded(d));
             }
         });
@@ -166,22 +180,31 @@ fn App() -> impl IntoView {
                         <span class="brand">"cohors"</span>
                         <span class="pill">"web"</span>
                     </div>
-                    <div class="tag">"Your GitHub fleet, at a glance"</div>
+                    <div class="tag">
+                        {move || {
+                            let r = roots.get();
+                            if r.is_empty() {
+                                "All your repos in one place — local status + remote".to_string()
+                            } else {
+                                format!("scanning {}", r.join(", "))
+                            }
+                        }}
+                    </div>
                 </div>
                 <div class="conn">
                     {move || match mode.get() {
                         Mode::Live => view! {
-                            <span class="src">"● GitHub"</span>
-                            <button class="ghost" on:click=reload>"reload"</button>
+                            <span class="src">"● local scan"</span>
+                            <button class="ghost" on:click=reload>"rescan"</button>
                             <button class="ghost" on:click=show_demo>"demo"</button>
                         }
                         .into_any(),
                         Mode::Demo => view! {
                             <span class="src demo">"demo"</span>
-                            <button class="ghost" on:click=reload>"connect GitHub"</button>
+                            <button class="ghost" on:click=reload>"rescan"</button>
                         }
                         .into_any(),
-                        Mode::Loading => view! { <span class="dim">"loading…"</span> }.into_any(),
+                        Mode::Loading => view! { <span class="dim">"scanning…"</span> }.into_any(),
                     }}
                 </div>
             </header>
@@ -190,33 +213,46 @@ fn App() -> impl IntoView {
 
             {move || match mode.get() {
                 Mode::Loading => {
-                    view! { <div class="state">"Fetching your repositories from GitHub…"</div> }
-                        .into_any()
+                    view! { <div class="state">"Scanning your repositories…"</div> }.into_any()
                 }
                 Mode::Demo => {
-                    dashboard(repos, DEMO_NOW, filter, sort, selected, detail).into_any()
+                    dashboard(repos, DEMO_NOW, filter, dirty_only, sort, selected, detail).into_any()
                 }
                 Mode::Live => {
-                    dashboard(repos, real_now(), filter, sort, selected, detail).into_any()
+                    dashboard(repos, real_now(), filter, dirty_only, sort, selected, detail)
+                        .into_any()
                 }
             }}
         </div>
     }
 }
 
-/// The dashboard body: the health summary, filter/sort controls, the fleet
-/// table, and the per-repo detail aside. Reads `repos` reactively so enrichment
-/// updates the rows live.
+/// The dashboard body: the attention summary, filter/sort controls, the fleet
+/// table (the TUI's columns), and the per-repo detail aside. Reads `repos`
+/// reactively so the remote-enrichment pass updates the rows live.
+#[allow(clippy::too_many_arguments)]
 fn dashboard(
     repos: RwSignal<Vec<RepoSnapshot>>,
     now: i64,
     filter: RwSignal<String>,
-    sort: RwSignal<SortKey>,
+    dirty_only: RwSignal<bool>,
+    sort: RwSignal<SortMode>,
     selected: RwSignal<Option<String>>,
     detail: RwSignal<DetailState>,
 ) -> impl IntoView {
     let summary = move || summary_chips(&repos.get(), now);
-    let visible = move || view_indices(&repos.get(), &filter.get(), sort.get(), now);
+    let visible = move || {
+        let r = repos.get();
+        let params = ViewParams {
+            sort: sort.get(),
+            dirty_only: dirty_only.get(),
+            query: &filter.get(),
+        };
+        compute_view(&r, &params)
+            .into_iter()
+            .map(|row| row.index)
+            .collect::<Vec<_>>()
+    };
     let body = move || {
         let r = repos.get();
         visible()
@@ -243,11 +279,18 @@ fn dashboard(
                     prop:value=move || filter.get()
                     on:input=move |ev| filter.set(event_target_value(&ev))
                 />
+                <button
+                    class="sort"
+                    class:active=move || dirty_only.get()
+                    on:click=move |_| dirty_only.update(|d| *d = !*d)
+                >
+                    "needs attention"
+                </button>
                 <div class="sorts">
-                    {sort_button(sort, SortKey::Attention, "attention")}
-                    {sort_button(sort, SortKey::Recent, "recent")}
-                    {sort_button(sort, SortKey::Name, "name")}
-                    {sort_button(sort, SortKey::Prs, "PRs")}
+                    {sort_button(sort, SortMode::DirtyFirst, "attention")}
+                    {sort_button(sort, SortMode::Recent, "recent")}
+                    {sort_button(sort, SortMode::Name, "name")}
+                    {sort_button(sort, SortMode::AheadBehind, "sync")}
                 </div>
             </section>
             <div class="grid">
@@ -262,6 +305,10 @@ fn dashboard(
                             <thead>
                                 <tr>
                                     <th>"Repo"</th>
+                                    <th>"Branch"</th>
+                                    <th>"Sync"</th>
+                                    <th>"Changes"</th>
+                                    <th>"Stash"</th>
                                     <th>"PRs"</th>
                                     <th>"CI"</th>
                                     <th>"Last"</th>
@@ -278,65 +325,53 @@ fn dashboard(
     }
 }
 
-/// Health rank for sorting/attention: failing CI is most urgent, then open PRs,
-/// then pending CI, then stale; a healthy or not-yet-enriched repo is 0.
-fn health_rank(s: &RepoSnapshot, now: i64) -> u8 {
-    match &s.remote {
-        None => 0,
-        Some(r) => {
-            if r.ci == CiStatus::Failing {
-                5
-            } else if r.open_prs > 0 {
-                4
-            } else if r.ci == CiStatus::Pending {
-                3
-            } else if s.last_commit.as_ref().is_some_and(|c| now - c.timestamp > STALE_SECS) {
-                1
-            } else {
-                0
-            }
-        }
+/// The CSS color class for a severity — mirrors the TUI's `severity_style`.
+fn severity_class(sev: Severity) -> &'static str {
+    match sev {
+        Severity::Ok => "ok",
+        Severity::Info => "dim",
+        Severity::Notice => "ahead",
+        Severity::Warn => "warn",
+        Severity::Risk => "risk",
     }
 }
 
-/// The health summary chips, computed across the fleet.
+/// The attention summary strip, from `cohors-core`'s `fleet_summary` — the same
+/// counts the TUI's header shows.
 fn summary_chips(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
-    let total = repos.len();
-    let enriching = repos.iter().filter(|s| s.remote.is_none()).count();
-    let failing = repos
-        .iter()
-        .filter(|s| s.remote.as_ref().is_some_and(|r| r.ci == CiStatus::Failing))
-        .count();
-    let pending = repos
-        .iter()
-        .filter(|s| s.remote.as_ref().is_some_and(|r| r.ci == CiStatus::Pending))
-        .count();
-    let prs: u32 = repos
-        .iter()
-        .filter_map(|s| s.remote.as_ref().map(|r| r.open_prs))
-        .sum();
-    let stale = repos
-        .iter()
-        .filter(|s| health_rank(s, now) == 1)
-        .count();
+    let s = fleet_summary(repos, now);
+    let enriching = repos.iter().filter(|r| r.remote.is_none()).count();
 
-    let mut chips: Vec<(String, &'static str)> = vec![(format!("{total} repositories"), "accent")];
-    if failing > 0 {
-        chips.push((format!("{failing} failing CI"), "risk"));
+    let mut chips: Vec<(String, &'static str)> =
+        vec![(format!("{} repositories", s.total), "accent")];
+    if s.needs_attention > 0 {
+        chips.push((format!("{} need attention", s.needs_attention), "warn"));
     }
-    if pending > 0 {
-        chips.push((format!("{pending} CI pending"), "warn"));
+    if s.errors > 0 {
+        chips.push((format!("{} unreadable", s.errors), "risk"));
     }
-    if prs > 0 {
-        chips.push((format!("{prs} open PRs"), "notice"));
+    if s.unpushed > 0 {
+        let label = if s.unpushed_aging > 0 {
+            format!("{} unpushed · {} aging", s.unpushed, s.unpushed_aging)
+        } else {
+            format!("{} unpushed", s.unpushed)
+        };
+        chips.push((label, "ahead"));
     }
-    if stale > 0 {
-        chips.push((format!("{stale} stale"), "dim"));
+    if s.behind > 0 {
+        chips.push((format!("{} behind", s.behind), "notice"));
     }
-    if enriching > 0 {
-        chips.push((format!("enriching {enriching}…"), "dim"));
-    } else if failing == 0 && pending == 0 {
-        chips.push(("all green".to_string(), "ok"));
+    if s.dirty > 0 {
+        chips.push((format!("{} dirty", s.dirty), "modified"));
+    }
+    if s.stash > 0 {
+        chips.push((format!("{} stashed", s.stash), "dim"));
+    }
+    if s.needs_attention == 0 && s.errors == 0 {
+        chips.push(("all clear".to_string(), "ok"));
+    }
+    if enriching == repos.len() && !repos.is_empty() {
+        chips.push(("enriching remote…".to_string(), "dim"));
     }
     chips
         .into_iter()
@@ -344,203 +379,228 @@ fn summary_chips(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
         .collect::<Vec<_>>()
 }
 
-/// Filter (substring on name) then order by the chosen key. Returns indices into
-/// `repos`.
-fn view_indices(repos: &[RepoSnapshot], query: &str, sort: SortKey, now: i64) -> Vec<usize> {
-    let q = query.trim().to_lowercase();
-    let mut idx: Vec<usize> = repos
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| q.is_empty() || s.name.to_lowercase().contains(&q))
-        .map(|(i, _)| i)
-        .collect();
-    let recency = |s: &RepoSnapshot| s.last_commit.as_ref().map(|c| c.timestamp).unwrap_or(0);
-    idx.sort_by(|&a, &b| {
-        let (ra, rb) = (&repos[a], &repos[b]);
-        match sort {
-            SortKey::Attention => health_rank(rb, now)
-                .cmp(&health_rank(ra, now))
-                .then(recency(rb).cmp(&recency(ra))),
-            SortKey::Recent => recency(rb).cmp(&recency(ra)),
-            SortKey::Name => ra.name.to_lowercase().cmp(&rb.name.to_lowercase()),
-            SortKey::Prs => {
-                let pa = ra.remote.as_ref().map(|r| r.open_prs).unwrap_or(0);
-                let pb = rb.remote.as_ref().map(|r| r.open_prs).unwrap_or(0);
-                pb.cmp(&pa).then(recency(rb).cmp(&recency(ra)))
-            }
-        }
-    });
-    idx
-}
-
-/// One CI cell's (label, class). `·` is "still enriching"; once enriched, a repo
-/// with no checks reads as "no CI" rather than an ambiguous dash.
-fn ci_view(s: &RepoSnapshot) -> (&'static str, &'static str) {
-    match &s.remote {
-        None => ("·", "dim"),
-        Some(r) => match r.ci {
-            CiStatus::Passing => ("passing", "staged"),
-            CiStatus::Failing => ("failing", "risk"),
-            CiStatus::Pending => ("pending", "warn"),
-            CiStatus::None => ("no CI", "dim"),
-        },
-    }
-}
-
-/// One fleet row. Clicking it selects the repo (driving the detail aside).
+/// One fleet row, mirroring the TUI's dock columns. Clicking it selects the repo.
 fn repo_row(s: &RepoSnapshot, selected: RwSignal<Option<String>>, now: i64) -> impl IntoView + use<> {
     let id = s.id.0.clone();
     let id_click = id.clone();
     let is_sel = move || selected.get().as_deref() == Some(id.as_str());
 
-    let failing = s
-        .remote
-        .as_ref()
-        .is_some_and(|r| r.ci == CiStatus::Failing);
-    let name = s.name.clone();
-    let name_class = if failing { "name risk" } else { "name" };
-
-    // While a repo is still being enriched its remote is None: show an animated
-    // braille dot-spinner (echoing the TUI's spinner) rather than a static dot.
-    let enriching = s.remote.is_none();
-    let prs = if enriching {
-        view! { <span class="spin"></span> }.into_any()
-    } else {
-        match &s.remote {
-            // 0 PRs is a real, enriched state — show a dim "0", not a bare dot
-            // (a dot now means only "still loading").
-            Some(r) if r.open_prs == 0 => view! { <span class="dim">"0"</span> }.into_any(),
-            Some(r) => view! { <span class="ahead">{r.open_prs.to_string()}</span> }.into_any(),
-            None => view! { <span class="dim">"0"</span> }.into_any(),
+    // A broken repo: red name + "error", reason in the Status column, dim dots
+    // for the data cells (matching the TUI's error row).
+    if let Some(reason) = &s.error {
+        let name = s.name.clone();
+        let reason = reason.clone();
+        return view! {
+            <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
+                <td class="name error">{name}</td>
+                <td class="risk">"error"</td>
+                <td class="dim">"·"</td>
+                <td class="dim">"·"</td>
+                <td class="dim">"·"</td>
+                <td class="dim">"·"</td>
+                <td class="dim">"·"</td>
+                <td class="dim">"·"</td>
+                <td class="risk">{reason}</td>
+            </tr>
         }
-    };
-    let ci = if enriching {
-        view! { <span class="spin"></span> }.into_any()
-    } else if s.remote.as_ref().is_some_and(|r| r.ci == CiStatus::Pending) {
-        // Pending CI is itself a kind of loading — pair the label with a spinner.
-        view! { <span class="spin"></span><span class="warn">"pending"</span> }.into_any()
-    } else {
-        let (label, cls) = ci_view(s);
-        view! { <span class=cls>{label}</span> }.into_any()
-    };
+        .into_any();
+    }
 
-    let age = s
-        .last_commit
-        .as_ref()
-        .map(|c| time::relative(c.timestamp, now))
-        .unwrap_or_else(|| "—".to_string());
+    let a = assess(s, now);
+    let name_class = match a.severity {
+        Severity::Ok | Severity::Info => "name dim",
+        Severity::Warn | Severity::Risk => "name strong",
+        Severity::Notice => "name",
+    };
+    let name = s.name.clone();
 
     view! {
         <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
             <td class=name_class>{name}</td>
-            <td>{prs}</td>
-            <td>{ci}</td>
-            <td class="dim">{age}</td>
-            <td class="status">{status_view(s, now)}</td>
+            <td>{branch_cell(s)}</td>
+            <td>{sync_cell(s)}</td>
+            <td>{changes_cell(s)}</td>
+            <td>{stash_cell(s)}</td>
+            <td>{prs_cell(s)}</td>
+            <td>{ci_cell(s)}</td>
+            <td class="last">{last_cell(s, now)}</td>
+            <td class="status">{status_cell(&a)}</td>
         </tr>
     }
+    .into_any()
 }
 
-/// The "Status" cell: *why* a repo wants attention (or that it's calm) — failing
-/// CI, open PRs, CI running, or staleness, mirroring [`health_rank`]. Replaces the
-/// old commit-summary "About" column with something actionable.
-fn status_view(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
-    let Some(r) = s.remote.as_ref() else {
-        return view! { <span class="spin"></span><span class="dim">" checking…"</span> }.into_any();
-    };
-    let stale = s
-        .last_commit
-        .as_ref()
-        .is_some_and(|c| now - c.timestamp > STALE_SECS);
-    if r.ci == CiStatus::Failing {
-        view! { <span class="risk">"CI failing"</span> }.into_any()
-    } else if r.open_prs > 0 {
-        let label = format!("{} open PR{}", r.open_prs, if r.open_prs == 1 { "" } else { "s" });
-        view! { <span class="notice">{label}</span> }.into_any()
-    } else if r.ci == CiStatus::Pending {
-        view! { <span class="spin"></span><span class="warn">" CI running"</span> }.into_any()
-    } else if stale {
-        view! { <span class="dim">"stale — no recent pushes"</span> }.into_any()
-    } else {
-        view! { <span class="ok">"up to date"</span> }.into_any()
+/// The Branch cell: branch name, `@sha` for detached, "unborn" for a fresh repo.
+fn branch_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    match &s.branch {
+        Branch::Named(b) => view! { <span>{b.clone()}</span> }.into_any(),
+        Branch::Detached(id) => {
+            let short: String = id.chars().take(7).collect();
+            view! { <span class="detached">{format!("@{short}")}</span> }.into_any()
+        }
+        Branch::Unborn => view! { <span class="dim">"unborn"</span> }.into_any(),
     }
 }
 
-/// The per-repo detail aside: the at-a-glance remote facts, plus the on-demand
-/// rich detail (commits, PRs, contributors, issues, release) once it loads.
+/// The Sync cell (ahead/behind arrows): `↑2 ↓5`, `↑2`, `↓5`, `·` (even), `—` (no
+/// upstream) — mirroring the TUI's `ahead_behind_spans`.
+fn sync_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    match &s.upstream {
+        None => view! { <span class="dim">"—"</span> }.into_any(),
+        Some(up) if up.ahead == 0 && up.behind == 0 => view! { <span class="dim">"·"</span> }.into_any(),
+        Some(up) => {
+            let ahead = (up.ahead > 0).then(|| view! { <span class="ahead">{format!("↑{}", up.ahead)}</span> });
+            let sep = (up.ahead > 0 && up.behind > 0).then(|| view! { <span>" "</span> });
+            let behind = (up.behind > 0).then(|| view! { <span class="behind">{format!("↓{}", up.behind)}</span> });
+            view! { <span>{ahead}{sep}{behind}</span> }.into_any()
+        }
+    }
+}
+
+/// The Changes cell: changed-file count, green when all staged, amber when there's
+/// unstaged work; `·` when clean.
+fn changes_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    let w = &s.worktree;
+    let total = w.staged + w.modified + w.untracked;
+    if total == 0 {
+        view! { <span class="dim">"·"</span> }.into_any()
+    } else {
+        let cls = if w.modified > 0 || w.untracked > 0 { "modified" } else { "staged" };
+        view! { <span class=cls>{total.to_string()}</span> }.into_any()
+    }
+}
+
+/// The Stash cell: the stash count (amber), or `·` when there are none.
+fn stash_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    if s.stash_count > 0 {
+        view! { <span class="warn">{s.stash_count.to_string()}</span> }.into_any()
+    } else {
+        view! { <span class="dim">"·"</span> }.into_any()
+    }
+}
+
+/// The PRs cell: open-PR count — `·` on a remote with none, `—` off-remote or not
+/// yet enriched.
+fn prs_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    match &s.remote {
+        None => view! { <span class="dim">"—"</span> }.into_any(),
+        Some(r) if r.open_prs == 0 => view! { <span class="dim">"·"</span> }.into_any(),
+        Some(r) => view! { <span class="ahead">{r.open_prs.to_string()}</span> }.into_any(),
+    }
+}
+
+/// The CI cell: the check status spelled out and colored; `—` off-remote, `·` on a
+/// remote with no CI signal.
+fn ci_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    match &s.remote {
+        None => view! { <span class="dim">"—"</span> }.into_any(),
+        Some(r) => {
+            let (label, cls) = match r.ci {
+                CiStatus::Passing => ("passing", "ok"),
+                CiStatus::Failing => ("failing", "risk"),
+                CiStatus::Pending => ("pending", "warn"),
+                CiStatus::None => ("·", "dim"),
+            };
+            view! { <span class=cls>{label}</span> }.into_any()
+        }
+    }
+}
+
+/// The Last cell: the last commit's age and subject (dim) — `—` when none.
+fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
+    match &s.last_commit {
+        Some(c) => {
+            let age = time::relative(c.timestamp, now);
+            let summary = ellipsize(&c.summary, 60);
+            view! {
+                <span class="age">{format!("{age}  ")}</span>
+                <span class="msg">{summary}</span>
+            }
+            .into_any()
+        }
+        None => view! { <span class="dim">"—"</span> }.into_any(),
+    }
+}
+
+/// Truncate `s` to at most `max` characters, adding an ellipsis when cut.
+fn ellipsize(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
+/// The Status cell: the primary attention reason, colored by severity (the same
+/// signal that drives the attention sort) — `·` when the repo wants nothing.
+fn status_cell(a: &cohors_core::Assessment) -> impl IntoView + use<> {
+    match &a.primary {
+        Some(r) => {
+            let cls = severity_class(r.severity());
+            view! { <span class=cls>{r.label()}</span> }.into_any()
+        }
+        None => view! { <span class="dim">"·"</span> }.into_any(),
+    }
+}
+
+/// The per-repo detail aside: the local facts + every reason it wants attention,
+/// then the on-demand drill-in (recent commits, changed files, remote PRs, etc).
 fn detail_panel(
     s: &RepoSnapshot,
     now: i64,
     detail: RwSignal<DetailState>,
 ) -> impl IntoView + use<> {
-    let branch = match &s.branch {
-        Branch::Named(b) => b.clone(),
-        Branch::Detached(id) => format!("@{}", id.chars().take(7).collect::<String>()),
-        Branch::Unborn => "unborn".to_string(),
-    };
     let name = s.name.clone();
+    let a = assess(s, now);
 
-    // CI as a header node (a pending build pairs its label with the spinner).
-    let ci_node = match &s.remote {
-        None => view! { <span class="dim">"enriching…"</span> }.into_any(),
-        Some(r) => match r.ci {
-            CiStatus::Passing => view! { <span class="ok">"passing"</span> }.into_any(),
-            CiStatus::Failing => view! { <span class="risk">"failing"</span> }.into_any(),
-            CiStatus::Pending => {
-                view! { <span class="spin"></span><span class="warn">"pending"</span> }.into_any()
-            }
-            CiStatus::None => view! { <span class="dim">"no CI"</span> }.into_any(),
-        },
-    };
-    let prs = match &s.remote {
-        None => "…".to_string(),
-        Some(r) if r.open_prs == 0 => "none".to_string(),
-        Some(r) => format!(
-            "{} open PR{}",
-            r.open_prs,
-            if r.open_prs == 1 { "" } else { "s" }
-        ),
-    };
+    // Every reason it wants attention (most urgent first), each severity-colored.
+    let reasons: Vec<_> = a
+        .reasons
+        .iter()
+        .map(|r| {
+            let cls = severity_class(r.severity());
+            let label = r.label();
+            view! { <li class=cls>{label}</li> }
+        })
+        .collect();
+    let reasons_block = (!a.reasons.is_empty()).then(|| {
+        view! {
+            <div class="sec">
+                <div class="sec-h">"Needs attention"</div>
+                <ul class="reasons">{reasons}</ul>
+            </div>
+        }
+    });
+
+    // Local facts pulled straight from the snapshot.
+    let branch = s.branch.label();
+    let sync = sync_text(s);
+    let changes = changes_text(s);
+    let stash = if s.stash_count > 0 { format!("{} stashed", s.stash_count) } else { "none".to_string() };
+    let (ci_label, ci_cls) = ci_text(s);
+    let prs = prs_text(s);
     let last = s
         .last_commit
         .as_ref()
-        .map(|c| {
-            let age = time::relative(c.timestamp, now);
-            let stale = now - c.timestamp > STALE_SECS;
-            if stale {
-                format!("{age} ago · stale")
-            } else {
-                format!("{age} ago")
-            }
-        })
+        .map(|c| format!("{} ago · {}", time::relative(c.timestamp, now), c.summary))
         .unwrap_or_else(|| "—".to_string());
-    let about = s
-        .last_commit
-        .as_ref()
-        .map(|c| c.summary.clone())
-        .filter(|d| !d.is_empty());
     let link = s.remote_url.clone();
 
     view! {
         <div class="card detail">
             <div class="card-title">{name}<span class="dim">{format!("  ·  {branch}")}</span></div>
             <div class="scroll">
-                // ── Header: the at-a-glance facts (CI · PRs · Activity · Sync) ──
                 <dl class="facts">
-                    <dt>"CI"</dt><dd>{ci_node}</dd>
+                    <dt>"Sync"</dt><dd>{sync}</dd>
+                    <dt>"Changes"</dt><dd>{changes}</dd>
+                    <dt>"Stash"</dt><dd>{stash}</dd>
+                    <dt>"CI"</dt><dd class=ci_cls>{ci_label}</dd>
                     <dt>"PRs"</dt><dd>{prs}</dd>
-                    <dt>"Activity"</dt><dd>{last}</dd>
-                    <dt>"Sync"</dt><dd>{move || sync_dd(detail.get())}</dd>
+                    <dt>"Last"</dt><dd>{last}</dd>
                 </dl>
-                // ── About: description + the GitHub stats line ──────────────────
-                <div class="sec">
-                    <div class="sec-h">"About"</div>
-                    {about.map(|d| view! { <p class="about-detail">{d}</p> })}
-                    <div class="stats">{move || stats_dd(detail.get())}</div>
-                </div>
-                // ── Recent commits · Open PRs · Top contributors (on demand) ────
-                {move || rich_sections_block(detail.get(), now)}
-                // ── Remote source ──────────────────────────────────────────────
+                {reasons_block}
+                {move || rich_block(detail.get(), now)}
                 {link.map(|url| {
                     let shown = url.clone();
                     view! {
@@ -557,55 +617,10 @@ fn detail_panel(
     }
 }
 
-/// The "Sync" header value (reactive on `detail`): how far the default branch has
-/// moved past the latest release — the remote analog of local ahead/behind.
-fn sync_dd(state: DetailState) -> AnyView {
-    match state {
-        DetailState::Idle => view! { <span class="dim">"—"</span> }.into_any(),
-        DetailState::Loading => view! { <span class="spin"></span> }.into_any(),
-        DetailState::Loaded(d) => match (d.latest_release, d.commits_since_release) {
-            (None, _) => view! { <span class="dim">"no releases"</span> }.into_any(),
-            (Some(tag), Some(0)) => {
-                view! { <span class="ok">{format!("in sync · {tag}")}</span> }.into_any()
-            }
-            (Some(tag), Some(n)) => view! {
-                <span class="ahead">
-                    {format!("{n} commit{} ahead · {tag}", if n == 1 { "" } else { "s" })}
-                </span>
-            }
-            .into_any(),
-            (Some(tag), None) => view! { <span class="dim">{tag}</span> }.into_any(),
-        },
-    }
-}
-
-/// The "About" stats line (reactive on `detail`): stars · language · open issues
-/// · latest release.
-fn stats_dd(state: DetailState) -> AnyView {
-    match state {
-        DetailState::Idle => ().into_any(),
-        DetailState::Loading => view! { <span class="dim">"…"</span> }.into_any(),
-        DetailState::Loaded(d) => {
-            let mut parts = vec![format!("★ {}", d.stars)];
-            if let Some(lang) = d.language {
-                parts.push(lang);
-            }
-            parts.push(format!(
-                "{} open issue{}",
-                d.open_issues,
-                if d.open_issues == 1 { "" } else { "s" }
-            ));
-            if let Some(rel) = d.latest_release {
-                parts.push(format!("release {rel}"));
-            }
-            parts.join("  ·  ").into_any()
-        }
-    }
-}
-
-/// The on-demand drill-in sections (commits, PRs, contributors). `Loading` shows
-/// the dots spinner; `Idle` (demo) renders nothing.
-fn rich_sections_block(state: DetailState, now: i64) -> AnyView {
+/// The on-demand drill-in under the facts: local recent commits / changed files,
+/// then remote PRs / contributors / issues / release. `Loading` shows the dots
+/// spinner; `Idle` (demo) renders nothing.
+fn rich_block(state: DetailState, now: i64) -> AnyView {
     match state {
         DetailState::Idle => ().into_any(),
         DetailState::Loading => view! {
@@ -616,12 +631,12 @@ fn rich_sections_block(state: DetailState, now: i64) -> AnyView {
     }
 }
 
-/// Render the loaded drill-in: sections for recent commits, open PRs, and top
-/// contributors. Empty sections are omitted.
-fn rich_sections(d: github::RepoDetail, now: i64) -> impl IntoView {
-    let commits_view = (!d.commits.is_empty()).then(|| {
+/// Render the loaded drill-in. Empty sections are omitted.
+fn rich_sections(d: api::RepoDetailResponse, now: i64) -> impl IntoView {
+    let commits = (!d.local.recent_commits.is_empty()).then(|| {
         let rows = d
-            .commits
+            .local
+            .recent_commits
             .clone()
             .into_iter()
             .map(|c| {
@@ -643,62 +658,97 @@ fn rich_sections(d: github::RepoDetail, now: i64) -> impl IntoView {
         }
     });
 
-    let prs_view = (!d.prs.is_empty()).then(|| {
+    let changed = (!d.local.changed_files.is_empty()).then(|| {
         let rows = d
-            .prs
+            .local
+            .changed_files
             .clone()
             .into_iter()
-            .map(|p| {
-                let draft = p.draft.then(|| view! { <span class="badge">"draft"</span> });
+            .map(|f| {
                 view! {
                     <li>
-                        <a class="sha" href=p.url target="_blank" rel="noreferrer">
-                            {format!("#{}", p.number)}
-                        </a>
-                        <span class="msg">{p.title}</span>
-                        {draft}
-                        <span class="age">{p.author}</span>
+                        <span class="sha">{f.status}</span>
+                        <span class="msg">{f.path}</span>
                     </li>
                 }
             })
             .collect::<Vec<_>>();
         view! {
             <div class="sec">
-                <div class="sec-h">"Open PRs"</div>
+                <div class="sec-h">"Working tree"</div>
                 <ul class="rows">{rows}</ul>
             </div>
         }
     });
 
-    let contrib_view = (!d.contributors.is_empty()).then(|| {
-        let rows = d
-            .contributors
-            .clone()
-            .into_iter()
-            .map(|c| {
-                view! {
-                    <li>
-                        <span class="msg">{c.login}</span>
-                        <span class="age">{format!("{} commits", c.contributions)}</span>
-                    </li>
-                }
-            })
-            .collect::<Vec<_>>();
+    let remote = d.remote.map(|r| {
+        let stats = format!(
+            "{} open issue{}{}",
+            r.open_issues,
+            if r.open_issues == 1 { "" } else { "s" },
+            r.latest_release
+                .as_ref()
+                .map(|t| format!("  ·  release {t}"))
+                .unwrap_or_default()
+        );
+        let prs = (!r.prs.is_empty()).then(|| {
+            let rows = r
+                .prs
+                .clone()
+                .into_iter()
+                .map(|p| {
+                    let draft = p.draft.then(|| view! { <span class="badge">"draft"</span> });
+                    view! {
+                        <li>
+                            <a class="sha" href=p.url target="_blank" rel="noreferrer">
+                                {format!("#{}", p.number)}
+                            </a>
+                            <span class="msg">{p.title}</span>
+                            {draft}
+                            <span class="age">{p.author}</span>
+                        </li>
+                    }
+                })
+                .collect::<Vec<_>>();
+            view! {
+                <div class="sec">
+                    <div class="sec-h">"Open PRs"</div>
+                    <ul class="rows">{rows}</ul>
+                </div>
+            }
+        });
+        let contribs = (!r.contributors.is_empty()).then(|| {
+            let rows = r
+                .contributors
+                .clone()
+                .into_iter()
+                .map(|c| {
+                    view! {
+                        <li>
+                            <span class="msg">{c.login}</span>
+                            <span class="age">{format!("{} commits", c.contributions)}</span>
+                        </li>
+                    }
+                })
+                .collect::<Vec<_>>();
+            view! {
+                <div class="sec">
+                    <div class="sec-h">"Top contributors"</div>
+                    <ul class="rows">{rows}</ul>
+                </div>
+            }
+        });
         view! {
             <div class="sec">
-                <div class="sec-h">"Top contributors"</div>
-                <ul class="rows">{rows}</ul>
+                <div class="sec-h">"Remote"</div>
+                <div class="stats">{stats}</div>
             </div>
+            {prs}
+            {contribs}
         }
     });
 
-    view! {
-        <div class="rich">
-            {commits_view}
-            {prs_view}
-            {contrib_view}
-        </div>
-    }
+    view! { <div class="rich">{commits}{changed}{remote}</div> }
 }
 
 /// The aside's default panel (nothing selected).
@@ -712,10 +762,67 @@ fn hint_panel() -> impl IntoView {
 }
 
 /// One sort button, highlighted when active.
-fn sort_button(sort: RwSignal<SortKey>, key: SortKey, label: &'static str) -> impl IntoView {
+fn sort_button(sort: RwSignal<SortMode>, key: SortMode, label: &'static str) -> impl IntoView {
     view! {
         <button class="sort" class:active=move || sort.get() == key on:click=move |_| sort.set(key)>
             {label}
         </button>
+    }
+}
+
+// ── Text variants of the cells, for the detail facts list ────────────────────
+
+fn sync_text(s: &RepoSnapshot) -> String {
+    match &s.upstream {
+        None => "no upstream".to_string(),
+        Some(up) if up.ahead == 0 && up.behind == 0 => "in sync".to_string(),
+        Some(up) => {
+            let mut parts = Vec::new();
+            if up.ahead > 0 {
+                parts.push(format!("↑{} ahead", up.ahead));
+            }
+            if up.behind > 0 {
+                parts.push(format!("↓{} behind", up.behind));
+            }
+            parts.join(" · ")
+        }
+    }
+}
+
+fn changes_text(s: &RepoSnapshot) -> String {
+    let w = &s.worktree;
+    if w.staged + w.modified + w.untracked == 0 {
+        return "clean".to_string();
+    }
+    let mut parts = Vec::new();
+    if w.staged > 0 {
+        parts.push(format!("{} staged", w.staged));
+    }
+    if w.modified > 0 {
+        parts.push(format!("{} modified", w.modified));
+    }
+    if w.untracked > 0 {
+        parts.push(format!("{} untracked", w.untracked));
+    }
+    parts.join(" · ")
+}
+
+fn ci_text(s: &RepoSnapshot) -> (&'static str, &'static str) {
+    match &s.remote {
+        None => ("—", "dim"),
+        Some(r) => match r.ci {
+            CiStatus::Passing => ("passing", "ok"),
+            CiStatus::Failing => ("failing", "risk"),
+            CiStatus::Pending => ("pending", "warn"),
+            CiStatus::None => ("no CI", "dim"),
+        },
+    }
+}
+
+fn prs_text(s: &RepoSnapshot) -> String {
+    match &s.remote {
+        None => "—".to_string(),
+        Some(r) if r.open_prs == 0 => "none".to_string(),
+        Some(r) => format!("{} open", r.open_prs),
     }
 }

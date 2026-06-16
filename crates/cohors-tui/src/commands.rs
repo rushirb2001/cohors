@@ -372,7 +372,7 @@ const WEB_HOST: &str = "cohors.localhost";
 /// accepting connections, then prints + opens the branded local URL
 /// (`http://cohors.localhost:<port>`). Blocks until Ctrl-C. Must run from inside
 /// the cohors repository, since Trunk builds the app from source.
-pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
+pub fn run_web(cli: &Cli, port: u16, open: bool, install: bool) -> Result<()> {
     // `cohors web` builds the dashboard from source, so it needs the repo. This
     // is the *developer* path. End users won't run this at all: once the
     // dashboard is deployed (v0.5 slice 4), an installed `cohors web` outside a
@@ -393,10 +393,14 @@ pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
     }
     let port = chosen;
 
-    // The machine's GitHub token — the SAME one the TUI uses (`gh auth token` /
-    // `$GITHUB_TOKEN`). We hold it here and inject it into the GitHub proxy, so
-    // the browser uses your login with zero setup and never sees the token.
-    let token = cohors_github::discover_token();
+    // The web app is just another front-end over the SAME local scan the TUI,
+    // CLI, and MCP run: discover the repos under `--root`/config, snapshot their
+    // local state, and (with a token) enrich with remote CI/PRs. The server does
+    // the scan and serves the `cohors-core` snapshots as JSON; the browser
+    // renders them through the same `assess`/sort logic. The token is the SAME
+    // one the TUI uses (`gh auth token` / `$GITHUB_TOKEN`) and never leaves here.
+    let scanner = std::sync::Arc::new(Scanner::from_cli(cli)?);
+    let token = scanner.github_token();
 
     // Build the WASM assets to dist/ and keep watching for rebuilds while we
     // serve. (Our own server — not `trunk serve` — so we can proxy GitHub.)
@@ -417,12 +421,13 @@ pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
     }
 
     let url = format!("http://{WEB_HOST}:{port}");
+    let roots = scanner.roots().join(", ");
     let auth = if token.is_some() {
-        "using your GitHub login"
+        "remote CI/PRs enriched with your GitHub login"
     } else {
-        "no GitHub login found — showing demo data (run `gh auth login` for your repos)"
+        "no GitHub login found — local status only (run `gh auth login` for CI/PRs)"
     };
-    println!("\n  cohors web is live → {url}\n  {auth}\n  Ctrl-C to stop.\n");
+    println!("\n  cohors web is live → {url}\n  scanning {roots}\n  {auth}\n  Ctrl-C to stop.\n");
     if open {
         let url = url.clone();
         std::thread::spawn(move || {
@@ -432,8 +437,9 @@ pub fn run_web(port: u16, open: bool, install: bool) -> Result<()> {
         });
     }
 
-    // Serve until stopped; then tear down the watcher.
-    let result = crate::web::serve(&dist, port, token);
+    // Serve until stopped; then tear down the watcher. `--watch` makes the page
+    // poll `/api/repos` so a fresh scan shows up without a manual rescan.
+    let result = crate::web::serve(&dist, port, scanner, token, cli.watch);
     let _ = watcher.kill();
     result
 }

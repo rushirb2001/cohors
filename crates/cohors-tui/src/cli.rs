@@ -75,12 +75,15 @@ pub enum Command {
         #[arg(long, default_value_t = 120)]
         timeout: u64,
     },
-    /// Build and serve the web dashboard, then open it in your browser.
+    /// Build and serve the web dashboard for a folder of repos, then open it.
     ///
-    /// One command starts everything: it finds the `cohors-web` crate, makes sure
-    /// Trunk (the WASM bundler) is installed — installing it for you the first
-    /// time unless `--no-install` — then runs the dev server and prints the URL.
-    /// Run it from inside the cohors repository. Ctrl-C to stop.
+    /// The same local scan as the TUI, in the browser: `cohors web --root ~/code`
+    /// shows that folder's repos (local status + remote CI/PRs). With `--watch`
+    /// the page re-scans live. One command starts everything: it finds the
+    /// `cohors-web` crate, makes sure Trunk (the WASM bundler) is installed —
+    /// installing it for you the first time unless `--no-install` — then runs the
+    /// server and prints the URL. Run it from inside the cohors repository (it
+    /// builds the web app from source). Ctrl-C to stop.
     Web {
         /// Port to serve on.
         #[arg(long, default_value_t = 8080)]
