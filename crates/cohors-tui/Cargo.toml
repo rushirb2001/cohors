@@ -31,10 +31,9 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 ratatui = { workspace = true }
 arboard = { workspace = true }
-# `cohors web`: a local server that serves the WASM dashboard and proxies GitHub
-# with the machine's token injected server-side (so the browser never sees it).
+# `cohors web`: a local server that serves the WASM dashboard and the local scan
+# as JSON (remote enrichment runs server-side via cohors-github).
 tiny_http = { workspace = true }
-ureq = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

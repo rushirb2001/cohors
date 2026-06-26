@@ -19,6 +19,20 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Changed
+
+- **Leaner builds and smaller artifacts (optimization pass).** Tuned the build
+  profiles: release now uses `lto = true`, `codegen-units = 1`, and `strip = true`
+  (keeping unwinding panics so the TUI's terminal-restore hook still works), which
+  cut the installed binary from **9.7 MB to 6.6 MB (-32%)**. The web crate's
+  release profile (`opt-level = "s"` + LTO) plus a `trunk --release` (wasm-opt)
+  build takes the shipped wasm bundle from **4.0 MB to 0.79 MB (-80%)**. Dev
+  profiles drop full debuginfo (`line-tables-only` for the workspace, off for the
+  WASM crate, which can't be gdb'd anyway) — this is the main source of
+  `target/`-dir bloat, so day-to-day rebuilds stay much smaller. Also dropped
+  three unused dependencies (`serde_json`/`thiserror` from cohors-github, the
+  leftover `ureq` from cohors-tui after the GitHub proxy was removed).
+
 ### Fixed
 
 - **Web: fixed a tall empty gap in the detail header (and any cell with a

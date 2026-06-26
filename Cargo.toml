@@ -16,7 +16,7 @@ exclude = ["crates/cohors-web"]
 # Shared package metadata. Each crate inherits these with `field.workspace = true`
 # so version/edition/license stay consistent across the workspace.
 [workspace.package]
-version = "0.4.26"
+version = "0.4.27"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -98,3 +98,17 @@ targets = [
 ]
 publish-jobs = []
 pr-run-mode = "plan"
+
+# ── Build profiles ───────────────────────────────────────────────────────────
+# Dev: keep line-table debuginfo (backtraces still resolve) but drop the full
+# debuginfo that is the bulk of the target dir's growth across rebuilds.
+[profile.dev]
+debug = "line-tables-only"
+
+# Release: smaller and faster. LTO + a single codegen unit help both size and
+# runtime; `strip` removes symbols. We deliberately keep unwinding panics (the
+# default `panic = "unwind"`) so the TUI's panic hook can restore the terminal.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

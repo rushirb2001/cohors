@@ -13,7 +13,7 @@
 name = "cohors-web"
 # Its own pre-release line — the web front-end isn't part of the workspace's
 # (TUI/CLI/MCP) version, and isn't published or installed yet.
-version = "0.4.15"
+version = "0.4.16"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -38,3 +38,15 @@ gloo-timers = { version = "0.3", features = ["futures"] } # `--watch` poll inter
 js-sys = "0.3"                 # Date: a real clock for relative ages
 serde = { version = "1", features = ["derive"] }
 wasm-bindgen-futures = "0.4"   # spawn the async fetch
+
+# ── Build profiles (this crate is workspace-excluded, so set here) ────────────
+[profile.dev]
+# Debuginfo is the bulk of the wasm target's growth, and you can't gdb wasm
+# anyway — `console_error_panic_hook` still surfaces panics. Roughly halves the
+# wasm target dir across rebuilds.
+debug = false
+
+[profile.release]
+opt-level = "s"   # size-leaning; trunk runs wasm-opt on top
+lto = true
+codegen-units = 1
