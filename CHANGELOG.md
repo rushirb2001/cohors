@@ -21,6 +21,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **The `act` box's live action-target (`→ <repo>`) moved beside the title.** It
+  now sits on the title row (right-aligned, next to the centered "act") instead of
+  on the box's bottom border, which is now a clean edge.
+- **Fast local reinstall: `scripts/dev-install.sh`.** The release profile's LTO +
+  `codegen-units = 1` make `cargo install` take ~1-2 min (great for the shipped
+  binary, overkill for iterating). The script builds the **dev** profile
+  (incremental, no LTO — ~2s) and drops it into `~/.cargo/bin`, so a
+  rebuild+reinstall is near-instant (~28× faster). Use `cargo install` (release)
+  only for the optimized/shipped artifact.
+
 - **TUI footer group titles (`select` / `act` / `view`) moved inside their boxes.**
   They render as a **centered header row with a divider rule beneath it** at the
   top of each box instead of sitting on the border; the box top is now a clean

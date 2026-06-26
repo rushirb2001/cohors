@@ -504,17 +504,10 @@ fn render_group_box(
     app: &App,
     theme: &Theme,
 ) {
-    let mut block = Block::bordered()
+    let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
         .padding(Padding::horizontal(1));
-    if label == "act"
-        && let Some((_, target)) = action_target_hint(app)
-    {
-        block = block.title_bottom(
-            Line::from(Span::styled(format!(" → {target} "), theme.highlight())).right_aligned(),
-        );
-    }
     let outer_inner = block.inner(area);
     frame.render_widget(block, area);
 
@@ -534,6 +527,20 @@ fn render_group_box(
         .alignment(Alignment::Center),
         title_area,
     );
+    // The "act" box shows its live action-target beside the title (same header
+    // row, right-aligned) rather than on the bottom border.
+    if label == "act"
+        && let Some((_, target)) = action_target_hint(app)
+    {
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                format!("→ {target}"),
+                theme.highlight(),
+            )))
+            .alignment(Alignment::Right),
+            title_area,
+        );
+    }
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             "─".repeat(rule_area.width as usize),

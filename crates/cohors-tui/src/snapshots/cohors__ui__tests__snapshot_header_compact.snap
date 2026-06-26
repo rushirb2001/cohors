@@ -10,11 +10,11 @@ expression: "render_to_string(&app, 60, 16)"
 ╭ Attention (4 of 5 repositories) ─────────────────────────╮
 ────────────────── press h to hide hints ───────────────────
 ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮
-│     select      │ │        act       │ │      view       │
+│     select      │ │ → legacy-billing │ │      view       │
 │ ─────────────── │ │ ──────────────── │ │ ─────────────── │
 │ a mark │ Esc cl │ │ ⏎ open  │ P push │ │ ↑/↓ mo │ ? help │
 │ / filt │        │ │ f fetch │ S stas │ │ s sort │ q quit │
 │ ─────────────── │ │ p pull  │        │ │ ─────────────── │
 │ Space mark repo │ │ ──────────────── │ │ d dirty-only    │
 │                 │ │ ! run command    │ │ Tab standup     │
-╰─────────────────╯ ╰ → legacy-billing ╯ ╰─────────────────╯
+╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯

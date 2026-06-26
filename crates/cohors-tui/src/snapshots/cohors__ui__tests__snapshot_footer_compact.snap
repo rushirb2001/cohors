@@ -16,11 +16,11 @@ expression: "render_to_string(&app, 56, 22)"
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────
 ╭────────────────╮ ╭────────────────╮ ╭────────────────╮
-│     select     │ │       act      │ │      view      │
+│     select     │ │ → legacy-billi │ │      view      │
 │ ────────────── │ │ ────────────── │ │ ────────────── │
 │ a mark │ Esc c │ │ ⏎ open │ P pus │ │ ↑/↓ mo │ ? hel │
 │ / filt │       │ │ f fetc │ S sta │ │ s sort │ q qui │
 │ ────────────── │ │ p pull │       │ │ ────────────── │
 │ Space mark rep │ │ ────────────── │ │ d dirty-only   │
 │                │ │ ! run command  │ │ Tab standup    │
-╰────────────────╯ ╰ legacy-billing ╯ ╰────────────────╯
+╰────────────────╯ ╰────────────────╯ ╰────────────────╯
