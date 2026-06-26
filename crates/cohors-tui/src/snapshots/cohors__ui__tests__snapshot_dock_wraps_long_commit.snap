@@ -12,7 +12,7 @@ expression: "render_to_string(&app, 100, 34)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo              Branch         Sync  Changes  Stash  PRs    CI     Last  Status             │
-│▌   load-tester       main           ↑1    ✓        ✓      local  local    1w  ↑1 unpushed · aging│
+│▌   load-tester       main           ↑1    0        0      local  local    1w  ↑1 unpushed · aging│
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

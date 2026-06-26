@@ -14,9 +14,9 @@ expression: "render_to_string(&app, 100, 34)"
 │    Repo              Branch         Sync   Changes  Stash  PRs    CI       Last  Status          │
 │▌   legacy-billing    error                                                       could not read …│
 │    payments          main           ↑2     4        1      2      passing    2h  ↑2 unpushed     │
-│    web-app           feat/checkout  ⠋      7        ✓      ✓      failing   20m  ↓5 behind — pull│
-│    infra             @a1b2c3d       local  4        ✓      local  local      1w  4 uncommitted c…│
-│    auth-service      main           ⠋      ✓        ✓      1      pending    3d  up to date      │
+│    web-app           feat/checkout  ⠋      7        0      0      failing   20m  ↓5 behind — pull│
+│    infra             @a1b2c3d       local  4        0      local  local      1w  4 uncommitted c…│
+│    auth-service      main           ⠋      0        0      1      pending    3d  up to date      │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

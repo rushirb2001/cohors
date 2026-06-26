@@ -15,8 +15,8 @@ expression: "render_to_string(&app, 100, 22)"
 │▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │d not read …│
 │    payments│ ▌ :!<cmd>                  │ run any shell command across the targets  │npushed     │
 │    web-app ╰────────────────────────────────────────────────────────────────────────╯ehind — pull│
-│    infra             @a1b2c3d       local  4        ✓      local  local      1w  4 uncommitted c…│
-│    auth-service      main           local  ✓        ✓      1      pending    3d  up to date      │
+│    infra             @a1b2c3d       local  4        0      local  local      1w  4 uncommitted c…│
+│    auth-service      main           local  0        0      1      pending    3d  up to date      │
 │ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                  │
 │ ⚠ could not read .git (permission denied)                                                        │
