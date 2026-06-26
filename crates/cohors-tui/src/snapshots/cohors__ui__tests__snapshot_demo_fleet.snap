@@ -16,12 +16,12 @@ expression: "render_to_string(&app, 100, 26)"
 │    mobile-app        release/2.0    ↑4 ↓1 ● 3pr  4         9h  feat: biometric unlock            │
 │    payments          main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from pro…│
 │    analytics         main           ↑1 ●         0 s2      4d  perf: precompute funnel rollups   │
-│    design-system     main           ↑1 ● 1pr     0 s1      6h  feat: dark-mode tokens            │
-│                                             ↓ 7 more                                             │
+│                                             ↓ 8 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭───────────────────────────────╮ ╭──────────────────────────────╮ ╭───────────────────────────────╮
-│ select                        │ │ act                          │ │ view                          │
+│            select             │ │              act             │ │             view              │
+│ ───────────────────────────── │ │ ──────────────────────────── │ │ ───────────────────────────── │
 │ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
 │ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │
 │ ───────────────────────────── │ │ p pull        │              │ │ ───────────────────────────── │
