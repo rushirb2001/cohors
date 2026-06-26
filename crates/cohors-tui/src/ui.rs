@@ -387,8 +387,9 @@ fn footer_partition<'a>(items: &'a [(&'a str, &'a str)]) -> (Vec<Hint<'a>>, Vec<
         .partition(|(k, d)| footer_item_w(k, d) <= FOOTER_GRID_MAX)
 }
 
-/// A group box's content height: the two-column grid rows, the full-width long
-/// rows, and a 1-row horizontal divider between them when both are present.
+/// A group box's content height: the in-box title row, the two-column grid rows,
+/// the full-width long rows, and a 1-row horizontal divider between them when both
+/// are present.
 fn footer_group_rows(items: &[(&str, &str)]) -> u16 {
     let (short, long) = footer_partition(items);
     let hr = if !short.is_empty() && !long.is_empty() {
@@ -396,7 +397,7 @@ fn footer_group_rows(items: &[(&str, &str)]) -> u16 {
     } else {
         0
     };
-    (short.len().div_ceil(2) + hr + long.len()) as u16
+    (1 + short.len().div_ceil(2) + hr + long.len()) as u16
 }
 
 /// The footer's total height (including borders). In Normal mode it's the three
@@ -506,8 +507,7 @@ fn render_group_box(
     let mut block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
-        .padding(Padding::horizontal(1))
-        .title(Span::styled(format!(" {label} "), theme.dim()));
+        .padding(Padding::horizontal(1));
     if label == "act"
         && let Some((_, target)) = action_target_hint(app)
     {
@@ -515,8 +515,19 @@ fn render_group_box(
             Line::from(Span::styled(format!(" → {target} "), theme.highlight())).right_aligned(),
         );
     }
-    let inner = block.inner(area);
+    let outer_inner = block.inner(area);
     frame.render_widget(block, area);
+
+    // The group title lives *inside* the box now (a header row), not on the border.
+    let [title_area, inner] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(outer_inner);
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            label.to_string(),
+            theme.dim().add_modifier(Modifier::BOLD),
+        ))),
+        title_area,
+    );
 
     let key_style = theme.ahead().add_modifier(Modifier::BOLD);
     let hint = |key: &str, desc: &str| {

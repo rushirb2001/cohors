@@ -8,10 +8,10 @@ expression: "render_to_string(&app, 60, 16)"
 │ ▀▐▖▀█▀▗▌▀                                                │
 ╰──────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────╮
-│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadab │
 ╰──────────────────────────────────────────────────────────╯
 ────────────────── press h to hide hints ───────────────────
-╭ select ─────────╮ ╭ act ─────────────╮ ╭ view ───────────╮
+╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮
+│ select          │ │ act              │ │ view            │
 │ a mark │ Esc cl │ │ ⏎ open  │ P push │ │ ↑/↓ mo │ ? help │
 │ / filt │        │ │ f fetch │ S stas │ │ s sort │ q quit │
 │ ─────────────── │ │ p pull  │        │ │ ─────────────── │

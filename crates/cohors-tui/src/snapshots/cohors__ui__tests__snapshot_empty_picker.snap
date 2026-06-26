@@ -7,9 +7,9 @@ expression: "render_to_string(&app, 100, 14)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config cfg                                 │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active —                                   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-                                   No git repos under: ~/projects                                   
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭ select ───────────────────────╮ ╭ act ─────────────────────────╮ ╭ view ─────────────────────────╮
+╭───────────────────────────────╮ ╭──────────────────────────────╮ ╭───────────────────────────────╮
+│ select                        │ │ act                          │ │ view                          │
 │ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
 │ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │
 │ ───────────────────────────── │ │ p pull        │              │ │ ───────────────────────────── │

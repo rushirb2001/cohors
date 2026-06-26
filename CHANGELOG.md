@@ -21,6 +21,11 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **TUI footer group titles (`select` / `act` / `view`) moved inside their boxes.**
+  They render as a header row at the top of each box instead of sitting on the
+  border; the box top is now a clean rounded edge. The `act` box's live
+  action-target (`→ <repo>`) still sits on its bottom edge.
+
 - **The TUI's empty states now read as real values, not bare `·`/`—`.** Each
   column shows a meaningful state in its natural form: count columns are numeric
   (Changes / Stash / PRs show a dim **0** when empty), and relationship columns
