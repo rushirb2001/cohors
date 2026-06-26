@@ -11,12 +11,12 @@ expression: "render_to_string(&app, 100, 22)"
 │ 1 unpushed ╭ Command ───────────────────────────────────────────────────────────────╮            │
 ╰────────────│ : sort name▏                                                           │────────────╯
 ╭ Repositorie│ ────────────────────────────────────────────────────────────────────── │────────────╮
-│    Repo    │ :fetch :pull :push         │ sync the targets with their remotes       │            │
-│▌   legacy-b│ :!<cmd>                    │ run any shell command across the targets  │ot read .gi…│
-│    payments│ :sort <name·dirty·recent>  │ change the sort order                     │shed        │
-│    web-app │ :dirty   /<text>           │ dirty-only · fuzzy filter                 │nd — pull   │
-│    infra   │ :jump <repo>               │ move the cursor to a repo                 │mitted chan…│
-│    auth-ser│ :standup :refresh :quit    │ standup · rescan · exit                   │            │
+│    Repo    │ :fetch :pull :push         │ sync the targets with their remotes       │us          │
+│▌   legacy-b│ :!<cmd>                    │ run any shell command across the targets  │d not read …│
+│    payments│ :sort <name·dirty·recent>  │ change the sort order                     │npushed     │
+│    web-app │ :dirty   /<text>           │ dirty-only · fuzzy filter                 │ehind — pull│
+│    infra   │ :jump <repo>               │ move the cursor to a repo                 │committed c…│
+│    auth-ser│ :standup :refresh :quit    │ standup · rescan · exit                   │o date      │
 │ legacy-bill╰────────────────────────────────────────────────────────────────────────╯full detail │
 │                                                                                                  │
 │ ⚠ could not read .git (permission denied)                                                        │

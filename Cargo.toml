@@ -16,7 +16,7 @@ exclude = ["crates/cohors-web"]
 # Shared package metadata. Each crate inherits these with `field.workspace = true`
 # so version/edition/license stay consistent across the workspace.
 [workspace.package]
-version = "0.4.27"
+version = "0.4.28"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"

@@ -11,7 +11,7 @@ expression: "render_to_string(&app, 100, 20)"
 ╭ Repositories (2) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo              Branch         Sync      Changes  Last commit                               │
 │▌   payments          main           ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                    │
-│    legacy-billing    error          ·         ·        could not read .git (permission denied)   │
+│    legacy-billing    error                             could not read .git (permission denied)   │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

@@ -11,12 +11,12 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync  Changes  Stash  PRs  CI       Last  Status             │
-│▌   legacy-billing    error          ·     ·        ·      ·    ·        ·     could not read .gi…│
-│    payments          main           ↑2    4        1      2    passing    2h  ↑2 unpushed        │
-│    web-app           feat/checkout  ↓5    7        ·      ·    failing   20m  ↓5 behind — pull   │
-│    infra             @a1b2c3d       —     4        ·      —    —          1w  4 uncommitted chan…│
-│    auth-service      main           —     ·        ·      1    pending    3d  ·                  │
+│    Repo              Branch         Sync   Changes  Stash  PRs    CI       Last  Status          │
+│▌   legacy-billing    error                                                       could not read …│
+│    payments          main           ↑2     4        1      2      passing    2h  ↑2 unpushed     │
+│    web-app           feat/checkout  ↓5     7        ✓      ✓      failing   20m  ↓5 behind — pull│
+│    infra             @a1b2c3d       local  4        ✓      local  local      1w  4 uncommitted c…│
+│    auth-service      main           local  ✓        ✓      1      pending    3d  up to date      │
 │ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                  │
 │ ⚠ could not read .git (permission denied)                                                        │

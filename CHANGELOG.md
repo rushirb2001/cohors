@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **The TUI's empty states now read like the web's, not bare `·`/`—`.** Each
+  column shows a meaningful, terminal-tasteful state instead of an ambiguous dot:
+  a dim **✓** where a dimension is clear (in sync, no changes, no stashes, no open
+  PRs), **local** where there's no upstream/remote, **no CI** where a remote has
+  no checks, and **up to date** in the Status column when nothing needs you.
+  Error rows leave the data cells blank (the reason carries the row). Real signals
+  (counts, `passing`/`failing`, ↑/↓ arrows) still pop; the clear states recede.
+  Matches the web vocabulary while staying compact for the terminal.
+
 - **Leaner builds and smaller artifacts (optimization pass).** Tuned the build
   profiles: release now uses `lto = true`, `codegen-units = 1`, and `strip = true`
   (keeping unwinding panics so the TUI's terminal-restore hook still works), which

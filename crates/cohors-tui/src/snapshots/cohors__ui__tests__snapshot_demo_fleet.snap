@@ -12,11 +12,11 @@ expression: "render_to_string(&app, 100, 26)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
 │    Repo              Branch         Sync         Changes  Last commit                            │
-│▌   legacy-billing    error          ·            ·        could not read .git (permission denied)│
+│▌   legacy-billing    error                                could not read .git (permission denied)│
 │    mobile-app        release/2.0    ↑4 ↓1 ● 3pr  4         9h  feat: biometric unlock            │
 │    payments          main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from pro…│
-│    analytics         main           ↑1 ●         · s2      4d  perf: precompute funnel rollups   │
-│    design-system     main           ↑1 ● 1pr     · s1      6h  feat: dark-mode tokens            │
+│    analytics         main           ↑1 ●         ✓ s2      4d  perf: precompute funnel rollups   │
+│    design-system     main           ↑1 ● 1pr     ✓ s1      6h  feat: dark-mode tokens            │
 │    web-app           feat/checkout  ↓5 ● 1pr     7        20m  wip: cart drawer animation        │
 │                                             ↓ 6 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

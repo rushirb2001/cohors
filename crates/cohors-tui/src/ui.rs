@@ -1619,10 +1619,11 @@ fn repo_row<'a>(
 ) -> Row<'a> {
     if let Some(reason) = &snap.error {
         // A broken repo: a red name + an "error" marker, the reason in the wide
-        // trailing column. The data columns get a dim "·" (no data to report);
-        // they must be non-empty or the table collapses them and misaligns. The
-        // leading "  " keeps the name aligned with the selection gutter.
-        let dot = || Cell::from(Span::styled("·", theme.dim()));
+        // trailing column. The data columns are genuinely unknowable, so they're
+        // left blank (a single space keeps the cell non-empty so the table doesn't
+        // collapse/misalign). The leading "  " keeps the name aligned with the
+        // selection gutter.
+        let blank = || Cell::from(Span::raw(" "));
         let name = Cell::from(Line::from(vec![
             Span::raw("  "),
             Span::styled(snap.name.clone(), theme.error()),
@@ -1633,20 +1634,20 @@ fn repo_row<'a>(
             Row::new(vec![
                 name,
                 err,
-                dot(), // Sync
-                dot(), // Changes
-                dot(), // Stash
-                dot(), // PRs
-                dot(), // CI
-                dot(), // Last
+                blank(), // Sync
+                blank(), // Changes
+                blank(), // Stash
+                blank(), // PRs
+                blank(), // CI
+                blank(), // Last
                 status,
             ])
         } else {
             Row::new(vec![
                 name,
                 err,
-                dot(),
-                dot(),
+                blank(),
+                blank(),
                 Cell::from(Span::styled(reason.clone(), theme.dim())),
             ])
         };
@@ -1701,24 +1702,24 @@ fn age_cell<'a>(snap: &RepoSnapshot, now: i64, age_w: usize, theme: &Theme) -> C
 
 /// The "Status" column: the repo's primary attention reason, colored by severity
 /// — the same signal that drives the dirty-first sort, made visible per row. A
-/// dim "·" when the repo wants nothing.
+/// dim "up to date" when the repo wants nothing (rather than a bare dot).
 fn reason_cell<'a>(primary: Option<&AttentionReason>, max: usize, theme: &Theme) -> Cell<'a> {
     match primary {
         Some(r) => Cell::from(Span::styled(
             ellipsize(&r.label(), max),
             severity_style(r.severity(), theme),
         )),
-        None => Cell::from(Span::styled("·", theme.dim())),
+        None => Cell::from(Span::styled(ellipsize("up to date", max), theme.dim())),
     }
 }
 
-/// The "Sync" column (dock layout): ahead/behind arrows only — `↑2 ↓5`, `↑2`,
-/// `↓5`, `·` (even with upstream), or `—` (no upstream). The remote PR/CI signal
-/// moved to its own columns.
+/// The "Sync" column (dock layout): ahead/behind arrows — `↑2 ↓5`, `↑2`, `↓5` — a
+/// dim "✓" when even with upstream, "local" when there's no upstream. The remote
+/// PR/CI signal moved to its own columns.
 fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.upstream {
-        None => vec![Span::styled("—", theme.dim())],
-        Some(up) if up.ahead == 0 && up.behind == 0 => vec![Span::styled("·", theme.dim())],
+        None => vec![Span::styled("local", theme.dim())],
+        Some(up) if up.ahead == 0 && up.behind == 0 => vec![Span::styled("✓", theme.dim())],
         Some(up) => {
             let mut spans = Vec::new();
             if up.ahead > 0 {
@@ -1736,13 +1737,13 @@ fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> 
 }
 
 /// The "Changes" column (dock layout): the changed-file count, colored (green
-/// when fully staged, yellow when there's unstaged work); `·` when clean. The
-/// stash moved to its own column.
+/// when fully staged, yellow when there's unstaged work); a dim "✓" when clean.
+/// The stash moved to its own column.
 fn changed_count_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     let w = &snap.worktree;
     let total = w.staged + w.modified + w.untracked;
     if total == 0 {
-        vec![Span::styled("·", theme.dim())]
+        vec![Span::styled("✓", theme.dim())]
     } else {
         let style = if w.modified > 0 || w.untracked > 0 {
             theme.modified()
@@ -1753,36 +1754,37 @@ fn changed_count_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>>
     }
 }
 
-/// The "Stash" column (dock layout): the stash count, or `·` when there are none.
+/// The "Stash" column (dock layout): the stash count, or a dim "✓" when there are
+/// none.
 fn stash_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     if snap.stash_count > 0 {
         vec![Span::styled(snap.stash_count.to_string(), theme.warn())]
     } else {
-        vec![Span::styled("·", theme.dim())]
+        vec![Span::styled("✓", theme.dim())]
     }
 }
 
-/// The "PRs" column (dock layout): open pull-request count — `·` on a remote with
-/// none, `—` when the repo isn't on a remote.
+/// The "PRs" column (dock layout): open pull-request count — a dim "✓" on a remote
+/// with none, "local" when the repo isn't on a remote.
 fn prs_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.remote {
-        None => vec![Span::styled("—", theme.dim())],
-        Some(r) if r.open_prs == 0 => vec![Span::styled("·", theme.dim())],
+        None => vec![Span::styled("local", theme.dim())],
+        Some(r) if r.open_prs == 0 => vec![Span::styled("✓", theme.dim())],
         Some(r) => vec![Span::styled(r.open_prs.to_string(), theme.ahead())],
     }
 }
 
 /// The "CI" column (dock layout): the check status spelled out and colored;
-/// `—` when the repo isn't on a remote, `·` when it is but has no CI signal.
+/// "local" when the repo isn't on a remote, "no CI" when it is but has no checks.
 fn ci_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.remote {
-        None => vec![Span::styled("—", theme.dim())],
+        None => vec![Span::styled("local", theme.dim())],
         Some(r) => {
             let (label, style) = match r.ci {
                 CiStatus::Passing => ("passing", theme.ok()),
                 CiStatus::Failing => ("failing", theme.risk()),
                 CiStatus::Pending => ("pending", theme.warn()),
-                CiStatus::None => ("·", theme.dim()),
+                CiStatus::None => ("no CI", theme.dim()),
             };
             vec![Span::styled(label, style)]
         }
@@ -1899,7 +1901,7 @@ fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
         None => Vec::new(),
         Some(up) if up.ahead == 0 && up.behind == 0 => {
             if remote.is_empty() {
-                vec![Span::styled("·", theme.dim())]
+                vec![Span::styled("✓", theme.dim())]
             } else {
                 Vec::new()
             }
@@ -1919,21 +1921,22 @@ fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
         }
     };
 
-    // Join the two sub-parts with a space; fall back to "—" when both are empty.
+    // Join the two sub-parts with a space; fall back to "local" (no upstream and
+    // no remote, i.e. a purely local repo) when both are empty.
     let mut spans = upstream;
     if !spans.is_empty() && !remote.is_empty() {
         spans.push(Span::raw(" "));
     }
     spans.extend(remote);
     if spans.is_empty() {
-        spans.push(Span::styled("—", theme.dim()));
+        spans.push(Span::styled("local", theme.dim()));
     }
     spans
 }
 
 /// The Changes column: changed-file count (green when all staged, yellow when
 /// there's unstaged work), plus the stash folded in as a dim `s{n}` when there
-/// are stashes. "·" when the tree is clean and nothing is stashed.
+/// are stashes. A dim "✓" when the tree is clean and nothing is stashed.
 fn changes_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     Cell::from(Line::from(changes_spans(snap, theme)))
 }
@@ -1945,7 +1948,7 @@ fn changes_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     let total = w.staged + w.modified + w.untracked;
     let mut spans: Vec<Span> = Vec::new();
     if total == 0 {
-        spans.push(Span::styled("·", theme.dim()));
+        spans.push(Span::styled("✓", theme.dim()));
     } else {
         let style = if w.modified > 0 || w.untracked > 0 {
             theme.modified()
