@@ -1228,6 +1228,8 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         summary_max,
         reason_max,
         age_w,
+        // ~400ms on / ~400ms off at the 100ms tick cadence.
+        blink_on: (app.spinner / 4).is_multiple_of(2),
     };
     let spin = spinner_frame(app.spinner);
     let rows: Vec<Row> = view
@@ -1631,6 +1633,10 @@ struct RowFmt {
     reason_max: usize,
     /// Width of the age column, for right-aligning the age (the dock layout).
     age_w: u16,
+    /// Blink phase for the "synced" dot: on this frame the green `●` shows; off,
+    /// it's blank. Toggled from the animation tick so the dot blinks (terminals
+    /// ignore the ANSI blink attribute, so we animate it ourselves).
+    blink_on: bool,
 }
 
 fn repo_row<'a>(
@@ -1683,10 +1689,16 @@ fn repo_row<'a>(
     let name = name_cell(&snap.name, highlights, severity, marked, theme);
     let branch = branch_cell(snap, severity, theme);
 
+    // The "synced" state (even with upstream) renders as a blinking green dot: on
+    // the off phase of the blink it's blank. (The remote CI dot in the non-dock
+    // layout is a separate `●` and never blinks.)
+    let synced = matches!(&snap.upstream, Some(u) if u.ahead == 0 && u.behind == 0);
+
     if fmt.dock {
         // While an action runs, the Sync cell shows a spinner instead.
         let sync = match busy {
             Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
+            None if synced && !fmt.blink_on => Cell::from(Span::raw(" ")),
             None => Cell::from(Line::from(ahead_behind_spans(snap, theme))),
         };
         Row::new(vec![
@@ -1703,6 +1715,7 @@ fn repo_row<'a>(
     } else {
         let sync = match busy {
             Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
+            None if synced && snap.remote.is_none() && !fmt.blink_on => Cell::from(Span::raw(" ")),
             None => sync_cell(snap, theme),
         };
         Row::new(vec![
@@ -1744,12 +1757,7 @@ fn reason_cell<'a>(primary: Option<&AttentionReason>, max: usize, theme: &Theme)
 fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.upstream {
         None => vec![Span::styled("local", theme.dim())],
-        Some(up) if up.ahead == 0 && up.behind == 0 => {
-            vec![Span::styled(
-                "●",
-                theme.ok().add_modifier(Modifier::SLOW_BLINK),
-            )]
-        }
+        Some(up) if up.ahead == 0 && up.behind == 0 => vec![Span::styled("●", theme.ok())],
         Some(up) => {
             let mut spans = Vec::new();
             if up.ahead > 0 {
@@ -1931,10 +1939,7 @@ fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
         None => Vec::new(),
         Some(up) if up.ahead == 0 && up.behind == 0 => {
             if remote.is_empty() {
-                vec![Span::styled(
-                    "●",
-                    theme.ok().add_modifier(Modifier::SLOW_BLINK),
-                )]
+                vec![Span::styled("●", theme.ok())]
             } else {
                 Vec::new()
             }

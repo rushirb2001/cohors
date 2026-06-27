@@ -316,8 +316,9 @@ fn run_loop(
                 },
                 _ => {}
             }
-        } else if app.scanning || !app.busy.is_empty() || run_in_progress(&app) {
-            // Timed out with work in flight: animate the spinner.
+        } else {
+            // Timed out: advance the animation tick. Drives the busy spinner and
+            // the blinking "synced" dot, so the dot blinks even when idle.
             app.spinner = app.spinner.wrapping_add(1);
         }
 
