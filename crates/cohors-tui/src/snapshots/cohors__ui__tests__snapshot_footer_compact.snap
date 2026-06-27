@@ -16,7 +16,7 @@ expression: "render_to_string(&app, 56, 22)"
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────
 ╭────────────────╮ ╭────────────────╮ ╭────────────────╮
-│     select     │ │ → legacy-billi │ │      view      │
+│     select     │ │ act  → legacy- │ │      view      │
 │ ────────────── │ │ ────────────── │ │ ────────────── │
 │ a mark │ Esc c │ │ ⏎ open │ P pus │ │ ↑/↓ mo │ ? hel │
 │ / filt │       │ │ f fetc │ S sta │ │ s sort │ q qui │

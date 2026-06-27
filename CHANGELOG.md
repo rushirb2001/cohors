@@ -21,9 +21,9 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
-- **The `act` box's live action-target (`→ <repo>`) moved beside the title.** It
-  now sits on the title row (right-aligned, next to the centered "act") instead of
-  on the box's bottom border, which is now a clean edge.
+- **The `act` box's live action-target (`→ <repo>`) moved beside the title.** The
+  whole `act  → <repo>` unit is centered on the title row, instead of the target
+  sitting on the box's bottom border (now a clean edge).
 - **Fast local reinstall: `scripts/dev-install.sh`.** The release profile's LTO +
   `codegen-units = 1` make `cargo install` take ~1-2 min (great for the shipped
   binary, overkill for iterating). The script builds the **dev** profile

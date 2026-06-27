@@ -519,28 +519,22 @@ fn render_group_box(
         Constraint::Min(0),
     ])
     .areas(outer_inner);
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            label.to_string(),
-            theme.dim().add_modifier(Modifier::BOLD),
-        )))
-        .alignment(Alignment::Center),
-        title_area,
-    );
-    // The "act" box shows its live action-target beside the title (same header
-    // row, right-aligned) rather than on the bottom border.
+    // The "act" box shows its live action-target beside the title — the whole
+    // "act  → <repo>" unit is centered (not on the bottom border).
+    let mut title_spans = vec![Span::styled(
+        label.to_string(),
+        theme.dim().add_modifier(Modifier::BOLD),
+    )];
     if label == "act"
         && let Some((_, target)) = action_target_hint(app)
     {
-        frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                format!("→ {target}"),
-                theme.highlight(),
-            )))
-            .alignment(Alignment::Right),
-            title_area,
-        );
+        title_spans.push(Span::raw("  "));
+        title_spans.push(Span::styled(format!("→ {target}"), theme.highlight()));
     }
+    frame.render_widget(
+        Paragraph::new(Line::from(title_spans)).alignment(Alignment::Center),
+        title_area,
+    );
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
             "─".repeat(rule_area.width as usize),
