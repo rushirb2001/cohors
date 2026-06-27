@@ -4,7 +4,7 @@
 
 **A governed control plane for all your git repositories — for you, and your coding agent.**
 
-Coding agents made single-repo work cheap. The bottleneck moved to the *fleet*: an agent is blind across your 20 repos — it can't see which need attention, can't find which ones call `X`, and can't safely act across them. cohors is the fix — one fast view of every repo, a search that indexes the whole fleet, and bulk actions an agent can preview before you ever grant write access. Over MCP, in the terminal, and (soon) the browser. One Rust core.
+Coding agents made single-repo work cheap. The bottleneck moved to the *fleet*: an agent is blind across your 20 repos — it can't see which need attention, can't find which ones call `X`, and can't safely act across them. cohors is the fix — one fast view of every repo, a search that indexes the whole fleet, and bulk actions an agent can preview before you ever grant write access. Over MCP, in the terminal, and in the browser. One Rust core.
 
 <sub><i>cohors</i> — Latin for "cohort," a Roman legion's core unit. Every repository, marshalled into one cohort under your command.</sub>
 
@@ -64,6 +64,10 @@ cohors demo
 - **Remote-aware** — open pull-request counts, CI status, and ahead/behind vs upstream, inline.
 - **Weekly standup** — every commit you made this week, across every repo, in one view.
 
+## For your team: the same fleet in the browser
+
+`cohors web --root ~/code` serves that **same scan** in the browser — local status (worktree, ahead/behind, stash, *why each repo needs you*) plus remote CI/PRs, rendered through the **same core** the TUI and MCP use, so all three surfaces agree by construction. The GitHub token stays on your machine; the page never sees it. `--watch` keeps it live. (A hosted, shareable read-only dashboard is on the roadmap.)
+
 ## Install
 
 Requires [Rust](https://rustup.rs) and `git` on your `PATH`.
@@ -85,6 +89,7 @@ cohors init            # detect your repos → ~/.config/cohors/config.toml
 cohors scan            # print repository snapshots as JSON (scriptable)
 cohors scan --select dirty           # filter — e.g. dirty, behind, 'name:pay*', or raw JSON
 cohors mcp             # run the MCP server (read-only; --allow-writes / --allow-run to arm)
+cohors web --root ~/code   # serve the same fleet in the browser (--watch for live)
 ```
 
 Inside the dashboard: `↑`/`↓` move · `Enter` inspect · `/` fuzzy filter · `Space` mark · `f`/`p`/`S` fetch/pull/stash · `!` run a command · `Tab` weekly standup · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked.
@@ -103,11 +108,12 @@ Inside the dashboard: `↑`/`↓` move · `Enter` inspect · `/` fuzzy filter ·
 
 ## How it's built
 
-A Rust workspace around a pure, I/O-free core with thin adapters — so the *same* analysis powers the terminal, the agent, and (soon) the browser:
+A Rust workspace around a pure, I/O-free core with thin adapters — so the *same* analysis powers the terminal, the agent, and the browser:
 
 - `cohors-core` — pure, WASM-safe models and analysis: attention scoring, the selector language, search.
 - `cohors-config` · `cohors-git` ([gitoxide](https://github.com/GitoxideLabs/gitoxide)) · `cohors-github` — config, local git, and GitHub adapters.
-- `cohors-tui` ([ratatui](https://ratatui.rs)) — the `cohors` binary: dashboard, CLI, and MCP server.
+- `cohors-tui` ([ratatui](https://ratatui.rs)) — the `cohors` binary: dashboard, CLI, MCP server, and the `cohors web` server.
+- `cohors-web` ([Leptos](https://leptos.dev), WASM) — the browser front-end: `cohors-core` compiled to WebAssembly, rendering the same fleet the server scans.
 
 Because the core is independent of its data sources and front-ends, one selector language and one analysis serve every surface.
 
