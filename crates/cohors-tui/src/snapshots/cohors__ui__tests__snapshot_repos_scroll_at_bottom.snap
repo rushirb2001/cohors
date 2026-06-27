@@ -17,6 +17,6 @@ expression: "render_to_string(&app, 100, 18)"
 │    infra             @a1b2c3d       local        4         1w  build: pin terraform provider ver…│
 │    cli-tools         main           ●            1        12h  docs: add shell-completion instal…│
 │    auth-service      main           ●            0         3d  chore: bump jsonwebtoken to 9.3   │
-│▌   marketing-site    main           synced       0        1mo  content: Q2 launch landing page   │
+│▌   marketing-site    main           ●            0        1mo  content: Q2 launch landing page   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

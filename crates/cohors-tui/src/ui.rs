@@ -1739,12 +1739,17 @@ fn reason_cell<'a>(primary: Option<&AttentionReason>, max: usize, theme: &Theme)
 }
 
 /// The "Sync" column (dock layout): ahead/behind arrows — `↑2 ↓5`, `↑2`, `↓5` — a
-/// dim "synced" when even with upstream, "local" when there's no upstream. The
-/// remote PR/CI signal moved to its own columns.
+/// blinking green `●` when in sync with upstream, "local" when there's no
+/// upstream. The remote PR/CI signal moved to its own columns.
 fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.upstream {
         None => vec![Span::styled("local", theme.dim())],
-        Some(up) if up.ahead == 0 && up.behind == 0 => vec![Span::styled("synced", theme.dim())],
+        Some(up) if up.ahead == 0 && up.behind == 0 => {
+            vec![Span::styled(
+                "●",
+                theme.ok().add_modifier(Modifier::SLOW_BLINK),
+            )]
+        }
         Some(up) => {
             let mut spans = Vec::new();
             if up.ahead > 0 {
@@ -1926,7 +1931,10 @@ fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
         None => Vec::new(),
         Some(up) if up.ahead == 0 && up.behind == 0 => {
             if remote.is_empty() {
-                vec![Span::styled("synced", theme.dim())]
+                vec![Span::styled(
+                    "●",
+                    theme.ok().add_modifier(Modifier::SLOW_BLINK),
+                )]
             } else {
                 Vec::new()
             }

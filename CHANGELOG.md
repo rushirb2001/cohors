@@ -21,6 +21,11 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **TUI Sync "synced" state is now a blinking green `●`** instead of the word
+  "synced" (via the terminal `SLOW_BLINK` attribute; terminals that don't blink
+  show a static green dot). The ahead/behind arrows, `local`, and the web's green
+  cloud are unchanged.
+
 - **The `act` box's live action-target (`→ <repo>`) moved beside the title.** The
   whole `act  → <repo>` unit is centered on the title row, instead of the target
   sitting on the box's bottom border (now a clean edge).
