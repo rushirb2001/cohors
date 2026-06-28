@@ -12,6 +12,7 @@
 //!     assumed (most terminals don't ship a Nerd Font).
 
 use cohors_config::IconMode;
+use cohors_core::CiStatus;
 
 /// The resolved rendering tier (no `Auto` — that decision has been made).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -67,6 +68,31 @@ impl Glyphs {
     pub fn blink_synced(&self) -> bool {
         matches!(self.kind, IconKind::Unicode | IconKind::Nerd)
     }
+
+    /// The selection-gutter marker for a repo marked for a bulk action. A filled
+    /// dot in the glyph tiers, an asterisk under Ascii (where `●` may be missing).
+    pub fn marked(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "*",
+            IconKind::Unicode | IconKind::Nerd => "●",
+        }
+    }
+
+    /// The remote CI dot (used in the compact, fused Sync cell). In the glyph
+    /// tiers it's a single `●` whose *colour* says pass/fail/pending — so under
+    /// Ascii (no colour) it becomes a short self-describing letter instead, and an
+    /// empty string when there's no CI signal (the caller then omits it).
+    pub fn ci_dot(&self, ci: CiStatus) -> &'static str {
+        match self.kind {
+            IconKind::Unicode | IconKind::Nerd => "●",
+            IconKind::Ascii => match ci {
+                CiStatus::Passing => "ok",
+                CiStatus::Failing => "x",
+                CiStatus::Pending => "~",
+                CiStatus::None => "",
+            },
+        }
+    }
 }
 
 #[cfg(test)]
@@ -90,5 +116,23 @@ mod tests {
         assert!(Glyphs::resolve(IconMode::Unicode, false).blink_synced());
         assert!(Glyphs::resolve(IconMode::Nerd, false).blink_synced());
         assert!(!Glyphs::resolve(IconMode::Ascii, false).blink_synced());
+    }
+
+    #[test]
+    fn marked_marker_falls_back_to_ascii() {
+        assert_eq!(Glyphs::resolve(IconMode::Unicode, false).marked(), "●");
+        assert_eq!(Glyphs::resolve(IconMode::Ascii, false).marked(), "*");
+    }
+
+    #[test]
+    fn ci_dot_is_a_letter_under_ascii() {
+        let g = Glyphs::resolve(IconMode::Unicode, false);
+        assert_eq!(g.ci_dot(CiStatus::Passing), "●");
+        assert_eq!(g.ci_dot(CiStatus::Failing), "●");
+        let a = Glyphs::resolve(IconMode::Ascii, false);
+        assert_eq!(a.ci_dot(CiStatus::Passing), "ok");
+        assert_eq!(a.ci_dot(CiStatus::Failing), "x");
+        assert_eq!(a.ci_dot(CiStatus::Pending), "~");
+        assert_eq!(a.ci_dot(CiStatus::None), ""); // caller omits it
     }
 }

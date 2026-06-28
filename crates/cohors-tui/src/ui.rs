@@ -1845,10 +1845,11 @@ fn ci_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
 /// green passing, red failing, yellow pending, dim when there's no CI signal —
 /// plus the open-PR count. Empty when the repo isn't on a remote.
 ///
-/// We use `●` (a basic geometric glyph present in every monospace font, colored
-/// via ANSI like the rest of the UI) rather than a cloud emoji: emoji are
-/// double-width, can't be themed/`NO_COLOR`'d, and — as with `☁` (U+2601) — may
-/// have no text glyph in the user's font and render invisibly.
+/// In the glyph tiers it's `●` (a basic geometric glyph present in every monospace
+/// font, colored via ANSI) rather than a cloud emoji — emoji are double-width,
+/// can't be themed/`NO_COLOR`'d, and may render invisibly. Under Ascii the colour
+/// can't carry pass/fail, so the dot becomes a short letter (`ok`/`x`/`~`) via
+/// [`Glyphs::ci_dot`].
 fn remote_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.remote {
         None => Vec::new(),
@@ -1859,9 +1860,14 @@ fn remote_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
                 CiStatus::Pending => theme.warn(),
                 CiStatus::None => theme.dim(),
             };
-            let mut spans = vec![Span::styled("●", style)];
+            let dot = theme.glyphs.ci_dot(r.ci);
+            let mut spans = Vec::new();
+            if !dot.is_empty() {
+                spans.push(Span::styled(dot, style));
+            }
             if r.open_prs > 0 {
-                spans.push(Span::styled(format!(" {}pr", r.open_prs), theme.dim()));
+                let sep = if spans.is_empty() { "" } else { " " };
+                spans.push(Span::styled(format!("{sep}{}pr", r.open_prs), theme.dim()));
             }
             spans
         }
@@ -1890,7 +1896,7 @@ fn name_cell<'a>(
         Severity::Notice => Style::new(),
     };
     let gutter = if marked {
-        Span::styled("● ", theme.ahead())
+        Span::styled(format!("{} ", theme.glyphs.marked()), theme.ahead())
     } else {
         Span::raw("  ")
     };
@@ -2099,9 +2105,11 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         row(vec![s("local", theme.dim())], "no upstream (local only)"),
         row(
             vec![
-                s("●", theme.ok()),
-                s(" ●", theme.risk()),
-                s(" ●", theme.warn()),
+                s(theme.glyphs.ci_dot(CiStatus::Passing), theme.ok()),
+                Span::raw(" "),
+                s(theme.glyphs.ci_dot(CiStatus::Failing), theme.risk()),
+                Span::raw(" "),
+                s(theme.glyphs.ci_dot(CiStatus::Pending), theme.warn()),
             ],
             "CI: pass / fail / pending",
         ),
@@ -2115,7 +2123,10 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         row(vec![s("name", theme.dim())], "row: clean"),
         row(vec![s("name", bold)], "row: needs attention"),
         row(vec![s("name", theme.error())], "row: unreadable (error)"),
-        row(vec![s("●", theme.ahead())], "row: marked for a bulk action"),
+        row(
+            vec![s(theme.glyphs.marked(), theme.ahead())],
+            "row: marked for a bulk action",
+        ),
         Line::from(""),
         head("Navigation"),
         row(key("↑ / ↓"), "move cursor"),
@@ -3345,8 +3356,8 @@ mod tests {
     }
 
     /// ASCII icon mode (also the `NO_COLOR` fallback): the synced state renders as
-    /// a steady "ok" word instead of a colour-only, blinking `●` — the multi-user
-    /// portability path. A single in-sync repo makes the Sync cell unambiguous.
+    /// a steady "ok" word instead of a colour-only, blinking `●`, and a marked repo
+    /// uses a `*` gutter instead of `●` — the multi-user portability path.
     #[test]
     fn snapshot_ascii_synced() {
         let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
@@ -3360,6 +3371,7 @@ mod tests {
             Some((NOW - 3600, "chore: nothing to do")),
             None,
         )]);
+        app.selection.insert(app.repos[0].id.clone()); // marked → `*` gutter
         insta::assert_snapshot!(render_to_string(&app, 100, 34));
     }
 

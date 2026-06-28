@@ -31,6 +31,12 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
+- **All status glyphs are now mode-aware (finishing Phase 0).** The remaining
+  colour-only glyphs route through the icon resolver with ASCII fallbacks: the
+  marked-selection gutter `●` becomes `*`, and the compact Sync cell's remote CI
+  dot (whose *colour* meant pass/fail/pending) becomes a short letter `ok` / `x` /
+  `~` under ASCII/`NO_COLOR` (omitted when there's no CI). The `?`-help legend
+  reflects whichever tier is active. Default (Unicode) rendering is unchanged.
 - **`icons` config + a glyph foundation built for *any* terminal (Phase 0).** A
   new `icons = "auto" | "ascii" | "unicode" | "nerd"` setting (default `auto`)
   routes every status glyph through one resolver: Unicode glyphs by default, an

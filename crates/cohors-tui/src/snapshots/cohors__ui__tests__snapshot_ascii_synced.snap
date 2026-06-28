@@ -12,7 +12,7 @@ expression: "render_to_string(&app, 100, 34)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo           Sync  Changes  Stash  PRs    CI     Last  Status                               │
-│▌   in-sync @main  ok    0        0      local  local    1h  up to date                           │
+│▌ * in-sync @main  ok    0        0      local  local    1h  up to date                           │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
@@ -28,7 +28,7 @@ expression: "render_to_string(&app, 100, 34)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭───────────────────────────────╮ ╭──────────────────────────────╮ ╭───────────────────────────────╮
-│            select             │ │        act  → in-sync        │ │             view              │
+│            select             │ │       act  → 1 selected      │ │             view              │
 │ ───────────────────────────── │ │ ──────────────────────────── │ │ ───────────────────────────── │
 │ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
 │ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │
