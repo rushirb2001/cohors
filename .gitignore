@@ -10,10 +10,11 @@
 /crates/cohors-web/dist
 /crates/cohors-web/pkg
 
-# Editors / OS
+# Editors / OS / local agent state
 .DS_Store
 .idea/
 .vscode/
+.claude/
 *.swp
 
 # cohors runtime artifacts (in case they ever land in-tree during dev)
