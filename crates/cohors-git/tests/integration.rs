@@ -96,7 +96,7 @@ fn clean_repo_snapshot() {
     let tmp = TempDir::new().unwrap();
     init_repo_with_commit(tmp.path(), "README.md", "hi", "init: first commit");
 
-    let snap = snapshot_repo(&repo_ref(tmp.path()));
+    let snap = snapshot_repo(&repo_ref(tmp.path()), COMMIT_TS);
 
     assert!(snap.error.is_none(), "error: {:?}", snap.error);
     assert_eq!(snap.branch, Branch::Named("main".to_string()));
@@ -110,6 +110,22 @@ fn clean_repo_snapshot() {
 }
 
 #[test]
+fn activity_sparkline_buckets_commits_by_week() {
+    let tmp = TempDir::new().unwrap();
+    init_repo_with_commit(tmp.path(), "a.txt", "x", "init");
+    // `now == COMMIT_TS`, so the single fixture commit lands in the current week
+    // (the last bucket); the 11 older weeks are empty.
+    let snap = snapshot_repo(&repo_ref(tmp.path()), COMMIT_TS);
+    assert_eq!(snap.activity.len(), 12, "12 weekly buckets");
+    assert_eq!(*snap.activity.last().unwrap(), 1, "1 commit this week");
+    assert_eq!(
+        snap.activity[..11].iter().map(|&c| c as u32).sum::<u32>(),
+        0,
+        "no commits in the older weeks"
+    );
+}
+
+#[test]
 fn dirty_repo_counts_staged_modified_untracked() {
     let tmp = TempDir::new().unwrap();
     let dir = tmp.path();
@@ -120,7 +136,7 @@ fn dirty_repo_counts_staged_modified_untracked() {
     git(dir, &["add", "staged.txt"]); // staged
     write(dir, "untracked.txt", "u"); // untracked
 
-    let snap = snapshot_repo(&repo_ref(dir));
+    let snap = snapshot_repo(&repo_ref(dir), COMMIT_TS);
 
     assert!(snap.is_dirty());
     assert!(
@@ -146,7 +162,7 @@ fn unborn_repo_has_no_commits() {
     let tmp = TempDir::new().unwrap();
     init_repo(tmp.path());
 
-    let snap = snapshot_repo(&repo_ref(tmp.path()));
+    let snap = snapshot_repo(&repo_ref(tmp.path()), COMMIT_TS);
 
     assert!(snap.error.is_none(), "error: {:?}", snap.error);
     assert_eq!(snap.branch, Branch::Unborn);
@@ -162,7 +178,7 @@ fn detached_head_reports_short_sha() {
     let full_sha = git_output(dir, &["rev-parse", "HEAD"]);
     git(dir, &["checkout", "-q", "--detach", "HEAD"]);
 
-    let snap = snapshot_repo(&repo_ref(dir));
+    let snap = snapshot_repo(&repo_ref(dir), COMMIT_TS);
 
     match snap.branch {
         Branch::Detached(short) => {
@@ -184,7 +200,7 @@ fn stash_is_counted_and_worktree_clean_after() {
     write(dir, "f.txt", "v2");
     git(dir, &["stash"]);
 
-    let snap = snapshot_repo(&repo_ref(dir));
+    let snap = snapshot_repo(&repo_ref(dir), COMMIT_TS);
 
     assert_eq!(snap.stash_count, 1);
     assert!(!snap.is_dirty(), "worktree should be clean after stash");
@@ -214,7 +230,7 @@ fn ahead_of_upstream_counts_commits() {
     git(&work, &["add", "."]);
     git(&work, &["commit", "-q", "-m", "c2"]);
 
-    let snap = snapshot_repo(&repo_ref(&work));
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
 
     let upstream = snap.upstream.expect("has an upstream");
     assert!(
@@ -230,7 +246,7 @@ fn ahead_of_upstream_counts_commits() {
 fn unreadable_repo_becomes_error_snapshot_not_panic() {
     // A path that exists but isn't a git repo → gix open fails → error snapshot.
     let tmp = TempDir::new().unwrap();
-    let snap = snapshot_repo(&repo_ref(tmp.path()));
+    let snap = snapshot_repo(&repo_ref(tmp.path()), COMMIT_TS);
     assert!(snap.has_error());
 }
 

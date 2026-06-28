@@ -19,6 +19,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-repo commit-activity data, walked in parallel (Phase 2, data layer).**
+  Each snapshot now carries `activity`: weekly commit counts for the last 12 weeks
+  (oldest first), the input for an activity sparkline. The walk runs inside the
+  already-parallel scan (`rayon`), so the fleet-wide cost stays negligible — it
+  walks newest-first by commit time and stops as soon as it leaves the window
+  (an inactive repo costs ~one lookup), with a hard cap for huge histories.
+  Measured: a full scan of an 18-repo fleet stayed at ~0.09s. The field is
+  `#[serde(default)]`, so old caches and the web deserialize fine. (The sparkline
+  *rendering* lands next.)
+
 ### Changed
 
 - **TUI: Repo and Branch fused into one `name @branch` column (Phase 1),** matching

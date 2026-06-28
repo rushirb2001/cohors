@@ -209,6 +209,11 @@ pub struct RepoSnapshot {
     /// adapters record the reason here instead of failing the whole scan.
     #[serde(default)]
     pub error: Option<String>,
+    /// Recent commit activity: one count per week, oldest first, ending with the
+    /// current week — for a sparkline. Empty when unknown (old caches, repos read
+    /// without the git2 walk). Counts are capped at `u8::MAX`.
+    #[serde(default)]
+    pub activity: Vec<u8>,
 }
 
 impl RepoSnapshot {
@@ -234,6 +239,7 @@ impl RepoSnapshot {
             remote_url: None,
             remote: None,
             error: Some(error.into()),
+            activity: Vec::new(),
         }
     }
 
@@ -319,6 +325,7 @@ pub(crate) fn sample(
             summary: "msg".to_string(),
         }),
         error: None,
+        activity: Vec::new(),
     }
 }
 

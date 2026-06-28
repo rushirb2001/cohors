@@ -216,7 +216,28 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
             summary: s.summary.to_string(),
         }),
         error: s.error.map(|e| e.to_string()),
+        activity: demo_activity(s.name, s.error.is_some()),
     }
+}
+
+/// A deterministic, varied-looking 12-week commit sparkline for a demo repo, so
+/// the dashboard's activity column has something lively to render. Derived from
+/// the name (clock-free, so snapshots stay stable); unreadable repos get none.
+fn demo_activity(name: &str, errored: bool) -> Vec<u8> {
+    if errored {
+        return Vec::new();
+    }
+    let seed = name
+        .bytes()
+        .fold(0u32, |a, b| a.wrapping_mul(31).wrapping_add(b as u32));
+    (0..12u32)
+        .map(|w| {
+            let x = seed
+                .wrapping_mul(2_654_435_761)
+                .wrapping_add(w.wrapping_mul(40_503));
+            ((x >> 13) % 9) as u8 // 0..=8 commits that week
+        })
+        .collect()
 }
 
 /// Demo commits for the standup view: a week of work across a few repos.

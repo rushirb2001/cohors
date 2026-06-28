@@ -3175,6 +3175,7 @@ mod tests {
                 summary: summary.to_string(),
             }),
             error: error.map(str::to_string),
+            activity: Vec::new(),
         }
     }
 

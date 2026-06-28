@@ -301,6 +301,7 @@ mod tests {
                 summary: "m".into(),
             }),
             error: error.map(str::to_string),
+            activity: Vec::new(),
         }
     }
 

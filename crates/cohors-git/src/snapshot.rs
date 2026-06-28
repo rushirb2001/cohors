@@ -11,9 +11,15 @@ use camino::Utf8Path;
 use cohors_core::{Branch, CommitMeta, RepoRef, RepoSnapshot, Upstream, WorktreeStatus};
 use gix::bstr::{BStr, ByteSlice};
 
+/// How many trailing weeks of commit activity to record for the sparkline.
+const ACTIVITY_WEEKS: usize = 12;
+
 /// Snapshot a single repo. Always returns a snapshot; read failures land in
-/// [`RepoSnapshot::error`].
-pub fn snapshot_repo(repo_ref: &RepoRef) -> RepoSnapshot {
+/// [`RepoSnapshot::error`]. `now` (Unix seconds) buckets the commit-activity
+/// sparkline deterministically. This runs once per repo, in parallel across the
+/// fleet (the provider walks repos with `rayon`), so the per-repo git walks fan
+/// out across cores rather than running serially.
+pub fn snapshot_repo(repo_ref: &RepoRef, now: i64) -> RepoSnapshot {
     let Some(path) = repo_ref.path.clone() else {
         return RepoSnapshot::errored(
             repo_ref.id.clone(),
@@ -42,7 +48,7 @@ pub fn snapshot_repo(repo_ref: &RepoRef) -> RepoSnapshot {
 
     let last_commit = repo.head_commit().ok().and_then(|c| commit_meta(&c));
     let branch = branch_of(&repo, last_commit.as_ref());
-    let extras = git2_extras(&path);
+    let extras = git2_extras(&path, now);
 
     RepoSnapshot {
         id: repo_ref.id.clone(),
@@ -57,6 +63,7 @@ pub fn snapshot_repo(repo_ref: &RepoRef) -> RepoSnapshot {
         remote: None,
         last_commit,
         error: None,
+        activity: extras.activity,
     }
 }
 
@@ -121,10 +128,11 @@ struct Extras {
     stash_count: u32,
     stash_latest: Option<i64>,
     remote_url: Option<String>,
+    activity: Vec<u8>,
 }
 
 #[cfg(feature = "git2-fallback")]
-fn git2_extras(path: &Utf8Path) -> Extras {
+fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
     let mut extras = Extras::default();
     let mut repo = match git2::Repository::open(path.as_std_path()) {
         Ok(repo) => repo,
@@ -136,6 +144,7 @@ fn git2_extras(path: &Utf8Path) -> Extras {
 
     extras.worktree = worktree_status(&repo);
     extras.upstream = upstream_info(&repo);
+    extras.activity = commit_activity(&repo, now);
     // The `origin` URL is local git data; cohors-github resolves it to a repo.
     extras.remote_url = repo
         .find_remote("origin")
@@ -218,8 +227,48 @@ fn upstream_info(repo: &git2::Repository) -> Option<Upstream> {
     })
 }
 
+/// Recent commit activity as weekly counts (oldest first, ending with the current
+/// week) for the sparkline. Walks newest-first by commit time and stops once it
+/// leaves the window, so an inactive repo costs ~one lookup; a hard cap bounds
+/// huge or merge-tangled histories. Best-effort: any failure yields empty.
+#[cfg(feature = "git2-fallback")]
+fn commit_activity(repo: &git2::Repository, now: i64) -> Vec<u8> {
+    const WEEK: i64 = 7 * 24 * 60 * 60;
+    const CAP: usize = 2000;
+    let window_start = now - (ACTIVITY_WEEKS as i64) * WEEK;
+    let mut buckets = vec![0u8; ACTIVITY_WEEKS];
+
+    let Ok(mut walk) = repo.revwalk() else {
+        return buckets;
+    };
+    if walk.push_head().is_err() {
+        return buckets; // unborn HEAD / empty repo
+    }
+    let _ = walk.set_sorting(git2::Sort::TIME); // newest commit first
+
+    for (i, oid) in walk.enumerate() {
+        if i >= CAP {
+            break;
+        }
+        let Ok(oid) = oid else { continue };
+        let Ok(commit) = repo.find_commit(oid) else {
+            continue;
+        };
+        let ts = commit.time().seconds();
+        if ts < window_start {
+            break; // time-sorted newest-first ⇒ everything remaining is older
+        }
+        let weeks_ago = ((now - ts) / WEEK).max(0) as usize;
+        if weeks_ago < ACTIVITY_WEEKS {
+            let idx = ACTIVITY_WEEKS - 1 - weeks_ago; // oldest first, current week last
+            buckets[idx] = buckets[idx].saturating_add(1);
+        }
+    }
+    buckets
+}
+
 #[cfg(not(feature = "git2-fallback"))]
-fn git2_extras(_path: &Utf8Path) -> Extras {
+fn git2_extras(_path: &Utf8Path, _now: i64) -> Extras {
     // Without libgit2 these fields are unavailable; degrade to empty rather than
     // failing. (Migration target: implement via gix — see ADR-004.)
     Extras::default()

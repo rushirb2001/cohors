@@ -979,10 +979,17 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
         let message = match outcome {
             Ok(m) | Err(m) => m,
         };
-        let snapshot = Some(Box::new(cohors_git::snapshot_repo(&RepoRef {
-            id: id.clone(),
-            path: Some(path),
-        })));
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let snapshot = Some(Box::new(cohors_git::snapshot_repo(
+            &RepoRef {
+                id: id.clone(),
+                path: Some(path),
+            },
+            now,
+        )));
         let _ = tx.send(BgMsg::ActionDone {
             id,
             message,

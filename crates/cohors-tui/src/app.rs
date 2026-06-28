@@ -1022,6 +1022,7 @@ mod tests {
                 summary: "msg".to_string(),
             }),
             error: None,
+            activity: Vec::new(),
         }
     }
 
