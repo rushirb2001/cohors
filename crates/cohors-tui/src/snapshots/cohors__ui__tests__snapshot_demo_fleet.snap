@@ -11,11 +11,11 @@ expression: "render_to_string(&app, 100, 26)"
 │ 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync         Changes  Last commit                            │
-│▌   legacy-billing    error                                could not read .git (permission denied)│
-│    mobile-app        release/2.0    ↑4 ↓1 ● 3pr  4         9h  feat: biometric unlock            │
-│    payments          main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from pro…│
-│    analytics         main           ↑1 ●         0 s2      4d  perf: precompute funnel rollups   │
+│    Repo                     Sync         Changes  Last commit                                    │
+│▌   legacy-billing                                                                                │
+│    mobile-app @release/2.0  ↑4 ↓1 ● 3pr  4         9h  feat: biometric unlock                    │
+│    payments @main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from processor   │
+│    analytics @main          ↑1 ●         0 s2      4d  perf: precompute funnel rollups           │
 │                                             ↓ 8 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────

@@ -11,12 +11,12 @@ expression: "render_to_string(&app, 100, 22)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositorie╭ Shell command ─────────────────────────────────────────────────────────╮────────────╮
-│    Repo    │ : !git checkout main▏                                                  │us          │
-│▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │d not read …│
-│    payments│ ▌ :!<cmd>                  │ run any shell command across the targets  │npushed     │
-│    web-app ╰────────────────────────────────────────────────────────────────────────╯ehind — pull│
-│    infra             @a1b2c3d       local  4        0      local  local      1w  4 uncommitted c…│
-│    auth-service      main           local  0        0      1      pending    3d  up to date      │
+│    Repo    │ : !git checkout main▏                                                  │            │
+│▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │d .git (per…│
+│    payments│ ▌ :!<cmd>                  │ run any shell command across the targets  │            │
+│    web-app ╰────────────────────────────────────────────────────────────────────────╯ull         │
+│    infra @a1b2c3d          local  4        0      local  local      1w  4 uncommitted changes    │
+│    auth-service @main      local  0        0      1      pending    3d  up to date               │
 │ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                  │
 │ ⚠ could not read .git (permission denied)                                                        │

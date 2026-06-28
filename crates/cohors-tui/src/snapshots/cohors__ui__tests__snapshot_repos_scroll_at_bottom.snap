@@ -11,12 +11,12 @@ expression: "render_to_string(&app, 100, 18)"
 │ 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync         Changes  Last commit                            │
+│    Repo                     Sync         Changes  Last commit                                    │
 │                                             ↑ 7 more                                             │
-│    experiments       @9f8e7d6       local        7         1y  spike: try wgpu for the renderer  │
-│    infra             @a1b2c3d       local        4         1w  build: pin terraform provider ver…│
-│    cli-tools         main           ●            1        12h  docs: add shell-completion instal…│
-│    auth-service      main           ●            0         3d  chore: bump jsonwebtoken to 9.3   │
-│▌   marketing-site    main           ●            0        1mo  content: Q2 launch landing page   │
+│    experiments @9f8e7d6     local        7         1y  spike: try wgpu for the renderer          │
+│    infra @a1b2c3d           local        4         1w  build: pin terraform provider versions    │
+│    cli-tools @main          ●            1        12h  docs: add shell-completion install notes  │
+│    auth-service @main       ●            0         3d  chore: bump jsonwebtoken to 9.3           │
+│▌   marketing-site @main     ●            0        1mo  content: Q2 launch landing page           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

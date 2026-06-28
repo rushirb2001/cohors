@@ -11,8 +11,8 @@ expression: "render_to_string(&app, 100, 34)"
 │ 1 unpushed (1 aging)                                                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync  Changes  Stash  PRs    CI     Last  Status             │
-│▌   load-tester       main           ↑1    0        0      local  local    1w  ↑1 unpushed · aging│
+│    Repo               Sync  Changes  Stash  PRs    CI     Last  Status                           │
+│▌   load-tester @main  ↑1    0        0      local  local    1w  ↑1 unpushed · aging              │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

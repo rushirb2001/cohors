@@ -12,11 +12,11 @@ expression: "render_to_string(&app, 100, 28)"
 ╰───────│ │  M src/refund.rs                     │ │ c3d4e5f    1d  refactor: extract pro ││───────╯
 ╭ Reposi│ │ ?? notes.md                          │ │ d4e5f60    3d  feat: idempotency key ││───────╮
 │    Rep│ │                                      │ │ e5f6071    4d  chore: bump stripe sd ││       │
-│▌   leg│ │ Branches (3)                         │ │                                      ││ read …│
-│    pay│ │ ● main                               │ │                                      ││ed     │
-│    web│ │   feat/idempotency                   │ │                                      ││ — pull│
-│    inf│ │   spike/webhooks                     │ │                                      ││tted c…│
-│    aut│ │                                      │ │                                      ││e      │
+│▌   leg│ │ Branches (3)                         │ │                                      ││t (per…│
+│    pay│ │ ● main                               │ │                                      ││       │
+│    web│ │   feat/idempotency                   │ │                                      ││       │
+│    inf│ │   spike/webhooks                     │ │                                      ││ges    │
+│    aut│ │                                      │ │                                      ││       │
 │       │ │ Stashes (1)                          │ │                                      ││       │
 │       │ │ WIP on main: dashboard tweaks        │ │                                      ││       │
 │       │ │                                      │ │                                      ││       │

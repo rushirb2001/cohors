@@ -1194,17 +1194,20 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     // edge; its text is ellipsized to that width (computed by mirroring the
     // table's own arithmetic: inner width − the 2-col highlight reserve − the
     // fixed columns − the 2-col gaps between them).
+    // Repo and Branch are fused into one `name @branch` column, sized to its
+    // widest content (gutter + name + branch) within a cap so a long branch can't
+    // run away. This mirrors the web and reclaims a whole column for Status.
+    let repo_w = col_w(repo_spans, 12, 30);
     let (widths, reason_max, summary_max): (Vec<Constraint>, usize, usize) = if dock_visible {
         let sync_w = col_w(ahead_behind_spans, 4, 9);
         let chg_w = col_w(changed_count_spans, 7, 9);
         let stash_w = col_w(stash_spans, 5, 6);
         let prs_w = col_w(prs_spans, 3, 5);
         let ci_w = col_w(ci_spans, 2, 8);
-        let fixed = 2 + 18 + 13 + sync_w + chg_w + stash_w + prs_w + ci_w + age_w;
-        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 8); // 9 cols ⇒ 8 gaps
+        let fixed = 2 + repo_w + sync_w + chg_w + stash_w + prs_w + ci_w + age_w;
+        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 7); // 8 cols ⇒ 7 gaps
         let widths = vec![
-            Constraint::Length(18), // Repo (incl. 2-col selection gutter)
-            Constraint::Length(13), // Branch
+            Constraint::Length(repo_w), // Repo @branch (incl. 2-col gutter)
             Constraint::Length(sync_w),
             Constraint::Length(chg_w),
             Constraint::Length(stash_w),
@@ -1217,11 +1220,10 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     } else {
         let sync_w = col_w(sync_spans, 4, 12);
         let changes_w = col_w(changes_spans, 7, 12);
-        let fixed = 2 + 18 + 13 + sync_w as usize + changes_w as usize;
-        let last_w = (inner.width as usize).saturating_sub(fixed + 2 * 4); // 5 cols ⇒ 4 gaps
+        let fixed = 2 + repo_w as usize + sync_w as usize + changes_w as usize;
+        let last_w = (inner.width as usize).saturating_sub(fixed + 2 * 3); // 4 cols ⇒ 3 gaps
         let widths = vec![
-            Constraint::Length(18),
-            Constraint::Length(13),
+            Constraint::Length(repo_w),
             Constraint::Length(sync_w),
             Constraint::Length(changes_w),
             Constraint::Fill(1), // Last commit (age + message)
@@ -1254,10 +1256,10 @@ fn render_repos_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     // the names' selection gutter.
     let labels: &[&str] = if dock_visible {
         &[
-            "  Repo", "Branch", "Sync", "Changes", "Stash", "PRs", "CI", "Last", "Status",
+            "  Repo", "Sync", "Changes", "Stash", "PRs", "CI", "Last", "Status",
         ]
     } else {
-        &["  Repo", "Branch", "Sync", "Changes", "Last commit"]
+        &["  Repo", "Sync", "Changes", "Last commit"]
     };
     let header_style = Style::new().add_modifier(Modifier::BOLD);
     let [_sym, header_cols] =
@@ -1655,22 +1657,22 @@ fn repo_row<'a>(
     fmt: &RowFmt,
 ) -> Row<'a> {
     if let Some(reason) = &snap.error {
-        // A broken repo: a red name + an "error" marker, the reason in the wide
-        // trailing column. The data columns are genuinely unknowable, so they're
-        // left blank (a single space keeps the cell non-empty so the table doesn't
-        // collapse/misalign). The leading "  " keeps the name aligned with the
-        // selection gutter.
+        // A broken repo: a red name, the reason in the wide trailing Status column.
+        // The data columns are genuinely unknowable, so they're left blank (a
+        // single space keeps the cell non-empty so the table doesn't collapse). The
+        // leading "  " keeps the name aligned with the selection gutter.
         let blank = || Cell::from(Span::raw(" "));
         let name = Cell::from(Line::from(vec![
             Span::raw("  "),
             Span::styled(snap.name.clone(), theme.error()),
         ]));
-        let err = Cell::from(Span::styled("error", theme.risk()));
-        let status = Cell::from(Span::styled(ellipsize(reason, fmt.reason_max), theme.dim()));
+        let status = Cell::from(Span::styled(
+            ellipsize(reason, fmt.reason_max),
+            theme.risk(),
+        ));
         return if fmt.dock {
             Row::new(vec![
                 name,
-                err,
                 blank(), // Sync
                 blank(), // Changes
                 blank(), // Stash
@@ -1680,20 +1682,20 @@ fn repo_row<'a>(
                 status,
             ])
         } else {
-            Row::new(vec![
-                name,
-                err,
-                blank(),
-                blank(),
-                Cell::from(Span::styled(reason.clone(), theme.dim())),
-            ])
+            Row::new(vec![name, blank(), blank(), status])
         };
     }
 
     let assessment = assess(snap, now);
     let severity = assessment.severity;
-    let name = name_cell(&snap.name, highlights, severity, marked, theme);
-    let branch = branch_cell(snap, severity, theme);
+    let name = name_cell(
+        &snap.name,
+        highlights,
+        severity,
+        marked,
+        &snap.branch,
+        theme,
+    );
 
     // The "synced" state (even with upstream): in the glyph tiers it's a blinking
     // green dot (blank on the off phase); under ASCII it's a steady "ok" word that
@@ -1711,7 +1713,6 @@ fn repo_row<'a>(
         };
         Row::new(vec![
             name,
-            branch,
             sync,
             Cell::from(Line::from(changed_count_spans(snap, theme))),
             Cell::from(Line::from(stash_spans(snap, theme))),
@@ -1730,7 +1731,6 @@ fn repo_row<'a>(
         };
         Row::new(vec![
             name,
-            branch,
             sync,
             changes_cell(snap, theme),
             last_commit_cell(snap, now, fmt.summary_max, theme),
@@ -1877,6 +1877,7 @@ fn name_cell<'a>(
     highlights: &[u32],
     severity: Severity,
     marked: bool,
+    branch: &Branch,
     theme: &Theme,
 ) -> Cell<'a> {
     // Red is reserved for genuinely broken repos (the `snap.error` row); a repo
@@ -1908,26 +1909,36 @@ fn name_cell<'a>(
             Span::styled(ch.to_string(), style)
         }));
     }
+    // The branch is fused onto the name (`name @branch`), mirroring the web — a
+    // dim suffix (or magenta for a detached `@sha`), so Repo + Branch share one
+    // tight column.
+    let bstyle = match branch {
+        Branch::Detached(_) => theme.detached(),
+        _ => theme.dim(),
+    };
+    spans.push(Span::styled(branch_suffix(branch), bstyle));
     Cell::from(Line::from(spans))
 }
 
-/// The branch — or a compact `@sha` for detached HEAD / "unborn" for a fresh
-/// repo — ellipsized to the column width.
-fn branch_cell<'a>(snap: &RepoSnapshot, severity: Severity, theme: &Theme) -> Cell<'a> {
-    match &snap.branch {
-        Branch::Detached(id) => {
-            let short: String = id.chars().take(7).collect();
-            Cell::from(Span::styled(format!("@{short}"), theme.detached()))
-        }
-        Branch::Unborn => Cell::from(Span::styled("unborn", theme.dim())),
-        Branch::Named(name) => {
-            let style = match severity {
-                Severity::Ok | Severity::Info => theme.dim(),
-                _ => Style::new(),
-            };
-            Cell::from(Span::styled(ellipsize(name, 13), style))
-        }
+/// The `@branch` suffix appended to the repo name: `@main`, `@a1b2c3d` for a
+/// detached HEAD, or `unborn` for a fresh repo. The branch name is ellipsized so
+/// one long branch can't blow out the fused Repo column.
+fn branch_suffix(branch: &Branch) -> String {
+    match branch {
+        Branch::Named(b) => format!(" @{}", ellipsize(b, 18)),
+        Branch::Detached(id) => format!(" @{}", id.chars().take(7).collect::<String>()),
+        Branch::Unborn => " unborn".to_string(),
     }
+}
+
+/// The styled spans of the fused Repo cell, *without* fuzzy highlights — used only
+/// to size the column to its widest content (see [`col_w`]).
+fn repo_spans(snap: &RepoSnapshot, _theme: &Theme) -> Vec<Span<'static>> {
+    vec![
+        Span::raw("  "),
+        Span::raw(snap.name.clone()),
+        Span::raw(branch_suffix(&snap.branch)),
+    ]
 }
 
 /// The Sync column: the local-vs-upstream state *and* the remote health, fused.

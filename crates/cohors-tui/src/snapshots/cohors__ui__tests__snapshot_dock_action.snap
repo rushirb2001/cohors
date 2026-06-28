@@ -11,12 +11,12 @@ expression: "render_to_string(&app, 100, 34)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync   Changes  Stash  PRs    CI       Last  Status          │
-│▌   legacy-billing    error                                                       could not read …│
-│    payments          main           ↑2     4        1      2      passing    2h  ↑2 unpushed     │
-│    web-app           feat/checkout  ⠋      7        0      0      failing   20m  ↓5 behind — pull│
-│    infra             @a1b2c3d       local  4        0      local  local      1w  4 uncommitted c…│
-│    auth-service      main           ⠋      0        0      1      pending    3d  up to date      │
+│    Repo                    Sync   Changes  Stash  PRs    CI       Last  Status                   │
+│▌   legacy-billing                                                       could not read .git (per…│
+│    payments @main          ↑2     4        1      2      passing    2h  ↑2 unpushed              │
+│    web-app @feat/checkout  ⠋      7        0      0      failing   20m  ↓5 behind — pull         │
+│    infra @a1b2c3d          local  4        0      local  local      1w  4 uncommitted changes    │
+│    auth-service @main      ⠋      0        0      1      pending    3d  up to date               │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

@@ -11,12 +11,12 @@ expression: "render_to_string(&app, 100, 64)"
 │ 1 unpushed · ╭ Help ──────────────────────────────────────────────────────────────╮              │
 ╰──────────────│                                                                    │──────────────╯
 ╭ Repositories │  Legend — what each column shows                                   │──────────────╮
-│    Repo      │    ↑2              commits ahead of upstream                       │atus          │
-│▌   legacy-bil│    ↓5              commits behind upstream                         │uld not read …│
-│    payments  │    ●               in sync with upstream                           │ unpushed     │
-│    web-app   │    local           no upstream (local only)                        │ behind — pull│
-│    infra     │    ● ● ●           CI: pass / fail / pending                       │uncommitted c…│
-│    auth-servi│    2pr             open pull requests                              │ to date      │
+│    Repo      │    ↑2              commits ahead of upstream                       │              │
+│▌   legacy-bil│    ↓5              commits behind upstream                         │ead .git (per…│
+│    payments @│    ●               in sync with upstream                           │              │
+│    web-app @f│    local           no upstream (local only)                        │ pull         │
+│    infra @a1b│    ● ● ●           CI: pass / fail / pending                       │ed changes    │
+│    auth-servi│    2pr             open pull requests                              │              │
 │              │    3               changed files, all staged                       │              │
 │              │    3               changed files, some unstaged                    │              │
 │              │    s1              stash entries                                   │              │

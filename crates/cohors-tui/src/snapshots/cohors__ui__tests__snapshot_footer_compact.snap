@@ -11,7 +11,7 @@ expression: "render_to_string(&app, 56, 22)"
 │ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unre │
 ╰──────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────╮
-│    Repo            Branch         Sync      Changes  │
+│    Repo                    Sync      Changes  Last co│
 │                       ↓ 4 more                       │
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────

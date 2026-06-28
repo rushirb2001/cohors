@@ -19,6 +19,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Changed
+
+- **TUI: Repo and Branch fused into one `name @branch` column (Phase 1),** matching
+  the web and reclaiming a whole column for the Status reason. The branch is a dim
+  suffix (`@main`, magenta `@a1b2c3d` for detached HEAD, `unborn` for a fresh
+  repo), ellipsized so a long branch can't blow out the column; the column
+  auto-sizes to its widest content within a cap. Error rows now show the red name +
+  the reason in Status (the redundant "error" marker is gone). Both the wide (dock)
+  and compact layouts updated.
+
 ### Added
 
 - **`icons` config + a glyph foundation built for *any* terminal (Phase 0).** A

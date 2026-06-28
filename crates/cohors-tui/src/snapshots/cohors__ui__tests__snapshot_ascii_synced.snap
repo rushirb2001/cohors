@@ -11,8 +11,8 @@ expression: "render_to_string(&app, 100, 34)"
 │ All 1 repositories are up to date.                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo              Branch         Sync  Changes  Stash  PRs    CI     Last  Status             │
-│▌   in-sync           main           ok    0        0      local  local    1h  up to date         │
+│    Repo           Sync  Changes  Stash  PRs    CI     Last  Status                               │
+│▌   in-sync @main  ok    0        0      local  local    1h  up to date                           │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

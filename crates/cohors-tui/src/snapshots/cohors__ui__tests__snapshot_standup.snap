@@ -12,11 +12,11 @@ expression: "render_to_string(&app, 100, 22)"
 ╰───────│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │───────╯
 ╭ Reposi│ │ payments  24           │  │ aa00010  feat: payments work item 10            ║│ │───────╮
 │    Rep│ │ web-app  5             │  │ aa00011  feat: payments work item 11            ║│ │       │
-│▌   leg│ │                        │  │ aa00012  feat: payments work item 12            ║│ │ read …│
-│    pay│ │                        │  │ aa00013  feat: payments work item 13            █│ │ed     │
-│    web│ │                        │  │ aa00014  feat: payments work item 14            █│ │ — pull│
-│    inf│ │                        │  │ aa00015  feat: payments work item 15            █│ │tted c…│
-│    aut│ │                        │  │ aa00016  feat: payments work item 16            █│ │e      │
+│▌   leg│ │                        │  │ aa00012  feat: payments work item 12            ║│ │t (per…│
+│    pay│ │                        │  │ aa00013  feat: payments work item 13            █│ │       │
+│    web│ │                        │  │ aa00014  feat: payments work item 14            █│ │       │
+│    inf│ │                        │  │ aa00015  feat: payments work item 15            █│ │ges    │
+│    aut│ │                        │  │ aa00016  feat: payments work item 16            █│ │       │
 │ legacy│ │                        │  │ aa00017  feat: payments work item 17            ║│ │detail │
 │       │ │                        │  │ aa00018  feat: payments work item 18            ║│ │       │
 │ ⚠ coul│ │                        │  │ aa00019  feat: payments work item 19            ║│ │       │
