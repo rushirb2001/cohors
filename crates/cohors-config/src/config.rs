@@ -32,6 +32,23 @@ pub struct Config {
     pub follow_symlinks: bool,
     /// Safety knobs for the MCP server (ADR-025).
     pub mcp: McpConfig,
+    /// How the TUI renders status glyphs (auto / ascii / unicode / nerd).
+    pub icons: IconMode,
+}
+
+/// How the TUI renders status glyphs. The default `auto` picks Unicode glyphs,
+/// but falls back to ASCII when `NO_COLOR` is set (glyph meaning leans on colour,
+/// so a colourless `●` is ambiguous). `nerd` opts into Nerd-Font icons — only
+/// pick it if your terminal actually uses a Nerd Font, since it's never assumed.
+/// `ascii` forces plain-text labels everywhere (maximum portability).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum IconMode {
+    #[default]
+    Auto,
+    Ascii,
+    Unicode,
+    Nerd,
 }
 
 /// MCP server safety settings (the `[mcp]` table).
@@ -69,6 +86,7 @@ impl Default for Config {
             stop_at_repo: true,
             follow_symlinks: false,
             mcp: McpConfig::default(),
+            icons: IconMode::default(),
         }
     }
 }
@@ -93,6 +111,7 @@ struct RawConfig {
     stop_at_repo: Option<bool>,
     follow_symlinks: Option<bool>,
     mcp: Option<RawMcp>,
+    icons: Option<IconMode>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -121,6 +140,7 @@ const KNOWN_KEYS: &[&str] = &[
     "stop_at_repo",
     "follow_symlinks",
     "mcp",
+    "icons",
 ];
 
 impl RawConfig {
@@ -135,6 +155,7 @@ impl RawConfig {
             stop_at_repo: self.stop_at_repo.unwrap_or(d.stop_at_repo),
             follow_symlinks: self.follow_symlinks.unwrap_or(d.follow_symlinks),
             mcp: self.mcp.map(RawMcp::into_config).unwrap_or(d.mcp),
+            icons: self.icons.unwrap_or(d.icons),
         }
     }
 }
@@ -250,6 +271,11 @@ stop_at_repo = true
 # Follow symlinks during discovery (devcontainers/codespaces).
 follow_symlinks = false
 
+# Status glyphs in the dashboard: "auto" (Unicode glyphs, or ASCII when NO_COLOR
+# is set), "ascii" (plain text everywhere), "unicode", or "nerd" (only if your
+# terminal uses a Nerd Font — it's never assumed).
+# icons = "auto"
+
 # Optional pretty names, keyed by absolute path or repo dir name.
 [aliases]
 # "~/work/payments-service" = "payments"
@@ -327,6 +353,24 @@ mod tests {
         // Untouched keys keep their defaults.
         assert!(c.stop_at_repo);
         assert_eq!(c.ignore, default_ignores());
+    }
+
+    #[test]
+    fn parse_icon_mode() {
+        // Default when absent.
+        let c = Config::parse("", Utf8Path::new("t.toml")).expect("parse");
+        assert_eq!(c.icons, IconMode::Auto);
+        // Explicit, case-as-written (lowercase).
+        for (s, want) in [
+            ("auto", IconMode::Auto),
+            ("ascii", IconMode::Ascii),
+            ("unicode", IconMode::Unicode),
+            ("nerd", IconMode::Nerd),
+        ] {
+            let c =
+                Config::parse(&format!("icons = \"{s}\""), Utf8Path::new("t.toml")).expect("parse");
+            assert_eq!(c.icons, want, "icons = {s:?}");
+        }
     }
 
     #[test]

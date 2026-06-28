@@ -240,6 +240,7 @@ fn run_loop(
     let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
+    app.icons = scanner.icon_mode();
     // Warm start: paint cached snapshots instantly, then refresh in background.
     if use_cache
         && let Some(cached) = crate::cache::load()

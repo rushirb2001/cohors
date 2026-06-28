@@ -17,6 +17,7 @@ use ratatui::widgets::{
 };
 
 use crate::app::{App, ConfirmAction, Mode, Opener, RunState};
+use crate::glyphs::Glyphs;
 
 /// Spinner frames (braille) for the scan indicator.
 const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -26,15 +27,20 @@ fn spinner_frame(tick: usize) -> &'static str {
 }
 
 /// Color policy. Colors are dropped when `NO_COLOR` is set; structural
-/// modifiers (dim/bold/reversed) are kept so the layout still reads.
+/// modifiers (dim/bold/reversed) are kept so the layout still reads. Also carries
+/// the resolved [`Glyphs`] so every cell renders glyphs through one source of
+/// truth (with ASCII fallback under `NO_COLOR`).
 struct Theme {
     color: bool,
+    glyphs: Glyphs,
 }
 
 impl Theme {
-    fn from_env() -> Self {
+    fn from_env(icons: cohors_config::IconMode) -> Self {
+        let color = std::env::var_os("NO_COLOR").is_none();
         Self {
-            color: std::env::var_os("NO_COLOR").is_none(),
+            color,
+            glyphs: Glyphs::resolve(icons, !color),
         }
     }
 
@@ -84,7 +90,7 @@ impl Theme {
 /// Render the whole dashboard for one frame. `now` (Unix seconds) is injected
 /// so relative commit ages are deterministic in tests.
 pub fn render(frame: &mut Frame, app: &App, now: i64) {
-    let theme = Theme::from_env();
+    let theme = Theme::from_env(app.icons);
     let area = frame.area();
 
     // Top-level layout: the branded header box, the body, and a boxed key-hint
@@ -1689,16 +1695,18 @@ fn repo_row<'a>(
     let name = name_cell(&snap.name, highlights, severity, marked, theme);
     let branch = branch_cell(snap, severity, theme);
 
-    // The "synced" state (even with upstream) renders as a blinking green dot: on
-    // the off phase of the blink it's blank. (The remote CI dot in the non-dock
-    // layout is a separate `●` and never blinks.)
+    // The "synced" state (even with upstream): in the glyph tiers it's a blinking
+    // green dot (blank on the off phase); under ASCII it's a steady "ok" word that
+    // never blinks (so the state never depends on an animation). `blink_synced()`
+    // gates the blanking accordingly.
     let synced = matches!(&snap.upstream, Some(u) if u.ahead == 0 && u.behind == 0);
+    let blink_synced = theme.glyphs.blink_synced();
 
     if fmt.dock {
         // While an action runs, the Sync cell shows a spinner instead.
         let sync = match busy {
             Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
-            None if synced && !fmt.blink_on => Cell::from(Span::raw(" ")),
+            None if synced && blink_synced && !fmt.blink_on => Cell::from(Span::raw(" ")),
             None => Cell::from(Line::from(ahead_behind_spans(snap, theme))),
         };
         Row::new(vec![
@@ -1715,7 +1723,9 @@ fn repo_row<'a>(
     } else {
         let sync = match busy {
             Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
-            None if synced && snap.remote.is_none() && !fmt.blink_on => Cell::from(Span::raw(" ")),
+            None if synced && snap.remote.is_none() && blink_synced && !fmt.blink_on => {
+                Cell::from(Span::raw(" "))
+            }
             None => sync_cell(snap, theme),
         };
         Row::new(vec![
@@ -1757,7 +1767,9 @@ fn reason_cell<'a>(primary: Option<&AttentionReason>, max: usize, theme: &Theme)
 fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.upstream {
         None => vec![Span::styled("local", theme.dim())],
-        Some(up) if up.ahead == 0 && up.behind == 0 => vec![Span::styled("●", theme.ok())],
+        Some(up) if up.ahead == 0 && up.behind == 0 => {
+            vec![Span::styled(theme.glyphs.synced(), theme.ok())]
+        }
         Some(up) => {
             let mut spans = Vec::new();
             if up.ahead > 0 {
@@ -1939,7 +1951,7 @@ fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
         None => Vec::new(),
         Some(up) if up.ahead == 0 && up.behind == 0 => {
             if remote.is_empty() {
-                vec![Span::styled("●", theme.ok())]
+                vec![Span::styled(theme.glyphs.synced(), theme.ok())]
             } else {
                 Vec::new()
             }
@@ -2069,8 +2081,11 @@ fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
         head("Legend — what each column shows"),
         row(vec![s("↑2", theme.ahead())], "commits ahead of upstream"),
         row(vec![s("↓5", theme.behind())], "commits behind upstream"),
-        row(vec![s("·", theme.dim())], "even with upstream"),
-        row(vec![s("—", theme.dim())], "no upstream (local only)"),
+        row(
+            vec![s(theme.glyphs.synced(), theme.ok())],
+            "in sync with upstream",
+        ),
+        row(vec![s("local", theme.dim())], "no upstream (local only)"),
         row(
             vec![
                 s("●", theme.ok()),
@@ -3316,6 +3331,25 @@ mod tests {
         let mut app = demo_app();
         app.selected = 1; // skip the unreadable repo that sorts to the top
         insta::assert_snapshot!(render_to_string(&app, 120, 34));
+    }
+
+    /// ASCII icon mode (also the `NO_COLOR` fallback): the synced state renders as
+    /// a steady "ok" word instead of a colour-only, blinking `●` — the multi-user
+    /// portability path. A single in-sync repo makes the Sync cell unambiguous.
+    #[test]
+    fn snapshot_ascii_synced() {
+        let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
+        app.icons = cohors_config::IconMode::Ascii;
+        app.set_repos(vec![snap(
+            "in-sync",
+            Branch::Named("main".to_string()),
+            Some(("origin/main", 0, 0)),
+            (0, 0, 0),
+            0,
+            Some((NOW - 3600, "chore: nothing to do")),
+            None,
+        )]);
+        insta::assert_snapshot!(render_to_string(&app, 100, 34));
     }
 
     /// While a bulk action runs, the dock shows the in-flight repos with spinners

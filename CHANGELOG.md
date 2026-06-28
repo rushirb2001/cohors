@@ -19,6 +19,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Added
+
+- **`icons` config + a glyph foundation built for *any* terminal (Phase 0).** A
+  new `icons = "auto" | "ascii" | "unicode" | "nerd"` setting (default `auto`)
+  routes every status glyph through one resolver: Unicode glyphs by default, an
+  **ASCII fallback** used automatically under `NO_COLOR` (a colourless `●` can't
+  say what it means, so a plain word reads better) or when forced, and a
+  **Nerd-Font tier** that's only ever used when you explicitly opt in (never
+  assumed). First migration: the *in-sync* indicator now renders a steady **"ok"**
+  in the ASCII/`NO_COLOR` path instead of a colour-only, blinking `●` — so the
+  state never depends solely on colour or on an animation. Groundwork for the
+  broader compact-glyph plan; more cells migrate in later phases.
+
 ### Changed
 
 - **TUI Sync "synced" state is now a blinking green `●`** instead of the word

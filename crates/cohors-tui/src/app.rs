@@ -282,6 +282,8 @@ pub struct App {
     /// Repos auto-detected elsewhere when the configured roots came up empty —
     /// drives the first-run rescue prompt in the empty state. Empty otherwise.
     pub suggested_roots: Vec<String>,
+    /// Configured glyph mode for the dashboard (auto / ascii / unicode / nerd).
+    pub icons: cohors_config::IconMode,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -384,6 +386,7 @@ impl App {
             repos_scroll: std::cell::Cell::new(0),
             detail: None,
             suggested_roots: Vec::new(),
+            icons: cohors_config::IconMode::default(),
         }
     }
 

@@ -93,6 +93,11 @@ impl Scanner {
     pub fn mcp_config(&self) -> cohors_config::McpConfig {
         self.config.mcp.clone()
     }
+
+    /// The configured TUI icon mode (auto / ascii / unicode / nerd).
+    pub fn icon_mode(&self) -> cohors_config::IconMode {
+        self.config.icons
+    }
 }
 
 /// The user's configured git email (`git config user.email`), for the standup.

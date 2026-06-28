@@ -13,8 +13,8 @@ expression: "render_to_string(&app, 100, 64)"
 ╭ Repositories │  Legend — what each column shows                                   │──────────────╮
 │    Repo      │    ↑2              commits ahead of upstream                       │atus          │
 │▌   legacy-bil│    ↓5              commits behind upstream                         │uld not read …│
-│    payments  │    ·               even with upstream                              │ unpushed     │
-│    web-app   │    —               no upstream (local only)                        │ behind — pull│
+│    payments  │    ●               in sync with upstream                           │ unpushed     │
+│    web-app   │    local           no upstream (local only)                        │ behind — pull│
 │    infra     │    ● ● ●           CI: pass / fail / pending                       │uncommitted c…│
 │    auth-servi│    2pr             open pull requests                              │ to date      │
 │              │    3               changed files, all staged                       │              │
