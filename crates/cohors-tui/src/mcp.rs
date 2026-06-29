@@ -205,6 +205,18 @@ fn tool_catalog() -> Value {
             }
         },
         {
+            "name": "changes",
+            "description": "What is actually uncommitted in each selected repo: the changed-file list (each path with its git porcelain status) and, with include_patch:true, a size-capped unified diff of the working tree. Use this to summarize or review uncommitted work — e.g. \"what's the work sitting in hybrid-flow?\" — instead of cd-ing in and running git status / git diff. Clean repos are omitted. Omit the selector to cover every dirty repo, or scope it (e.g. {\"name\": \"hybrid-flow\"}) to one.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "selector": selector_schema.clone(),
+                    "include_patch": { "type": "boolean", "description": "Also return a unified diff of the working tree per repo (default false; can be large)." },
+                    "max_bytes": { "type": "integer", "minimum": 1, "description": "Cap each repo's patch in bytes (default 20000); the patch is flagged `truncated` when cut." }
+                }
+            }
+        },
+        {
             "name": "repo_path",
             "description": "Resolve a repo (by id, name, or path) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
             "inputSchema": {
@@ -325,6 +337,7 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
             Ok(value)
         }
         "repo_path" => repo_path(args, ctx),
+        "changes" => Ok(changes(args, ctx, now)),
         "search" => search(args, ctx, now),
         "list_prs" => Ok(list_prs(args, ctx, now)),
         "ci_status" => Ok(ci_status(args, ctx, now)),
@@ -831,6 +844,64 @@ fn repo_path(args: &Value, ctx: &Ctx) -> Result<Value, String> {
         Some(path) => Ok(json!({ "path": path })),
         None => Err(format!("repository `{key}` has no local path")),
     }
+}
+
+/// `changes` — per-repo uncommitted file list (+ optional capped patch), scoped
+/// by an optional selector. Reads default to every *dirty* repo (a clean repo
+/// has nothing to show); path-less/errored repos are skipped, as are repos that
+/// turn out to have no changes.
+fn changes(args: &Value, ctx: &Ctx, now: i64) -> Value {
+    let snaps = (ctx.scan)();
+
+    let mut selector: Selector = args
+        .get("selector")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_default();
+    // No selector ⇒ every repo with uncommitted changes (the useful default).
+    if selector.is_empty() {
+        selector.dirty = true;
+    }
+
+    let include_patch = args
+        .get("include_patch")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let max_bytes = args
+        .get("max_bytes")
+        .and_then(Value::as_u64)
+        .map(|n| n as usize)
+        .unwrap_or(20_000)
+        .max(1);
+
+    let order = resolve(&snaps, &selector, SortMode::DirtyFirst, now);
+    let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
+        snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
+
+    let repos: Vec<Value> = order
+        .iter()
+        .filter_map(|id| by_id.get(id.0.as_str()).copied())
+        .filter_map(|snap| {
+            let path = snap.path.as_deref()?; // skip path-less repos
+            let ch = cohors_git::repo_changes(path, include_patch, max_bytes);
+            if ch.files.is_empty() {
+                return None; // nothing uncommitted — omit the repo entirely
+            }
+            let mut obj = serde_json::Map::new();
+            obj.insert("repo".into(), json!(snap.name));
+            obj.insert("id".into(), json!(snap.id.0));
+            obj.insert(
+                "files".into(),
+                serde_json::to_value(&ch.files).unwrap_or(Value::Null),
+            );
+            if let Some(patch) = ch.patch {
+                obj.insert("patch".into(), json!(patch));
+                obj.insert("truncated".into(), json!(ch.truncated));
+            }
+            Some(Value::Object(obj))
+        })
+        .collect();
+
+    json!({ "repos": repos, "meta": meta(ctx, &snaps) })
 }
 
 /// `search` — content grep (via the git adapter) or snapshot metadata match,

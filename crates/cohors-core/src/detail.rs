@@ -30,3 +30,18 @@ pub struct ChangedFile {
     /// The path, relative to the repo root.
     pub path: String,
 }
+
+/// What is uncommitted in one repo: the changed-file list and, optionally, a
+/// size-capped unified diff of the working tree. Adapters (`cohors-git`)
+/// populate it; this crate just defines the shape. Pure data — WASM-safe.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RepoChanges {
+    /// Each changed path with its short porcelain status (as in [`ChangedFile`]).
+    pub files: Vec<ChangedFile>,
+    /// A unified diff of the working tree against `HEAD`, present only when the
+    /// caller asks for it. Size-capped — see `truncated`.
+    pub patch: Option<String>,
+    /// `true` when `patch` was cut off at the byte cap (so the agent knows the
+    /// diff is partial).
+    pub truncated: bool,
+}

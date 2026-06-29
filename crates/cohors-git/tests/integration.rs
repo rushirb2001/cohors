@@ -323,3 +323,38 @@ fn max_depth_limits_descent() {
     opts.max_depth = 6;
     assert_eq!(discover(&opts).unwrap().len(), 1, "deep enough to find it");
 }
+
+// ----- changes / diff -------------------------------------------------------
+
+#[test]
+fn repo_changes_lists_files_and_caps_patch() {
+    let tmp = TempDir::new().unwrap();
+    init_repo_with_commit(tmp.path(), "a.txt", "one\ntwo\nthree\n", "init");
+    // Modify a tracked file and add an untracked one — both should surface.
+    write(tmp.path(), "a.txt", "one\nTWO\nthree\n");
+    write(tmp.path(), "new.txt", "brand new file\n");
+
+    let path = camino::Utf8Path::from_path(tmp.path()).unwrap();
+
+    // No patch requested → just the changed-file list.
+    let ch = cohors_git::repo_changes(path, false, 20_000);
+    assert_eq!(ch.files.len(), 2, "modified a.txt + untracked new.txt");
+    assert!(ch.patch.is_none());
+    assert!(
+        ch.files.iter().any(|f| f.path == "new.txt" && f.status == "??"),
+        "untracked file is `??`"
+    );
+    assert!(ch.files.iter().any(|f| f.path == "a.txt"));
+
+    // Patch requested with a generous cap → real diff, not truncated.
+    let ch = cohors_git::repo_changes(path, true, 20_000);
+    let patch = ch.patch.expect("patch was requested");
+    assert!(patch.contains("TWO"), "diff shows the modified line");
+    assert!(patch.contains("brand new file"), "diff shows the untracked file");
+    assert!(!ch.truncated);
+
+    // Tiny cap → the patch is truncated and flagged.
+    let ch = cohors_git::repo_changes(path, true, 10);
+    assert!(ch.truncated, "a 10-byte cap must truncate");
+    assert!(ch.patch.unwrap().len() <= 10);
+}

@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
+- **MCP `changes` tool — see *what's* uncommitted, not just that something is.**
+  Returns each selected repo's changed-file list (path + git porcelain status)
+  and, with `include_patch: true`, a size-capped unified diff of the working tree
+  (`max_bytes`, default 20 KB, flagged `truncated` when cut). Clean repos are
+  omitted and an empty selector defaults to every dirty repo, so an agent can
+  summarize or review uncommitted work ("what's the work sitting in hybrid-flow?")
+  without cd-ing in and shelling out to `git status` / `git diff`. Backed by new
+  `cohors_core::RepoChanges` (WASM-safe) and `cohors_git::repo_changes`.
+
 - **Per-repo commit-activity data, walked in parallel (Phase 2, data layer).**
   Each snapshot now carries `activity`: weekly commit counts for the last 12 weeks
   (oldest first), the input for an activity sparkline. The walk runs inside the

@@ -20,7 +20,7 @@ mod search;
 mod snapshot;
 mod standup;
 
-pub use detail::repo_detail;
+pub use detail::{repo_changes, repo_detail};
 pub use discover::{DiscoveryOptions, discover};
 pub use error::GitError;
 pub use provider::LocalGitProvider;

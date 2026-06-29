@@ -8,7 +8,7 @@
 //! any section that can't be read is left empty and we continue — never a panic.
 
 use camino::Utf8Path;
-use cohors_core::{ChangedFile, CommitMeta, RepoDetail};
+use cohors_core::{ChangedFile, CommitMeta, RepoChanges, RepoDetail};
 
 /// Number of recent commits to surface in the detail view, newest first.
 const RECENT_COMMITS_LIMIT: usize = 15;
@@ -40,6 +40,79 @@ pub fn repo_detail(path: &Utf8Path) -> RepoDetail {
         branches,
         stashes,
     }
+}
+
+/// Read what is uncommitted in the repo at `path`: the changed-file list and,
+/// when `include_patch` is set, a unified diff of the working tree vs. `HEAD`
+/// capped at `max_patch_bytes`. Always returns a [`RepoChanges`]; an unreadable
+/// repo (or one with no changes) yields an empty/near-empty one. Best-effort —
+/// never panics.
+#[cfg(feature = "git2-fallback")]
+pub fn repo_changes(path: &Utf8Path, include_patch: bool, max_patch_bytes: usize) -> RepoChanges {
+    let Ok(repo) = git2::Repository::open(path.as_std_path()) else {
+        return RepoChanges::default();
+    };
+    let files = changed_files(&repo);
+    // Only bother diffing when asked and there's actually something changed.
+    let (patch, truncated) = if include_patch && !files.is_empty() {
+        let (text, cut) = worktree_patch(&repo, max_patch_bytes);
+        (Some(text), cut)
+    } else {
+        (None, false)
+    };
+    RepoChanges {
+        files,
+        patch,
+        truncated,
+    }
+}
+
+/// A unified diff of the working tree (staged + unstaged + untracked) against
+/// `HEAD`, rendered as text and capped at `max_bytes`. Returns `(patch, truncated)`.
+/// Best-effort: an unreadable diff yields an empty string.
+#[cfg(feature = "git2-fallback")]
+fn worktree_patch(repo: &git2::Repository, max_bytes: usize) -> (String, bool) {
+    let mut opts = git2::DiffOptions::new();
+    opts.include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .show_untracked_content(true)
+        .include_ignored(false);
+
+    // Diff HEAD's tree against the working directory (index in between), so the
+    // patch covers everything not yet committed. An unborn HEAD → `None`, which
+    // diffs against an empty tree (every file shows as added).
+    let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+    let Ok(diff) = repo.diff_tree_to_workdir_with_index(head_tree.as_ref(), Some(&mut opts)) else {
+        return (String::new(), false);
+    };
+
+    let mut out = String::new();
+    let mut truncated = false;
+    let _ = diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        if out.len() >= max_bytes {
+            truncated = true;
+            return false; // abort printing — we've hit the cap
+        }
+        // `+`/`-`/` ` lines carry their origin marker apart from the content;
+        // file/hunk headers already include their own leading text.
+        if matches!(line.origin(), '+' | '-' | ' ') {
+            out.push(line.origin());
+        }
+        out.push_str(&String::from_utf8_lossy(line.content()));
+        true
+    });
+    // The line that crossed the cap may have pushed us past it; trim back to a
+    // char boundary so we never split a multi-byte sequence (`truncate` panics
+    // otherwise).
+    if out.len() > max_bytes {
+        let mut end = max_bytes;
+        while end > 0 && !out.is_char_boundary(end) {
+            end -= 1;
+        }
+        out.truncate(end);
+        truncated = true;
+    }
+    (out, truncated)
 }
 
 /// The current local branch name, or `None` for a detached or unborn HEAD.
@@ -237,4 +310,11 @@ fn short_id_of(commit: &git2::Commit<'_>) -> String {
 pub fn repo_detail(path: &Utf8Path) -> RepoDetail {
     let _ = path;
     RepoDetail::default()
+}
+
+/// Without libgit2 the changes read is unavailable; degrade to empty.
+#[cfg(not(feature = "git2-fallback"))]
+pub fn repo_changes(path: &Utf8Path, include_patch: bool, max_patch_bytes: usize) -> RepoChanges {
+    let _ = (path, include_patch, max_patch_bytes);
+    RepoChanges::default()
 }
