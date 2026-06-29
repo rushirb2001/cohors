@@ -153,7 +153,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-core"
-version = "0.4.38"
+version = "0.4.39"
 dependencies = [
  "camino",
  "nucleo-matcher",
@@ -162,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-web"
-version = "0.4.16"
+version = "0.4.17"
 dependencies = [
  "cohors-core",
  "console_error_panic_hook",

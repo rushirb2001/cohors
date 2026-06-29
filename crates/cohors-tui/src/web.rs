@@ -27,13 +27,19 @@ use tiny_http::{Header, Method, Response, Server};
 
 use crate::scan::Scanner;
 
-/// One repo's drill-in detail: the local view (the TUI's `Enter` pane) plus the
-/// remote view (open PRs, contributors, issues, latest release).
+/// One repo's drill-in detail: the local view (the TUI's `Enter` pane), the
+/// working-tree changes (file list + a size-capped patch), plus the remote view
+/// (open PRs, contributors, issues, latest release).
 #[derive(Serialize)]
 struct DetailResponse {
     local: cohors_core::RepoDetail,
+    changes: cohors_core::RepoChanges,
     remote: Option<cohors_core::RemoteDetail>,
 }
+
+/// Byte cap for the working-tree patch served to the page — matches the MCP
+/// `changes` tool's default, so the web and agent surfaces truncate alike.
+const DETAIL_PATCH_BYTES: usize = 20_000;
 
 /// Session metadata for the page: the roots being scanned and whether `--watch`
 /// asked for live re-scans (so the page can poll).
@@ -115,9 +121,20 @@ fn api_repos(req: tiny_http::Request, url: &str, scanner: &Scanner, token: Optio
 /// `GET /api/detail?path=…&url=…` — one repo's drill-in. `path` (the local repo
 /// path) drives the local detail; `url` (the remote URL) drives the remote one.
 fn api_detail(req: tiny_http::Request, url: &str, token: Option<&str>) {
-    let local = match query_param(url, "path") {
-        Some(p) => cohors_git::repo_detail(Utf8Path::new(&p)),
-        None => cohors_core::RepoDetail::default(),
+    let (local, changes) = match query_param(url, "path") {
+        Some(p) => {
+            let path = Utf8Path::new(&p);
+            // Two local reads of the same repo: the drill-in (commits/branches/…)
+            // and the working-tree diff (with the patch, so the drawer can show it).
+            (
+                cohors_git::repo_detail(path),
+                cohors_git::repo_changes(path, true, DETAIL_PATCH_BYTES),
+            )
+        }
+        None => (
+            cohors_core::RepoDetail::default(),
+            cohors_core::RepoChanges::default(),
+        ),
     };
     let remote = match (token, query_param(url, "url")) {
         (Some(t), Some(remote_url)) if !remote_url.is_empty() => {
@@ -125,7 +142,14 @@ fn api_detail(req: tiny_http::Request, url: &str, token: Option<&str>) {
         }
         _ => None,
     };
-    respond_json(req, &DetailResponse { local, remote });
+    respond_json(
+        req,
+        &DetailResponse {
+            local,
+            changes,
+            remote,
+        },
+    );
 }
 
 /// Serialize `value` to JSON and respond (500 with a JSON error on failure).

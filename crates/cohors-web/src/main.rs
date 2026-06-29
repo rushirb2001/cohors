@@ -327,6 +327,7 @@ fn dashboard(
                                     <th>"PRs"</th>
                                     <th>"CI"</th>
                                     <th>"Last"</th>
+                                    <th>"Activity"</th>
                                     <th>"Status"</th>
                                     <th class="spacer"></th>
                                 </tr>
@@ -421,6 +422,7 @@ fn repo_row(
                 <td></td>
                 <td></td>
                 <td class="last"></td>
+                <td class="spark-cell"></td>
                 <td class="status risk">{reason}</td>
                 <td class="spacer"></td>
             </tr>
@@ -444,6 +446,7 @@ fn repo_row(
             <td>{prs_cell(s, busy)}</td>
             <td>{ci_cell(s, busy)}</td>
             <td class="last">{last_cell(s, now)}</td>
+            <td class="spark-cell">{activity_cell(s)}</td>
             <td class="status">{status_cell(&a)}</td>
             <td class="spacer"></td>
         </tr>
@@ -478,9 +481,18 @@ fn repo_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
         Branch::Unborn => "unborn".to_string(),
     };
     let tip = format!("{} {branch}", s.name);
+    // Config-defined group pills (e.g. `payments`) trail the branch, so a cluster
+    // reads at a glance without a separate column.
+    let pills = s
+        .groups
+        .iter()
+        .cloned()
+        .map(|g| view! { <span class="gpill" title=format!("group: {g}")>{g.clone()}</span> })
+        .collect::<Vec<_>>();
     view! {
         <span class="rname" title=tip.clone()>{name}</span>
         <span class="rbranch" title=tip>{format!(" {branch}")}</span>
+        {pills}
     }
 }
 
@@ -630,6 +642,19 @@ fn clock_icon() -> impl IntoView {
     }
 }
 
+/// Activity pulse — recent commit cadence (the sparkline's label).
+fn activity_icon() -> impl IntoView {
+    icon! { <path d="M3 12h4l3 8 4-16 3 8h4" /> }
+}
+
+/// Tag — config-defined groups.
+fn tag_icon() -> impl IntoView {
+    icon! {
+        <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
+        <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
+    }
+}
+
 /// Wrap an icon in a tooltipped, colored span. `class` carries the color.
 fn iconw<V: IntoView>(icon: V, class: &'static str, tip: &'static str) -> AnyView {
     view! { <span class=class title=tip>{icon}</span> }.into_any()
@@ -690,6 +715,70 @@ fn ci_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
     }
 }
 
+/// The Activity cell: a compact bar sparkline of the snapshot's weekly commit
+/// counts (oldest → newest), scaled to the busiest week. A muted dash when the
+/// data is unknown (old caches, or repos read without the commit walk).
+fn activity_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
+    sparkline(&s.activity)
+}
+
+/// A tiny inline-SVG bar sparkline over `weeks` (one count per week, oldest first).
+/// Heights are scaled to the busiest week; a zero week renders a faint baseline
+/// tick so the cadence still reads. Empty/all-zero data → a muted dash.
+fn sparkline(weeks: &[u8]) -> AnyView {
+    let total: u32 = weeks.iter().map(|&c| c as u32).sum();
+    if weeks.is_empty() || total == 0 {
+        return word("—", "no recent commit activity");
+    }
+    // Geometry in SVG user units; the CSS sizes the rendered glyph. `viewBox`
+    // makes it scale cleanly, so these are just relative proportions.
+    let max = weeks.iter().copied().max().unwrap_or(1).max(1) as f32;
+    const BAR_W: f32 = 3.0;
+    const GAP: f32 = 1.0;
+    const H: f32 = 14.0;
+    let bars = weeks
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| {
+            // Busiest week fills the height; an empty week keeps a 1u baseline.
+            let bh = ((c as f32 / max) * H).max(1.0);
+            let x = i as f32 * (BAR_W + GAP);
+            let y = H - bh;
+            let faint = (c == 0).then_some("faint");
+            view! {
+                <rect
+                    class=faint
+                    x=x.to_string()
+                    y=y.to_string()
+                    width=BAR_W.to_string()
+                    height=bh.to_string()
+                    rx="0.5"
+                />
+            }
+        })
+        .collect::<Vec<_>>();
+    let total_w = weeks.len() as f32 * (BAR_W + GAP);
+    let tip = format!(
+        "{total} commit{} over {} week{}",
+        if total == 1 { "" } else { "s" },
+        weeks.len(),
+        if weeks.len() == 1 { "" } else { "s" },
+    );
+    view! {
+        <svg
+            class="spark"
+            viewBox=format!("0 0 {total_w} {H}")
+            preserveAspectRatio="xMidYMid meet"
+            fill="currentColor"
+            aria-hidden="true"
+        >
+            <title>{tip}</title>
+            {bars}
+        </svg>
+    }
+    .into_any()
+}
+
 /// The Last cell: the last commit's age only (mirroring the TUI dock — the commit
 /// subject lives in the detail aside, keeping the table compact). "never" if none.
 fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
@@ -737,6 +826,9 @@ fn reason_body(r: &AttentionReason) -> AnyView {
         }
         Stash { count, .. } => view! { {stash_icon()}<span>{count.to_string()}</span> }.into_any(),
         Detached => view! { {branch_icon()} }.into_any(),
+        // Branch never pushed: it lives only on this disk, so a cloud-off glyph —
+        // the same "not backed up to a remote" idea the Sync cell uses.
+        Unpublished => view! { {cloud_off_icon()} }.into_any(),
         Unreadable => view! { {alert_icon()} }.into_any(),
     }
 }
@@ -783,6 +875,23 @@ fn detail_panel(
         .unwrap_or_else(|| "never".to_string());
     let link = s.remote_url.clone();
 
+    // The config groups this repo belongs to, shown only when it's in any.
+    let groups_fact = (!s.groups.is_empty()).then(|| {
+        let pills = s
+            .groups
+            .iter()
+            .cloned()
+            .map(|g| view! { <span class="gpill" title=format!("group: {g}")>{g.clone()}</span> })
+            .collect::<Vec<_>>();
+        view! {
+            <div class="fact">
+                <span class="fi">{tag_icon()}</span>
+                <span class="fl">"Groups"</span>
+                <span class="fv groups">{pills}</span>
+            </div>
+        }
+    });
+
     view! {
         <div class="card detail">
             <div class="card-title detail-head">
@@ -818,6 +927,12 @@ fn detail_panel(
                         <span class="fl">"Last"</span>
                         <span class="fv">{last}</span>
                     </div>
+                    <div class="fact">
+                        <span class="fi">{activity_icon()}</span>
+                        <span class="fl">"Activity"</span>
+                        <span class="fv">{sparkline(&s.activity)}</span>
+                    </div>
+                    {groups_fact}
                 </div>
                 {reasons_block}
                 {move || rich_block(detail.get(), now)}
@@ -901,6 +1016,41 @@ fn rich_sections(d: api::RepoDetailResponse, now: i64) -> impl IntoView {
         }
     });
 
+    // The capped working-tree patch, in a collapsed <details> so it doesn't crowd
+    // the drawer. Lines are colored by their diff prefix (+/-/@/file header). The
+    // patch is byte-capped server-side (20 KB), so line count stays bounded.
+    let patch = d
+        .changes
+        .patch
+        .as_deref()
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            let lines = p
+                .lines()
+                .map(|ln| {
+                    let cls = match ln.as_bytes().first() {
+                        Some(b'+') if !ln.starts_with("+++") => "add",
+                        Some(b'-') if !ln.starts_with("---") => "del",
+                        Some(b'@') => "hunk",
+                        Some(b'd') if ln.starts_with("diff ") => "fileh",
+                        _ => "ctx",
+                    };
+                    view! { <span class=cls>{format!("{ln}\n")}</span> }
+                })
+                .collect::<Vec<_>>();
+            let trunc = d
+                .changes
+                .truncated
+                .then(|| view! { <div class="trunc">"diff truncated at 20 KB"</div> });
+            view! {
+                <details class="diff">
+                    <summary>"Working-tree diff"</summary>
+                    <pre class="patch">{lines}</pre>
+                    {trunc}
+                </details>
+            }
+        });
+
     let remote = d.remote.map(|r| {
         let stats = format!(
             "{} open issue{}{}",
@@ -968,7 +1118,7 @@ fn rich_sections(d: api::RepoDetailResponse, now: i64) -> impl IntoView {
         }
     });
 
-    view! { <div class="rich">{commits}{changed}{remote}</div> }
+    view! { <div class="rich">{commits}{changed}{patch}{remote}</div> }
 }
 
 /// The aside's default panel (nothing selected).

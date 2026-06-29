@@ -231,6 +231,7 @@ body {
   text-align: center;
 }
 .fleet th:nth-child(7), .fleet td:nth-child(7) { text-align: right; } /* Last */
+.fleet th:nth-child(8), .fleet td:nth-child(8) { text-align: center; } /* Activity */
 /* Repo (fused name @branch): cap and ellipsize, full text on hover. */
 .fleet td:nth-child(1) { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; }
 /* A trailing spacer column soaks up the leftover width, so every real column
@@ -243,6 +244,10 @@ body {
 /* A count paired with an icon (Changes/Stash/PRs), and the compact Status reason. */
 .count, .st { display: inline-flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
 .pr { color: var(--accent); }
+/* Activity sparkline: text-sized bars in brand violet; empty weeks dim to a tick. */
+.spark { height: 14px; width: auto; color: var(--accent); vertical-align: -0.2em; }
+.spark .faint { opacity: 0.22; }
+.spark-cell { color: var(--accent); }
 .fleet thead th {
   position: sticky;
   top: 0;
@@ -294,6 +299,19 @@ body {
 .repo.strong { color: var(--text); font-weight: 700; }
 .repo.error { color: var(--red); font-weight: 600; }
 .rbranch { color: var(--dim); font-weight: 400; }
+/* Config-group pills — a faint violet tag trailing the repo name / in the detail. */
+.gpill {
+  margin-left: 0.35rem;
+  padding: 0.02rem 0.32rem;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  vertical-align: 0.05em;
+}
+.fv.groups { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: center; }
+.fv.groups .gpill { margin-left: 0; }
 .ahead { color: var(--accent); }
 .behind { color: var(--amber); }
 .dim { color: var(--dim); }
@@ -346,6 +364,36 @@ body {
 .sec .msg { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sec .age { flex: none; color: var(--faint); font-size: 0.7rem; }
 .sec .badge { flex: none; color: var(--amber); font-size: 0.66rem; border: 1px solid var(--amber); border-radius: 3px; padding: 0 0.25rem; }
+
+/* Working-tree diff: a collapsed <details> with a colored, scrollable patch. */
+.diff { padding: 0.6rem 0.95rem; border-top: 1px solid var(--line); }
+.diff > summary {
+  cursor: pointer;
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.diff .patch {
+  margin: 0.5rem 0 0;
+  max-height: 18rem;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre;
+  background: #fbfbfc;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.4rem 0.55rem;
+}
+.diff .patch .add { color: var(--green); }
+.diff .patch .del { color: var(--red); }
+.diff .patch .hunk { color: var(--accent); }
+.diff .patch .fileh { color: var(--text); font-weight: 700; }
+.diff .patch .ctx { color: var(--dim); }
+.diff .trunc { margin-top: 0.35rem; color: var(--faint); font-size: 0.7rem; }
 
 /* ── Standup ────────────────────────────────────────────────────────────── */
 .su-repo { padding: 0.55rem 0.95rem; border-bottom: 1px solid var(--line); }

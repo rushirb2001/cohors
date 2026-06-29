@@ -6,7 +6,7 @@
 //! through `cohors-core`'s `assess`/sort logic. The browser does no GitHub work
 //! itself — the server enriches with remote CI/PRs and serves the result.
 
-use cohors_core::{RemoteDetail, RepoDetail, RepoSnapshot};
+use cohors_core::{RemoteDetail, RepoChanges, RepoDetail, RepoSnapshot};
 use gloo_net::http::Request;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -16,6 +16,10 @@ use serde::de::DeserializeOwned;
 #[derive(Deserialize, Clone, Default)]
 pub struct RepoDetailResponse {
     pub local: RepoDetail,
+    /// The working-tree changes: the changed-file list and a size-capped patch
+    /// (`#[serde(default)]` so older servers that omit it still deserialize).
+    #[serde(default)]
+    pub changes: RepoChanges,
     pub remote: Option<RemoteDetail>,
 }
 
