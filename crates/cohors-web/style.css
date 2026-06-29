@@ -339,12 +339,35 @@ body {
 /* ── Detail sections (About / commits / PRs / contributors / remote) ──────── */
 .rich-loading { padding: 0.6rem 0.95rem; color: var(--dim); font-family: var(--mono); font-size: 0.78rem; }
 .rich { display: contents; }
-.sec { padding: 0.6rem 0.95rem; border-top: 1px solid var(--line); }
+.sec { padding: 0.6rem 0.95rem; border-top: 1px solid var(--border); }
 .sec-h { color: var(--dim); font-weight: 700; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
-/* Each drawer section is a collapsible <details>; its <summary> is the header
-   (a disclosure triangle comes from the browser). Click to fold/unfold. */
-.sec > summary.sec-h { cursor: pointer; }
+/* Each drawer section is a collapsible <details>; its <summary> is the header.
+   The browser's default left-side marker is hidden and replaced with a custom
+   chevron pinned to the right (rotates down when open). Click to fold/unfold. */
+.sec > summary.sec-h,
+.diff > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sec > summary.sec-h::-webkit-details-marker,
+.diff > summary::-webkit-details-marker { display: none; }
+.sec > summary.sec-h::after,
+.diff > summary::after {
+  content: "›";
+  margin-left: 0.5rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--faint);
+  transition: transform 0.15s ease;
+}
+.sec[open] > summary.sec-h::after,
+.diff[open] > summary::after { transform: rotate(90deg); }
 .sec > summary.sec-h:hover { color: var(--text); }
+.sec > summary.sec-h:hover::after,
+.diff > summary:hover::after { color: var(--dim); }
 /* When collapsed, drop the header's bottom gap so it sits flush. */
 .sec:not([open]) > summary.sec-h { margin-bottom: 0; }
 .sec .stats { color: var(--dim); font-family: var(--mono); font-size: 0.74rem; }
