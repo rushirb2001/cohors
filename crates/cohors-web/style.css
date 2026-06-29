@@ -215,6 +215,13 @@ body {
 /* The detail aside's header: title on the left, at-a-glance status badges
    (sync + CI) on the right. */
 .detail-head { display: flex; align-items: center; gap: 0.6rem; }
+/* Tint the detail header by CI state: a faint red/green/amber wash for
+   failing/passing/pending, a neutral grey when there's no CI (or not yet
+   enriched). Subtle, so the repo name still reads clearly. */
+.detail-head.ci-fail { background: rgba(180, 35, 24, 0.07); }
+.detail-head.ci-pass { background: rgba(26, 127, 55, 0.08); }
+.detail-head.ci-pending { background: rgba(146, 97, 10, 0.08); }
+.detail-head.ci-none { background: var(--line); }
 .dt-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dt-badges { display: inline-flex; align-items: center; gap: 0.7rem; flex: none; font-family: var(--mono); font-weight: 400; font-size: 0.78rem; }
 

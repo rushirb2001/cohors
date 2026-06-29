@@ -87,6 +87,17 @@ fn App() -> impl IntoView {
                                     }
                                 }
                             });
+                            // Once CI is known, bring focus to a failing build by
+                            // opening its detail — unless the user already picked a
+                            // repo while enrichment was in flight.
+                            if selected.get_untracked().is_none() {
+                                let failing = repos.get_untracked().into_iter().find(|s| {
+                                    matches!(s.remote.as_ref().map(|r| r.ci), Some(CiStatus::Failing))
+                                });
+                                if let Some(s) = failing {
+                                    selected.set(Some(s.id.0));
+                                }
+                            }
                         }
                         enriching.set(false);
                     });
@@ -339,6 +350,18 @@ fn dashboard(
                 <aside class="side">{aside}</aside>
             </div>
         </>
+    }
+}
+
+/// A CSS tint class for the detail header, from the repo's CI state: red for a
+/// failing build, green for passing, amber while pending, grey when there's no CI
+/// (or the remote hasn't been enriched yet).
+fn ci_tint(s: &RepoSnapshot) -> &'static str {
+    match s.remote.as_ref().map(|r| r.ci) {
+        Some(CiStatus::Failing) => "ci-fail",
+        Some(CiStatus::Passing) => "ci-pass",
+        Some(CiStatus::Pending) => "ci-pending",
+        _ => "ci-none",
     }
 }
 
@@ -867,7 +890,7 @@ fn detail_panel(
 
     view! {
         <div class="card detail">
-            <div class="card-title detail-head">
+            <div class=format!("card-title detail-head {}", ci_tint(s))>
                 <span class="dt-title">
                     {name}<span class="dim">{format!("  ·  {branch}")}</span>
                 </span>
