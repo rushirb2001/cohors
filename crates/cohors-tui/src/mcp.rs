@@ -1039,6 +1039,10 @@ fn repo_json(snap: &RepoSnapshot, now: i64) -> Value {
             json!({
                 "severity": assessment.severity,
                 "needs_attention": assessment.needs_attention(),
+                // The concrete reasons (most urgent first), so the agent reads
+                // "branch never pushed" / "↑2 unpushed · aging" instead of having
+                // to re-derive the why from the raw fields.
+                "reasons": assessment.reasons.iter().map(|r| r.label()).collect::<Vec<_>>(),
             }),
         );
     }

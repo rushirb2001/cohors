@@ -51,6 +51,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **Attention: flag never-pushed branches, and expose the *why* over MCP.** A named
+  branch on a repo that has a remote but no upstream is now an `Unpublished` reason
+  ("branch never pushed") at **Warn** severity — above mere local dirtiness
+  (Notice) — and `rank` sorts it as unbacked work instead of "clean", so a feature
+  branch that was never pushed (real data-loss risk) stops hiding at the bottom of
+  the list. Every MCP repo `assessment` now also carries `reasons` (the concrete
+  labels, most urgent first), so an agent reads "branch never pushed" directly
+  instead of re-deriving it from the raw fields.
+
 - **MCP: the remote half (CI / PRs) now works when an agent launches the server,**
   and its absence is announced instead of silent. `gh` is resolved against `$PATH`
   *and* common install locations (Homebrew on Apple Silicon/Intel, Linuxbrew,

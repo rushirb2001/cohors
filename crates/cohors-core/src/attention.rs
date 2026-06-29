@@ -39,6 +39,9 @@ pub enum AttentionReason {
     Diverged { ahead: u32, behind: u32 },
     /// Behind the upstream (a fast-forward pull catches up).
     Behind { commits: u32 },
+    /// On a named branch that has a remote available but no upstream — local-only
+    /// work that was never pushed, so it isn't backed up anywhere (data-loss risk).
+    Unpublished,
     /// Uncommitted changes in the working tree.
     Uncommitted {
         staged: u32,
@@ -59,6 +62,9 @@ impl AttentionReason {
             AttentionReason::Unpushed { aging: true, .. } => Severity::Risk,
             AttentionReason::Unpushed { aging: false, .. } => Severity::Warn,
             AttentionReason::Diverged { .. } => Severity::Warn,
+            // Unbacked branch work outranks mere local dirtiness (Notice): if the
+            // disk dies, a never-pushed branch is simply gone.
+            AttentionReason::Unpublished => Severity::Warn,
             AttentionReason::Stash { stale: true, .. } => Severity::Warn,
             AttentionReason::Behind { .. } => Severity::Notice,
             AttentionReason::Uncommitted { .. } => Severity::Notice,
@@ -82,6 +88,7 @@ impl AttentionReason {
                 format!("↑{ahead}↓{behind} diverged")
             }
             AttentionReason::Behind { commits } => format!("↓{commits} behind — pull"),
+            AttentionReason::Unpublished => "branch never pushed".to_string(),
             AttentionReason::Uncommitted {
                 staged,
                 modified,
@@ -144,6 +151,8 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
             });
         } else if behind > 0 {
             reasons.push(AttentionReason::Behind { commits: behind });
+        } else if is_unpublished(repo) {
+            reasons.push(AttentionReason::Unpublished);
         }
 
         let w = &repo.worktree;
@@ -181,16 +190,24 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
     }
 }
 
+/// A named branch on a repo that *has* a remote but isn't tracking one — work
+/// that was never pushed, so it lives only on this disk. (A repo with no remote
+/// at all is intentionally local and doesn't count.)
+fn is_unpublished(repo: &RepoSnapshot) -> bool {
+    matches!(repo.branch, Branch::Named(_)) && repo.upstream.is_none() && repo.remote_url.is_some()
+}
+
 /// Clock-free urgency key for sorting (higher = more urgent). Kept separate from
 /// [`assess`] so the sort needs no clock: the "aging/stale" nuance is a display
-/// concern, while the gross ordering (error > diverged > unpushed > behind >
-/// dirty > stash > detached > clean) is timeless.
+/// concern, while the gross ordering (error > diverged > unpushed/unpublished >
+/// behind > dirty > stash > detached > clean) is timeless.
 pub fn rank(repo: &RepoSnapshot) -> u32 {
     let tier = if repo.has_error() {
         9
     } else if repo.ahead() > 0 && repo.behind() > 0 {
         8
-    } else if repo.ahead() > 0 {
+    } else if repo.ahead() > 0 || is_unpublished(repo) {
+        // Unpushed commits and never-pushed branches are both unbacked local work.
         7
     } else if repo.behind() > 0 {
         6
@@ -317,6 +334,35 @@ mod tests {
         assert_eq!(a.severity, Severity::Ok);
         assert!(a.primary.is_none());
         assert!(!a.needs_attention());
+    }
+
+    #[test]
+    fn unpublished_branch_outranks_dirtiness_but_local_only_is_fine() {
+        // Has a remote, but the current branch never pushed → unbacked work.
+        let mut unpublished = repo(main_branch(), 0, 0, (0, 0, 0), 0, None, Some(NOW), None);
+        unpublished.remote_url = Some("https://github.com/x/y.git".into()); // upstream stays None
+        let a = assess(&unpublished, NOW);
+        assert_eq!(a.primary, Some(AttentionReason::Unpublished));
+        assert_eq!(a.severity, Severity::Warn);
+        assert!(a.needs_attention());
+
+        // A merely-dirty repo (tracking an upstream) is only Notice → lower rank.
+        let mut dirty = repo(main_branch(), 0, 0, (0, 3, 0), 0, None, Some(NOW), None);
+        dirty.remote_url = Some("https://github.com/x/z.git".into());
+        dirty.upstream = Some(Upstream {
+            name: "origin/main".into(),
+            ahead: 0,
+            behind: 0,
+        });
+        assert_eq!(assess(&dirty, NOW).severity, Severity::Notice);
+        assert!(
+            rank(&unpublished) > rank(&dirty),
+            "unbacked branch work must outrank local dirtiness"
+        );
+
+        // A repo with NO remote at all is intentionally local — not flagged.
+        let local = repo(main_branch(), 0, 0, (0, 0, 0), 0, None, Some(NOW), None);
+        assert_eq!(assess(&local, NOW).severity, Severity::Ok);
     }
 
     #[test]
