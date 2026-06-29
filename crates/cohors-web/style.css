@@ -150,7 +150,9 @@ body {
 .chip.error { color: var(--red); }
 
 /* ── Controls ───────────────────────────────────────────────────────────── */
-.controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+/* The filter + sort controls live inside the fleet card now, as a sub-bar
+   between the title and the table. */
+.controls { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.55rem 0.95rem; border-bottom: 1px solid var(--border); }
 .filter {
   flex: 1;
   min-width: 220px;

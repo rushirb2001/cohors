@@ -288,27 +288,6 @@ fn dashboard(
     view! {
         <>
             <section class="attention">{summary}</section>
-            <section class="controls">
-                <input
-                    class="filter"
-                    placeholder="filter repos — name…"
-                    prop:value=move || filter.get()
-                    on:input=move |ev| filter.set(event_target_value(&ev))
-                />
-                <button
-                    class="sort"
-                    class:active=move || dirty_only.get()
-                    on:click=move |_| dirty_only.update(|d| *d = !*d)
-                >
-                    "needs attention"
-                </button>
-                <div class="sorts">
-                    {sort_button(sort, SortMode::DirtyFirst, "attention")}
-                    {sort_button(sort, SortMode::Recent, "recent")}
-                    {sort_button(sort, SortMode::Name, "name")}
-                    {sort_button(sort, SortMode::AheadBehind, "sync")}
-                </div>
-            </section>
             <div class="grid">
                 <section class="card fleet-wrap">
                     <div class="card-title">
@@ -316,6 +295,27 @@ fn dashboard(
                         <span class="dim">{move || format!("({})", count())}</span>
                         <span class="dim hint">"  ·  click a row for detail"</span>
                     </div>
+                    <section class="controls">
+                        <input
+                            class="filter"
+                            placeholder="filter repos — name…"
+                            prop:value=move || filter.get()
+                            on:input=move |ev| filter.set(event_target_value(&ev))
+                        />
+                        <button
+                            class="sort"
+                            class:active=move || dirty_only.get()
+                            on:click=move |_| dirty_only.update(|d| *d = !*d)
+                        >
+                            "needs attention"
+                        </button>
+                        <div class="sorts">
+                            {sort_button(sort, SortMode::DirtyFirst, "attention")}
+                            {sort_button(sort, SortMode::Recent, "recent")}
+                            {sort_button(sort, SortMode::Name, "name")}
+                            {sort_button(sort, SortMode::AheadBehind, "sync")}
+                        </div>
+                    </section>
                     <div class="scroll">
                         <table class="fleet">
                             <thead>
