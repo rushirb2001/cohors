@@ -33,6 +33,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **MCP: the remote half (CI / PRs) now works when an agent launches the server,**
+  and its absence is announced instead of silent. `gh` is resolved against `$PATH`
+  *and* common install locations (Homebrew on Apple Silicon/Intel, Linuxbrew,
+  `~/.local/bin`), so a server spawned by Claude Code with a stripped `PATH` still
+  finds the user's `gh auth token` — previously CI/PR data came back empty even for
+  fully-authenticated users because `gh` wasn't on the spawn `PATH`. Every tool's
+  `meta` now carries `github_token` (bool) plus an actionable `github_note` when a
+  token is absent, so an agent can tell the user to run `gh auth login` rather than
+  silently return fewer rows.
+
 - **MCP: rewrote every tool description and added a server `instructions` field**
   so a connected agent reliably reaches for cohors instead of shelling out to
   `git`/`find`. Each of the 13 tool descriptions now leads with *when* to use it;

@@ -914,12 +914,21 @@ fn search(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
 fn meta(ctx: &Ctx, snaps: &[RepoSnapshot]) -> Value {
     let total = snaps.len();
     let errored = snaps.iter().filter(|s| s.has_error()).count();
+    let has_token = ctx.token.is_some();
     let mut m = json!({
         "roots": ctx.roots,
         "config_path": ctx.config_path,
         "total": total,
         "errored": errored,
+        // Visible on every call so the agent always knows whether the remote half
+        // (CI / PRs) is live, instead of silently seeing fewer rows.
+        "github_token": has_token,
     });
+    if !has_token {
+        m["github_note"] = json!(
+            "No GitHub token — CI and PR data are unavailable (remote results will be empty). Run `gh auth login` (or set $GITHUB_TOKEN) and reconnect the server to enable them."
+        );
+    }
     if total == 0 {
         m["note"] = json!(format!(
             "No repositories found under {:?}. Point cohors at your code: set `roots` in {}, pass --root, or run it where your repos live.",

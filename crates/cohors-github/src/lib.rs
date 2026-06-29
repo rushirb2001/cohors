@@ -106,16 +106,46 @@ pub fn discover_token() -> Option<String> {
 
 /// Try `gh auth token`. Returns `None` if `gh` is missing, errors, or prints
 /// nothing useful. The trimmed stdout is the token.
+///
+/// `gh` is resolved against `$PATH` first, then a few well-known install
+/// locations. This matters because an MCP server spawned by an agent (or any
+/// GUI-launched process) often runs with a stripped `PATH` that omits Homebrew's
+/// bin dir — without the fallback, a fully authenticated user still gets no
+/// remote data because `gh` simply isn't found.
 fn gh_auth_token() -> Option<String> {
-    let output = std::process::Command::new("gh")
-        .args(["auth", "token"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
+    for gh in gh_candidates() {
+        let Ok(output) = std::process::Command::new(&gh)
+            .args(["auth", "token"])
+            .output()
+        else {
+            continue; // not found at this location — try the next
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let token = String::from_utf8(output.stdout).ok()?.trim().to_string();
+        if !token.is_empty() {
+            return Some(token);
+        }
     }
-    let token = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if token.is_empty() { None } else { Some(token) }
+    None
+}
+
+/// Candidate `gh` binaries, in order: the bare name (honours `$PATH` when it's
+/// intact), then the usual install locations a stripped `PATH` would miss —
+/// Homebrew on Apple Silicon and Intel, Linuxbrew, and `~/.local/bin`.
+fn gh_candidates() -> Vec<std::path::PathBuf> {
+    use std::path::PathBuf;
+    let mut v = vec![
+        PathBuf::from("gh"),
+        PathBuf::from("/opt/homebrew/bin/gh"),
+        PathBuf::from("/usr/local/bin/gh"),
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin/gh"),
+    ];
+    if let Ok(home) = std::env::var("HOME") {
+        v.push(PathBuf::from(home).join(".local/bin/gh"));
+    }
+    v
 }
 
 /// Look up a still-fresh cache entry, cloning out the `RemoteInfo` if its TTL
