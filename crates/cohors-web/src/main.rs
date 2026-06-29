@@ -838,12 +838,17 @@ fn detail_panel(
             view! { <li class=cls>{label}</li> }
         })
         .collect();
-    let reasons_block = (!a.reasons.is_empty()).then(|| {
+    // "Needs attention" and the working tree are fused into one section: the
+    // reasons (from the snapshot, shown immediately) followed by the concrete
+    // changed files + diff behind them (from the async drill-in). The files are
+    // exactly what "N uncommitted changes" refers to, so they belong together.
+    let attention_block = (!a.reasons.is_empty()).then(|| {
         view! {
-            <div class="sec">
-                <div class="sec-h">"Needs attention"</div>
+            <details class="sec" open>
+                <summary class="sec-h">"Needs attention"</summary>
                 <ul class="reasons">{reasons}</ul>
-            </div>
+                {move || working_tree_block(detail.get())}
+            </details>
         }
     });
 
@@ -901,17 +906,17 @@ fn detail_panel(
                         <span class="fv">{sparkline(&s.activity)}</span>
                     </div>
                 </div>
-                {reasons_block}
+                {attention_block}
                 {move || rich_block(detail.get(), now)}
                 {link.map(|url| {
                     let shown = url.clone();
                     view! {
-                        <div class="sec">
-                            <div class="sec-h">"Remote source"</div>
+                        <details class="sec" open>
+                            <summary class="sec-h">"Remote source"</summary>
                             <div class="link">
                                 <a href=url target="_blank" rel="noreferrer">{shown}</a>
                             </div>
-                        </div>
+                        </details>
                     }
                 })}
             </div>
@@ -953,14 +958,92 @@ fn rich_sections(d: api::RepoDetailResponse, now: i64) -> impl IntoView {
             })
             .collect::<Vec<_>>();
         view! {
-            <div class="sec">
-                <div class="sec-h">"Recent commits"</div>
+            <details class="sec" open>
+                <summary class="sec-h">"Recent commits"</summary>
                 <ul class="rows">{rows}</ul>
-            </div>
+            </details>
         }
     });
 
-    let changed = (!d.local.changed_files.is_empty()).then(|| {
+    let remote = d.remote.map(|r| {
+        let stats = format!(
+            "{} open issue{}{}",
+            r.open_issues,
+            if r.open_issues == 1 { "" } else { "s" },
+            r.latest_release
+                .as_ref()
+                .map(|t| format!("  ·  release {t}"))
+                .unwrap_or_default()
+        );
+        let prs = (!r.prs.is_empty()).then(|| {
+            let rows = r
+                .prs
+                .clone()
+                .into_iter()
+                .map(|p| {
+                    let draft = p.draft.then(|| view! { <span class="badge">"draft"</span> });
+                    view! {
+                        <li>
+                            <a class="sha" href=p.url target="_blank" rel="noreferrer">
+                                {format!("#{}", p.number)}
+                            </a>
+                            <span class="msg">{p.title}</span>
+                            {draft}
+                            <span class="age">{p.author}</span>
+                        </li>
+                    }
+                })
+                .collect::<Vec<_>>();
+            view! {
+                <details class="sec" open>
+                    <summary class="sec-h">"Open PRs"</summary>
+                    <ul class="rows">{rows}</ul>
+                </details>
+            }
+        });
+        let contribs = (!r.contributors.is_empty()).then(|| {
+            let rows = r
+                .contributors
+                .clone()
+                .into_iter()
+                .map(|c| {
+                    view! {
+                        <li>
+                            <span class="msg">{c.login}</span>
+                            <span class="age">{format!("{} commits", c.contributions)}</span>
+                        </li>
+                    }
+                })
+                .collect::<Vec<_>>();
+            view! {
+                <details class="sec" open>
+                    <summary class="sec-h">"Top contributors"</summary>
+                    <ul class="rows">{rows}</ul>
+                </details>
+            }
+        });
+        view! {
+            <details class="sec" open>
+                <summary class="sec-h">"Remote"</summary>
+                <div class="stats">{stats}</div>
+            </details>
+            {prs}
+            {contribs}
+        }
+    });
+
+    view! { <div class="rich">{commits}{remote}</div> }
+}
+
+/// The working-tree half of the fused "Needs attention" section: the changed-file
+/// list and the collapsible, size-capped diff. Driven by the async drill-in, so
+/// it's empty until that loads (the reasons above it come from the snapshot and
+/// render immediately). `Idle`/`Loading` render nothing here.
+fn working_tree_block(state: DetailState) -> AnyView {
+    let DetailState::Loaded(d) = state else {
+        return ().into_any();
+    };
+    let files = (!d.local.changed_files.is_empty()).then(|| {
         let rows = d
             .local
             .changed_files
@@ -975,12 +1058,7 @@ fn rich_sections(d: api::RepoDetailResponse, now: i64) -> impl IntoView {
                 }
             })
             .collect::<Vec<_>>();
-        view! {
-            <div class="sec">
-                <div class="sec-h">"Working tree"</div>
-                <ul class="rows">{rows}</ul>
-            </div>
-        }
+        view! { <ul class="rows wtree">{rows}</ul> }
     });
 
     // The capped working-tree patch, in a collapsed <details> so it doesn't crowd
@@ -1018,74 +1096,7 @@ fn rich_sections(d: api::RepoDetailResponse, now: i64) -> impl IntoView {
             }
         });
 
-    let remote = d.remote.map(|r| {
-        let stats = format!(
-            "{} open issue{}{}",
-            r.open_issues,
-            if r.open_issues == 1 { "" } else { "s" },
-            r.latest_release
-                .as_ref()
-                .map(|t| format!("  ·  release {t}"))
-                .unwrap_or_default()
-        );
-        let prs = (!r.prs.is_empty()).then(|| {
-            let rows = r
-                .prs
-                .clone()
-                .into_iter()
-                .map(|p| {
-                    let draft = p.draft.then(|| view! { <span class="badge">"draft"</span> });
-                    view! {
-                        <li>
-                            <a class="sha" href=p.url target="_blank" rel="noreferrer">
-                                {format!("#{}", p.number)}
-                            </a>
-                            <span class="msg">{p.title}</span>
-                            {draft}
-                            <span class="age">{p.author}</span>
-                        </li>
-                    }
-                })
-                .collect::<Vec<_>>();
-            view! {
-                <div class="sec">
-                    <div class="sec-h">"Open PRs"</div>
-                    <ul class="rows">{rows}</ul>
-                </div>
-            }
-        });
-        let contribs = (!r.contributors.is_empty()).then(|| {
-            let rows = r
-                .contributors
-                .clone()
-                .into_iter()
-                .map(|c| {
-                    view! {
-                        <li>
-                            <span class="msg">{c.login}</span>
-                            <span class="age">{format!("{} commits", c.contributions)}</span>
-                        </li>
-                    }
-                })
-                .collect::<Vec<_>>();
-            view! {
-                <div class="sec">
-                    <div class="sec-h">"Top contributors"</div>
-                    <ul class="rows">{rows}</ul>
-                </div>
-            }
-        });
-        view! {
-            <div class="sec">
-                <div class="sec-h">"Remote"</div>
-                <div class="stats">{stats}</div>
-            </div>
-            {prs}
-            {contribs}
-        }
-    });
-
-    view! { <div class="rich">{commits}{changed}{patch}{remote}</div> }
+    view! { {files}{patch} }.into_any()
 }
 
 /// The aside's default panel (nothing selected).
