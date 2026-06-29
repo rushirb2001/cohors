@@ -299,19 +299,6 @@ body {
 .repo.strong { color: var(--text); font-weight: 700; }
 .repo.error { color: var(--red); font-weight: 600; }
 .rbranch { color: var(--dim); font-weight: 400; }
-/* Config-group pills — a faint violet tag trailing the repo name / in the detail. */
-.gpill {
-  margin-left: 0.35rem;
-  padding: 0.02rem 0.32rem;
-  border-radius: 999px;
-  font-size: 0.66rem;
-  color: var(--accent);
-  background: var(--accent-soft);
-  border: 1px solid var(--border);
-  vertical-align: 0.05em;
-}
-.fv.groups { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: center; }
-.fv.groups .gpill { margin-left: 0; }
 .ahead { color: var(--accent); }
 .behind { color: var(--amber); }
 .dim { color: var(--dim); }

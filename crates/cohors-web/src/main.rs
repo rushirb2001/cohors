@@ -481,18 +481,9 @@ fn repo_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
         Branch::Unborn => "unborn".to_string(),
     };
     let tip = format!("{} {branch}", s.name);
-    // Config-defined group pills (e.g. `payments`) trail the branch, so a cluster
-    // reads at a glance without a separate column.
-    let pills = s
-        .groups
-        .iter()
-        .cloned()
-        .map(|g| view! { <span class="gpill" title=format!("group: {g}")>{g.clone()}</span> })
-        .collect::<Vec<_>>();
     view! {
         <span class="rname" title=tip.clone()>{name}</span>
         <span class="rbranch" title=tip>{format!(" {branch}")}</span>
-        {pills}
     }
 }
 
@@ -645,14 +636,6 @@ fn clock_icon() -> impl IntoView {
 /// Activity pulse — recent commit cadence (the sparkline's label).
 fn activity_icon() -> impl IntoView {
     icon! { <path d="M3 12h4l3 8 4-16 3 8h4" /> }
-}
-
-/// Tag — config-defined groups.
-fn tag_icon() -> impl IntoView {
-    icon! {
-        <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z" />
-        <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
-    }
 }
 
 /// Wrap an icon in a tooltipped, colored span. `class` carries the color.
@@ -875,23 +858,6 @@ fn detail_panel(
         .unwrap_or_else(|| "never".to_string());
     let link = s.remote_url.clone();
 
-    // The config groups this repo belongs to, shown only when it's in any.
-    let groups_fact = (!s.groups.is_empty()).then(|| {
-        let pills = s
-            .groups
-            .iter()
-            .cloned()
-            .map(|g| view! { <span class="gpill" title=format!("group: {g}")>{g.clone()}</span> })
-            .collect::<Vec<_>>();
-        view! {
-            <div class="fact">
-                <span class="fi">{tag_icon()}</span>
-                <span class="fl">"Groups"</span>
-                <span class="fv groups">{pills}</span>
-            </div>
-        }
-    });
-
     view! {
         <div class="card detail">
             <div class="card-title detail-head">
@@ -932,7 +898,6 @@ fn detail_panel(
                         <span class="fl">"Activity"</span>
                         <span class="fv">{sparkline(&s.activity)}</span>
                     </div>
-                    {groups_fact}
                 </div>
                 {reasons_block}
                 {move || rich_block(detail.get(), now)}
