@@ -341,7 +341,9 @@ fn repo_changes_lists_files_and_caps_patch() {
     assert_eq!(ch.files.len(), 2, "modified a.txt + untracked new.txt");
     assert!(ch.patch.is_none());
     assert!(
-        ch.files.iter().any(|f| f.path == "new.txt" && f.status == "??"),
+        ch.files
+            .iter()
+            .any(|f| f.path == "new.txt" && f.status == "??"),
         "untracked file is `??`"
     );
     assert!(ch.files.iter().any(|f| f.path == "a.txt"));
@@ -350,7 +352,10 @@ fn repo_changes_lists_files_and_caps_patch() {
     let ch = cohors_git::repo_changes(path, true, 20_000);
     let patch = ch.patch.expect("patch was requested");
     assert!(patch.contains("TWO"), "diff shows the modified line");
-    assert!(patch.contains("brand new file"), "diff shows the untracked file");
+    assert!(
+        patch.contains("brand new file"),
+        "diff shows the untracked file"
+    );
     assert!(!ch.truncated);
 
     // Tiny cap → the patch is truncated and flagged.

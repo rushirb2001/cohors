@@ -68,6 +68,9 @@ pub struct Selector {
     pub path_glob: Option<String>,
     /// Limit to repos under one root directory (a canonical path prefix).
     pub root: Option<String>,
+    /// Belongs to this config-defined group (matched against the repo's stamped
+    /// `groups`). Lets "act on the whole payments cluster" be one argument.
+    pub group: Option<String>,
 
     // ── local state ──
     /// Working tree has uncommitted changes.
@@ -114,6 +117,7 @@ impl Selector {
             && self.name.is_none()
             && self.path_glob.is_none()
             && self.root.is_none()
+            && self.group.is_none()
             && !self.dirty
             && !self.ahead
             && !self.behind
@@ -152,6 +156,11 @@ impl Selector {
                 Some(p) if path_under(p.as_str(), root) => {}
                 _ => return false,
             }
+        }
+        if let Some(group) = &self.group
+            && !repo.groups.iter().any(|g| g == group)
+        {
+            return false;
         }
         if self.dirty && !repo.is_dirty() {
             return false;
@@ -238,6 +247,12 @@ pub fn resolve(
 /// Case-insensitive glob over a name.
 fn glob_ci(pattern: &str, text: &str) -> bool {
     glob_match(&pattern.to_lowercase(), &text.to_lowercase())
+}
+
+/// Case-insensitive `*`/`?` glob match, exposed so adapters (e.g. group
+/// stamping) classify repo names with the *same* matcher selectors use.
+pub fn glob_name(pattern: &str, text: &str) -> bool {
+    glob_ci(pattern, text)
 }
 
 /// A tiny dependency-free glob matcher: `*` matches any sequence (including
@@ -347,6 +362,29 @@ mod tests {
     fn empty_selector_resolves_to_nothing() {
         assert!(Selector::default().is_empty());
         assert_eq!(run(&Selector::default()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn group_selector_matches_stamped_groups() {
+        let mut pay = sample("pay", "payments-api", false, 0, 0, Some(NOW));
+        pay.groups = vec!["payments".into()];
+        let mut bill = sample("bill", "billing", false, 0, 0, Some(NOW));
+        bill.groups = vec!["payments".into()];
+        let infra = sample("infra", "infra", false, 0, 0, Some(NOW)); // ungrouped
+        let repos = vec![pay, bill, infra];
+
+        let sel = Selector {
+            group: Some("payments".into()),
+            ..Default::default()
+        };
+        let mut got: Vec<String> = resolve(&repos, &sel, SortMode::Name, NOW)
+            .iter()
+            .map(|id| id.0.clone())
+            .collect();
+        got.sort();
+        assert_eq!(got, ["bill", "pay"]);
+        // `group` is a real constraint — a group selector isn't "empty".
+        assert!(!sel.is_empty());
     }
 
     #[test]

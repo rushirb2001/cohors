@@ -41,7 +41,7 @@ pub use model::{
 };
 pub use provider::RepoProvider;
 pub use search::{SearchHit, SearchKind, search_metadata};
-pub use select::{AttentionLevel, Selector, resolve};
+pub use select::{AttentionLevel, Selector, glob_name, resolve};
 pub use sort::SortMode;
 pub use standup::{StandupCommit, StandupWindow, group_commits, to_markdown};
 pub use view::{ViewParams, ViewRow, compute_view};

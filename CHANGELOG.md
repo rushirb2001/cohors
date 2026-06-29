@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
+- **Config `[groups]` + a `group` selector — repo clusters as a fact, not a guess.**
+  Define named groups of repo-name globs (e.g. `payments = ["sushrutalgs-*"]`);
+  cohors stamps each repo with every group it matches (by directory name) during
+  the scan. The new `groups` field rides on every snapshot (so `list_repos` /
+  `get_repo` show it), and `{ "group": "payments" }` is a first-class selector
+  across the TUI target-set, CLI `--select group:payments`, and MCP — so "act on
+  the whole payments cluster" is one argument. Backward-compatible
+  (`#[serde(default)]`); ungrouped repos carry `[]`.
+
 - **MCP `changes` tool — see *what's* uncommitted, not just that something is.**
   Returns each selected repo's changed-file list (path + git porcelain status)
   and, with `include_patch: true`, a size-capped unified diff of the working tree

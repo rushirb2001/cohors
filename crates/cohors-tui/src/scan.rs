@@ -64,6 +64,9 @@ impl Scanner {
     pub fn scan(&self) -> Vec<RepoSnapshot> {
         match self.provider.scan() {
             Ok(mut snapshots) => {
+                // Groups first (match the raw directory name), then aliases
+                // (a cosmetic rename that must not change group membership).
+                apply_groups(&self.config, &mut snapshots);
                 apply_aliases(&self.config, self.home.as_deref(), &mut snapshots);
                 snapshots
             }
@@ -156,6 +159,32 @@ pub(crate) fn discovery_options(
         max_depth: config.max_depth,
         stop_at_repo: config.stop_at_repo,
         follow_symlinks: config.follow_symlinks,
+    }
+}
+
+/// Stamp each repo with the config groups whose name globs match it (matched
+/// against the repo's directory name, using the same glob matcher selectors use).
+/// Runs before aliasing so a cosmetic rename can't change membership.
+fn apply_groups(config: &Config, snapshots: &mut [RepoSnapshot]) {
+    if config.groups.is_empty() {
+        return;
+    }
+    for snap in snapshots.iter_mut() {
+        // The directory name is the stable identity to match globs against;
+        // fall back to the current name for a path-less repo.
+        let key = snap
+            .path
+            .as_ref()
+            .and_then(|p| p.file_name())
+            .unwrap_or(snap.name.as_str())
+            .to_string();
+        // BTreeMap iterates in name order, so `groups` comes out sorted.
+        snap.groups = config
+            .groups
+            .iter()
+            .filter(|(_, globs)| globs.iter().any(|g| cohors_core::glob_name(g, &key)))
+            .map(|(name, _)| name.clone())
+            .collect();
     }
 }
 

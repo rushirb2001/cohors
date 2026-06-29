@@ -217,6 +217,7 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         }),
         error: s.error.map(|e| e.to_string()),
         activity: demo_activity(s.name, s.error.is_some()),
+        groups: Vec::new(),
     }
 }
 

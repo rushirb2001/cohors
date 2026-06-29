@@ -159,7 +159,7 @@ const INSTRUCTIONS: &str = "cohors is the user's git repository fleet — every 
 fn tool_catalog() -> Value {
     let selector_schema = json!({
         "type": "object",
-        "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob, root. Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, has_stash, detached, error, branch (exact name), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+        "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob, root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, has_stash, detached, error, branch (exact name), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
         "additionalProperties": true
     });
     json!([
@@ -171,7 +171,7 @@ fn tool_catalog() -> Value {
                 "properties": {
                     "selector": selector_schema.clone(),
                     "sort": { "type": "string", "enum": ["dirty-first", "recent", "name", "ahead-behind"], "description": "Order of the returned repos (default dirty-first)." },
-                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project each repo to just these top-level keys (id and name are always kept) to keep the response small. Valid keys: branch, upstream, worktree, last_commit, activity, stash_count, stash_latest, remote, assessment, path, error. Note: ahead/behind live inside `upstream`, and staged/modified/untracked inside `worktree` — request those parent keys, not the leaf names." },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project each repo to just these top-level keys (id and name are always kept) to keep the response small. Valid keys: branch, upstream, worktree, last_commit, activity, groups, stash_count, stash_latest, remote, assessment, path, error. Note: ahead/behind live inside `upstream`, and staged/modified/untracked inside `worktree` — request those parent keys, not the leaf names." },
                     "limit": { "type": "integer", "minimum": 1, "description": "Return at most this many repos (after sorting)." }
                 }
             }

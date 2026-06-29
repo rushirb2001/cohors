@@ -256,6 +256,7 @@ fn parse_shorthand(query: &str) -> Result<Selector> {
                 "branch" => sel.branch = Some(value),
                 "root" => sel.root = Some(value),
                 "path" => sel.path_glob = Some(value),
+                "group" => sel.group = Some(value),
                 "ci" => sel.ci = Some(parse_ci(&value)?),
                 "prs" | "min-prs" => {
                     sel.min_prs = Some(value.parse().context("--select prs expects a number")?)

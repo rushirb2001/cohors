@@ -24,6 +24,10 @@ pub struct Config {
     pub ignore: Vec<String>,
     /// Pretty names keyed by absolute path or repo directory name.
     pub aliases: BTreeMap<String, String>,
+    /// Named groups → repo name globs (e.g. `payments = ["sushrutalgs-*"]`). A
+    /// repo is stamped with every group whose globs match its directory name, so
+    /// a surface can target a whole cluster with one selector.
+    pub groups: BTreeMap<String, Vec<String>>,
     /// Editor command; falls back to `$EDITOR`/`$VISUAL` when `None`.
     pub editor: Option<String>,
     /// Stop descending into a repo once `.git` is found (don't nest).
@@ -82,6 +86,7 @@ impl Default for Config {
             max_depth: 4,
             ignore: default_ignores(),
             aliases: BTreeMap::new(),
+            groups: BTreeMap::new(),
             editor: None,
             stop_at_repo: true,
             follow_symlinks: false,
@@ -107,6 +112,7 @@ struct RawConfig {
     max_depth: Option<usize>,
     ignore: Option<Vec<String>>,
     aliases: Option<BTreeMap<String, String>>,
+    groups: Option<BTreeMap<String, Vec<String>>>,
     editor: Option<String>,
     stop_at_repo: Option<bool>,
     follow_symlinks: Option<bool>,
@@ -136,6 +142,7 @@ const KNOWN_KEYS: &[&str] = &[
     "max_depth",
     "ignore",
     "aliases",
+    "groups",
     "editor",
     "stop_at_repo",
     "follow_symlinks",
@@ -151,6 +158,7 @@ impl RawConfig {
             max_depth: self.max_depth.unwrap_or(d.max_depth),
             ignore: self.ignore.unwrap_or(d.ignore),
             aliases: self.aliases.unwrap_or(d.aliases),
+            groups: self.groups.unwrap_or(d.groups),
             editor: self.editor.or(d.editor),
             stop_at_repo: self.stop_at_repo.unwrap_or(d.stop_at_repo),
             follow_symlinks: self.follow_symlinks.unwrap_or(d.follow_symlinks),
@@ -280,6 +288,12 @@ follow_symlinks = false
 [aliases]
 # "~/work/payments-service" = "payments"
 
+# Optional groups: a name -> list of repo-name globs. cohors stamps each repo
+# with every group it matches (by directory name), so any surface (TUI/MCP/CLI)
+# can target a whole cluster at once.
+[groups]
+# payments = ["sushrutalgs-*", "billing"]
+
 # Safety knobs for the `cohors mcp` agent server.
 [mcp]
 # Restrict the `run` tool to commands matching these globs (empty = any command,
@@ -384,6 +398,24 @@ mod tests {
             c.aliases.get("~/work/payments-service").map(String::as_str),
             Some("payments")
         );
+    }
+
+    #[test]
+    fn parse_reads_groups_table() {
+        let toml = r#"
+            [groups]
+            payments = ["sushrutalgs-*", "billing"]
+            infra = ["terraform-*"]
+        "#;
+        let c = Config::parse(toml, Utf8Path::new("test.toml")).expect("parse");
+        assert_eq!(
+            c.groups.get("payments").map(Vec::as_slice),
+            Some(["sushrutalgs-*".to_string(), "billing".to_string()].as_slice())
+        );
+        assert_eq!(c.groups.get("infra").map(|v| v.len()), Some(1));
+        // The starter template (which has only a commented example) → no groups.
+        let starter = Config::parse(STARTER_CONFIG, Utf8Path::new("s.toml")).expect("starter");
+        assert!(starter.groups.is_empty());
     }
 
     #[test]

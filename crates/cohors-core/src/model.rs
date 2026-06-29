@@ -214,6 +214,12 @@ pub struct RepoSnapshot {
     /// without the git2 walk). Counts are capped at `u8::MAX`.
     #[serde(default)]
     pub activity: Vec<u8>,
+    /// Config-defined groups this repo belongs to (e.g. `["payments"]`), stamped
+    /// after the scan from the `[groups]` table. Empty when ungrouped. Lets a
+    /// surface reason about a repo *cluster* as a fact rather than guessing from
+    /// names.
+    #[serde(default)]
+    pub groups: Vec<String>,
 }
 
 impl RepoSnapshot {
@@ -240,6 +246,7 @@ impl RepoSnapshot {
             remote: None,
             error: Some(error.into()),
             activity: Vec::new(),
+            groups: Vec::new(),
         }
     }
 
@@ -326,6 +333,7 @@ pub(crate) fn sample(
         }),
         error: None,
         activity: Vec::new(),
+        groups: Vec::new(),
     }
 }
 

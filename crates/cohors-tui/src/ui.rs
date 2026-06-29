@@ -3176,6 +3176,7 @@ mod tests {
             }),
             error: error.map(str::to_string),
             activity: Vec::new(),
+            groups: Vec::new(),
         }
     }
 

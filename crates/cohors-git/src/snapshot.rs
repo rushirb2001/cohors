@@ -64,6 +64,8 @@ pub fn snapshot_repo(repo_ref: &RepoRef, now: i64) -> RepoSnapshot {
         last_commit,
         error: None,
         activity: extras.activity,
+        // Stamped after the scan by the Scanner (it holds the config `[groups]`).
+        groups: Vec::new(),
     }
 }
 
