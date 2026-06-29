@@ -130,6 +130,7 @@ fn handle(request: &Value, ctx: &Ctx, now: i64) -> Option<Value> {
                     "protocolVersion": version,
                     "capabilities": { "tools": { "listChanged": false } },
                     "serverInfo": { "name": "cohors", "version": env!("CARGO_PKG_VERSION") },
+                    "instructions": INSTRUCTIONS,
                 }),
             )
         }
@@ -147,76 +148,85 @@ fn handle(request: &Value, ctx: &Ctx, now: i64) -> Option<Value> {
     })
 }
 
+/// Server-level guidance surfaced to the model on `initialize` (the MCP
+/// `instructions` field). This is the highest-leverage place to make an agent
+/// reach for cohors instead of shelling out to `git`/`find`.
+const INSTRUCTIONS: &str = "cohors is the user's git repository fleet — every repo under their configured roots — with live local status (branch, ahead/behind, dirty worktree, stashes, last commit) and optional GitHub enrichment (CI, PRs). Whenever the user asks about \"my repos\", \"my projects\", the \"fleet\", what is dirty / unpushed / behind / needs attention, where a repo lives, or to find or change code across repos, use these cohors tools — do NOT shell out to find, cd, or per-repo git, and do not ask the user where their repos are. Start with fleet_summary (cheapest) or list_repos. Reads are always available; the write tools (fetch/pull/push/commit/stash) and run are gated and will tell you how to enable them. Target repos with the shared selector predicate, e.g. {\"dirty\": true}, {\"behind\": true}, {\"name\": \"pay*\"}, or {\"all\": true}.";
+
 /// The catalog returned by `tools/list`. JSON-Schema'd inputs; `repo` accepts an
-/// id, name, or path.
+/// id, name, or path. Descriptions lead with *when* to use the tool, so an agent
+/// matches user intent to a tool instead of falling back to raw git.
 fn tool_catalog() -> Value {
     let selector_schema = json!({
         "type": "object",
-        "description": "Fleet predicate (ADR-024). Fields AND together; e.g. {\"behind\": true}, {\"dirty\": true, \"name\": \"pay*\"}, {\"all\": true}. Empty matches nothing.",
+        "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob, root. Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, has_stash, detached, error, branch (exact name), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
         "additionalProperties": true
     });
     json!([
         {
             "name": "list_repos",
-            "description": "List repositories with their status (the cohors scan shape plus a per-repo assessment and a fleet summary). Omit the selector to get the whole fleet.",
+            "description": "The primary \"what's going on across my repos\" call: returns every repo's git status — branch, ahead/behind, dirty worktree, stashes, last commit, and an attention assessment — plus a fleet summary, in one request. Use this (or fleet_summary) whenever the user asks about their repos, projects, or fleet, or what is dirty/unpushed/behind/needs attention; do NOT enumerate repos yourself with find or per-repo git. Omit selector for the whole fleet, or narrow it (e.g. {\"dirty\": true}). Use fields to shrink each repo to just the keys you need.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "selector": selector_schema.clone(),
-                    "sort": { "type": "string", "enum": ["dirty-first", "recent", "name", "ahead-behind"] },
-                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project each repo to these top-level fields (id and name always kept)." },
-                    "limit": { "type": "integer", "minimum": 1 }
+                    "sort": { "type": "string", "enum": ["dirty-first", "recent", "name", "ahead-behind"], "description": "Order of the returned repos (default dirty-first)." },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project each repo to just these top-level keys (id and name are always kept) to keep the response small. Valid keys: branch, upstream, worktree, last_commit, activity, stash_count, stash_latest, remote, assessment, path, error. Note: ahead/behind live inside `upstream`, and staged/modified/untracked inside `worktree` — request those parent keys, not the leaf names." },
+                    "limit": { "type": "integer", "minimum": 1, "description": "Return at most this many repos (after sorting)." }
                 }
             }
         },
         {
             "name": "get_repo",
-            "description": "Get one repository's full status by id, name, or path — the same inspect the TUI shows on Enter. Includes remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token.",
+            "description": "Full status of ONE repository, found by id, name, or path — branch, upstream ahead/behind, worktree counts, stashes, recent activity, and last commit. Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "repo": { "type": "string" } },
+                "properties": { "repo": { "type": "string", "description": "Repo id, name/alias, or path." } },
                 "required": ["repo"]
             }
         },
         {
             "name": "fleet_summary",
-            "description": "Fleet-wide counts: total, needs-attention, unpushed, behind, dirty, stashed, errors. The cheapest 'anything on fire?' call.",
+            "description": "The cheapest \"is anything on fire?\" call: fleet-wide counts only — total, needs-attention, unpushed, behind, dirty, stashed, errors. Use it first to gauge overall state, then drill in with list_repos. Takes no arguments.",
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
             "name": "search",
-            "description": "Search across the fleet. kind=content greps file contents (ripgrep/git grep/fallback, fixed-string); kind=path/name/branch matches snapshot metadata. Scope with an optional selector. The entry point for cross-repo refactors.",
+            "description": "Find code or repos ACROSS the whole fleet without cd-ing into each one. kind=content greps file contents (ripgrep/git grep/fallback, fixed-string — the default); kind=path|name|branch matches repo metadata. An optional selector limits which repos are searched. This is the entry point for cross-repo audits and refactors — use it instead of running grep/rg in each repo yourself.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "query": { "type": "string" },
-                    "kind": { "type": "string", "enum": ["content", "path", "name", "branch"] },
+                    "query": { "type": "string", "description": "What to look for (fixed string for content; substring/glob for path/name/branch)." },
+                    "kind": { "type": "string", "enum": ["content", "path", "name", "branch"], "description": "What to match (default content)." },
                     "selector": selector_schema.clone(),
-                    "max_results": { "type": "integer", "minimum": 1 }
+                    "max_results": { "type": "integer", "minimum": 1, "description": "Cap on total hits (default 200)." }
                 },
                 "required": ["query"]
             }
         },
         {
             "name": "repo_path",
-            "description": "Resolve a repository (by id, name, or path) to its absolute path, so the agent can operate in it directly.",
+            "description": "Resolve a repo (by id, name, or path) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "repo": { "type": "string" } },
+                "properties": { "repo": { "type": "string", "description": "Repo id, name/alias, or path." } },
                 "required": ["repo"]
             }
         },
         {
             "name": "list_prs",
-            "description": "Open pull-request counts per repo (GitHub-enriched). Needs a token (gh auth / GITHUB_TOKEN); says so in meta when absent. Scope with an optional selector.",
+            "description": "Open pull requests per repo (GitHub-enriched). Use for \"any open PRs across my repos / waiting on me?\". Needs a token (gh auth or GITHUB_TOKEN) — meta says so when absent — and repos without a GitHub remote are omitted. An optional selector scopes the set.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "selector": selector_schema.clone(), "state": { "type": "string", "enum": ["open", "all"] } }
+                "properties": {
+                    "selector": selector_schema.clone(),
+                    "state": { "type": "string", "enum": ["open", "all"], "description": "Which PRs to count (default open)." }
+                }
             }
         },
         {
             "name": "ci_status",
-            "description": "CI/checks status per repo (GitHub-enriched: passing | failing | pending). Needs a token. Scope with an optional selector.",
+            "description": "CI / checks status per repo (GitHub-enriched: passing | failing | pending). Use for \"which repos have red/failing CI?\"; to then act on them, pass {\"ci\": \"failing\"} as a selector to another tool. Needs a token; repos without a GitHub remote are omitted. An optional selector scopes the set.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "selector": selector_schema.clone() }
@@ -224,73 +234,73 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "fetch",
-            "description": "git fetch across the selected repos (non-destructive). Execution requires the server launched with --allow-writes; dry_run:true previews the target set without it.",
+            "description": "git fetch across the selected repos — non-destructive (updates remote-tracking refs only). Use to refresh remote state before checking what is behind. Requires a selector. Executing needs the server launched with --allow-writes; without it (or with dry_run:true) the call just previews the resolved target set.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean" } },
+                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." } },
                 "required": ["selector"]
             }
         },
         {
             "name": "pull",
-            "description": "git pull --ff-only across the selected repos — never merges or rebases, so it can't lose work. Execution requires --allow-writes; dry_run:true previews without it.",
+            "description": "git pull --ff-only across the selected repos — fast-forward only, so it never merges, rebases, or loses work. Typical flow: find what is behind with {\"behind\": true}, then pull those. Requires a selector. Executing needs --allow-writes; dry_run:true (or a read-only server) previews the targets.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "selector": selector_schema.clone(),
-                    "mode": { "type": "string", "enum": ["ff-only"] },
-                    "dry_run": { "type": "boolean" }
+                    "mode": { "type": "string", "enum": ["ff-only"], "description": "Only fast-forward is supported (the default)." },
+                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
                 },
                 "required": ["selector"]
             }
         },
         {
             "name": "push",
-            "description": "git push the current branch to its upstream across the selected repos. Never force-pushes, so it can't overwrite remote history (non-fast-forward pushes are rejected by git). Execution requires --allow-writes; dry_run:true previews the target set without it.",
+            "description": "git push the current branch to its upstream across the selected repos. Never force-pushes (git rejects non-fast-forward pushes), so it can't overwrite remote history. Pair after commit to land a cross-repo change. Requires a selector. Executing needs --allow-writes; dry_run:true previews the targets.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean" } },
+                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." } },
                 "required": ["selector"]
             }
         },
         {
             "name": "commit",
-            "description": "git add -A + git commit -m <message> across the selected repos (stages tracked and untracked changes; 'nothing to commit' is a no-op). Never amends or rewrites history. Pair with push to finish a cross-repo change. Execution requires --allow-writes and confirm:true; dry_run:true previews the target set with neither.",
+            "description": "git add -A + git commit -m <message> across the selected repos (stages tracked AND untracked; \"nothing to commit\" is a no-op). Never amends or rewrites history. Pair with push to finish a cross-repo change. Requires selector and message. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "selector": selector_schema.clone(),
-                    "message": { "type": "string", "description": "Commit message (required)." },
-                    "confirm": { "type": "boolean" },
-                    "dry_run": { "type": "boolean" }
+                    "message": { "type": "string", "description": "Commit message, applied to every selected repo (required)." },
+                    "confirm": { "type": "boolean", "description": "Must be true to actually commit; preview first with dry_run." },
+                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
                 },
                 "required": ["selector", "message"]
             }
         },
         {
             "name": "stash",
-            "description": "git stash push (tracked changes) across the selected repos. Execution requires --allow-writes and confirm:true; dry_run:true previews the target set with neither.",
+            "description": "git stash push (tracked changes) across the selected repos — a safe way to park work, e.g. before a bulk pull or run on dirty repos. Requires a selector. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "selector": selector_schema.clone(),
-                    "confirm": { "type": "boolean" },
-                    "dry_run": { "type": "boolean" }
+                    "confirm": { "type": "boolean", "description": "Must be true to actually stash; preview first with dry_run." },
+                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
                 },
                 "required": ["selector"]
             }
         },
         {
             "name": "run",
-            "description": "Run a shell command in each selected repo; returns per-repo {exit_code, stdout, stderr, truncated, timed_out}. The fleet codemod/audit/test primitive. Execution requires --allow-run and confirm:true; dry_run:true previews the target set with neither. Each repo is bounded by timeout_secs (default 120s).",
+            "description": "Run one shell command in each selected repo and collect per-repo {exit_code, stdout, stderr, truncated, timed_out} — the fleet codemod/audit/test primitive (e.g. \"cargo fmt --check\", \"rg TODO\", \"npm test\"). The command runs in each repo's own directory. Requires command and selector. Executing needs --allow-run AND confirm:true; dry_run:true previews the target set with neither. Each repo is bounded by timeout_secs (default 120).",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "command": { "type": "string" },
+                    "command": { "type": "string", "description": "Shell command run in each selected repo's directory." },
                     "selector": selector_schema.clone(),
-                    "confirm": { "type": "boolean" },
-                    "dry_run": { "type": "boolean" },
-                    "timeout_secs": { "type": "integer", "minimum": 1 }
+                    "confirm": { "type": "boolean", "description": "Must be true to actually run; preview first with dry_run." },
+                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." },
+                    "timeout_secs": { "type": "integer", "minimum": 1, "description": "Per-repo timeout in seconds (default 120)." }
                 },
                 "required": ["command", "selector"]
             }

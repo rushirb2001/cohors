@@ -33,6 +33,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Changed
 
+- **MCP: rewrote every tool description and added a server `instructions` field**
+  so a connected agent reliably reaches for cohors instead of shelling out to
+  `git`/`find`. Each of the 13 tool descriptions now leads with *when* to use it;
+  the new `instructions` string (surfaced on `initialize`) tells the agent that any
+  "my repos / fleet / what needs attention / find across repos" question maps to
+  these tools. Also corrected the `list_repos` `fields` guidance (ahead/behind live
+  under `upstream`, staged/modified/untracked under `worktree`) and spelled out the
+  full selector vocabulary in the schema. Descriptions only — no tool behaviour or
+  wire shape changed.
+
 - **TUI: Repo and Branch fused into one `name @branch` column (Phase 1),** matching
   the web and reclaiming a whole column for the Status reason. The branch is a dim
   suffix (`@main`, magenta `@a1b2c3d` for detached HEAD, `unborn` for a fresh
