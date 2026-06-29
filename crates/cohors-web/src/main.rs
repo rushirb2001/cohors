@@ -711,7 +711,9 @@ fn activity_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
 fn sparkline(weeks: &[u8]) -> AnyView {
     let total: u32 = weeks.iter().map(|&c| c as u32).sum();
     if weeks.is_empty() || total == 0 {
-        return word("—", "no recent commit activity");
+        // A plain word, like the other empty cells ("clean", "never", "local"),
+        // rather than a cryptic dash.
+        return word("quiet", "no commits in the last 12 weeks");
     }
     // Geometry in SVG user units; the CSS sizes the rendered glyph. `viewBox`
     // makes it scale cleanly, so these are just relative proportions.
