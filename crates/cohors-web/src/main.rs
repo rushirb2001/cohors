@@ -186,19 +186,17 @@ fn App() -> impl IntoView {
                     <span>"▟██▌█▐██▙"</span>
                     <span>"▀▐▖▀█▀▗▌▀"</span>
                 </div>
-                <div class="lede">
-                    <div class="title">
-                        <span class="brand">"cohors"</span>
-                        <span class="pill">"web"</span>
-                    </div>
-                    <div class="fleet-name">
-                        "Your Fleet"
-                        {move || {
-                            let r = roots.get();
-                            (!r.is_empty())
-                                .then(|| view! { <span class="fleet-path">{format!(" @{}", r.join(", "))}</span> })
-                        }}
-                    </div>
+                <div class="title">
+                    <span class="brand">"cohors"</span>
+                    <span class="pill">"web"</span>
+                </div>
+                <div class="fleet-name">
+                    "Your Fleet"
+                    {move || {
+                        let r = roots.get();
+                        (!r.is_empty())
+                            .then(|| view! { <span class="fleet-path">{format!(" @{}", r.join(", "))}</span> })
+                    }}
                 </div>
             </header>
 

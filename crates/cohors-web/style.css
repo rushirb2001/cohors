@@ -58,7 +58,6 @@ body {
   letter-spacing: 1px;
   opacity: 0.9;
 }
-.lede { flex: 1; }
 .title { display: flex; align-items: baseline; gap: 0.5rem; }
 .brand { font-size: 1.3rem; font-weight: 700; color: var(--accent); letter-spacing: -0.3px; }
 .pill {
@@ -73,8 +72,9 @@ body {
   letter-spacing: 1px;
 }
 .tag { color: var(--dim); font-size: 0.85rem; }
-/* The big "Your Fleet @<path>" heading — the page's primary title. */
-.fleet-name { font-size: 1.5rem; font-weight: 700; color: var(--text); letter-spacing: -0.3px; margin-top: 0.1rem; }
+/* The big "Your Fleet @<path>" heading — inline with the brand, pushed to the
+   right edge of the header by `margin-left: auto`. */
+.fleet-name { margin-left: auto; font-size: 1.5rem; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
 .fleet-path { font-family: var(--mono); font-size: 1.05rem; font-weight: 500; color: var(--dim); }
 
 /* ── Connect (GitHub token) ─────────────────────────────────────────────── */
