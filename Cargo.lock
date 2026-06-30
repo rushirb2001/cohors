@@ -361,6 +361,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "cohors-actions"
+version = "0.4.39"
+dependencies = [
+ "camino",
+ "cohors-core",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "cohors-config"
 version = "0.4.39"
 dependencies = [
@@ -420,6 +434,7 @@ dependencies = [
  "assert_cmd",
  "camino",
  "clap",
+ "cohors-actions",
  "cohors-config",
  "cohors-core",
  "cohors-git",

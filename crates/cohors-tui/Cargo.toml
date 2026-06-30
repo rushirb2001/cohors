@@ -21,6 +21,7 @@ cohors-core = { workspace = true }
 cohors-config = { workspace = true }
 cohors-git = { workspace = true }
 cohors-github = { workspace = true }
+cohors-actions = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 rayon = { workspace = true }

@@ -1,0 +1,21 @@
+[package]
+name = "cohors-actions"
+description = "Write-side adapter for cohors: the git mutating actions (fetch/pull/push/commit/stash/run), the bounded command runner, and the action registry shared by every front-end."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+cohors-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+camino = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
