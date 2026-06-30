@@ -1061,6 +1061,7 @@ mod tests {
                     staged: 0,
                     modified: 1,
                     untracked: 0,
+                    conflicted: 0,
                 }
             } else {
                 WorktreeStatus::default()

@@ -195,6 +195,12 @@ fn worktree_status(repo: &git2::Repository) -> WorktreeStatus {
     let mut status = WorktreeStatus::default();
     for entry in statuses.iter() {
         let s = entry.status();
+        // An unmerged path is *only* counted as conflicted — it carries WT_/INDEX_
+        // flags too, but folding it into modified/staged would hide the conflict.
+        if s.contains(Status::CONFLICTED) {
+            status.conflicted += 1;
+            continue;
+        }
         if s.intersects(staged_flags) {
             status.staged += 1;
         }

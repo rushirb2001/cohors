@@ -204,6 +204,7 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
             staged: s.worktree.0,
             modified: s.worktree.1,
             untracked: s.worktree.2,
+            conflicted: 0,
         },
         stash_count: s.stash,
         stash_latest: None,

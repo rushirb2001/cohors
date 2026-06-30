@@ -89,17 +89,28 @@ pub struct WorktreeStatus {
     pub modified: u32,
     /// Untracked files.
     pub untracked: u32,
+    /// Unmerged (conflicted) files. Surfaced separately from `modified` because
+    /// "you have conflicts" is a distinct, more urgent state than a dirty tree —
+    /// it usually means a merge/rebase/cherry-pick is mid-flight. `#[serde(default)]`
+    /// so snapshots cached before this field existed still deserialize as 0.
+    #[serde(default)]
+    pub conflicted: u32,
 }
 
 impl WorktreeStatus {
     /// Any uncommitted change at all?
     pub fn is_dirty(&self) -> bool {
-        self.staged > 0 || self.modified > 0 || self.untracked > 0
+        self.staged > 0 || self.modified > 0 || self.untracked > 0 || self.conflicted > 0
     }
 
     /// Total number of changed entries.
     pub fn total(&self) -> u32 {
-        self.staged + self.modified + self.untracked
+        self.staged + self.modified + self.untracked + self.conflicted
+    }
+
+    /// Whether any file is in an unmerged/conflicted state.
+    pub fn has_conflicts(&self) -> bool {
+        self.conflicted > 0
     }
 }
 
@@ -317,6 +328,7 @@ pub(crate) fn sample(
                 staged: 0,
                 modified: 1,
                 untracked: 0,
+                conflicted: 0,
             }
         } else {
             WorktreeStatus::default()
@@ -355,10 +367,18 @@ mod tests {
             WorktreeStatus {
                 staged: 2,
                 modified: 3,
-                untracked: 1
+                untracked: 1,
+                conflicted: 2,
             }
             .total(),
-            6
+            8
+        );
+        assert!(
+            WorktreeStatus {
+                conflicted: 1,
+                ..Default::default()
+            }
+            .has_conflicts()
         );
     }
 

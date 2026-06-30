@@ -306,6 +306,7 @@ mod tests {
                 staged: worktree.0,
                 modified: worktree.1,
                 untracked: worktree.2,
+                conflicted: 0,
             },
             stash_count: stash,
             stash_latest,
