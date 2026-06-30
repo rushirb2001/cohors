@@ -376,161 +376,22 @@ fn require_confirm(args: &Value, tool: &str) -> Result<(), String> {
     }
 }
 
-fn is_dry_run(args: &Value) -> bool {
-    args.get("dry_run")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-}
-
-/// Parse an action's selector (required — an empty selector matches nothing).
-fn action_selector(args: &Value) -> Selector {
-    args.get("selector")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default()
-}
-
-/// Resolve a parsed selector to action targets, scoped to the configured roots,
-/// with error/path-less repos excluded since they can't be acted on (ADR-019).
-fn resolve_targets(selector: &Selector, snaps: &[RepoSnapshot], now: i64) -> Vec<RepoSnapshot> {
-    if selector.is_empty() {
-        return Vec::new();
-    }
-    let order = resolve(snaps, selector, SortMode::DirtyFirst, now);
-    let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
-        snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
-    order
-        .iter()
-        .filter_map(|id| by_id.get(id.0.as_str()).copied())
-        .filter(|s| !s.has_error() && s.path.is_some())
-        .cloned()
-        .collect()
-}
-
-/// Enforce the action-target cap: too many targets without an explicit
-/// `{all: true}` is refused (ADR-025), so a fumbled selector can't fan out.
-fn within_cap(selector: &Selector, targets: &[RepoSnapshot], max: usize) -> Result<(), String> {
-    if max > 0 && !selector.all && targets.len() > max {
-        Err(format!(
-            "{} repos match — over the configured cap of {max}. Narrow the selector, or pass {{\"all\": true}} to act on the whole fleet deliberately.",
-            targets.len()
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Write a one-line audit record of an action to the log (`cohors.log`, ADR-025).
-fn audit(tool: &str, selector: &Selector, targets: &[RepoSnapshot], ok: usize) {
-    let ids: Vec<&str> = targets.iter().map(|s| s.id.0.as_str()).collect();
-    tracing::info!(
-        target: "cohors::audit",
-        tool,
-        selector = %serde_json::to_string(selector).unwrap_or_default(),
-        targets = targets.len(),
-        ok,
-        failed = targets.len() - ok,
-        ids = ?ids,
-        "mcp action",
-    );
-}
-
-/// Whether `cmd` is permitted by the allowlist (empty allows anything).
-fn command_allowed(cmd: &str, allowlist: &[String]) -> bool {
-    allowlist.is_empty() || allowlist.iter().any(|pat| command_matches(pat, cmd))
-}
-
-/// A small `*`-glob match for allowlist patterns like `cargo *` or `git *`.
-fn command_matches(pattern: &str, cmd: &str) -> bool {
-    let p: Vec<char> = pattern.chars().collect();
-    let t: Vec<char> = cmd.chars().collect();
-    let (mut pi, mut ti, mut star, mut resume) = (0usize, 0usize, None, 0usize);
-    while ti < t.len() {
-        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
-            pi += 1;
-            ti += 1;
-        } else if pi < p.len() && p[pi] == '*' {
-            star = Some(pi);
-            resume = ti;
-            pi += 1;
-        } else if let Some(s) = star {
-            pi = s + 1;
-            resume += 1;
-            ti = resume;
-        } else {
-            return false;
-        }
-    }
-    while pi < p.len() && p[pi] == '*' {
-        pi += 1;
-    }
-    pi == p.len()
-}
-
-/// The "you selected nothing" result — explicit, so the agent doesn't read an
-/// empty action as "done."
-fn no_targets() -> Value {
-    json!({
-        "targets": 0,
-        "results": [],
-        "note": "Selector resolved to 0 repos. An empty selector matches nothing — pass predicates or {\"all\": true}. (Repos that errored or have no local path are excluded from actions.)"
-    })
-}
-
-/// A `dry_run` preview: the exact target set + the action, with no side effects.
-fn dry_run_preview(action: Value, targets: &[RepoSnapshot]) -> Value {
-    let repos: Vec<Value> = targets
-        .iter()
-        .map(|s| json!({ "repo": s.id.0, "name": s.name, "path": s.path }))
-        .collect();
-    json!({ "dry_run": true, "action": action, "targets": repos.len(), "repos": repos })
-}
-
-/// Run a per-repo git action (fetch / pull / stash) over the targets and collect
-/// `{repo, ok, message}` results.
-fn git_action(
-    tool: &str,
-    action: Value,
-    args: &Value,
-    ctx: &Ctx,
-    now: i64,
-    authorize: impl Fn() -> Result<(), String>,
-    op: impl Fn(&camino::Utf8Path, &str) -> Result<String, String>,
-) -> Result<Value, String> {
-    let snaps = (ctx.scan)();
-    let selector = action_selector(args);
-    let targets = resolve_targets(&selector, &snaps, now);
-    if targets.is_empty() {
-        return Ok(no_targets());
-    }
-    within_cap(&selector, &targets, ctx.max_targets)?;
-    // A dry run is side-effect-free, so it's allowed *before* the gate/confirm:
-    // an agent can preview the exact target set (even on a read-only server) for
-    // a human to approve, then enable the tier and act.
-    if is_dry_run(args) {
-        return Ok(dry_run_preview(action, &targets));
-    }
-    authorize()?;
-    let results: Vec<Value> = targets
-        .iter()
-        .map(|s| {
-            let path = s.path.as_ref().expect("action targets have a path");
-            match op(path, &s.name) {
-                Ok(message) => json!({ "repo": s.id.0, "ok": true, "message": message }),
-                Err(message) => json!({ "repo": s.id.0, "ok": false, "message": message }),
-            }
-        })
-        .collect();
-    let ok = results.iter().filter(|r| r["ok"] == true).count();
-    audit(tool, &selector, &targets, ok);
-    Ok(json!({ "targets": targets.len(), "results": results }))
-}
+/// The surface-agnostic orchestration (selector → targets → cap → dry-run → run
+/// → audit) lives in `cohors_actions::orchestrate`; re-export the bits this
+/// module names so call sites stay short.
+use cohors_actions::{
+    action_selector, audit, command_allowed, dry_run_preview, git_action, is_dry_run, no_targets,
+    resolve_targets, within_cap,
+};
 
 fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "fetch",
         json!("fetch"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || require_writes(ctx, "fetch"),
         crate::action::fetch,
@@ -538,11 +399,13 @@ fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
 }
 
 fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "pull",
         json!("pull --ff-only"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || require_writes(ctx, "pull"),
         crate::action::pull_ff,
@@ -550,11 +413,13 @@ fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
 }
 
 fn push_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "push",
         json!("push"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || require_writes(ctx, "push"),
         crate::action::push,
@@ -570,11 +435,13 @@ fn commit_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         .filter(|m| !m.trim().is_empty())
         .ok_or("missing required argument `message`")?
         .to_string();
+    let snaps = (ctx.scan)();
     git_action(
         "commit",
         json!({ "commit": message }),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || {
             require_writes(ctx, "commit")?;
@@ -585,11 +452,13 @@ fn commit_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
 }
 
 fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "stash",
         json!("stash push"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || {
             require_writes(ctx, "stash")?;
@@ -1546,15 +1415,5 @@ mod tests {
         );
         let resp = call_ctx(ok, RUN, &allow, 0);
         assert!(!is_error(&resp));
-    }
-
-    #[test]
-    fn command_matches_globs() {
-        assert!(command_matches("cargo *", "cargo build --release"));
-        assert!(command_matches("git *", "git status -s"));
-        assert!(!command_matches("git *", "rm -rf /"));
-        assert!(command_matches("*", "anything goes"));
-        assert!(command_matches("exact", "exact"));
-        assert!(!command_matches("exact", "exactly"));
     }
 }
