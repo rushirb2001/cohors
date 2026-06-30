@@ -188,27 +188,28 @@ pub fn run_command_action(
     }
 
     let timeout = std::time::Duration::from_secs(timeout.max(1));
+    // The shared bounded-pool runner (ADR-020) executes the targets concurrently
+    // and returns results in target order, so we zip them back to print by name.
+    let owned: Vec<cohors_core::RepoSnapshot> = targets.iter().map(|s| (*s).clone()).collect();
+    let results = cohors_actions::run_each(&owned, command, timeout);
     let mut ok = 0usize;
-    for s in &targets {
-        let path = s.path.as_ref().unwrap();
-        let out = crate::action::run_command_timeout(path, command, timeout);
-        let passed = out.code == 0 && !out.timed_out;
-        if passed {
+    for (s, r) in targets.iter().zip(&results) {
+        if r.ok {
             ok += 1;
         }
-        let tag = if out.timed_out {
+        let tag = if r.timed_out {
             "timed out"
-        } else if passed {
+        } else if r.ok {
             "ok"
         } else {
             "fail"
         };
         println!("── {} ({tag})", s.name);
-        if !out.stdout.trim().is_empty() {
-            print!("{}", out.stdout);
+        if !r.stdout.trim().is_empty() {
+            print!("{}", r.stdout);
         }
-        if !out.stderr.trim().is_empty() {
-            eprint!("{}", out.stderr);
+        if !r.stderr.trim().is_empty() {
+            eprint!("{}", r.stderr);
         }
     }
     println!("run: {ok}/{} ok", targets.len());

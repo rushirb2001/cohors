@@ -10,7 +10,11 @@
 #![forbid(unsafe_code)]
 
 mod git;
+mod runner;
 
 pub use git::{
     RunOutcome, commit, fetch, pull_ff, push, run_command, run_command_timeout, stash_push,
+};
+pub use runner::{
+    DEFAULT_RUN_TIMEOUT_SECS, RUN_OUTPUT_CAP, RunResult, cap_output, next_run_id, run_each,
 };

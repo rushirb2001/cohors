@@ -11,9 +11,7 @@ use std::process::Command;
 
 use camino::Utf8Path;
 
-pub use cohors_actions::{
-    commit, fetch, pull_ff, push, run_command, run_command_timeout, stash_push,
-};
+pub use cohors_actions::{commit, fetch, pull_ff, push, run_command, stash_push};
 
 /// Reveal the repo in the OS file manager (spawned detached).
 pub fn reveal(path: &Utf8Path) -> Result<(), String> {

@@ -599,12 +599,6 @@ fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     )
 }
 
-/// Maximum captured output per stream per repo (matches the TUI runner, ADR-020).
-const RUN_OUTPUT_CAP: usize = 64 * 1024;
-/// Per-repo wall-clock bound for `run` when the caller doesn't set `timeout_secs`,
-/// so one hung command can't stall the whole fan-out.
-const DEFAULT_RUN_TIMEOUT_SECS: u64 = 120;
-
 fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let command = args
         .get("command")
@@ -642,69 +636,19 @@ fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let timeout = std::time::Duration::from_secs(
         args.get("timeout_secs")
             .and_then(Value::as_u64)
-            .unwrap_or(DEFAULT_RUN_TIMEOUT_SECS)
+            .unwrap_or(cohors_actions::DEFAULT_RUN_TIMEOUT_SECS)
             .max(1),
     );
-    let run_id = next_run_id();
+    let run_id = cohors_actions::next_run_id();
     // Fan out across a bounded pool (ADR-020) so a large fleet finishes fast
-    // without spawning a process per repo at once. `par_iter().collect()`
-    // preserves target order.
-    let results: Vec<Value> = run_each(&targets, &command, timeout);
-    let ok = results.iter().filter(|r| r["ok"] == true).count();
+    // without spawning a process per repo at once; results stay in target order.
+    let results = cohors_actions::run_each(&targets, &command, timeout);
+    let ok = results.iter().filter(|r| r.ok).count();
     audit("run", &selector, &targets, ok);
     Ok(json!({
         "run_id": run_id, "command": command, "targets": targets.len(),
         "ok": ok, "failed": targets.len() - ok, "results": results
     }))
-}
-
-/// Truncate a captured stream to [`RUN_OUTPUT_CAP`] bytes on a char boundary.
-fn cap_output(mut s: String) -> (String, bool) {
-    if s.len() <= RUN_OUTPUT_CAP {
-        return (s, false);
-    }
-    let mut end = RUN_OUTPUT_CAP;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    s.truncate(end);
-    (s, true)
-}
-
-/// Monotonic, process-global run id (ADR-020).
-fn next_run_id() -> u64 {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(1);
-    COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
-/// How many repos `run` executes concurrently (ADR-020).
-const RUN_POOL_SIZE: usize = 8;
-
-/// Run `command` in each target's directory over a bounded thread pool, returning
-/// per-repo `{repo, ok, exit_code, stdout, stderr, truncated, timed_out}` results
-/// in target order. Falls back to sequential if the pool can't be built.
-fn run_each(targets: &[RepoSnapshot], command: &str, timeout: std::time::Duration) -> Vec<Value> {
-    use rayon::prelude::*;
-
-    let exec = |s: &RepoSnapshot| {
-        let path = s.path.as_ref().expect("action targets have a path");
-        let out = crate::action::run_command_timeout(path, command, timeout);
-        let (stdout, t1) = cap_output(out.stdout);
-        let (stderr, t2) = cap_output(out.stderr);
-        json!({
-            "repo": s.id.0, "ok": out.code == 0 && !out.timed_out, "exit_code": out.code,
-            "stdout": stdout, "stderr": stderr, "truncated": t1 || t2, "timed_out": out.timed_out
-        })
-    };
-
-    match rayon::ThreadPoolBuilder::new()
-        .num_threads(RUN_POOL_SIZE)
-        .build()
-    {
-        Ok(pool) => pool.install(|| targets.par_iter().map(exec).collect()),
-        Err(_) => targets.iter().map(exec).collect(),
-    }
 }
 
 // ── Remote read tools (GitHub enrichment) ────────────────────────────────────
