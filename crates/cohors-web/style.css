@@ -72,10 +72,25 @@ body {
   letter-spacing: 1px;
 }
 .tag { color: var(--dim); font-size: 0.85rem; }
-/* The big "Your Fleet @<path>" heading — inline with the brand, pushed to the
-   right edge of the header by `margin-left: auto`. */
-.fleet-name { margin-left: auto; font-size: 1.5rem; font-weight: 700; color: var(--text); letter-spacing: -0.3px; }
-.fleet-path { font-family: var(--mono); font-size: 1.05rem; font-weight: 500; color: var(--dim); }
+/* "Your Fleet" + the scanned root, inline with the brand and pushed to the right
+   edge. The label is a clean heading; the path is a violet pill with a folder
+   glyph, echoing the `web` pill and the summary chips. */
+.fleet-name { margin-left: auto; display: flex; align-items: center; gap: 0.6rem; }
+.fleet-label { font-size: 1.2rem; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+.fleet-path {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.22rem 0.7rem;
+  max-width: 30rem;
+}
+.fleet-path .ic { width: 13px; height: 13px; flex: none; opacity: 0.85; }
 
 /* ── Connect (GitHub token) ─────────────────────────────────────────────── */
 .conn { display: flex; align-items: center; gap: 0.4rem; }

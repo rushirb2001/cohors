@@ -191,11 +191,19 @@ fn App() -> impl IntoView {
                     <span class="pill">"web"</span>
                 </div>
                 <div class="fleet-name">
-                    "Your Fleet"
+                    <span class="fleet-label">"Your Fleet"</span>
                     {move || {
                         let r = roots.get();
-                        (!r.is_empty())
-                            .then(|| view! { <span class="fleet-path">{format!(" @{}", r.join(", "))}</span> })
+                        (!r.is_empty()).then(|| {
+                            let path =
+                                r.iter().map(|p| shorten_home(p)).collect::<Vec<_>>().join("  ·  ");
+                            view! {
+                                <span class="fleet-path" title=r.join(", ")>
+                                    {folder_icon()}
+                                    {path}
+                                </span>
+                            }
+                        })
                     }}
                 </div>
             </header>
@@ -648,6 +656,27 @@ fn clock_icon() -> impl IntoView {
 /// Activity pulse — recent commit cadence (the sparkline's label).
 fn activity_icon() -> impl IntoView {
     icon! { <path d="M3 12h4l3 8 4-16 3 8h4" /> }
+}
+
+/// Folder — the scanned fleet root in the header.
+fn folder_icon() -> impl IntoView {
+    icon! {
+        <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    }
+}
+
+/// Tidy an absolute path for display: a leading `/Users/<name>` or `/home/<name>`
+/// becomes `~`, the way a shell would show it. Anything else is left as-is.
+fn shorten_home(p: &str) -> String {
+    for prefix in ["/Users/", "/home/"] {
+        if let Some(rest) = p.strip_prefix(prefix) {
+            return match rest.split_once('/') {
+                Some((_, tail)) => format!("~/{tail}"),
+                None => "~".to_string(),
+            };
+        }
+    }
+    p.to_string()
 }
 
 /// Wrap an icon in a tooltipped, colored span. `class` carries the color.
