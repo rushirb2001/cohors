@@ -191,14 +191,12 @@ fn App() -> impl IntoView {
                         <span class="brand">"cohors"</span>
                         <span class="pill">"web"</span>
                     </div>
-                    <div class="tag">
+                    <div class="fleet-name">
+                        "Your Fleet"
                         {move || {
                             let r = roots.get();
-                            if r.is_empty() {
-                                "All your repos in one place — local status + remote".to_string()
-                            } else {
-                                format!("scanning {}", r.join(", "))
-                            }
+                            (!r.is_empty())
+                                .then(|| view! { <span class="fleet-path">{format!(" @{}", r.join(", "))}</span> })
                         }}
                     </div>
                 </div>

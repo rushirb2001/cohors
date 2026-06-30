@@ -73,6 +73,9 @@ body {
   letter-spacing: 1px;
 }
 .tag { color: var(--dim); font-size: 0.85rem; }
+/* The big "Your Fleet @<path>" heading — the page's primary title. */
+.fleet-name { font-size: 1.5rem; font-weight: 700; color: var(--text); letter-spacing: -0.3px; margin-top: 0.1rem; }
+.fleet-path { font-family: var(--mono); font-size: 1.05rem; font-weight: 500; color: var(--dim); }
 
 /* ── Connect (GitHub token) ─────────────────────────────────────────────── */
 .conn { display: flex; align-items: center; gap: 0.4rem; }
