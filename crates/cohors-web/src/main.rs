@@ -118,12 +118,6 @@ fn App() -> impl IntoView {
         });
     };
 
-    let show_demo = move |_| {
-        notice.set(Some("Showing the demo fleet.".to_string()));
-        selected.set(None);
-        repos.set(demo::fleet(DEMO_NOW));
-        mode.set(Mode::Demo);
-    };
     let reload = move |_| load();
     load();
 
@@ -208,22 +202,6 @@ fn App() -> impl IntoView {
                         }}
                     </div>
                 </div>
-                <div class="conn">
-                    {move || match mode.get() {
-                        Mode::Live => view! {
-                            <span class="src">"● local scan"</span>
-                            <button class="ghost" on:click=reload>"rescan"</button>
-                            <button class="ghost" on:click=show_demo>"demo"</button>
-                        }
-                        .into_any(),
-                        Mode::Demo => view! {
-                            <span class="src demo">"demo"</span>
-                            <button class="ghost" on:click=reload>"rescan"</button>
-                        }
-                        .into_any(),
-                        Mode::Loading => view! { <span class="dim">"scanning…"</span> }.into_any(),
-                    }}
-                </div>
             </header>
 
             {move || notice.get().map(|n| view! { <div class="banner">{n}</div> })}
@@ -232,10 +210,11 @@ fn App() -> impl IntoView {
                 Mode::Loading => {
                     view! { <div class="state">"Scanning your repositories…"</div> }.into_any()
                 }
-                Mode::Demo => {
-                    dashboard(repos, DEMO_NOW, filter, dirty_only, sort, selected, detail, enriching)
-                        .into_any()
-                }
+                Mode::Demo => dashboard(
+                    repos, DEMO_NOW, filter, dirty_only, sort, selected, detail, enriching, mode,
+                    reload,
+                )
+                .into_any(),
                 Mode::Live => dashboard(
                     repos,
                     real_now(),
@@ -245,6 +224,8 @@ fn App() -> impl IntoView {
                     selected,
                     detail,
                     enriching,
+                    mode,
+                    reload,
                 )
                 .into_any(),
             }}
@@ -265,6 +246,8 @@ fn dashboard(
     selected: RwSignal<Option<String>>,
     detail: RwSignal<DetailState>,
     enriching: RwSignal<bool>,
+    mode: RwSignal<Mode>,
+    reload: impl Fn(leptos::ev::MouseEvent) + Copy + Send + 'static,
 ) -> impl IntoView {
     let summary = move || summary_chips(&repos.get(), now);
     let visible = move || {
@@ -287,7 +270,6 @@ fn dashboard(
             .map(|i| repo_row(&r[i], selected, now, busy))
             .collect::<Vec<_>>()
     };
-    let count = move || visible().len();
     let aside = move || {
         selected
             .get()
@@ -298,13 +280,24 @@ fn dashboard(
 
     view! {
         <>
-            <section class="attention">{summary}</section>
             <div class="grid">
                 <section class="card fleet-wrap">
-                    <div class="card-title">
-                        "Repositories "
-                        <span class="dim">{move || format!("({})", count())}</span>
-                        <span class="dim hint">"  ·  click a row for detail"</span>
+                    // The fleet card header: the attention summary chips on the
+                    // left, the scan status + rescan on the right (the count of
+                    // matches is the first chip; "demo" only appears as a fallback).
+                    <div class="card-title fleet-head">
+                        <section class="attention">{summary}</section>
+                        <div class="conn">
+                            {move || {
+                                let demo = mode.get() == Mode::Demo;
+                                view! {
+                                    <span class=if demo { "src demo" } else { "src" }>
+                                        {if demo { "demo fleet" } else { "● local scan" }}
+                                    </span>
+                                    <button class="ghost" on:click=reload>"rescan"</button>
+                                }
+                            }}
+                        </div>
                     </div>
                     <section class="controls">
                         <input

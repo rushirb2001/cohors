@@ -211,6 +211,11 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .card-title .hint { font-weight: 400; }
+/* The fleet card header: summary chips on the left, scan status + rescan on the
+   right. The chips take the slack and wrap; the status stays pinned right. */
+.card-title.fleet-head { display: flex; align-items: center; gap: 0.6rem; }
+.fleet-head .attention { flex: 1 1 auto; min-width: 0; }
+.fleet-head .conn { flex: none; }
 
 /* The detail aside's header: title on the left, at-a-glance status badges
    (sync + CI) on the right. */
