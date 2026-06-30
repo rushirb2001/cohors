@@ -2969,17 +2969,19 @@ fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let Some(pending) = &app.confirm else {
         return;
     };
-    let names: Vec<&str> = match &pending.action {
-        ConfirmAction::BulkStash(ids) => ids
-            .iter()
-            .filter_map(|id| {
-                app.repos
-                    .iter()
-                    .find(|r| &r.id == id)
-                    .map(|r| r.name.as_str())
-            })
-            .collect(),
+    let ids = match &pending.action {
+        ConfirmAction::BulkStash(ids) => ids,
+        ConfirmAction::BulkCommit { ids, .. } => ids,
     };
+    let names: Vec<&str> = ids
+        .iter()
+        .filter_map(|id| {
+            app.repos
+                .iter()
+                .find(|r| &r.id == id)
+                .map(|r| r.name.as_str())
+        })
+        .collect();
     let area = centered_rect(54, 32, full);
     frame.render_widget(Clear, area);
     let block = Block::bordered()

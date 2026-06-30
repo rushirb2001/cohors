@@ -42,12 +42,14 @@ type Tui = Terminal<CrosstermBackend<Stdout>>;
 const POLL: Duration = Duration::from_millis(100);
 
 /// Which background git action to run.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum ActionKind {
     Fetch,
     Pull,
     Push,
     Stash,
+    /// Commit with this message (the others carry no payload).
+    Commit(String),
 }
 
 /// An in-flight bulk batch, for the aggregate progress/summary status line.
@@ -304,6 +306,9 @@ fn run_loop(
                                 ConfirmAction::BulkStash(ids) => {
                                     start_bulk_stash(&mut app, &tx, ids, &mut batch)
                                 }
+                                ConfirmAction::BulkCommit { ids, message } => {
+                                    start_bulk_commit(&mut app, &tx, ids, message, &mut batch)
+                                }
                             }
                         }
                     }
@@ -541,11 +546,12 @@ fn start_action_targets(
         app.status = Some("no repo selected".to_string());
         return;
     }
-    let (doing, done) = match kind {
+    let (doing, done) = match &kind {
         ActionKind::Fetch => ("fetching", "fetched"),
         ActionKind::Pull => ("pulling", "pulled"),
         ActionKind::Push => ("pushing", "pushed"),
         ActionKind::Stash => ("stashing", "stashed"),
+        ActionKind::Commit(_) => ("committing", "committed"),
     };
     if targets.len() > 1 {
         *batch = Some(Batch {
@@ -559,7 +565,7 @@ fn start_action_targets(
     }
     for (id, path, name) in targets {
         app.busy.insert(id.clone());
-        spawn_action(tx.clone(), kind, id, path, name);
+        spawn_action(tx.clone(), kind.clone(), id, path, name);
     }
 }
 
@@ -618,6 +624,46 @@ fn start_bulk_stash(
     for (id, path, name) in targets {
         app.busy.insert(id.clone());
         spawn_action(tx.clone(), ActionKind::Stash, id, path, name);
+    }
+}
+
+/// Commit changes across the given repos (post-confirmation) on the per-repo
+/// busy/`ActionDone` path, so each row re-snapshots when done. Mirrors
+/// [`start_bulk_stash`]; every repo gets the same `message`.
+fn start_bulk_commit(
+    app: &mut App,
+    tx: &Sender<BgMsg>,
+    ids: Vec<RepoId>,
+    message: String,
+    batch: &mut Option<Batch>,
+) {
+    let targets: Vec<(RepoId, Utf8PathBuf, String)> = ids
+        .iter()
+        .filter_map(|id| app.repos.iter().find(|r| &r.id == id))
+        .filter(|r| !r.has_error())
+        .filter_map(|r| r.path.clone().map(|p| (r.id.clone(), p, r.name.clone())))
+        .filter(|(id, _, _)| !app.busy.contains(id))
+        .collect();
+
+    if targets.is_empty() {
+        app.status = Some("no repos to commit".to_string());
+        return;
+    }
+    *batch = Some(Batch {
+        total: targets.len(),
+        doing: "committing",
+        done: "committed",
+    });
+    app.status = Some(format!("committing {} repos…", targets.len()));
+    for (id, path, name) in targets {
+        app.busy.insert(id.clone());
+        spawn_action(
+            tx.clone(),
+            ActionKind::Commit(message.clone()),
+            id,
+            path,
+            name,
+        );
     }
 }
 
@@ -975,6 +1021,7 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
             ActionKind::Pull => action::pull_ff(&path, &name),
             ActionKind::Push => action::push(&path, &name),
             ActionKind::Stash => action::stash_push(&path, &name),
+            ActionKind::Commit(message) => action::commit(&path, &name, &message),
         };
         let message = match outcome {
             Ok(m) | Err(m) => m,

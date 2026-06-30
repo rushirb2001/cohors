@@ -11,6 +11,7 @@
 
 mod git;
 mod orchestrate;
+mod registry;
 mod runner;
 
 pub use git::{
@@ -20,6 +21,7 @@ pub use orchestrate::{
     action_selector, audit, command_allowed, command_matches, dry_run_preview, git_action,
     is_dry_run, no_targets, resolve_targets, within_cap,
 };
+pub use registry::{ActionDef, Tier, find as find_action, registry};
 pub use runner::{
     DEFAULT_RUN_TIMEOUT_SECS, RUN_OUTPUT_CAP, RunResult, cap_output, next_run_id, run_each,
 };

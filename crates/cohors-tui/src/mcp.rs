@@ -162,7 +162,9 @@ fn tool_catalog() -> Value {
         "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob, root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, has_stash, detached, error, branch (exact name), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
         "additionalProperties": true
     });
-    json!([
+    // Read tools are hand-written (their schemas are bespoke); the action tools
+    // below are appended from the registry.
+    let mut tools = json!([
         {
             "name": "list_repos",
             "description": "The primary \"what's going on across my repos\" call: returns every repo's git status — branch, ahead/behind, dirty worktree, stashes, last commit, and an attention assessment — plus a fleet summary, in one request. Use this (or fleet_summary) whenever the user asks about their repos, projects, or fleet, or what is dirty/unpushed/behind/needs attention; do NOT enumerate repos yourself with find or per-repo git. Omit selector for the whole fleet, or narrow it (e.g. {\"dirty\": true}). Use fields to shrink each repo to just the keys you need.",
@@ -244,80 +246,65 @@ fn tool_catalog() -> Value {
                 "properties": { "selector": selector_schema.clone() }
             }
         },
-        {
-            "name": "fetch",
-            "description": "git fetch across the selected repos — non-destructive (updates remote-tracking refs only). Use to refresh remote state before checking what is behind. Requires a selector. Executing needs the server launched with --allow-writes; without it (or with dry_run:true) the call just previews the resolved target set.",
-            "inputSchema": {
-                "type": "object",
-                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." } },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "pull",
-            "description": "git pull --ff-only across the selected repos — fast-forward only, so it never merges, rebases, or loses work. Typical flow: find what is behind with {\"behind\": true}, then pull those. Requires a selector. Executing needs --allow-writes; dry_run:true (or a read-only server) previews the targets.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "selector": selector_schema.clone(),
-                    "mode": { "type": "string", "enum": ["ff-only"], "description": "Only fast-forward is supported (the default)." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
-                },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "push",
-            "description": "git push the current branch to its upstream across the selected repos. Never force-pushes (git rejects non-fast-forward pushes), so it can't overwrite remote history. Pair after commit to land a cross-repo change. Requires a selector. Executing needs --allow-writes; dry_run:true previews the targets.",
-            "inputSchema": {
-                "type": "object",
-                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." } },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "commit",
-            "description": "git add -A + git commit -m <message> across the selected repos (stages tracked AND untracked; \"nothing to commit\" is a no-op). Never amends or rewrites history. Pair with push to finish a cross-repo change. Requires selector and message. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "selector": selector_schema.clone(),
-                    "message": { "type": "string", "description": "Commit message, applied to every selected repo (required)." },
-                    "confirm": { "type": "boolean", "description": "Must be true to actually commit; preview first with dry_run." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
-                },
-                "required": ["selector", "message"]
-            }
-        },
-        {
-            "name": "stash",
-            "description": "git stash push (tracked changes) across the selected repos — a safe way to park work, e.g. before a bulk pull or run on dirty repos. Requires a selector. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "selector": selector_schema.clone(),
-                    "confirm": { "type": "boolean", "description": "Must be true to actually stash; preview first with dry_run." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
-                },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "run",
-            "description": "Run one shell command in each selected repo and collect per-repo {exit_code, stdout, stderr, truncated, timed_out} — the fleet codemod/audit/test primitive (e.g. \"cargo fmt --check\", \"rg TODO\", \"npm test\"). The command runs in each repo's own directory. Requires command and selector. Executing needs --allow-run AND confirm:true; dry_run:true previews the target set with neither. Each repo is bounded by timeout_secs (default 120).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "command": { "type": "string", "description": "Shell command run in each selected repo's directory." },
-                    "selector": selector_schema.clone(),
-                    "confirm": { "type": "boolean", "description": "Must be true to actually run; preview first with dry_run." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." },
-                    "timeout_secs": { "type": "integer", "minimum": 1, "description": "Per-repo timeout in seconds (default 120)." }
-                },
-                "required": ["command", "selector"]
-            }
+    ]);
+    // The action half (fetch/pull/push/commit/stash/run) is generated from the
+    // shared registry (ADR: one registry drives all surfaces), so a verb added in
+    // `cohors-actions` shows up here automatically and the parity test enforces it.
+    if let Value::Array(arr) = &mut tools {
+        for def in cohors_actions::registry() {
+            arr.push(action_tool(def, &selector_schema));
         }
-    ])
+    }
+    tools
+}
+
+/// Build one action tool's catalog entry from its [`cohors_actions::ActionDef`]:
+/// the name and description come from the registry; the per-verb argument schema
+/// (which differ — `commit` needs a message, `run` a command + timeout) is here.
+fn action_tool(def: &cohors_actions::ActionDef, selector_schema: &Value) -> Value {
+    let dry_run = json!({ "type": "boolean", "description": "Preview the resolved target set without acting." });
+    let confirm = json!({ "type": "boolean", "description": "Must be true to actually act; preview first with dry_run." });
+
+    let mut props = serde_json::Map::new();
+    let mut required = vec![json!("selector")];
+    // `run`'s command comes before the selector in the existing schema; keep that.
+    if def.verb == "run" {
+        props.insert(
+            "command".into(),
+            json!({ "type": "string", "description": "Shell command run in each selected repo's directory." }),
+        );
+        required.insert(0, json!("command"));
+    }
+    props.insert("selector".into(), selector_schema.clone());
+    if def.verb == "pull" {
+        props.insert(
+            "mode".into(),
+            json!({ "type": "string", "enum": ["ff-only"], "description": "Only fast-forward is supported (the default)." }),
+        );
+    }
+    if def.verb == "commit" {
+        props.insert(
+            "message".into(),
+            json!({ "type": "string", "description": "Commit message, applied to every selected repo (required)." }),
+        );
+        required.push(json!("message"));
+    }
+    if def.needs_confirm {
+        props.insert("confirm".into(), confirm);
+    }
+    props.insert("dry_run".into(), dry_run);
+    if def.verb == "run" {
+        props.insert(
+            "timeout_secs".into(),
+            json!({ "type": "integer", "minimum": 1, "description": "Per-repo timeout in seconds (default 120)." }),
+        );
+    }
+
+    json!({
+        "name": def.verb,
+        "description": def.summary,
+        "inputSchema": { "type": "object", "properties": Value::Object(props), "required": required }
+    })
 }
 
 /// Execute a read tool, returning the JSON payload to embed (or an error message
@@ -1266,29 +1253,60 @@ mod tests {
         assert!(p["note"].as_str().unwrap().contains("empty selector"));
     }
 
+    /// Structural cross-surface parity (replaces the old hardcoded list): every
+    /// action in the shared registry must have an MCP catalog tool whose
+    /// description, confirm arg, and tier-gate match the `ActionDef`, AND a TUI
+    /// binding. Adding a verb to `cohors_actions::registry()` without wiring a
+    /// surface fails this test — the guarantee MCP-DESIGN §10 always claimed.
     #[test]
-    fn action_tools_appear_in_catalog() {
+    fn registry_drives_catalog_and_tui_parity() {
+        use crate::app::verb_binding;
         let resp = call(json!({ "jsonrpc": "2.0", "id": 100, "method": "tools/list" }));
-        let names: Vec<&str> = resp["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|t| t["name"].as_str().unwrap())
-            .collect();
-        // Parity: every repo-targeting TUI verb has a matching MCP tool, plus the
-        // remote read tools.
-        for tool in [
-            "fetch",
-            "pull",
-            "push",
-            "commit",
-            "stash",
-            "run",
-            "list_prs",
-            "ci_status",
-        ] {
-            assert!(names.contains(&tool), "missing {tool}");
+        let tools = resp["result"]["tools"].as_array().unwrap();
+        let find = |name: &str| tools.iter().find(|t| t["name"] == name);
+
+        for def in cohors_actions::registry() {
+            // (a) MCP catalog: a tool exists for this verb, generated from the def.
+            let tool =
+                find(def.verb).unwrap_or_else(|| panic!("MCP catalog missing `{}`", def.verb));
+            assert_eq!(
+                tool["description"], def.summary,
+                "`{}` catalog description drifted from the registry",
+                def.verb
+            );
+            // needs_confirm ⇔ a `confirm` argument is offered.
+            let has_confirm = tool["inputSchema"]["properties"].get("confirm").is_some();
+            assert_eq!(
+                has_confirm, def.needs_confirm,
+                "`{}` confirm arg disagrees with the registry",
+                def.verb
+            );
+            // The tier picks which gate the description must name.
+            let desc = tool["description"].as_str().unwrap();
+            match def.tier {
+                cohors_actions::Tier::Write => assert!(
+                    desc.contains("--allow-writes"),
+                    "`{}` is Write tier but doesn't name --allow-writes",
+                    def.verb
+                ),
+                cohors_actions::Tier::Run => assert!(
+                    desc.contains("--allow-run"),
+                    "`{}` is Run tier but doesn't name --allow-run",
+                    def.verb
+                ),
+                other => panic!("action `{}` has unexpected tier {other:?}", def.verb),
+            }
+            // (b) TUI: the same verb is reachable from the keymap/command palette.
+            assert!(
+                verb_binding(def.verb).is_some(),
+                "TUI has no binding for `{}`",
+                def.verb
+            );
         }
+
+        // The remote read tools are not registry-driven; keep asserting they ship.
+        assert!(find("list_prs").is_some());
+        assert!(find("ci_status").is_some());
     }
 
     #[test]
