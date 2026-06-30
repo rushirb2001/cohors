@@ -374,7 +374,14 @@ const WEB_HOST: &str = "cohors.localhost";
 /// accepting connections, then prints + opens the branded local URL
 /// (`http://cohors.localhost:<port>`). Blocks until Ctrl-C. Must run from inside
 /// the cohors repository, since Trunk builds the app from source.
-pub fn run_web(cli: &Cli, port: u16, open: bool, install: bool) -> Result<()> {
+pub fn run_web(
+    cli: &Cli,
+    port: u16,
+    open: bool,
+    install: bool,
+    allow_writes: bool,
+    allow_run: bool,
+) -> Result<()> {
     // `cohors web` builds the dashboard from source, so it needs the repo. This
     // is the *developer* path. End users won't run this at all: once the
     // dashboard is deployed (v0.5 slice 4), an installed `cohors web` outside a
@@ -440,8 +447,30 @@ pub fn run_web(cli: &Cli, port: u16, open: bool, install: bool) -> Result<()> {
     }
 
     // Serve until stopped; then tear down the watcher. `--watch` makes the page
-    // poll `/api/repos` so a fresh scan shows up without a manual rescan.
-    let result = crate::web::serve(&dist, port, scanner, token, cli.watch);
+    // poll `/api/repos` so a fresh scan shows up without a manual rescan. The
+    // server lives in `cohors-web` now (the write seam is no longer trapped in
+    // this binary); we hand it a scan closure + the shared safety config.
+    let mcp_config = scanner.mcp_config();
+    let roots = scanner.roots();
+    let caps = cohors_web::Caps {
+        allow_writes,
+        allow_run,
+    };
+    let scan: std::sync::Arc<cohors_web::ScanFn> = {
+        let scanner = scanner.clone();
+        std::sync::Arc::new(move || scanner.scan())
+    };
+    let result = cohors_web::serve(
+        &dist,
+        port,
+        scan,
+        roots,
+        token,
+        cli.watch,
+        caps,
+        mcp_config.run_allowlist,
+        mcp_config.max_action_targets,
+    );
     let _ = watcher.kill();
     result
 }

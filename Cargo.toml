@@ -7,13 +7,13 @@ members = [
     "crates/cohors-github",
     "crates/cohors-actions",
     "crates/cohors-mcp",
+    "crates/cohors-web",
     "crates/cohors-tui",
 ]
-# The web front-end is WASM-only and pulls a heavy UI stack (Leptos). Keeping it
-# out of the workspace means the native gates (`cargo test --all`, `clippy
-# --all-targets`) never build it for the host; it's built explicitly for
-# `wasm32-unknown-unknown` (and served with Trunk) — see crates/cohors-web.
-exclude = ["crates/cohors-web"]
+# cohors-web is split by build target: its native server half (lib) is a normal
+# member built/tested by the host gates, while its Leptos browser half builds only
+# for `wasm32-unknown-unknown` (served with Trunk) via `[target.…]` deps that the
+# host never pulls. See crates/cohors-web/Cargo.toml.
 
 # Shared package metadata. Each crate inherits these with `field.workspace = true`
 # so version/edition/license stay consistent across the workspace.
@@ -86,6 +86,7 @@ cohors-git = { path = "crates/cohors-git" }
 cohors-github = { path = "crates/cohors-github" }
 cohors-actions = { path = "crates/cohors-actions" }
 cohors-mcp = { path = "crates/cohors-mcp" }
+cohors-web = { path = "crates/cohors-web" }
 
 # Release config for cargo-dist (the `dist` tool). This is a starting point —
 # run `dist init` to (re)generate the matching `.github/workflows/release.yml`
