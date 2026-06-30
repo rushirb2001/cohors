@@ -577,7 +577,7 @@ pub fn run_demo() -> Result<()> {
 /// read tools are implemented).
 pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool) -> Result<()> {
     let scanner = Scanner::from_cli(cli)?;
-    let caps = crate::mcp::Caps {
+    let caps = cohors_mcp::Caps {
         allow_writes,
         allow_run,
         allow_open,
@@ -587,7 +587,7 @@ pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool)
     let token = scanner.github_token();
     let mcp_config = scanner.mcp_config();
     let scan = || scanner.scan();
-    crate::mcp::run(
+    cohors_mcp::serve_stdio(
         &scan,
         token.as_deref(),
         &roots,

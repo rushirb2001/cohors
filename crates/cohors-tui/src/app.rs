@@ -1375,6 +1375,29 @@ mod tests {
         );
     }
 
+    /// Structural parity, TUI half: every action in the shared registry must be
+    /// reachable from the TUI (the MCP half is enforced in `cohors-mcp`). Adding a
+    /// verb to `cohors_actions::registry()` without wiring the TUI fails here.
+    #[test]
+    fn registry_verbs_are_all_wired_in_the_tui() {
+        for def in cohors_actions::registry() {
+            assert!(
+                super::verb_binding(def.verb).is_some(),
+                "TUI has no binding for action `{}`",
+                def.verb
+            );
+        }
+        // The confirm-gated verbs really go through the modal path, not a Cmd.
+        assert_eq!(
+            super::verb_binding("commit"),
+            Some(super::VerbBinding::Confirmed)
+        );
+        assert_eq!(
+            super::verb_binding("stash"),
+            Some(super::VerbBinding::Confirmed)
+        );
+    }
+
     #[test]
     fn empty_picker_offers_use_suggested() {
         let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());

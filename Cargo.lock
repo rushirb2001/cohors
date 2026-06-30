@@ -426,6 +426,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cohors-mcp"
+version = "0.4.39"
+dependencies = [
+ "anyhow",
+ "cohors-actions",
+ "cohors-core",
+ "cohors-git",
+ "cohors-github",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "cohors-tui"
 version = "0.4.39"
 dependencies = [
@@ -439,6 +452,7 @@ dependencies = [
  "cohors-core",
  "cohors-git",
  "cohors-github",
+ "cohors-mcp",
  "insta",
  "ratatui",
  "rayon",

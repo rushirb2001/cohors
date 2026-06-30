@@ -6,6 +6,7 @@ members = [
     "crates/cohors-git",
     "crates/cohors-github",
     "crates/cohors-actions",
+    "crates/cohors-mcp",
     "crates/cohors-tui",
 ]
 # The web front-end is WASM-only and pulls a heavy UI stack (Leptos). Keeping it
@@ -84,6 +85,7 @@ cohors-config = { path = "crates/cohors-config" }
 cohors-git = { path = "crates/cohors-git" }
 cohors-github = { path = "crates/cohors-github" }
 cohors-actions = { path = "crates/cohors-actions" }
+cohors-mcp = { path = "crates/cohors-mcp" }
 
 # Release config for cargo-dist (the `dist` tool). This is a starting point —
 # run `dist init` to (re)generate the matching `.github/workflows/release.yml`

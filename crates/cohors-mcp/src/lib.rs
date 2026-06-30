@@ -5,7 +5,7 @@
 //! (newline-delimited messages, as the MCP stdio transport specifies). This
 //! keeps the binary on the project's sync, no-tokio architecture (ADR-012) and
 //! adds no new dependency. The tool layer is deliberately transport-agnostic, so
-//! swapping in `rmcp` later is contained to [`run`].
+//! swapping in `rmcp` later is contained to [`serve_stdio`].
 //!
 //! Tools: reads (`list_repos`, `get_repo`, `fleet_summary`, `repo_path`,
 //! `search`, and the GitHub-enriched `list_prs`/`ci_status`) are always on;
@@ -13,6 +13,12 @@
 //! `--allow-writes`, `--allow-run`, per-call `confirm`, and `dry_run` (a
 //! side-effect-free preview that needs no tier or confirm). Every read carries
 //! fail-loud diagnostics (see [`meta`]).
+//!
+//! This is the 4th adapter, its own crate (ADR-002/023): it depends on
+//! `cohors-actions` for the write half and the read adapters for enrichment, and
+//! the `cohors` binary's `mcp` subcommand calls [`serve_stdio`].
+
+#![forbid(unsafe_code)]
 
 use std::io::{BufRead, Write};
 
@@ -60,7 +66,7 @@ struct Ctx<'a> {
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
 /// message; each request gets exactly one response line, notifications none.
 #[allow(clippy::too_many_arguments)]
-pub fn run(
+pub fn serve_stdio(
     scan: &ScanFn<'_>,
     token: Option<&str>,
     roots: &[String],
@@ -381,7 +387,7 @@ fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         ctx.max_targets,
         now,
         || require_writes(ctx, "fetch"),
-        crate::action::fetch,
+        cohors_actions::fetch,
     )
 }
 
@@ -395,7 +401,7 @@ fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         ctx.max_targets,
         now,
         || require_writes(ctx, "pull"),
-        crate::action::pull_ff,
+        cohors_actions::pull_ff,
     )
 }
 
@@ -409,7 +415,7 @@ fn push_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         ctx.max_targets,
         now,
         || require_writes(ctx, "push"),
-        crate::action::push,
+        cohors_actions::push,
     )
 }
 
@@ -434,7 +440,7 @@ fn commit_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
             require_writes(ctx, "commit")?;
             require_confirm(args, "commit")
         },
-        |path, name| crate::action::commit(path, name, &message),
+        |path, name| cohors_actions::commit(path, name, &message),
     )
 }
 
@@ -451,7 +457,7 @@ fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
             require_writes(ctx, "stash")?;
             require_confirm(args, "stash")
         },
-        crate::action::stash_push,
+        cohors_actions::stash_push,
     )
 }
 
@@ -1253,20 +1259,19 @@ mod tests {
         assert!(p["note"].as_str().unwrap().contains("empty selector"));
     }
 
-    /// Structural cross-surface parity (replaces the old hardcoded list): every
-    /// action in the shared registry must have an MCP catalog tool whose
-    /// description, confirm arg, and tier-gate match the `ActionDef`, AND a TUI
-    /// binding. Adding a verb to `cohors_actions::registry()` without wiring a
-    /// surface fails this test — the guarantee MCP-DESIGN §10 always claimed.
+    /// Structural parity, MCP half (replaces the old hardcoded list): every action
+    /// in the shared registry must have an MCP catalog tool whose description,
+    /// confirm arg, and tier-gate match the `ActionDef`. Adding a verb to
+    /// `cohors_actions::registry()` without generating its tool here fails this
+    /// test. The TUI half is enforced symmetrically in `cohors-tui` (app::tests).
     #[test]
-    fn registry_drives_catalog_and_tui_parity() {
-        use crate::app::verb_binding;
+    fn registry_drives_catalog_parity() {
         let resp = call(json!({ "jsonrpc": "2.0", "id": 100, "method": "tools/list" }));
         let tools = resp["result"]["tools"].as_array().unwrap();
         let find = |name: &str| tools.iter().find(|t| t["name"] == name);
 
         for def in cohors_actions::registry() {
-            // (a) MCP catalog: a tool exists for this verb, generated from the def.
+            // A tool exists for this verb, generated from the def.
             let tool =
                 find(def.verb).unwrap_or_else(|| panic!("MCP catalog missing `{}`", def.verb));
             assert_eq!(
@@ -1296,12 +1301,6 @@ mod tests {
                 ),
                 other => panic!("action `{}` has unexpected tier {other:?}", def.verb),
             }
-            // (b) TUI: the same verb is reachable from the keymap/command palette.
-            assert!(
-                verb_binding(def.verb).is_some(),
-                "TUI has no binding for `{}`",
-                def.verb
-            );
         }
 
         // The remote read tools are not registry-driven; keep asserting they ship.

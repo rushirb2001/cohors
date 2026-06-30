@@ -14,7 +14,6 @@ mod detect;
 mod editors;
 mod glyphs;
 mod logging;
-mod mcp;
 mod prefs;
 mod scan;
 mod tui;
