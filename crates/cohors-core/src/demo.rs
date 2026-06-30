@@ -209,6 +209,9 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         stash_count: s.stash,
         stash_latest: None,
         remote_url: on_remote.then(|| format!("git@github.com:acme/{}.git", s.name)),
+        operation: None,
+        default_branch: Some("main".into()),
+        last_fetch: None,
         remote,
         last_commit: (s.error.is_none()).then(|| CommitMeta {
             short_id: "abc1234".into(),

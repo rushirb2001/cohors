@@ -140,6 +140,35 @@ pub enum CiStatus {
     None,
 }
 
+/// A multi-step git operation that is paused mid-flight in the working tree — the
+/// repo is in a special state until you finish or abort it. Surfaced because it's
+/// urgent context (often paired with conflicts) that a plain dirty/ahead view hides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoOperation {
+    Merge,
+    Rebase,
+    CherryPick,
+    Revert,
+    Bisect,
+    /// `git am` — applying a mailbox of patches.
+    Mailbox,
+}
+
+impl RepoOperation {
+    /// A short, stable label for status lines (e.g. "rebase in progress").
+    pub fn label(self) -> &'static str {
+        match self {
+            RepoOperation::Merge => "merge",
+            RepoOperation::Rebase => "rebase",
+            RepoOperation::CherryPick => "cherry-pick",
+            RepoOperation::Revert => "revert",
+            RepoOperation::Bisect => "bisect",
+            RepoOperation::Mailbox => "am",
+        }
+    }
+}
+
 /// Remote (GitHub) info for a repo, populated by `cohors-github` (v0.2). `None`
 /// on a snapshot means "not a GitHub repo, or not fetched yet".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -211,6 +240,20 @@ pub struct RepoSnapshot {
     /// resolution in `cohors-github`.
     #[serde(default)]
     pub remote_url: Option<String>,
+    /// A multi-step git operation paused in the working tree (merge/rebase/…), if
+    /// any. `None` is the normal "clean state". Urgent context the dashboard flags.
+    #[serde(default)]
+    pub operation: Option<RepoOperation>,
+    /// The repo's default branch (e.g. `main`), detected locally from
+    /// `refs/remotes/origin/HEAD`. `None` when there's no origin or it isn't set.
+    /// Lets a surface flag "you're on a non-default branch" without a network call.
+    #[serde(default)]
+    pub default_branch: Option<String>,
+    /// When the repo last fetched from its remote (Unix seconds), from the mtime
+    /// of `FETCH_HEAD`. `None` if it has never fetched. Feeds a "stale remote"
+    /// (haven't fetched in a while) signal without touching the network.
+    #[serde(default)]
+    pub last_fetch: Option<i64>,
     /// GitHub-derived info (v0.2), filled asynchronously after the local scan;
     /// `None` until fetched (or for non-GitHub repos).
     #[serde(default)]
@@ -254,6 +297,9 @@ impl RepoSnapshot {
             stash_latest: None,
             last_commit: None,
             remote_url: None,
+            operation: None,
+            default_branch: None,
+            last_fetch: None,
             remote: None,
             error: Some(error.into()),
             activity: Vec::new(),
@@ -300,6 +346,15 @@ impl RepoSnapshot {
     pub fn has_error(&self) -> bool {
         self.error.is_some()
     }
+
+    /// Whether HEAD is on the repo's known default branch. `None` when the current
+    /// branch or the default branch is unknown (detached, unborn, or no origin).
+    pub fn on_default_branch(&self) -> Option<bool> {
+        match (&self.branch, &self.default_branch) {
+            (Branch::Named(b), Some(default)) => Some(b == default),
+            _ => None,
+        }
+    }
 }
 
 /// Build a minimal snapshot for tests in this crate. Kept here (compiled only
@@ -336,6 +391,9 @@ pub(crate) fn sample(
         stash_count: stash,
         stash_latest: None,
         remote_url: None,
+        operation: None,
+        default_branch: Some("main".to_string()),
+        last_fetch: None,
         remote: None,
         last_commit: commit_ts.map(|t| CommitMeta {
             short_id: "abc1234".to_string(),

@@ -3170,6 +3170,9 @@ mod tests {
             stash_count: stash,
             stash_latest: None,
             remote_url: None,
+            operation: None,
+            default_branch: None,
+            last_fetch: None,
             remote: None,
             last_commit: commit.map(|(ts, summary)| CommitMeta {
                 short_id: "a1b2c3d".to_string(),

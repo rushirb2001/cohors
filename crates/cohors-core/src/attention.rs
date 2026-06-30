@@ -311,6 +311,9 @@ mod tests {
             stash_count: stash,
             stash_latest,
             remote_url: None,
+            operation: None,
+            default_branch: None,
+            last_fetch: None,
             remote: None,
             last_commit: commit_ts.map(|t| CommitMeta {
                 short_id: "abc".into(),
