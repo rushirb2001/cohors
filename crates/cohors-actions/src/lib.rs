@@ -9,11 +9,13 @@
 
 #![forbid(unsafe_code)]
 
+mod dispatch;
 mod git;
 mod orchestrate;
 mod registry;
 mod runner;
 
+pub use dispatch::{Caps, dispatch};
 pub use git::{
     RunOutcome, commit, fetch, pull_ff, push, run_command, run_command_timeout, stash_push,
 };
