@@ -23,7 +23,7 @@ pub mod standalone {
 
     use anyhow::{Result, bail};
     use camino::Utf8PathBuf;
-    use cohors_git::{DiscoveryOptions, LocalGitProvider};
+    use cohors_fleet::Scanner;
 
     use crate::{Caps, serve};
 
@@ -59,19 +59,29 @@ pub mod standalone {
             bail!("no roots given — pass one or more directories to scan");
         }
 
-        // A scan closure backed by a fresh discovery each call (so the page's
-        // `--watch` poll sees new commits). The provider is cheap to rebuild.
-        let opts = DiscoveryOptions {
-            roots: roots.clone(),
-            ..Default::default()
-        };
-        let scan = Arc::new(move || {
-            LocalGitProvider::new(opts.clone())
-                .scan()
-                .unwrap_or_default()
-        });
+        // The shared fleet Scanner: same config → discovery → groups/aliases
+        // path as the TUI and MCP, with the given roots as explicit overrides.
+        // This is the whole point of `cohors-fleet` — the standalone server no
+        // longer hand-rolls a lesser scan (it now gets ignore globs, groups,
+        // aliases, and the GitHub token for enrichment, exactly like `cohors web`).
+        let scanner = Arc::new(
+            Scanner::new(None, &roots).map_err(|e| anyhow::anyhow!("building scanner: {e}"))?,
+        );
+        let token = scanner.github_token();
+        let served_roots = scanner.roots();
+        let mcp = scanner.mcp_config();
+        let scan = Arc::new(move || scanner.scan());
 
-        // No GitHub token plumbed in the standalone form yet (local status only).
-        serve(&dist, port, scan, roots, None, false, caps, Vec::new(), 0)
+        serve(
+            &dist,
+            port,
+            scan,
+            served_roots,
+            token,
+            false,
+            caps,
+            mcp.run_allowlist,
+            mcp.max_action_targets,
+        )
     }
 }
