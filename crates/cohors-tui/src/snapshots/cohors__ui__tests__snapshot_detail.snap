@@ -1,5 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
+assertion_line: 3503
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -13,9 +14,9 @@ expression: "render_to_string(&app, 100, 28)"
 ╭ Reposi│ │ ?? notes.md                          │ │ d4e5f60    3d  feat: idempotency key ││───────╮
 │    Rep│ │                                      │ │ e5f6071    4d  chore: bump stripe sd ││       │
 │▌   leg│ │ Branches (3)                         │ │                                      ││t (per…│
-│    pay│ │ ● main                               │ │                                      ││       │
-│    web│ │   feat/idempotency                   │ │                                      ││       │
-│    inf│ │   spike/webhooks                     │ │                                      ││ges    │
+│    pay│ │ ● main  ↑2                           │ │                                      ││       │
+│    web│ │   feat/idempotency  ↑3 ↓1            │ │                                      ││       │
+│    inf│ │   spike/webhooks  · no upstream      │ │                                      ││ges    │
 │    aut│ │                                      │ │                                      ││       │
 │       │ │ Stashes (1)                          │ │                                      ││       │
 │       │ │ WIP on main: dashboard tweaks        │ │                                      ││       │

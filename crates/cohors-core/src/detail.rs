@@ -16,8 +16,8 @@ pub struct RepoDetail {
     pub recent_commits: Vec<CommitMeta>,
     /// Working-tree changes (staged + unstaged + untracked).
     pub changed_files: Vec<ChangedFile>,
-    /// Local branch names, current first.
-    pub branches: Vec<String>,
+    /// Local branches, current first, each with its own upstream sync state.
+    pub branches: Vec<BranchInfo>,
     /// Stash entries, newest first (the stash message).
     pub stashes: Vec<String>,
 }
@@ -44,4 +44,23 @@ pub struct RepoChanges {
     /// `true` when `patch` was cut off at the byte cap (so the agent knows the
     /// diff is partial).
     pub truncated: bool,
+}
+
+/// One local branch in the drill-in: its name and how it stands against its
+/// own upstream — so "which branch has unpushed work" is visible per branch,
+/// not just for HEAD.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BranchInfo {
+    pub name: String,
+    /// Commits ahead of / behind this branch's upstream (0/0 when in sync).
+    #[serde(default)]
+    pub ahead: u32,
+    #[serde(default)]
+    pub behind: u32,
+    /// Whether the branch tracks an upstream at all (ahead/behind are only
+    /// meaningful when true).
+    #[serde(default)]
+    pub has_upstream: bool,
+    #[serde(default)]
+    pub is_current: bool,
 }

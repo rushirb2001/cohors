@@ -9,7 +9,7 @@
 
 use camino::Utf8PathBuf;
 
-use crate::detail::{ChangedFile, RepoDetail};
+use crate::detail::{BranchInfo, ChangedFile, RepoDetail};
 use crate::model::{
     Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, TagInfo, Upstream,
     WorktreeStatus,
@@ -328,9 +328,24 @@ pub fn detail(now: i64) -> RepoDetail {
             },
         ],
         branches: vec![
-            "main".to_string(),
-            "feat/idempotency".to_string(),
-            "spike/webhooks".to_string(),
+            BranchInfo {
+                name: "main".to_string(),
+                ahead: 2,
+                behind: 0,
+                has_upstream: true,
+                is_current: true,
+            },
+            BranchInfo {
+                name: "feat/idempotency".to_string(),
+                ahead: 3,
+                behind: 1,
+                has_upstream: true,
+                is_current: false,
+            },
+            BranchInfo {
+                name: "spike/webhooks".to_string(),
+                ..BranchInfo::default()
+            },
         ],
         stashes: vec!["WIP on main: dashboard tweaks".to_string()],
     }

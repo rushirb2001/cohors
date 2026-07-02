@@ -8,7 +8,7 @@
 //! any section that can't be read is left empty and we continue — never a panic.
 
 use camino::Utf8Path;
-use cohors_core::{ChangedFile, CommitMeta, RepoChanges, RepoDetail};
+use cohors_core::{BranchInfo, ChangedFile, CommitMeta, RepoChanges, RepoDetail};
 
 /// Number of recent commits to surface in the detail view, newest first.
 const RECENT_COMMITS_LIMIT: usize = 15;
@@ -254,26 +254,41 @@ const INDEX_FLAGS: git2::Status = git2::Status::INDEX_NEW
     .union(git2::Status::INDEX_RENAMED)
     .union(git2::Status::INDEX_TYPECHANGE);
 
-/// Local branch names, with the current branch (if any) listed first. A repo
-/// with no branches yields an empty list.
+/// Local branches with per-branch upstream sync, current first. A repo with no
+/// branches yields an empty list. Each branch is compared against *its own*
+/// upstream (not HEAD's), so "which branch has unpushed work" reads directly.
 #[cfg(feature = "git2-fallback")]
-fn local_branches(repo: &git2::Repository, current: Option<&str>) -> Vec<String> {
+fn local_branches(repo: &git2::Repository, current: Option<&str>) -> Vec<BranchInfo> {
     let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) else {
         return Vec::new();
     };
 
-    let mut names: Vec<String> = branches
+    let mut infos: Vec<BranchInfo> = branches
         .filter_map(|b| b.ok())
-        .filter_map(|(branch, _)| branch.name().ok().flatten().map(str::to_string))
+        .filter_map(|(branch, _)| {
+            let name = branch.name().ok().flatten()?.to_string();
+            let mut info = BranchInfo {
+                is_current: Some(name.as_str()) == current,
+                name,
+                ..BranchInfo::default()
+            };
+            if let (Ok(upstream), Some(local_oid)) = (branch.upstream(), branch.get().target())
+                && let Some(upstream_oid) = upstream.get().target()
+                && let Ok((ahead, behind)) = repo.graph_ahead_behind(local_oid, upstream_oid)
+            {
+                info.has_upstream = true;
+                info.ahead = ahead as u32;
+                info.behind = behind as u32;
+            }
+            Some(info)
+        })
         .collect();
 
     // Hoist the current branch to the front so the detail pane can show it first.
-    if let Some(current) = current
-        && let Some(pos) = names.iter().position(|n| n == current)
-    {
-        names.swap(0, pos);
+    if let Some(pos) = infos.iter().position(|b| b.is_current) {
+        infos.swap(0, pos);
     }
-    names
+    infos
 }
 
 /// Stash messages, newest first. `stash_foreach` requires `&mut`, and index 0 is

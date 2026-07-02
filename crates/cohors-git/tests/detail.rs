@@ -71,9 +71,16 @@ fn reports_branch_commits_and_changes() {
 
     assert_eq!(detail.current_branch.as_deref(), Some("main"));
     assert!(!detail.recent_commits.is_empty(), "got: {detail:?}");
-    // The current branch is hoisted to the front of the branch list.
-    assert_eq!(detail.branches.first().map(String::as_str), Some("main"));
-    assert!(detail.branches.iter().any(|b| b == "feature"));
+    // The current branch is hoisted to the front and flagged; a branch with no
+    // upstream reports has_upstream=false (this fixture has no remote at all).
+    let first = detail.branches.first().expect("has branches");
+    assert_eq!((first.name.as_str(), first.is_current), ("main", true));
+    let feature = detail
+        .branches
+        .iter()
+        .find(|b| b.name == "feature")
+        .expect("feature branch listed");
+    assert!(!feature.is_current && !feature.has_upstream);
     // The modified file shows up as a worktree change.
     assert!(
         detail.changed_files.iter().any(|f| f.path == "a.txt"),
