@@ -188,27 +188,28 @@ pub fn run_command_action(
     }
 
     let timeout = std::time::Duration::from_secs(timeout.max(1));
+    // The shared bounded-pool runner (ADR-020) executes the targets concurrently
+    // and returns results in target order, so we zip them back to print by name.
+    let owned: Vec<cohors_core::RepoSnapshot> = targets.iter().map(|s| (*s).clone()).collect();
+    let results = cohors_actions::run_each(&owned, command, timeout);
     let mut ok = 0usize;
-    for s in &targets {
-        let path = s.path.as_ref().unwrap();
-        let out = crate::action::run_command_timeout(path, command, timeout);
-        let passed = out.code == 0 && !out.timed_out;
-        if passed {
+    for (s, r) in targets.iter().zip(&results) {
+        if r.ok {
             ok += 1;
         }
-        let tag = if out.timed_out {
+        let tag = if r.timed_out {
             "timed out"
-        } else if passed {
+        } else if r.ok {
             "ok"
         } else {
             "fail"
         };
         println!("── {} ({tag})", s.name);
-        if !out.stdout.trim().is_empty() {
-            print!("{}", out.stdout);
+        if !r.stdout.trim().is_empty() {
+            print!("{}", r.stdout);
         }
-        if !out.stderr.trim().is_empty() {
-            eprint!("{}", out.stderr);
+        if !r.stderr.trim().is_empty() {
+            eprint!("{}", r.stderr);
         }
     }
     println!("run: {ok}/{} ok", targets.len());
@@ -373,7 +374,14 @@ const WEB_HOST: &str = "cohors.localhost";
 /// accepting connections, then prints + opens the branded local URL
 /// (`http://cohors.localhost:<port>`). Blocks until Ctrl-C. Must run from inside
 /// the cohors repository, since Trunk builds the app from source.
-pub fn run_web(cli: &Cli, port: u16, open: bool, install: bool) -> Result<()> {
+pub fn run_web(
+    cli: &Cli,
+    port: u16,
+    open: bool,
+    install: bool,
+    allow_writes: bool,
+    allow_run: bool,
+) -> Result<()> {
     // `cohors web` builds the dashboard from source, so it needs the repo. This
     // is the *developer* path. End users won't run this at all: once the
     // dashboard is deployed (v0.5 slice 4), an installed `cohors web` outside a
@@ -439,8 +447,30 @@ pub fn run_web(cli: &Cli, port: u16, open: bool, install: bool) -> Result<()> {
     }
 
     // Serve until stopped; then tear down the watcher. `--watch` makes the page
-    // poll `/api/repos` so a fresh scan shows up without a manual rescan.
-    let result = crate::web::serve(&dist, port, scanner, token, cli.watch);
+    // poll `/api/repos` so a fresh scan shows up without a manual rescan. The
+    // server lives in `cohors-web` now (the write seam is no longer trapped in
+    // this binary); we hand it a scan closure + the shared safety config.
+    let mcp_config = scanner.mcp_config();
+    let roots = scanner.roots();
+    let caps = cohors_web::Caps {
+        allow_writes,
+        allow_run,
+    };
+    let scan: std::sync::Arc<cohors_web::ScanFn> = {
+        let scanner = scanner.clone();
+        std::sync::Arc::new(move || scanner.scan())
+    };
+    let result = cohors_web::serve(
+        &dist,
+        port,
+        scan,
+        roots,
+        token,
+        cli.watch,
+        caps,
+        mcp_config.run_allowlist,
+        mcp_config.max_action_targets,
+    );
     let _ = watcher.kill();
     result
 }
@@ -576,7 +606,7 @@ pub fn run_demo() -> Result<()> {
 /// read tools are implemented).
 pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool) -> Result<()> {
     let scanner = Scanner::from_cli(cli)?;
-    let caps = crate::mcp::Caps {
+    let caps = cohors_mcp::Caps {
         allow_writes,
         allow_run,
         allow_open,
@@ -586,7 +616,7 @@ pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool)
     let token = scanner.github_token();
     let mcp_config = scanner.mcp_config();
     let scan = || scanner.scan();
-    crate::mcp::run(
+    cohors_mcp::serve_stdio(
         &scan,
         token.as_deref(),
         &roots,

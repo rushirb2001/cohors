@@ -5,7 +5,7 @@
 //! (newline-delimited messages, as the MCP stdio transport specifies). This
 //! keeps the binary on the project's sync, no-tokio architecture (ADR-012) and
 //! adds no new dependency. The tool layer is deliberately transport-agnostic, so
-//! swapping in `rmcp` later is contained to [`run`].
+//! swapping in `rmcp` later is contained to [`serve_stdio`].
 //!
 //! Tools: reads (`list_repos`, `get_repo`, `fleet_summary`, `repo_path`,
 //! `search`, and the GitHub-enriched `list_prs`/`ci_status`) are always on;
@@ -13,6 +13,12 @@
 //! `--allow-writes`, `--allow-run`, per-call `confirm`, and `dry_run` (a
 //! side-effect-free preview that needs no tier or confirm). Every read carries
 //! fail-loud diagnostics (see [`meta`]).
+//!
+//! This is the 4th adapter, its own crate (ADR-002/023): it depends on
+//! `cohors-actions` for the write half and the read adapters for enrichment, and
+//! the `cohors` binary's `mcp` subcommand calls [`serve_stdio`].
+
+#![forbid(unsafe_code)]
 
 use std::io::{BufRead, Write};
 
@@ -60,7 +66,7 @@ struct Ctx<'a> {
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
 /// message; each request gets exactly one response line, notifications none.
 #[allow(clippy::too_many_arguments)]
-pub fn run(
+pub fn serve_stdio(
     scan: &ScanFn<'_>,
     token: Option<&str>,
     roots: &[String],
@@ -162,7 +168,9 @@ fn tool_catalog() -> Value {
         "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob, root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, has_stash, detached, error, branch (exact name), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
         "additionalProperties": true
     });
-    json!([
+    // Read tools are hand-written (their schemas are bespoke); the action tools
+    // below are appended from the registry.
+    let mut tools = json!([
         {
             "name": "list_repos",
             "description": "The primary \"what's going on across my repos\" call: returns every repo's git status — branch, ahead/behind, dirty worktree, stashes, last commit, and an attention assessment — plus a fleet summary, in one request. Use this (or fleet_summary) whenever the user asks about their repos, projects, or fleet, or what is dirty/unpushed/behind/needs attention; do NOT enumerate repos yourself with find or per-repo git. Omit selector for the whole fleet, or narrow it (e.g. {\"dirty\": true}). Use fields to shrink each repo to just the keys you need.",
@@ -244,80 +252,65 @@ fn tool_catalog() -> Value {
                 "properties": { "selector": selector_schema.clone() }
             }
         },
-        {
-            "name": "fetch",
-            "description": "git fetch across the selected repos — non-destructive (updates remote-tracking refs only). Use to refresh remote state before checking what is behind. Requires a selector. Executing needs the server launched with --allow-writes; without it (or with dry_run:true) the call just previews the resolved target set.",
-            "inputSchema": {
-                "type": "object",
-                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." } },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "pull",
-            "description": "git pull --ff-only across the selected repos — fast-forward only, so it never merges, rebases, or loses work. Typical flow: find what is behind with {\"behind\": true}, then pull those. Requires a selector. Executing needs --allow-writes; dry_run:true (or a read-only server) previews the targets.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "selector": selector_schema.clone(),
-                    "mode": { "type": "string", "enum": ["ff-only"], "description": "Only fast-forward is supported (the default)." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
-                },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "push",
-            "description": "git push the current branch to its upstream across the selected repos. Never force-pushes (git rejects non-fast-forward pushes), so it can't overwrite remote history. Pair after commit to land a cross-repo change. Requires a selector. Executing needs --allow-writes; dry_run:true previews the targets.",
-            "inputSchema": {
-                "type": "object",
-                "properties": { "selector": selector_schema.clone(), "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." } },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "commit",
-            "description": "git add -A + git commit -m <message> across the selected repos (stages tracked AND untracked; \"nothing to commit\" is a no-op). Never amends or rewrites history. Pair with push to finish a cross-repo change. Requires selector and message. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "selector": selector_schema.clone(),
-                    "message": { "type": "string", "description": "Commit message, applied to every selected repo (required)." },
-                    "confirm": { "type": "boolean", "description": "Must be true to actually commit; preview first with dry_run." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
-                },
-                "required": ["selector", "message"]
-            }
-        },
-        {
-            "name": "stash",
-            "description": "git stash push (tracked changes) across the selected repos — a safe way to park work, e.g. before a bulk pull or run on dirty repos. Requires a selector. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "selector": selector_schema.clone(),
-                    "confirm": { "type": "boolean", "description": "Must be true to actually stash; preview first with dry_run." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." }
-                },
-                "required": ["selector"]
-            }
-        },
-        {
-            "name": "run",
-            "description": "Run one shell command in each selected repo and collect per-repo {exit_code, stdout, stderr, truncated, timed_out} — the fleet codemod/audit/test primitive (e.g. \"cargo fmt --check\", \"rg TODO\", \"npm test\"). The command runs in each repo's own directory. Requires command and selector. Executing needs --allow-run AND confirm:true; dry_run:true previews the target set with neither. Each repo is bounded by timeout_secs (default 120).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "command": { "type": "string", "description": "Shell command run in each selected repo's directory." },
-                    "selector": selector_schema.clone(),
-                    "confirm": { "type": "boolean", "description": "Must be true to actually run; preview first with dry_run." },
-                    "dry_run": { "type": "boolean", "description": "Preview the resolved target set without acting." },
-                    "timeout_secs": { "type": "integer", "minimum": 1, "description": "Per-repo timeout in seconds (default 120)." }
-                },
-                "required": ["command", "selector"]
-            }
+    ]);
+    // The action half (fetch/pull/push/commit/stash/run) is generated from the
+    // shared registry (ADR: one registry drives all surfaces), so a verb added in
+    // `cohors-actions` shows up here automatically and the parity test enforces it.
+    if let Value::Array(arr) = &mut tools {
+        for def in cohors_actions::registry() {
+            arr.push(action_tool(def, &selector_schema));
         }
-    ])
+    }
+    tools
+}
+
+/// Build one action tool's catalog entry from its [`cohors_actions::ActionDef`]:
+/// the name and description come from the registry; the per-verb argument schema
+/// (which differ — `commit` needs a message, `run` a command + timeout) is here.
+fn action_tool(def: &cohors_actions::ActionDef, selector_schema: &Value) -> Value {
+    let dry_run = json!({ "type": "boolean", "description": "Preview the resolved target set without acting." });
+    let confirm = json!({ "type": "boolean", "description": "Must be true to actually act; preview first with dry_run." });
+
+    let mut props = serde_json::Map::new();
+    let mut required = vec![json!("selector")];
+    // `run`'s command comes before the selector in the existing schema; keep that.
+    if def.verb == "run" {
+        props.insert(
+            "command".into(),
+            json!({ "type": "string", "description": "Shell command run in each selected repo's directory." }),
+        );
+        required.insert(0, json!("command"));
+    }
+    props.insert("selector".into(), selector_schema.clone());
+    if def.verb == "pull" {
+        props.insert(
+            "mode".into(),
+            json!({ "type": "string", "enum": ["ff-only"], "description": "Only fast-forward is supported (the default)." }),
+        );
+    }
+    if def.verb == "commit" {
+        props.insert(
+            "message".into(),
+            json!({ "type": "string", "description": "Commit message, applied to every selected repo (required)." }),
+        );
+        required.push(json!("message"));
+    }
+    if def.needs_confirm {
+        props.insert("confirm".into(), confirm);
+    }
+    props.insert("dry_run".into(), dry_run);
+    if def.verb == "run" {
+        props.insert(
+            "timeout_secs".into(),
+            json!({ "type": "integer", "minimum": 1, "description": "Per-repo timeout in seconds (default 120)." }),
+        );
+    }
+
+    json!({
+        "name": def.verb,
+        "description": def.summary,
+        "inputSchema": { "type": "object", "properties": Value::Object(props), "required": required }
+    })
 }
 
 /// Execute a read tool, returning the JSON payload to embed (or an error message
@@ -376,188 +369,53 @@ fn require_confirm(args: &Value, tool: &str) -> Result<(), String> {
     }
 }
 
-fn is_dry_run(args: &Value) -> bool {
-    args.get("dry_run")
-        .and_then(Value::as_bool)
-        .unwrap_or(false)
-}
-
-/// Parse an action's selector (required — an empty selector matches nothing).
-fn action_selector(args: &Value) -> Selector {
-    args.get("selector")
-        .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_default()
-}
-
-/// Resolve a parsed selector to action targets, scoped to the configured roots,
-/// with error/path-less repos excluded since they can't be acted on (ADR-019).
-fn resolve_targets(selector: &Selector, snaps: &[RepoSnapshot], now: i64) -> Vec<RepoSnapshot> {
-    if selector.is_empty() {
-        return Vec::new();
-    }
-    let order = resolve(snaps, selector, SortMode::DirtyFirst, now);
-    let by_id: std::collections::HashMap<&str, &RepoSnapshot> =
-        snaps.iter().map(|s| (s.id.0.as_str(), s)).collect();
-    order
-        .iter()
-        .filter_map(|id| by_id.get(id.0.as_str()).copied())
-        .filter(|s| !s.has_error() && s.path.is_some())
-        .cloned()
-        .collect()
-}
-
-/// Enforce the action-target cap: too many targets without an explicit
-/// `{all: true}` is refused (ADR-025), so a fumbled selector can't fan out.
-fn within_cap(selector: &Selector, targets: &[RepoSnapshot], max: usize) -> Result<(), String> {
-    if max > 0 && !selector.all && targets.len() > max {
-        Err(format!(
-            "{} repos match — over the configured cap of {max}. Narrow the selector, or pass {{\"all\": true}} to act on the whole fleet deliberately.",
-            targets.len()
-        ))
-    } else {
-        Ok(())
-    }
-}
-
-/// Write a one-line audit record of an action to the log (`cohors.log`, ADR-025).
-fn audit(tool: &str, selector: &Selector, targets: &[RepoSnapshot], ok: usize) {
-    let ids: Vec<&str> = targets.iter().map(|s| s.id.0.as_str()).collect();
-    tracing::info!(
-        target: "cohors::audit",
-        tool,
-        selector = %serde_json::to_string(selector).unwrap_or_default(),
-        targets = targets.len(),
-        ok,
-        failed = targets.len() - ok,
-        ids = ?ids,
-        "mcp action",
-    );
-}
-
-/// Whether `cmd` is permitted by the allowlist (empty allows anything).
-fn command_allowed(cmd: &str, allowlist: &[String]) -> bool {
-    allowlist.is_empty() || allowlist.iter().any(|pat| command_matches(pat, cmd))
-}
-
-/// A small `*`-glob match for allowlist patterns like `cargo *` or `git *`.
-fn command_matches(pattern: &str, cmd: &str) -> bool {
-    let p: Vec<char> = pattern.chars().collect();
-    let t: Vec<char> = cmd.chars().collect();
-    let (mut pi, mut ti, mut star, mut resume) = (0usize, 0usize, None, 0usize);
-    while ti < t.len() {
-        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
-            pi += 1;
-            ti += 1;
-        } else if pi < p.len() && p[pi] == '*' {
-            star = Some(pi);
-            resume = ti;
-            pi += 1;
-        } else if let Some(s) = star {
-            pi = s + 1;
-            resume += 1;
-            ti = resume;
-        } else {
-            return false;
-        }
-    }
-    while pi < p.len() && p[pi] == '*' {
-        pi += 1;
-    }
-    pi == p.len()
-}
-
-/// The "you selected nothing" result — explicit, so the agent doesn't read an
-/// empty action as "done."
-fn no_targets() -> Value {
-    json!({
-        "targets": 0,
-        "results": [],
-        "note": "Selector resolved to 0 repos. An empty selector matches nothing — pass predicates or {\"all\": true}. (Repos that errored or have no local path are excluded from actions.)"
-    })
-}
-
-/// A `dry_run` preview: the exact target set + the action, with no side effects.
-fn dry_run_preview(action: Value, targets: &[RepoSnapshot]) -> Value {
-    let repos: Vec<Value> = targets
-        .iter()
-        .map(|s| json!({ "repo": s.id.0, "name": s.name, "path": s.path }))
-        .collect();
-    json!({ "dry_run": true, "action": action, "targets": repos.len(), "repos": repos })
-}
-
-/// Run a per-repo git action (fetch / pull / stash) over the targets and collect
-/// `{repo, ok, message}` results.
-fn git_action(
-    tool: &str,
-    action: Value,
-    args: &Value,
-    ctx: &Ctx,
-    now: i64,
-    authorize: impl Fn() -> Result<(), String>,
-    op: impl Fn(&camino::Utf8Path, &str) -> Result<String, String>,
-) -> Result<Value, String> {
-    let snaps = (ctx.scan)();
-    let selector = action_selector(args);
-    let targets = resolve_targets(&selector, &snaps, now);
-    if targets.is_empty() {
-        return Ok(no_targets());
-    }
-    within_cap(&selector, &targets, ctx.max_targets)?;
-    // A dry run is side-effect-free, so it's allowed *before* the gate/confirm:
-    // an agent can preview the exact target set (even on a read-only server) for
-    // a human to approve, then enable the tier and act.
-    if is_dry_run(args) {
-        return Ok(dry_run_preview(action, &targets));
-    }
-    authorize()?;
-    let results: Vec<Value> = targets
-        .iter()
-        .map(|s| {
-            let path = s.path.as_ref().expect("action targets have a path");
-            match op(path, &s.name) {
-                Ok(message) => json!({ "repo": s.id.0, "ok": true, "message": message }),
-                Err(message) => json!({ "repo": s.id.0, "ok": false, "message": message }),
-            }
-        })
-        .collect();
-    let ok = results.iter().filter(|r| r["ok"] == true).count();
-    audit(tool, &selector, &targets, ok);
-    Ok(json!({ "targets": targets.len(), "results": results }))
-}
+/// The surface-agnostic orchestration (selector → targets → cap → dry-run → run
+/// → audit) lives in `cohors_actions::orchestrate`; re-export the bits this
+/// module names so call sites stay short.
+use cohors_actions::{
+    action_selector, audit, command_allowed, dry_run_preview, git_action, is_dry_run, no_targets,
+    resolve_targets, within_cap,
+};
 
 fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "fetch",
         json!("fetch"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || require_writes(ctx, "fetch"),
-        crate::action::fetch,
+        cohors_actions::fetch,
     )
 }
 
 fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "pull",
         json!("pull --ff-only"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || require_writes(ctx, "pull"),
-        crate::action::pull_ff,
+        cohors_actions::pull_ff,
     )
 }
 
 fn push_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "push",
         json!("push"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || require_writes(ctx, "push"),
-        crate::action::push,
+        cohors_actions::push,
     )
 }
 
@@ -570,40 +428,38 @@ fn commit_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         .filter(|m| !m.trim().is_empty())
         .ok_or("missing required argument `message`")?
         .to_string();
+    let snaps = (ctx.scan)();
     git_action(
         "commit",
         json!({ "commit": message }),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || {
             require_writes(ctx, "commit")?;
             require_confirm(args, "commit")
         },
-        |path, name| crate::action::commit(path, name, &message),
+        |path, name| cohors_actions::commit(path, name, &message),
     )
 }
 
 fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let snaps = (ctx.scan)();
     git_action(
         "stash",
         json!("stash push"),
         args,
-        ctx,
+        &snaps,
+        ctx.max_targets,
         now,
         || {
             require_writes(ctx, "stash")?;
             require_confirm(args, "stash")
         },
-        crate::action::stash_push,
+        cohors_actions::stash_push,
     )
 }
-
-/// Maximum captured output per stream per repo (matches the TUI runner, ADR-020).
-const RUN_OUTPUT_CAP: usize = 64 * 1024;
-/// Per-repo wall-clock bound for `run` when the caller doesn't set `timeout_secs`,
-/// so one hung command can't stall the whole fan-out.
-const DEFAULT_RUN_TIMEOUT_SECS: u64 = 120;
 
 fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let command = args
@@ -642,69 +498,19 @@ fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let timeout = std::time::Duration::from_secs(
         args.get("timeout_secs")
             .and_then(Value::as_u64)
-            .unwrap_or(DEFAULT_RUN_TIMEOUT_SECS)
+            .unwrap_or(cohors_actions::DEFAULT_RUN_TIMEOUT_SECS)
             .max(1),
     );
-    let run_id = next_run_id();
+    let run_id = cohors_actions::next_run_id();
     // Fan out across a bounded pool (ADR-020) so a large fleet finishes fast
-    // without spawning a process per repo at once. `par_iter().collect()`
-    // preserves target order.
-    let results: Vec<Value> = run_each(&targets, &command, timeout);
-    let ok = results.iter().filter(|r| r["ok"] == true).count();
+    // without spawning a process per repo at once; results stay in target order.
+    let results = cohors_actions::run_each(&targets, &command, timeout);
+    let ok = results.iter().filter(|r| r.ok).count();
     audit("run", &selector, &targets, ok);
     Ok(json!({
         "run_id": run_id, "command": command, "targets": targets.len(),
         "ok": ok, "failed": targets.len() - ok, "results": results
     }))
-}
-
-/// Truncate a captured stream to [`RUN_OUTPUT_CAP`] bytes on a char boundary.
-fn cap_output(mut s: String) -> (String, bool) {
-    if s.len() <= RUN_OUTPUT_CAP {
-        return (s, false);
-    }
-    let mut end = RUN_OUTPUT_CAP;
-    while end > 0 && !s.is_char_boundary(end) {
-        end -= 1;
-    }
-    s.truncate(end);
-    (s, true)
-}
-
-/// Monotonic, process-global run id (ADR-020).
-fn next_run_id() -> u64 {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(1);
-    COUNTER.fetch_add(1, Ordering::Relaxed)
-}
-
-/// How many repos `run` executes concurrently (ADR-020).
-const RUN_POOL_SIZE: usize = 8;
-
-/// Run `command` in each target's directory over a bounded thread pool, returning
-/// per-repo `{repo, ok, exit_code, stdout, stderr, truncated, timed_out}` results
-/// in target order. Falls back to sequential if the pool can't be built.
-fn run_each(targets: &[RepoSnapshot], command: &str, timeout: std::time::Duration) -> Vec<Value> {
-    use rayon::prelude::*;
-
-    let exec = |s: &RepoSnapshot| {
-        let path = s.path.as_ref().expect("action targets have a path");
-        let out = crate::action::run_command_timeout(path, command, timeout);
-        let (stdout, t1) = cap_output(out.stdout);
-        let (stderr, t2) = cap_output(out.stderr);
-        json!({
-            "repo": s.id.0, "ok": out.code == 0 && !out.timed_out, "exit_code": out.code,
-            "stdout": stdout, "stderr": stderr, "truncated": t1 || t2, "timed_out": out.timed_out
-        })
-    };
-
-    match rayon::ThreadPoolBuilder::new()
-        .num_threads(RUN_POOL_SIZE)
-        .build()
-    {
-        Ok(pool) => pool.install(|| targets.par_iter().map(exec).collect()),
-        Err(_) => targets.iter().map(exec).collect(),
-    }
 }
 
 // ── Remote read tools (GitHub enrichment) ────────────────────────────────────
@@ -1453,29 +1259,53 @@ mod tests {
         assert!(p["note"].as_str().unwrap().contains("empty selector"));
     }
 
+    /// Structural parity, MCP half (replaces the old hardcoded list): every action
+    /// in the shared registry must have an MCP catalog tool whose description,
+    /// confirm arg, and tier-gate match the `ActionDef`. Adding a verb to
+    /// `cohors_actions::registry()` without generating its tool here fails this
+    /// test. The TUI half is enforced symmetrically in `cohors-tui` (app::tests).
     #[test]
-    fn action_tools_appear_in_catalog() {
+    fn registry_drives_catalog_parity() {
         let resp = call(json!({ "jsonrpc": "2.0", "id": 100, "method": "tools/list" }));
-        let names: Vec<&str> = resp["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|t| t["name"].as_str().unwrap())
-            .collect();
-        // Parity: every repo-targeting TUI verb has a matching MCP tool, plus the
-        // remote read tools.
-        for tool in [
-            "fetch",
-            "pull",
-            "push",
-            "commit",
-            "stash",
-            "run",
-            "list_prs",
-            "ci_status",
-        ] {
-            assert!(names.contains(&tool), "missing {tool}");
+        let tools = resp["result"]["tools"].as_array().unwrap();
+        let find = |name: &str| tools.iter().find(|t| t["name"] == name);
+
+        for def in cohors_actions::registry() {
+            // A tool exists for this verb, generated from the def.
+            let tool =
+                find(def.verb).unwrap_or_else(|| panic!("MCP catalog missing `{}`", def.verb));
+            assert_eq!(
+                tool["description"], def.summary,
+                "`{}` catalog description drifted from the registry",
+                def.verb
+            );
+            // needs_confirm ⇔ a `confirm` argument is offered.
+            let has_confirm = tool["inputSchema"]["properties"].get("confirm").is_some();
+            assert_eq!(
+                has_confirm, def.needs_confirm,
+                "`{}` confirm arg disagrees with the registry",
+                def.verb
+            );
+            // The tier picks which gate the description must name.
+            let desc = tool["description"].as_str().unwrap();
+            match def.tier {
+                cohors_actions::Tier::Write => assert!(
+                    desc.contains("--allow-writes"),
+                    "`{}` is Write tier but doesn't name --allow-writes",
+                    def.verb
+                ),
+                cohors_actions::Tier::Run => assert!(
+                    desc.contains("--allow-run"),
+                    "`{}` is Run tier but doesn't name --allow-run",
+                    def.verb
+                ),
+                other => panic!("action `{}` has unexpected tier {other:?}", def.verb),
+            }
         }
+
+        // The remote read tools are not registry-driven; keep asserting they ship.
+        assert!(find("list_prs").is_some());
+        assert!(find("ci_status").is_some());
     }
 
     #[test]
@@ -1602,15 +1432,5 @@ mod tests {
         );
         let resp = call_ctx(ok, RUN, &allow, 0);
         assert!(!is_error(&resp));
-    }
-
-    #[test]
-    fn command_matches_globs() {
-        assert!(command_matches("cargo *", "cargo build --release"));
-        assert!(command_matches("git *", "git status -s"));
-        assert!(!command_matches("git *", "rm -rf /"));
-        assert!(command_matches("*", "anything goes"));
-        assert!(command_matches("exact", "exact"));
-        assert!(!command_matches("exact", "exactly"));
     }
 }

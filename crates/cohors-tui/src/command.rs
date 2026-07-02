@@ -12,6 +12,9 @@ pub enum Command {
     Fetch,
     Pull,
     Push,
+    /// Commit staged + unstaged changes across the target repos with this message
+    /// (`:commit <message>`). Opens a confirmation modal before acting.
+    Commit(String),
     Refresh,
     Standup,
     Help,
@@ -60,6 +63,8 @@ pub fn parse(input: &str) -> Option<Command> {
         "fetch" | "f" => Some(Command::Fetch),
         "pull" | "pl" => Some(Command::Pull),
         "push" | "p" => Some(Command::Push),
+        // `commit` needs a message; with none it's invalid (not a repo jump).
+        "commit" | "ci" => (!arg.is_empty()).then(|| Command::Commit(arg.to_string())),
         "refresh" | "r" => Some(Command::Refresh),
         "standup" | "st" => Some(Command::Standup),
         "help" | "h" | "?" => Some(Command::Help),
@@ -105,5 +110,16 @@ mod tests {
         );
         assert_eq!(parse("   "), None);
         assert_eq!(parse("sort sideways"), None);
+    }
+
+    #[test]
+    fn commit_needs_a_message() {
+        assert_eq!(
+            parse(":commit snapshot wip"),
+            Some(Command::Commit("snapshot wip".into()))
+        );
+        assert_eq!(parse(":ci done"), Some(Command::Commit("done".into())));
+        // No message ⇒ not a valid commit (and not a repo jump either).
+        assert_eq!(parse(":commit"), None);
     }
 }

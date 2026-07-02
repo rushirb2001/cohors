@@ -1,52 +1,56 @@
-# The web front-end (v0.5): `cohors-core` compiled to WASM, rendered with Leptos.
+# cohors-web — the web front-end, in two halves that never build together:
 #
-# This crate is intentionally **excluded** from the workspace (see the root
-# Cargo.toml `exclude`) so the native gates (`cargo test --all`, `clippy
-# --all-targets`) never try to build Leptos for the host. It is built only for
-# `wasm32-unknown-unknown`:
+#   • Native server half (this crate's lib, default on the host): the HTTP server
+#     that scans, enriches, and now *acts* on the local fleet. Links the native
+#     leaf libraries (cohors-config/git/github/actions) and is a normal workspace
+#     member, built and tested by the native gates.
+#   • WASM browser half (the bin, built by Trunk for wasm32): the Leptos page,
+#     which links cohors-core only and talks to the server over HTTP.
 #
-#   cargo build --manifest-path crates/cohors-web/Cargo.toml --target wasm32-unknown-unknown
-#
-# and served for local dev with Trunk (`cargo install trunk`, then `trunk serve`
-# from this directory).
+# The split is by build target (see the `[target.…]` dependency tables below), so
+# `cargo build` on the host compiles the server and never Leptos, while
+# `trunk build` (wasm32) compiles the page and never tiny_http.
 [package]
 name = "cohors-web"
-# Its own pre-release line — the web front-end isn't part of the workspace's
-# (TUI/CLI/MCP) version, and isn't published or installed yet.
 version = "0.4.27"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
 authors = ["Rushir Bhavsar <rbhavsa4@asu.edu>"]
-description = "cohors web dashboard — the same Rust core, in the browser (WASM, Leptos)"
+description = "cohors web dashboard — one Rust core; a native server half and a WASM (Leptos) browser half"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "cohors-web"
+path = "src/main.rs"
 
 [dependencies]
-# The pure core, compiled to WASM: models, sort/filter (`resolve`), attention
-# (`assess`), relative time, and the demo fleet — all shared verbatim with the TUI.
-cohors-core = { path = "../cohors-core" }
+# The pure core is shared verbatim by both halves (models, sort/filter, attention).
+cohors-core = { workspace = true }
+serde = { workspace = true }
+# JSON: the server (de)serializes responses; the browser builds the action body.
+serde_json = { workspace = true }
 
+# ── WASM browser half (Trunk target only) ────────────────────────────────────
+[target.'cfg(target_arch = "wasm32")'.dependencies]
 # All-Rust reactive UI (ADR-006). `csr` = client-side rendering (no server).
 leptos = { version = "0.8", features = ["csr"] }
-
 # Surface Rust panics in the browser console instead of an opaque "unreachable".
 console_error_panic_hook = "0.1"
-
-# The page fetches the local scan the server serves (same `cohors-core` models)
-# over the WASM HTTP client, rather than doing any git/GitHub work itself.
+# The page fetches the server's JSON (same `cohors-core` models) over WASM HTTP.
 gloo-net = { version = "0.6", features = ["http"] }
 gloo-timers = { version = "0.3", features = ["futures"] } # `--watch` poll interval
 js-sys = "0.3"                 # Date: a real clock for relative ages
-serde = { version = "1", features = ["derive"] }
 wasm-bindgen-futures = "0.4"   # spawn the async fetch
 
-# ── Build profiles (this crate is workspace-excluded, so set here) ────────────
-[profile.dev]
-# Debuginfo is the bulk of the wasm target's growth, and you can't gdb wasm
-# anyway — `console_error_panic_hook` still surfaces panics. Roughly halves the
-# wasm target dir across rebuilds.
-debug = false
-
-[profile.release]
-opt-level = "s"   # size-leaning; trunk runs wasm-opt on top
-lto = true
-codegen-units = 1
+# ── Native server half (host target only) ────────────────────────────────────
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+cohors-config = { workspace = true }
+cohors-git = { workspace = true }
+cohors-github = { workspace = true }
+cohors-actions = { workspace = true }
+anyhow = { workspace = true }
+camino = { workspace = true }
+tiny_http = { workspace = true }

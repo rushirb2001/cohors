@@ -2969,17 +2969,19 @@ fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let Some(pending) = &app.confirm else {
         return;
     };
-    let names: Vec<&str> = match &pending.action {
-        ConfirmAction::BulkStash(ids) => ids
-            .iter()
-            .filter_map(|id| {
-                app.repos
-                    .iter()
-                    .find(|r| &r.id == id)
-                    .map(|r| r.name.as_str())
-            })
-            .collect(),
+    let ids = match &pending.action {
+        ConfirmAction::BulkStash(ids) => ids,
+        ConfirmAction::BulkCommit { ids, .. } => ids,
     };
+    let names: Vec<&str> = ids
+        .iter()
+        .filter_map(|id| {
+            app.repos
+                .iter()
+                .find(|r| &r.id == id)
+                .map(|r| r.name.as_str())
+        })
+        .collect();
     let area = centered_rect(54, 32, full);
     frame.render_widget(Clear, area);
     let block = Block::bordered()
@@ -3163,10 +3165,14 @@ mod tests {
                 staged: worktree.0,
                 modified: worktree.1,
                 untracked: worktree.2,
+                conflicted: 0,
             },
             stash_count: stash,
             stash_latest: None,
             remote_url: None,
+            operation: None,
+            default_branch: None,
+            last_fetch: None,
             remote: None,
             last_commit: commit.map(|(ts, summary)| CommitMeta {
                 short_id: "a1b2c3d".to_string(),
@@ -3196,6 +3202,11 @@ mod tests {
                 open_prs,
                 prs_awaiting_review: 0,
                 ci,
+                description: None,
+                topics: Vec::new(),
+                stars: 0,
+                forks: 0,
+                watchers: 0,
             })
         };
         let mut payments = snap(
@@ -3491,6 +3502,7 @@ mod tests {
                     draft: false,
                     branch: "fix/retry".to_string(),
                     url: String::new(),
+                    requested_reviewers: vec!["sam".to_string()],
                 },
                 PullRequest {
                     number: 147,
@@ -3499,6 +3511,7 @@ mod tests {
                     draft: true,
                     branch: "spike/webhooks".to_string(),
                     url: String::new(),
+                    requested_reviewers: Vec::new(),
                 },
             ],
             contributors: vec![
@@ -3513,6 +3526,9 @@ mod tests {
             ],
             open_issues: 7,
             latest_release: Some("v1.4.0".to_string()),
+            assigned_issues: 2,
+            default_branch_protected: Some(true),
+            latest_run: Some(CiStatus::Passing),
         });
         app.detail = Some(dv);
         insta::assert_snapshot!(render_to_string(&app, 100, 28));

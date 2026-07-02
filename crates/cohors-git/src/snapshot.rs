@@ -8,7 +8,9 @@
 //! to open the repo yields an error snapshot — never a panic.
 
 use camino::Utf8Path;
-use cohors_core::{Branch, CommitMeta, RepoRef, RepoSnapshot, Upstream, WorktreeStatus};
+use cohors_core::{
+    Branch, CommitMeta, RepoOperation, RepoRef, RepoSnapshot, Upstream, WorktreeStatus,
+};
 use gix::bstr::{BStr, ByteSlice};
 
 /// How many trailing weeks of commit activity to record for the sparkline.
@@ -60,6 +62,9 @@ pub fn snapshot_repo(repo_ref: &RepoRef, now: i64) -> RepoSnapshot {
         stash_count: extras.stash_count,
         stash_latest: extras.stash_latest,
         remote_url: extras.remote_url,
+        operation: extras.operation,
+        default_branch: extras.default_branch,
+        last_fetch: extras.last_fetch,
         remote: None,
         last_commit,
         error: None,
@@ -130,6 +135,9 @@ struct Extras {
     stash_count: u32,
     stash_latest: Option<i64>,
     remote_url: Option<String>,
+    operation: Option<RepoOperation>,
+    default_branch: Option<String>,
+    last_fetch: Option<i64>,
     activity: Vec<u8>,
 }
 
@@ -147,6 +155,9 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
     extras.worktree = worktree_status(&repo);
     extras.upstream = upstream_info(&repo);
     extras.activity = commit_activity(&repo, now);
+    extras.operation = repo_operation(&repo);
+    extras.default_branch = default_branch(&repo);
+    extras.last_fetch = last_fetch_time(&repo);
     // The `origin` URL is local git data; cohors-github resolves it to a repo.
     extras.remote_url = repo
         .find_remote("origin")
@@ -172,6 +183,49 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
     extras
 }
 
+/// Map libgit2's repository state to a paused [`RepoOperation`], if any. `Clean`
+/// (and any future state) reads as `None`.
+#[cfg(feature = "git2-fallback")]
+fn repo_operation(repo: &git2::Repository) -> Option<RepoOperation> {
+    use git2::RepositoryState as S;
+    match repo.state() {
+        S::Merge => Some(RepoOperation::Merge),
+        S::Revert | S::RevertSequence => Some(RepoOperation::Revert),
+        S::CherryPick | S::CherryPickSequence => Some(RepoOperation::CherryPick),
+        S::Bisect => Some(RepoOperation::Bisect),
+        S::Rebase | S::RebaseInteractive | S::RebaseMerge => Some(RepoOperation::Rebase),
+        S::ApplyMailbox | S::ApplyMailboxOrRebase => Some(RepoOperation::Mailbox),
+        _ => None,
+    }
+}
+
+/// The repo's default branch, read locally from `refs/remotes/origin/HEAD`
+/// (e.g. `refs/remotes/origin/main` → `main`). `None` if origin or its HEAD
+/// symref isn't set — no network call.
+#[cfg(feature = "git2-fallback")]
+fn default_branch(repo: &git2::Repository) -> Option<String> {
+    let head = repo.find_reference("refs/remotes/origin/HEAD").ok()?;
+    head.symbolic_target()
+        .ok()
+        .flatten()
+        .and_then(|t| t.rsplit('/').next())
+        .map(str::to_string)
+}
+
+/// When the repo last fetched, from the mtime of `FETCH_HEAD` (Unix seconds).
+/// `None` if it has never fetched.
+#[cfg(feature = "git2-fallback")]
+fn last_fetch_time(repo: &git2::Repository) -> Option<i64> {
+    let meta = std::fs::metadata(repo.path().join("FETCH_HEAD")).ok()?;
+    let secs = meta
+        .modified()
+        .ok()?
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+    Some(secs as i64)
+}
+
 #[cfg(feature = "git2-fallback")]
 fn worktree_status(repo: &git2::Repository) -> WorktreeStatus {
     use git2::Status;
@@ -195,6 +249,12 @@ fn worktree_status(repo: &git2::Repository) -> WorktreeStatus {
     let mut status = WorktreeStatus::default();
     for entry in statuses.iter() {
         let s = entry.status();
+        // An unmerged path is *only* counted as conflicted — it carries WT_/INDEX_
+        // flags too, but folding it into modified/staged would hide the conflict.
+        if s.contains(Status::CONFLICTED) {
+            status.conflicted += 1;
+            continue;
+        }
         if s.intersects(staged_flags) {
             status.staged += 1;
         }

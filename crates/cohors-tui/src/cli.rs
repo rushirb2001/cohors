@@ -94,6 +94,12 @@ pub enum Command {
         /// Fail with instructions instead of installing Trunk when it's missing.
         #[arg(long)]
         no_install: bool,
+        /// Enable write actions over `/api/action` (`fetch`/`pull`/`push`/`commit`/`stash`).
+        #[arg(long)]
+        allow_writes: bool,
+        /// Enable the `run` action over `/api/action` (arbitrary shell across repos).
+        #[arg(long)]
+        allow_run: bool,
     },
     /// Run as a Model Context Protocol server over stdio, so a coding agent can
     /// see and (opt-in) act on your fleet. Read-only by default.

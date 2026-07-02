@@ -89,17 +89,28 @@ pub struct WorktreeStatus {
     pub modified: u32,
     /// Untracked files.
     pub untracked: u32,
+    /// Unmerged (conflicted) files. Surfaced separately from `modified` because
+    /// "you have conflicts" is a distinct, more urgent state than a dirty tree —
+    /// it usually means a merge/rebase/cherry-pick is mid-flight. `#[serde(default)]`
+    /// so snapshots cached before this field existed still deserialize as 0.
+    #[serde(default)]
+    pub conflicted: u32,
 }
 
 impl WorktreeStatus {
     /// Any uncommitted change at all?
     pub fn is_dirty(&self) -> bool {
-        self.staged > 0 || self.modified > 0 || self.untracked > 0
+        self.staged > 0 || self.modified > 0 || self.untracked > 0 || self.conflicted > 0
     }
 
     /// Total number of changed entries.
     pub fn total(&self) -> u32 {
-        self.staged + self.modified + self.untracked
+        self.staged + self.modified + self.untracked + self.conflicted
+    }
+
+    /// Whether any file is in an unmerged/conflicted state.
+    pub fn has_conflicts(&self) -> bool {
+        self.conflicted > 0
     }
 }
 
@@ -129,6 +140,35 @@ pub enum CiStatus {
     None,
 }
 
+/// A multi-step git operation that is paused mid-flight in the working tree — the
+/// repo is in a special state until you finish or abort it. Surfaced because it's
+/// urgent context (often paired with conflicts) that a plain dirty/ahead view hides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RepoOperation {
+    Merge,
+    Rebase,
+    CherryPick,
+    Revert,
+    Bisect,
+    /// `git am` — applying a mailbox of patches.
+    Mailbox,
+}
+
+impl RepoOperation {
+    /// A short, stable label for status lines (e.g. "rebase in progress").
+    pub fn label(self) -> &'static str {
+        match self {
+            RepoOperation::Merge => "merge",
+            RepoOperation::Rebase => "rebase",
+            RepoOperation::CherryPick => "cherry-pick",
+            RepoOperation::Revert => "revert",
+            RepoOperation::Bisect => "bisect",
+            RepoOperation::Mailbox => "am",
+        }
+    }
+}
+
 /// Remote (GitHub) info for a repo, populated by `cohors-github` (v0.2). `None`
 /// on a snapshot means "not a GitHub repo, or not fetched yet".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,6 +184,22 @@ pub struct RemoteInfo {
     pub prs_awaiting_review: u32,
     /// CI/checks status of the default branch's latest commit.
     pub ci: CiStatus,
+    /// The repo's GitHub description, if set — a human label for what it does.
+    /// All identity/popularity fields below are parsed from the same `GET /repos`
+    /// call the enrich pass already makes (zero extra requests) and default so
+    /// older cached snapshots still deserialize.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// GitHub topics (e.g. `["cli", "rust"]`) — future filter/group fodder.
+    #[serde(default)]
+    pub topics: Vec<String>,
+    #[serde(default)]
+    pub stars: u32,
+    #[serde(default)]
+    pub forks: u32,
+    /// Subscribers ("watching"), not the legacy `watchers_count` stars alias.
+    #[serde(default)]
+    pub watchers: u32,
 }
 
 /// An open pull request, for the detail pane (populated by `cohors-github`).
@@ -155,6 +211,12 @@ pub struct PullRequest {
     pub draft: bool,
     pub branch: String,
     pub url: String,
+    /// Logins the PR is waiting on for review — "who is blocking this". Parsed
+    /// from the same list-PRs response (zero extra requests). Note the *true*
+    /// mergeable state is NOT available on the list endpoint (only per-PR, at
+    /// +1 request each), so readiness here = not-draft + who's asked to review.
+    #[serde(default)]
+    pub requested_reviewers: Vec<String>,
 }
 
 /// A repository contributor, by commit count.
@@ -165,7 +227,9 @@ pub struct Contributor {
 }
 
 /// Remote (GitHub) drill-in detail for one repo: open PRs + top contributors.
-/// Fetched on demand when the detail pane opens.
+/// Fetched on demand when the detail pane opens — so the per-repo extras below
+/// cost network requests only for the one repo being inspected, never in the
+/// fleet-wide enrich pass (rate-limit discipline).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteDetail {
     pub prs: Vec<PullRequest>,
@@ -174,6 +238,18 @@ pub struct RemoteDetail {
     pub open_issues: u32,
     /// Latest release tag, if the repo has one.
     pub latest_release: Option<String>,
+    /// Open issues assigned to the current user.
+    #[serde(default)]
+    pub assigned_issues: u32,
+    /// Whether the default branch has protection rules. `None` = unknown
+    /// (fetch failed or insufficient permissions).
+    #[serde(default)]
+    pub default_branch_protected: Option<bool>,
+    /// The most recent GitHub Actions workflow run's outcome (any branch,
+    /// including PRs) — complements `RemoteInfo.ci`, which is the default
+    /// branch's checks only. `None` = no runs or not fetched.
+    #[serde(default)]
+    pub latest_run: Option<CiStatus>,
 }
 
 /// A full point-in-time view of one repo — the unit the dashboard renders.
@@ -200,6 +276,20 @@ pub struct RepoSnapshot {
     /// resolution in `cohors-github`.
     #[serde(default)]
     pub remote_url: Option<String>,
+    /// A multi-step git operation paused in the working tree (merge/rebase/…), if
+    /// any. `None` is the normal "clean state". Urgent context the dashboard flags.
+    #[serde(default)]
+    pub operation: Option<RepoOperation>,
+    /// The repo's default branch (e.g. `main`), detected locally from
+    /// `refs/remotes/origin/HEAD`. `None` when there's no origin or it isn't set.
+    /// Lets a surface flag "you're on a non-default branch" without a network call.
+    #[serde(default)]
+    pub default_branch: Option<String>,
+    /// When the repo last fetched from its remote (Unix seconds), from the mtime
+    /// of `FETCH_HEAD`. `None` if it has never fetched. Feeds a "stale remote"
+    /// (haven't fetched in a while) signal without touching the network.
+    #[serde(default)]
+    pub last_fetch: Option<i64>,
     /// GitHub-derived info (v0.2), filled asynchronously after the local scan;
     /// `None` until fetched (or for non-GitHub repos).
     #[serde(default)]
@@ -243,6 +333,9 @@ impl RepoSnapshot {
             stash_latest: None,
             last_commit: None,
             remote_url: None,
+            operation: None,
+            default_branch: None,
+            last_fetch: None,
             remote: None,
             error: Some(error.into()),
             activity: Vec::new(),
@@ -289,6 +382,15 @@ impl RepoSnapshot {
     pub fn has_error(&self) -> bool {
         self.error.is_some()
     }
+
+    /// Whether HEAD is on the repo's known default branch. `None` when the current
+    /// branch or the default branch is unknown (detached, unborn, or no origin).
+    pub fn on_default_branch(&self) -> Option<bool> {
+        match (&self.branch, &self.default_branch) {
+            (Branch::Named(b), Some(default)) => Some(b == default),
+            _ => None,
+        }
+    }
 }
 
 /// Build a minimal snapshot for tests in this crate. Kept here (compiled only
@@ -317,6 +419,7 @@ pub(crate) fn sample(
                 staged: 0,
                 modified: 1,
                 untracked: 0,
+                conflicted: 0,
             }
         } else {
             WorktreeStatus::default()
@@ -324,6 +427,9 @@ pub(crate) fn sample(
         stash_count: stash,
         stash_latest: None,
         remote_url: None,
+        operation: None,
+        default_branch: Some("main".to_string()),
+        last_fetch: None,
         remote: None,
         last_commit: commit_ts.map(|t| CommitMeta {
             short_id: "abc1234".to_string(),
@@ -355,10 +461,18 @@ mod tests {
             WorktreeStatus {
                 staged: 2,
                 modified: 3,
-                untracked: 1
+                untracked: 1,
+                conflicted: 2,
             }
             .total(),
-            6
+            8
+        );
+        assert!(
+            WorktreeStatus {
+                conflicted: 1,
+                ..Default::default()
+            }
+            .has_conflicts()
         );
     }
 

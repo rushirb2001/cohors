@@ -80,6 +80,35 @@ pub enum Cmd {
     UseSuggestedRoots,
 }
 
+/// How a registry action verb is reached from the TUI. This is the TUI half of
+/// the cross-surface parity test: every `cohors_actions::registry()` verb must
+/// map to a binding, so adding an action without wiring the TUI fails the build.
+/// Test-only scaffolding for now — it encodes the wiring the parity test checks.
+#[cfg(test)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum VerbBinding {
+    /// A key (or `:`-command) that returns this event-loop [`Cmd`].
+    Direct(Cmd),
+    /// A confirm-gated action: opens a modal, then `ConfirmAccept` runs it.
+    Confirmed,
+}
+
+/// Map a registry action verb to how the TUI triggers it. `None` means the verb
+/// isn't wired in the TUI — which the parity test rejects. The `Direct` arms name
+/// real [`Cmd`] variants, so removing one breaks this match at compile time.
+#[cfg(test)]
+pub fn verb_binding(verb: &str) -> Option<VerbBinding> {
+    Some(match verb {
+        "fetch" => VerbBinding::Direct(Cmd::FetchSelected),
+        "pull" => VerbBinding::Direct(Cmd::PullSelected),
+        "push" => VerbBinding::Direct(Cmd::PushSelected),
+        "run" => VerbBinding::Direct(Cmd::RunCommand),
+        // Confirm-gated: 'S' / `:commit <msg>` open a modal, then ConfirmAccept.
+        "stash" | "commit" => VerbBinding::Confirmed,
+        _ => return None,
+    })
+}
+
 /// A destructive bulk action awaiting confirmation.
 #[derive(Debug, Clone)]
 pub struct Pending {
@@ -93,6 +122,8 @@ pub struct Pending {
 pub enum ConfirmAction {
     /// `git stash push` across these repos.
     BulkStash(Vec<RepoId>),
+    /// `git add -A && git commit -m <message>` across these repos.
+    BulkCommit { ids: Vec<RepoId>, message: String },
 }
 
 /// One repo's slot in a command run.
@@ -706,6 +737,7 @@ impl App {
             Some(C::Fetch) => return Cmd::FetchSelected,
             Some(C::Pull) => return Cmd::PullSelected,
             Some(C::Push) => return Cmd::PushSelected,
+            Some(C::Commit(message)) => self.request_bulk_commit(message),
             Some(C::Refresh) => return Cmd::Refresh,
             Some(C::Standup) => {
                 self.mode = Mode::Standup;
@@ -929,6 +961,28 @@ impl App {
         self.mode = Mode::Confirm;
     }
 
+    /// Open the confirmation modal for committing the target repos' changes with
+    /// `message` (mirrors [`Self::request_bulk_stash`] — commit is confirm-gated
+    /// since it writes history, ADR-008).
+    fn request_bulk_commit(&mut self, message: String) {
+        let ids: Vec<RepoId> = self
+            .action_targets()
+            .into_iter()
+            .filter(|id| self.repos.iter().any(|r| &r.id == id && !r.has_error()))
+            .collect();
+        if ids.is_empty() {
+            self.status = Some("no repos to commit".to_string());
+            return;
+        }
+        let n = ids.len();
+        let s = if n == 1 { "" } else { "s" };
+        self.confirm = Some(Pending {
+            prompt: format!("Commit changes in {n} repo{s}?"),
+            action: ConfirmAction::BulkCommit { ids, message },
+        });
+        self.mode = Mode::Confirm;
+    }
+
     /// Move the run-view focus by `delta` repos, clamped, resetting the output
     /// scroll to the top of the newly-focused repo.
     fn run_focus_step(&mut self, delta: isize) {
@@ -1007,6 +1061,7 @@ mod tests {
                     staged: 0,
                     modified: 1,
                     untracked: 0,
+                    conflicted: 0,
                 }
             } else {
                 WorktreeStatus::default()
@@ -1014,6 +1069,9 @@ mod tests {
             stash_count: 0,
             stash_latest: None,
             remote_url: None,
+            operation: None,
+            default_branch: None,
+            last_fetch: None,
             remote: None,
             last_commit: Some(CommitMeta {
                 short_id: "abc1234".to_string(),
@@ -1318,6 +1376,29 @@ mod tests {
         assert_eq!(
             app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
             Cmd::OpenDetail
+        );
+    }
+
+    /// Structural parity, TUI half: every action in the shared registry must be
+    /// reachable from the TUI (the MCP half is enforced in `cohors-mcp`). Adding a
+    /// verb to `cohors_actions::registry()` without wiring the TUI fails here.
+    #[test]
+    fn registry_verbs_are_all_wired_in_the_tui() {
+        for def in cohors_actions::registry() {
+            assert!(
+                super::verb_binding(def.verb).is_some(),
+                "TUI has no binding for action `{}`",
+                def.verb
+            );
+        }
+        // The confirm-gated verbs really go through the modal path, not a Cmd.
+        assert_eq!(
+            super::verb_binding("commit"),
+            Some(super::VerbBinding::Confirmed)
+        );
+        assert_eq!(
+            super::verb_binding("stash"),
+            Some(super::VerbBinding::Confirmed)
         );
     }
 

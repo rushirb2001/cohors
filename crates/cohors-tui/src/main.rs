@@ -14,12 +14,10 @@ mod detect;
 mod editors;
 mod glyphs;
 mod logging;
-mod mcp;
 mod prefs;
 mod scan;
 mod tui;
 mod ui;
-mod web;
 
 use clap::Parser;
 
@@ -60,7 +58,16 @@ fn main() -> anyhow::Result<()> {
             port,
             no_open,
             no_install,
-        }) => commands::run_web(&cli, *port, !no_open, !no_install),
+            allow_writes,
+            allow_run,
+        }) => commands::run_web(
+            &cli,
+            *port,
+            !no_open,
+            !no_install,
+            *allow_writes,
+            *allow_run,
+        ),
         Some(Command::Mcp {
             allow_writes,
             allow_run,

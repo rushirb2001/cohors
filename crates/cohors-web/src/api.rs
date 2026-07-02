@@ -58,6 +58,23 @@ pub async fn fetch_detail(path: &str, remote_url: Option<&str>) -> RepoDetailRes
     get_json(&url).await.unwrap_or_default()
 }
 
+/// Run a registry action (`fetch`/`pull`/`push`/`commit`/`stash`/`run`) over the
+/// repos matching `selector`, server-side (`POST /api/action`). Returns the raw
+/// JSON result (`{ targets, results }`, a dry-run preview, or `{ error }`). This
+/// is the first write path from the browser — the server enforces the gates, so
+/// a read-only server just refuses with a message the caller can surface.
+pub async fn post_action(body: serde_json::Value) -> Result<serde_json::Value, String> {
+    let resp = Request::post("/api/action")
+        .json(&body)
+        .map_err(|e| format!("could not build request: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("network error: {e}"))?;
+    resp.json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("could not parse the server response: {e}"))
+}
+
 /// GET `url` and decode its JSON body into `T`.
 async fn get_json<T: DeserializeOwned>(url: &str) -> Result<T, String> {
     let resp = Request::get(url)

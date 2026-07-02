@@ -189,6 +189,12 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         open_prs,
         prs_awaiting_review: 0,
         ci,
+        description: Some(format!("demo repo — {}", s.summary)),
+        topics: Vec::new(),
+        // Deterministic (clock-free) but varied, derived from the name.
+        stars: s.name.len() as u32 * 7,
+        forks: s.name.len() as u32 / 2,
+        watchers: s.name.len() as u32,
     });
     RepoSnapshot {
         id: RepoId(format!("demo/{}", s.name)),
@@ -204,10 +210,14 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
             staged: s.worktree.0,
             modified: s.worktree.1,
             untracked: s.worktree.2,
+            conflicted: 0,
         },
         stash_count: s.stash,
         stash_latest: None,
         remote_url: on_remote.then(|| format!("git@github.com:acme/{}.git", s.name)),
+        operation: None,
+        default_branch: Some("main".into()),
+        last_fetch: None,
         remote,
         last_commit: (s.error.is_none()).then(|| CommitMeta {
             short_id: "abc1234".into(),
