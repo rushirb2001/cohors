@@ -16,8 +16,46 @@ pub const RUN_OUTPUT_CAP: usize = 64 * 1024;
 /// Per-repo wall-clock bound for `run` when the caller doesn't set one, so one
 /// hung command can't stall the whole fan-out.
 pub const DEFAULT_RUN_TIMEOUT_SECS: u64 = 120;
-/// How many repos `run` executes concurrently (ADR-020).
-const RUN_POOL_SIZE: usize = 8;
+/// How many repos any bulk action executes concurrently (ADR-020). Bounded on
+/// purpose: 500 simultaneous `git fetch`es would hammer remotes and the disk;
+/// a pool of 8 keeps a large fleet fast while staying polite.
+const ACTION_POOL_SIZE: usize = 8;
+
+/// The one process-wide bounded pool every bulk-action path shares (the `run`
+/// fan-out, the per-repo git actions, and the TUI's background action spawns).
+/// `None` if the pool couldn't be built — callers then degrade to sequential.
+fn action_pool() -> Option<&'static rayon::ThreadPool> {
+    use std::sync::OnceLock;
+    static POOL: OnceLock<Option<rayon::ThreadPool>> = OnceLock::new();
+    POOL.get_or_init(|| {
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(ACTION_POOL_SIZE)
+            .thread_name(|i| format!("cohors-action-{i}"))
+            .build()
+            .ok()
+    })
+    .as_ref()
+}
+
+/// Run `f` on the shared bounded action pool (or inline if the pool couldn't be
+/// built). Lets a front-end stream per-repo work through the same 8-wide pool
+/// instead of spawning one OS thread per repo.
+pub fn spawn_bounded(f: impl FnOnce() + Send + 'static) {
+    match action_pool() {
+        Some(pool) => pool.spawn(f),
+        None => f(),
+    }
+}
+
+/// Run `op` over `items` on the shared pool, preserving order. Sequential
+/// fallback when the pool is unavailable.
+pub(crate) fn map_bounded<T: Sync, R: Send>(items: &[T], op: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    use rayon::prelude::*;
+    match action_pool() {
+        Some(pool) => pool.install(|| items.par_iter().map(&op).collect()),
+        None => items.iter().map(op).collect(),
+    }
+}
 
 /// One repo's result from a [`run_each`] fan-out. Field names match the MCP wire
 /// shape, so a surface can `serde_json::to_value` it directly.
@@ -59,8 +97,6 @@ pub fn next_run_id() -> u64 {
 /// per-repo results in target order. Falls back to sequential if the pool can't
 /// be built. Targets must have a path (callers filter path-less repos out).
 pub fn run_each(targets: &[RepoSnapshot], command: &str, timeout: Duration) -> Vec<RunResult> {
-    use rayon::prelude::*;
-
     let exec = |s: &RepoSnapshot| {
         let path = s.path.as_ref().expect("action targets have a path");
         let out = crate::git::run_command_timeout(path, command, timeout);
@@ -77,11 +113,5 @@ pub fn run_each(targets: &[RepoSnapshot], command: &str, timeout: Duration) -> V
         }
     };
 
-    match rayon::ThreadPoolBuilder::new()
-        .num_threads(RUN_POOL_SIZE)
-        .build()
-    {
-        Ok(pool) => pool.install(|| targets.par_iter().map(exec).collect()),
-        Err(_) => targets.iter().map(exec).collect(),
-    }
+    map_bounded(targets, exec)
 }

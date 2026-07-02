@@ -136,7 +136,7 @@ pub fn git_action(
     max_targets: usize,
     now: i64,
     authorize: impl Fn() -> Result<(), String>,
-    op: impl Fn(&Utf8Path, &str) -> Result<String, String>,
+    op: impl Fn(&Utf8Path, &str) -> Result<String, String> + Sync,
 ) -> Result<Value, String> {
     let selector = action_selector(args);
     let targets = resolve_targets(&selector, snaps, now);
@@ -151,16 +151,16 @@ pub fn git_action(
         return Ok(dry_run_preview(action, &targets));
     }
     authorize()?;
-    let results: Vec<Value> = targets
-        .iter()
-        .map(|s| {
-            let path = s.path.as_ref().expect("action targets have a path");
-            match op(path, &s.name) {
-                Ok(message) => json!({ "repo": s.id.0, "ok": true, "message": message }),
-                Err(message) => json!({ "repo": s.id.0, "ok": false, "message": message }),
-            }
-        })
-        .collect();
+    // Per-repo ops fan out on the shared bounded pool (order preserved), so a
+    // fleet-wide fetch/pull finishes in pool-width waves instead of serially —
+    // the difference between seconds and minutes at a few hundred repos.
+    let results: Vec<Value> = crate::runner::map_bounded(targets.as_slice(), |s| {
+        let path = s.path.as_ref().expect("action targets have a path");
+        match op(path, &s.name) {
+            Ok(message) => json!({ "repo": s.id.0, "ok": true, "message": message }),
+            Err(message) => json!({ "repo": s.id.0, "ok": false, "message": message }),
+        }
+    });
     let ok = results.iter().filter(|r| r["ok"] == true).count();
     audit(tool, &selector, &targets, ok);
     Ok(json!({ "targets": targets.len(), "results": results }))
