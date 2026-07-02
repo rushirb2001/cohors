@@ -15,7 +15,7 @@ struct Prefs {
 }
 
 fn load() -> Prefs {
-    let Ok(path) = cohors_config::paths::cache_dir() else {
+    let Ok(path) = crate::paths::cache_dir() else {
         return Prefs::default();
     };
     let path = path.join("prefs.json");
@@ -32,7 +32,7 @@ pub fn default_editor() -> Option<String> {
 
 /// Persist `command` as the default editor (best-effort; logged, not fatal).
 pub fn set_default_editor(command: &str) {
-    let Ok(dir) = cohors_config::paths::cache_dir() else {
+    let Ok(dir) = crate::paths::cache_dir() else {
         return;
     };
     let _ = std::fs::create_dir_all(&dir);
