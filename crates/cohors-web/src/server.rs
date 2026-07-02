@@ -52,16 +52,6 @@ struct ActionCtx {
     max_targets: usize,
 }
 
-/// One repo's drill-in detail: the local view (the TUI's `Enter` pane), the
-/// working-tree changes (file list + a size-capped patch), plus the remote view
-/// (open PRs, contributors, issues, latest release).
-#[derive(Serialize)]
-struct DetailResponse {
-    local: cohors_core::RepoDetail,
-    changes: cohors_core::RepoChanges,
-    remote: Option<cohors_core::RemoteDetail>,
-}
-
 /// Byte cap for the working-tree patch served to the page — matches the MCP
 /// `changes` tool's default, so the web and agent surfaces truncate alike.
 const DETAIL_PATCH_BYTES: usize = 20_000;
@@ -163,36 +153,18 @@ fn api_repos(req: tiny_http::Request, url: &str, scan: &ScanFn, token: Option<&s
 
 /// `GET /api/detail?path=…&url=…` — one repo's drill-in. `path` (the local repo
 /// path) drives the local detail; `url` (the remote URL) drives the remote one.
+/// The three-read composition itself lives in `cohors_fleet::detail_bundle`,
+/// shared with any other surface that offers a drill-in.
 fn api_detail(req: tiny_http::Request, url: &str, token: Option<&str>) {
-    let (local, changes) = match query_param(url, "path") {
-        Some(p) => {
-            let path = Utf8Path::new(&p);
-            // Two local reads of the same repo: the drill-in (commits/branches/…)
-            // and the working-tree diff (with the patch, so the drawer can show it).
-            (
-                cohors_git::repo_detail(path),
-                cohors_git::repo_changes(path, true, DETAIL_PATCH_BYTES),
-            )
-        }
-        None => (
-            cohors_core::RepoDetail::default(),
-            cohors_core::RepoChanges::default(),
-        ),
-    };
-    let remote = match (token, query_param(url, "url")) {
-        (Some(t), Some(remote_url)) if !remote_url.is_empty() => {
-            cohors_github::fetch_repo_detail(t, &remote_url)
-        }
-        _ => None,
-    };
-    respond_json(
-        req,
-        &DetailResponse {
-            local,
-            changes,
-            remote,
-        },
+    let path = query_param(url, "path");
+    let remote_url = query_param(url, "url");
+    let bundle = cohors_fleet::detail_bundle(
+        path.as_deref().map(Utf8Path::new),
+        remote_url.as_deref(),
+        token,
+        DETAIL_PATCH_BYTES,
     );
+    respond_json(req, &bundle);
 }
 
 /// `POST /api/action` — run a registry verb across a selector, server-side. The

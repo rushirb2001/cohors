@@ -14,6 +14,7 @@ cohors-config = { workspace = true }
 cohors-git = { workspace = true }
 cohors-github = { workspace = true }
 camino = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

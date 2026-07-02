@@ -10,8 +10,10 @@
 
 #![forbid(unsafe_code)]
 
+mod detail;
 mod detect;
 mod scanner;
 
+pub use detail::{DetailBundle, detail_bundle};
 pub use detect::detect_roots;
 pub use scanner::{FleetError, Scanner};
