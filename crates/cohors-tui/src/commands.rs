@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
-use cohors_core::{AttentionLevel, CiStatus, Selector, SortMode};
+use cohors_core::{Selector, SortMode};
 
 use crate::cli::Cli;
 
@@ -224,140 +224,18 @@ fn now_secs() -> i64 {
 }
 
 /// Parse a `--select` value into a [`Selector`]. A value starting with `{` is
-/// JSON; anything else is shorthand. `~` in path predicates is expanded against
-/// `$HOME` here (a CLI concern), keeping `cohors-core` free of environment access.
+/// JSON; anything else is the shared shorthand (parsed in `cohors-core`, so
+/// every surface speaks the same language). `~` expansion reads `$HOME` here —
+/// an environment concern that stays out of core.
 fn parse_selector(query: &str) -> Result<Selector> {
     let query = query.trim();
     let mut selector = if query.starts_with('{') {
         serde_json::from_str::<Selector>(query).context("parsing --select JSON")?
     } else {
-        parse_shorthand(query)?
+        cohors_core::parse_shorthand(query)?
     };
-    expand_tilde(&mut selector, std::env::var("HOME").ok().as_deref());
+    cohors_core::expand_selector_tilde(&mut selector, std::env::var("HOME").ok().as_deref());
     Ok(selector)
-}
-
-/// Parse comma-separated shorthand tokens into a [`Selector`] (tokens AND
-/// together). Bare flags (`dirty`, `behind`, …) set booleans; `key:value`
-/// tokens (`name:pay*`, `ci:failing`, `prs:1`, `branch:main`, `root:~/work`)
-/// set the scoped predicates; a few named views (`clean`, `attention`) expand
-/// to their selectors.
-fn parse_shorthand(query: &str) -> Result<Selector> {
-    let mut sel = Selector::default();
-    for raw in query.split(',') {
-        let token = raw.trim();
-        if token.is_empty() {
-            continue;
-        }
-        if let Some((key, value)) = token.split_once(':') {
-            let value = value.trim().to_string();
-            match key.trim() {
-                "name" => sel.name = Some(value),
-                "branch" => sel.branch = Some(value),
-                "root" => sel.root = Some(value),
-                "path" => sel.path_glob = Some(value),
-                "group" => sel.group = Some(value),
-                "ci" => sel.ci = Some(parse_ci(&value)?),
-                "prs" | "min-prs" => {
-                    sel.min_prs = Some(value.parse().context("--select prs expects a number")?)
-                }
-                "attention" => sel.attention = Some(parse_attention(&value)?),
-                other => bail!("unknown selector key `{other}:`"),
-            }
-            continue;
-        }
-        match token {
-            "all" => sel.all = true,
-            "dirty" => sel.dirty = true,
-            "ahead" | "unpushed" => sel.ahead = true,
-            "behind" => sel.behind = true,
-            "diverged" => sel.diverged = true,
-            "no-upstream" => sel.no_upstream = true,
-            "stash" | "has-stash" => sel.has_stash = true,
-            "detached" => sel.detached = true,
-            "error" | "errors" => sel.error = true,
-            "attention" | "needs-attention" => sel.attention = Some(AttentionLevel::Any),
-            "prs-open" => sel.min_prs = Some(1),
-            "red-ci" => sel.ci = Some(CiStatus::Failing),
-            // "clean" = nothing the attention layer would flag and readable.
-            "clean" => {
-                sel.not = Some(Box::new(Selector {
-                    any_of: vec![
-                        Selector {
-                            dirty: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            ahead: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            behind: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            has_stash: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            error: true,
-                            ..Default::default()
-                        },
-                    ],
-                    ..Default::default()
-                }))
-            }
-            other => bail!(
-                "unknown selector `{other}` (try: dirty, behind, ahead, attention, clean, name:<glob>)"
-            ),
-        }
-    }
-    Ok(sel)
-}
-
-fn parse_ci(value: &str) -> Result<CiStatus> {
-    Ok(match value {
-        "passing" => CiStatus::Passing,
-        "failing" => CiStatus::Failing,
-        "pending" => CiStatus::Pending,
-        other => bail!("unknown ci status `{other}` (passing | failing | pending)"),
-    })
-}
-
-fn parse_attention(value: &str) -> Result<AttentionLevel> {
-    Ok(match value {
-        "any" => AttentionLevel::Any,
-        "notice" => AttentionLevel::Notice,
-        "warn" => AttentionLevel::Warn,
-        "risk" => AttentionLevel::Risk,
-        other => bail!("unknown attention level `{other}` (any | notice | warn | risk)"),
-    })
-}
-
-/// Expand a leading `~` in path predicates against `home`, recursing into
-/// combinators. `home` is passed in (read from `$HOME` by the caller) so this
-/// stays a pure, directly-testable function.
-fn expand_tilde(sel: &mut Selector, home: Option<&str>) {
-    if let Some(home) = home.filter(|h| !h.is_empty()) {
-        expand_one(&mut sel.root, home);
-        expand_one(&mut sel.path_glob, home);
-    }
-    for inner in &mut sel.any_of {
-        expand_tilde(inner, home);
-    }
-    if let Some(inner) = &mut sel.not {
-        expand_tilde(inner, home);
-    }
-}
-
-fn expand_one(field: &mut Option<String>, home: &str) {
-    if let Some(value) = field {
-        if let Some(rest) = value.strip_prefix("~/") {
-            *value = format!("{home}/{rest}");
-        } else if value == "~" {
-            *value = home.to_string();
-        }
-    }
 }
 
 /// The branded local host the dashboard is served at. `*.localhost` is reserved
@@ -631,50 +509,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shorthand_flags_and_combine() {
-        let sel = parse_selector("dirty,behind").unwrap();
-        assert!(sel.dirty && sel.behind);
-        assert!(!sel.ahead);
-    }
-
-    #[test]
-    fn shorthand_key_values() {
-        let sel = parse_selector("name:pay*,ci:failing,prs:2,branch:main").unwrap();
-        assert_eq!(sel.name.as_deref(), Some("pay*"));
-        assert_eq!(sel.ci, Some(CiStatus::Failing));
-        assert_eq!(sel.min_prs, Some(2));
-        assert_eq!(sel.branch.as_deref(), Some("main"));
-    }
-
-    #[test]
-    fn unpushed_aliases_ahead() {
-        assert!(parse_selector("unpushed").unwrap().ahead);
-    }
-
-    #[test]
-    fn clean_is_negation_of_attention_states() {
-        let sel = parse_selector("clean").unwrap();
-        let not = sel.not.expect("clean sets `not`");
-        assert_eq!(not.any_of.len(), 5);
-    }
-
-    #[test]
     fn json_passthrough() {
         let sel = parse_selector(r#"{"behind": true, "name": "api"}"#).unwrap();
         assert!(sel.behind);
         assert_eq!(sel.name.as_deref(), Some("api"));
-    }
-
-    #[test]
-    fn tilde_expands_against_home() {
-        let mut sel = Selector {
-            root: Some("~/work".into()),
-            path_glob: Some("~/oss/**".into()),
-            ..Default::default()
-        };
-        expand_tilde(&mut sel, Some("/home/test"));
-        assert_eq!(sel.root.as_deref(), Some("/home/test/work"));
-        assert_eq!(sel.path_glob.as_deref(), Some("/home/test/oss/**"));
     }
 
     #[test]
