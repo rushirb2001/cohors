@@ -184,6 +184,22 @@ pub struct RemoteInfo {
     pub prs_awaiting_review: u32,
     /// CI/checks status of the default branch's latest commit.
     pub ci: CiStatus,
+    /// The repo's GitHub description, if set — a human label for what it does.
+    /// All identity/popularity fields below are parsed from the same `GET /repos`
+    /// call the enrich pass already makes (zero extra requests) and default so
+    /// older cached snapshots still deserialize.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// GitHub topics (e.g. `["cli", "rust"]`) — future filter/group fodder.
+    #[serde(default)]
+    pub topics: Vec<String>,
+    #[serde(default)]
+    pub stars: u32,
+    #[serde(default)]
+    pub forks: u32,
+    /// Subscribers ("watching"), not the legacy `watchers_count` stars alias.
+    #[serde(default)]
+    pub watchers: u32,
 }
 
 /// An open pull request, for the detail pane (populated by `cohors-github`).
@@ -195,6 +211,12 @@ pub struct PullRequest {
     pub draft: bool,
     pub branch: String,
     pub url: String,
+    /// Logins the PR is waiting on for review — "who is blocking this". Parsed
+    /// from the same list-PRs response (zero extra requests). Note the *true*
+    /// mergeable state is NOT available on the list endpoint (only per-PR, at
+    /// +1 request each), so readiness here = not-draft + who's asked to review.
+    #[serde(default)]
+    pub requested_reviewers: Vec<String>,
 }
 
 /// A repository contributor, by commit count.
@@ -205,7 +227,9 @@ pub struct Contributor {
 }
 
 /// Remote (GitHub) drill-in detail for one repo: open PRs + top contributors.
-/// Fetched on demand when the detail pane opens.
+/// Fetched on demand when the detail pane opens — so the per-repo extras below
+/// cost network requests only for the one repo being inspected, never in the
+/// fleet-wide enrich pass (rate-limit discipline).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RemoteDetail {
     pub prs: Vec<PullRequest>,
@@ -214,6 +238,18 @@ pub struct RemoteDetail {
     pub open_issues: u32,
     /// Latest release tag, if the repo has one.
     pub latest_release: Option<String>,
+    /// Open issues assigned to the current user.
+    #[serde(default)]
+    pub assigned_issues: u32,
+    /// Whether the default branch has protection rules. `None` = unknown
+    /// (fetch failed or insufficient permissions).
+    #[serde(default)]
+    pub default_branch_protected: Option<bool>,
+    /// The most recent GitHub Actions workflow run's outcome (any branch,
+    /// including PRs) — complements `RemoteInfo.ci`, which is the default
+    /// branch's checks only. `None` = no runs or not fetched.
+    #[serde(default)]
+    pub latest_run: Option<CiStatus>,
 }
 
 /// A full point-in-time view of one repo — the unit the dashboard renders.

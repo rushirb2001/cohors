@@ -189,6 +189,12 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         open_prs,
         prs_awaiting_review: 0,
         ci,
+        description: Some(format!("demo repo — {}", s.summary)),
+        topics: Vec::new(),
+        // Deterministic (clock-free) but varied, derived from the name.
+        stars: s.name.len() as u32 * 7,
+        forks: s.name.len() as u32 / 2,
+        watchers: s.name.len() as u32,
     });
     RepoSnapshot {
         id: RepoId(format!("demo/{}", s.name)),

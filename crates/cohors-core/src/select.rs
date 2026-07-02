@@ -542,6 +542,11 @@ mod tests {
             open_prs: 3,
             prs_awaiting_review: 0,
             ci: CiStatus::Failing,
+            description: None,
+            topics: Vec::new(),
+            stars: 0,
+            forks: 0,
+            watchers: 0,
         });
         let failing = resolve(
             &repos,

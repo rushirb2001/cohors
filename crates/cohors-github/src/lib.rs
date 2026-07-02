@@ -190,7 +190,7 @@ fn fetch_remote(
     owner: &str,
     repo: &str,
 ) -> Result<RemoteInfo, FetchError> {
-    // 1) Repo metadata → default branch.
+    // 1) Repo metadata → default branch + identity/popularity (one call).
     let repo_json: RepoResponse = get_json(agent, token, &format!("/repos/{owner}/{repo}"))?;
     let default_branch = repo_json.default_branch;
 
@@ -243,6 +243,11 @@ fn fetch_remote(
         open_prs,
         prs_awaiting_review,
         ci,
+        description: repo_json.description.filter(|d| !d.trim().is_empty()),
+        topics: repo_json.topics,
+        stars: repo_json.stargazers_count,
+        forks: repo_json.forks_count,
+        watchers: repo_json.subscribers_count,
     })
 }
 
@@ -271,6 +276,7 @@ pub fn fetch_repo_detail(token: &str, remote_url: &str) -> Option<RemoteDetail> 
                 draft: p.draft.unwrap_or(false),
                 branch: p.head.map(|h| h.r#ref).unwrap_or_default(),
                 url: p.html_url,
+                requested_reviewers: p.requested_reviewers.into_iter().map(|u| u.login).collect(),
             })
             .collect()
     })
@@ -314,12 +320,78 @@ pub fn fetch_repo_detail(token: &str, remote_url: &str) -> Option<RemoteDetail> 
     .ok()
     .map(|r| r.tag_name);
 
+    // ── Per-repo network extras. These live here (not in the fleet enrich pass)
+    // deliberately: each costs a request, and the detail pane fetches exactly one
+    // repo on demand, so the rate limit only pays for what the user inspects.
+
+    // Open issues assigned to me; best-effort → 0.
+    let assigned_issues = {
+        let q = format!("repo:{owner}/{repo} is:issue is:open assignee:@me");
+        get_json::<SearchResponse>(
+            &agent,
+            token,
+            &format!("/search/issues?q={}&per_page=1", encode_query(&q)),
+        )
+        .map(|r| r.total_count)
+        .unwrap_or(0)
+    };
+
+    // Is the default branch protected? Two hops: the repo call names the default
+    // branch, the branch call carries `protected`. Failure → `None` (unknown).
+    let default_branch_protected =
+        get_json::<RepoResponse>(&agent, token, &format!("/repos/{owner}/{repo}"))
+            .ok()
+            .and_then(|r| {
+                get_json::<BranchResponse>(
+                    &agent,
+                    token,
+                    &format!("/repos/{owner}/{repo}/branches/{}", r.default_branch),
+                )
+                .ok()
+            })
+            .map(|b| b.protected);
+
+    // The most recent Actions workflow run (any branch), folded to a CiStatus.
+    let latest_run = get_json::<WorkflowRunsResponse>(
+        &agent,
+        token,
+        &format!("/repos/{owner}/{repo}/actions/runs?per_page=1"),
+    )
+    .ok()
+    .and_then(|w| w.workflow_runs.into_iter().next())
+    .map(|run| run_ci(&run));
+
     Some(RemoteDetail {
         prs,
         contributors,
         open_issues,
         latest_release,
+        assigned_issues,
+        default_branch_protected,
+        latest_run,
     })
+}
+
+/// Fold one workflow run's `status`/`conclusion` into a [`CiStatus`], mirroring
+/// [`combine_ci`]'s vocabulary: not-completed → pending; failure-like conclusions
+/// → failing; success-like → passing; anything unrecognized → `None` ("no signal").
+fn run_ci(run: &WorkflowRun) -> CiStatus {
+    if !run.status.trim().eq_ignore_ascii_case("completed") {
+        return CiStatus::Pending;
+    }
+    match run
+        .conclusion
+        .as_deref()
+        .unwrap_or("")
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "failure" | "timed_out" | "cancelled" | "action_required" | "startup_failure" => {
+            CiStatus::Failing
+        }
+        "success" | "neutral" | "skipped" | "stale" => CiStatus::Passing,
+        _ => CiStatus::None,
+    }
 }
 
 /// Issue a `GET {API_BASE}{path}` with the standard GitHub headers and decode
@@ -387,10 +459,23 @@ fn encode_query(q: &str) -> String {
     out
 }
 
-/// `GET /repos/{owner}/{repo}` — we only need the default branch.
+/// `GET /repos/{owner}/{repo}` — default branch plus the identity/popularity
+/// fields that ride along in the same response (zero extra requests).
+/// `watchers_count` is deliberately NOT read: it's a legacy alias for stars;
+/// `subscribers_count` is the real "watching" number.
 #[derive(serde::Deserialize)]
 struct RepoResponse {
     default_branch: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    topics: Vec<String>,
+    #[serde(default)]
+    stargazers_count: u32,
+    #[serde(default)]
+    forks_count: u32,
+    #[serde(default)]
+    subscribers_count: u32,
 }
 
 /// `GET /search/issues` — we only need the result count.
@@ -461,6 +546,9 @@ fn combine_ci(checks: Option<&CheckRunsResponse>) -> CiStatus {
 }
 
 /// `GET /repos/{owner}/{repo}/pulls` — the fields the detail pane shows.
+/// `requested_reviewers` rides along in this list response for free; the
+/// `mergeable`/`mergeable_state` fields do NOT (they exist only on the
+/// per-PR endpoint, +1 request each) and are deliberately not fetched.
 #[derive(serde::Deserialize)]
 struct PrResponse {
     number: u32,
@@ -470,6 +558,8 @@ struct PrResponse {
     draft: Option<bool>,
     user: Option<UserResponse>,
     head: Option<HeadResponse>,
+    #[serde(default)]
+    requested_reviewers: Vec<UserResponse>,
 }
 
 #[derive(serde::Deserialize)]
@@ -496,6 +586,28 @@ struct ContributorResponse {
 #[derive(serde::Deserialize)]
 struct ReleaseResponse {
     tag_name: String,
+}
+
+/// `GET /repos/{owner}/{repo}/branches/{branch}` — we only need `protected`.
+#[derive(serde::Deserialize)]
+struct BranchResponse {
+    #[serde(default)]
+    protected: bool,
+}
+
+/// `GET /repos/{owner}/{repo}/actions/runs?per_page=1` — the latest run only.
+#[derive(serde::Deserialize)]
+struct WorkflowRunsResponse {
+    #[serde(default)]
+    workflow_runs: Vec<WorkflowRun>,
+}
+
+/// One workflow run — the same status/conclusion vocabulary as [`CheckRun`].
+#[derive(serde::Deserialize)]
+struct WorkflowRun {
+    #[serde(default)]
+    status: String,
+    conclusion: Option<String>,
 }
 
 #[cfg(test)]
@@ -563,5 +675,66 @@ mod tests {
     #[test]
     fn encode_query_leaves_unreserved_chars() {
         assert_eq!(encode_query("abcXYZ_0-9.~"), "abcXYZ_0-9.~");
+    }
+
+    fn run(status: &str, conclusion: Option<&str>) -> WorkflowRun {
+        WorkflowRun {
+            status: status.to_string(),
+            conclusion: conclusion.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn latest_run_maps_like_check_runs() {
+        assert_eq!(run_ci(&run("in_progress", None)), CiStatus::Pending);
+        assert_eq!(run_ci(&run("queued", None)), CiStatus::Pending);
+        assert_eq!(
+            run_ci(&run("completed", Some("success"))),
+            CiStatus::Passing
+        );
+        assert_eq!(
+            run_ci(&run("completed", Some("failure"))),
+            CiStatus::Failing
+        );
+        assert_eq!(
+            run_ci(&run("completed", Some("cancelled"))),
+            CiStatus::Failing
+        );
+        // Unknown conclusion is "no signal", not a false pass/fail.
+        assert_eq!(run_ci(&run("completed", Some("mystery"))), CiStatus::None);
+    }
+
+    #[test]
+    fn pr_list_response_parses_requested_reviewers() {
+        // The list endpoint carries reviewers inline — this is the zero-request
+        // parse the PR-readiness feature depends on.
+        let json = r#"[{
+            "number": 7, "title": "t", "html_url": "u", "draft": false,
+            "user": {"login": "alice"},
+            "head": {"ref": "feat"},
+            "requested_reviewers": [{"login": "bob"}, {"login": "carol"}]
+        }]"#;
+        let prs: Vec<PrResponse> = serde_json::from_str(json).unwrap();
+        let logins: Vec<&str> = prs[0]
+            .requested_reviewers
+            .iter()
+            .map(|u| u.login.as_str())
+            .collect();
+        assert_eq!(logins, ["bob", "carol"]);
+    }
+
+    #[test]
+    fn repo_response_parses_identity_fields() {
+        let json = r#"{
+            "default_branch": "main", "description": "a tool", "topics": ["cli","rust"],
+            "stargazers_count": 42, "forks_count": 3, "subscribers_count": 5,
+            "watchers_count": 42
+        }"#;
+        let r: RepoResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(r.description.as_deref(), Some("a tool"));
+        assert_eq!(r.topics, ["cli", "rust"]);
+        assert_eq!((r.stargazers_count, r.forks_count), (42, 3));
+        // watchers = subscribers_count (5), NOT the legacy watchers_count alias (42).
+        assert_eq!(r.subscribers_count, 5);
     }
 }

@@ -13,3 +13,7 @@ cohors-core = { workspace = true }
 serde = { workspace = true }
 ureq = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+# Fixture-JSON parse tests for the REST response structs.
+serde_json = { workspace = true }

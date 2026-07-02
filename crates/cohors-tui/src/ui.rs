@@ -3202,6 +3202,11 @@ mod tests {
                 open_prs,
                 prs_awaiting_review: 0,
                 ci,
+                description: None,
+                topics: Vec::new(),
+                stars: 0,
+                forks: 0,
+                watchers: 0,
             })
         };
         let mut payments = snap(
@@ -3497,6 +3502,7 @@ mod tests {
                     draft: false,
                     branch: "fix/retry".to_string(),
                     url: String::new(),
+                    requested_reviewers: vec!["sam".to_string()],
                 },
                 PullRequest {
                     number: 147,
@@ -3505,6 +3511,7 @@ mod tests {
                     draft: true,
                     branch: "spike/webhooks".to_string(),
                     url: String::new(),
+                    requested_reviewers: Vec::new(),
                 },
             ],
             contributors: vec![
@@ -3519,6 +3526,9 @@ mod tests {
             ],
             open_issues: 7,
             latest_release: Some("v1.4.0".to_string()),
+            assigned_issues: 2,
+            default_branch_protected: Some(true),
+            latest_run: Some(CiStatus::Passing),
         });
         app.detail = Some(dv);
         insta::assert_snapshot!(render_to_string(&app, 100, 28));
