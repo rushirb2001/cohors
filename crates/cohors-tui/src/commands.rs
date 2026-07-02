@@ -9,7 +9,6 @@ use camino::{Utf8Path, Utf8PathBuf};
 use cohors_core::{AttentionLevel, CiStatus, Selector, SortMode};
 
 use crate::cli::Cli;
-use crate::scan::Scanner;
 
 /// `cohors init` — write a starter config and print its path. Auto-detects where
 /// the user keeps repos and seeds `roots` with them, so the first `cohors` run
@@ -20,7 +19,7 @@ pub fn init(cli: &Cli, force: bool) -> Result<()> {
         None => cohors_config::paths::config_file().context("resolving the config path")?,
     };
     let home = cohors_config::paths::home_dir().ok();
-    let roots = crate::detect::detect_roots(home.as_deref());
+    let roots = cohors_fleet::detect_roots(home.as_deref());
     cohors_config::write_starter(&path, force, &roots)
         .with_context(|| format!("writing config to {path}"))?;
     println!("Wrote starter config to {path}");
@@ -39,7 +38,7 @@ pub fn init(cli: &Cli, force: bool) -> Result<()> {
 /// using the same [`cohors_core::resolve`] the dashboard and (later) the MCP
 /// server use — so `scan --select behind` and `list_repos({behind:true})` agree.
 pub fn scan(cli: &Cli, select: Option<&str>) -> Result<()> {
-    let scanner = Scanner::from_cli(cli)?;
+    let scanner = crate::scan::from_cli(cli)?;
     let mut snapshots = scanner.scan();
 
     // An empty fleet is cryptic on the scriptable surface. Keep stdout a clean
@@ -122,7 +121,7 @@ fn action_targets<'a>(
 /// action layer: pull is ff-only, push never force-pushes, stash/commit can't
 /// lose work.
 pub fn run_action(cli: &Cli, action: CliAction, select: &str, dry_run: bool) -> Result<()> {
-    let scanner = Scanner::from_cli(cli)?;
+    let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
     let targets = action_targets(&snapshots, select)?;
     let verb = action.verb();
@@ -171,7 +170,7 @@ pub fn run_command_action(
     timeout: u64,
     dry_run: bool,
 ) -> Result<()> {
-    let scanner = Scanner::from_cli(cli)?;
+    let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
     let targets = action_targets(&snapshots, select)?;
 
@@ -408,7 +407,7 @@ pub fn run_web(
     // the scan and serves the `cohors-core` snapshots as JSON; the browser
     // renders them through the same `assess`/sort logic. The token is the SAME
     // one the TUI uses (`gh auth token` / `$GITHUB_TOKEN`) and never leaves here.
-    let scanner = std::sync::Arc::new(Scanner::from_cli(cli)?);
+    let scanner = std::sync::Arc::new(crate::scan::from_cli(cli)?);
     let token = scanner.github_token();
 
     // Build the WASM assets to dist/ and keep watching for rebuilds while we
@@ -591,7 +590,7 @@ fn open_url(url: &str) -> std::io::Result<()> {
 
 /// Bare `cohors` — launch the interactive dashboard.
 pub fn run_tui(cli: &Cli) -> Result<()> {
-    let scanner = Arc::new(Scanner::from_cli(cli)?);
+    let scanner = Arc::new(crate::scan::from_cli(cli)?);
     crate::tui::run(scanner, cli, !cli.no_cache, cli.watch)
 }
 
@@ -605,7 +604,7 @@ pub fn run_demo() -> Result<()> {
 /// the matching `--allow-*` flags are passed (none have an effect yet — only the
 /// read tools are implemented).
 pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool) -> Result<()> {
-    let scanner = Scanner::from_cli(cli)?;
+    let scanner = crate::scan::from_cli(cli)?;
     let caps = cohors_mcp::Caps {
         allow_writes,
         allow_run,

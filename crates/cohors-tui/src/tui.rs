@@ -356,7 +356,7 @@ fn run_loop(
 /// candidates the empty-state rescue offers. Bounded and shallow (see `detect`).
 fn suggest_roots(current: &[String]) -> Vec<String> {
     let home = cohors_config::paths::home_dir().ok();
-    crate::detect::detect_roots(home.as_deref())
+    cohors_fleet::detect_roots(home.as_deref())
         .into_iter()
         .filter(|cand| {
             let expanded = match &home {
@@ -388,7 +388,7 @@ fn use_suggested_roots(app: &mut App, scanner: &mut Arc<Scanner>, cli: &Cli, tx:
         app.suggested_roots = roots;
         return;
     }
-    match Scanner::from_cli(cli) {
+    match crate::scan::from_cli(cli) {
         Ok(rebuilt) => {
             *scanner = Arc::new(rebuilt);
             app.roots = scanner.roots();

@@ -10,7 +10,6 @@ mod cache;
 mod cli;
 mod command;
 mod commands;
-mod detect;
 mod editors;
 mod glyphs;
 mod logging;
