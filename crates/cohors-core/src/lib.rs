@@ -37,7 +37,8 @@ pub use attention::{Assessment, AttentionReason, FleetSummary, Severity, assess,
 pub use detail::{ChangedFile, RepoChanges, RepoDetail};
 pub use model::{
     Branch, CiStatus, CommitMeta, Contributor, PullRequest, RemoteDetail, RemoteInfo, RemoteKind,
-    RepoId, RepoOperation, RepoRef, RepoSnapshot, Upstream, WorktreeStatus,
+    RepoId, RepoOperation, RepoRef, RepoSnapshot, TagInfo, Upstream, WorktreeStatus,
+    classify_remote, remote_host,
 };
 pub use provider::RepoProvider;
 pub use search::{SearchHit, SearchKind, search_metadata};

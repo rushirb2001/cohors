@@ -9,7 +9,7 @@
 
 use camino::Utf8Path;
 use cohors_core::{
-    Branch, CommitMeta, RepoOperation, RepoRef, RepoSnapshot, Upstream, WorktreeStatus,
+    Branch, CommitMeta, RepoOperation, RepoRef, RepoSnapshot, TagInfo, Upstream, WorktreeStatus,
 };
 use gix::bstr::{BStr, ByteSlice};
 
@@ -65,6 +65,7 @@ pub fn snapshot_repo(repo_ref: &RepoRef, now: i64) -> RepoSnapshot {
         operation: extras.operation,
         default_branch: extras.default_branch,
         last_fetch: extras.last_fetch,
+        latest_tag: extras.latest_tag,
         remote: None,
         last_commit,
         error: None,
@@ -138,6 +139,7 @@ struct Extras {
     operation: Option<RepoOperation>,
     default_branch: Option<String>,
     last_fetch: Option<i64>,
+    latest_tag: Option<TagInfo>,
     activity: Vec<u8>,
 }
 
@@ -158,6 +160,7 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
     extras.operation = repo_operation(&repo);
     extras.default_branch = default_branch(&repo);
     extras.last_fetch = last_fetch_time(&repo);
+    extras.latest_tag = tag_info(&repo);
     // The `origin` URL is local git data; cohors-github resolves it to a repo.
     extras.remote_url = repo
         .find_remote("origin")
@@ -210,6 +213,25 @@ fn default_branch(repo: &git2::Repository) -> Option<String> {
         .flatten()
         .and_then(|t| t.rsplit('/').next())
         .map(str::to_string)
+}
+
+/// The newest tag reachable from HEAD, via `git describe --tags --long`
+/// ("<tag>-<N>-g<hash>"). The tag name may itself contain `-`, so the suffix is
+/// parsed from the right. `None` when the repo has no tags.
+#[cfg(feature = "git2-fallback")]
+fn tag_info(repo: &git2::Repository) -> Option<TagInfo> {
+    let mut opts = git2::DescribeOptions::new();
+    opts.describe_tags();
+    let describe = repo.describe(&opts).ok()?;
+    let mut fmt = git2::DescribeFormatOptions::new();
+    fmt.always_use_long_format(true);
+    let formatted = describe.format(Some(&fmt)).ok()?;
+    let (rest, _hash) = formatted.rsplit_once('-')?;
+    let (tag, since) = rest.rsplit_once('-')?;
+    Some(TagInfo {
+        name: tag.to_string(),
+        commits_since: since.parse().ok()?,
+    })
 }
 
 /// When the repo last fetched, from the mtime of `FETCH_HEAD` (Unix seconds).

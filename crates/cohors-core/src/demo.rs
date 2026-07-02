@@ -11,7 +11,8 @@ use camino::Utf8PathBuf;
 
 use crate::detail::{ChangedFile, RepoDetail};
 use crate::model::{
-    Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, Upstream, WorktreeStatus,
+    Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, TagInfo, Upstream,
+    WorktreeStatus,
 };
 use crate::standup::StandupCommit;
 
@@ -218,6 +219,11 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         operation: None,
         default_branch: Some("main".into()),
         last_fetch: None,
+        // Deterministic tag flavor: remoted repos show a release + drift.
+        latest_tag: on_remote.then(|| TagInfo {
+            name: "v1.4.0".into(),
+            commits_since: (s.name.len() % 7) as u32,
+        }),
         remote,
         last_commit: (s.error.is_none()).then(|| CommitMeta {
             short_id: "abc1234".into(),

@@ -169,6 +169,15 @@ impl RepoOperation {
     }
 }
 
+/// The repo's most recent tag (by `git describe`) and how far HEAD has moved
+/// past it — "v1.4.0 +5" tells a release-aware project it has unshipped work.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagInfo {
+    pub name: String,
+    /// Commits on HEAD since the tag (0 = HEAD is exactly the tag).
+    pub commits_since: u32,
+}
+
 /// Remote (GitHub) info for a repo, populated by `cohors-github` (v0.2). `None`
 /// on a snapshot means "not a GitHub repo, or not fetched yet".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,6 +299,10 @@ pub struct RepoSnapshot {
     /// (haven't fetched in a while) signal without touching the network.
     #[serde(default)]
     pub last_fetch: Option<i64>,
+    /// The newest tag reachable from HEAD + commits since it (`git describe`).
+    /// `None` when the repo has no tags (or the git2 walk is unavailable).
+    #[serde(default)]
+    pub latest_tag: Option<TagInfo>,
     /// GitHub-derived info (v0.2), filled asynchronously after the local scan;
     /// `None` until fetched (or for non-GitHub repos).
     #[serde(default)]
@@ -336,6 +349,7 @@ impl RepoSnapshot {
             operation: None,
             default_branch: None,
             last_fetch: None,
+            latest_tag: None,
             remote: None,
             error: Some(error.into()),
             activity: Vec::new(),
@@ -436,6 +450,7 @@ pub(crate) fn sample(
         operation: None,
         default_branch: Some("main".to_string()),
         last_fetch: None,
+        latest_tag: None,
         remote: None,
         last_commit: commit_ts.map(|t| CommitMeta {
             short_id: "abc1234".to_string(),

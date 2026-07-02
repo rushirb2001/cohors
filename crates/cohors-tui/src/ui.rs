@@ -3173,6 +3173,7 @@ mod tests {
             operation: None,
             default_branch: None,
             last_fetch: None,
+            latest_tag: None,
             remote: None,
             last_commit: commit.map(|(ts, summary)| CommitMeta {
                 short_id: "a1b2c3d".to_string(),
