@@ -36,8 +36,8 @@ pub mod view;
 pub use attention::{Assessment, AttentionReason, FleetSummary, Severity, assess, fleet_summary};
 pub use detail::{ChangedFile, RepoChanges, RepoDetail};
 pub use model::{
-    Branch, CiStatus, CommitMeta, Contributor, PullRequest, RemoteDetail, RemoteInfo, RepoId,
-    RepoOperation, RepoRef, RepoSnapshot, Upstream, WorktreeStatus,
+    Branch, CiStatus, CommitMeta, Contributor, PullRequest, RemoteDetail, RemoteInfo, RemoteKind,
+    RepoId, RepoOperation, RepoRef, RepoSnapshot, Upstream, WorktreeStatus,
 };
 pub use provider::RepoProvider;
 pub use search::{SearchHit, SearchKind, search_metadata};

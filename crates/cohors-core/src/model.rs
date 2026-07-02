@@ -383,6 +383,12 @@ impl RepoSnapshot {
         self.error.is_some()
     }
 
+    /// Which forge the repo's remote points at, derived from `remote_url` on
+    /// demand (never stored — see [`classify_remote`]).
+    pub fn remote_kind(&self) -> Option<RemoteKind> {
+        self.remote_url.as_deref().and_then(classify_remote)
+    }
+
     /// Whether HEAD is on the repo's known default branch. `None` when the current
     /// branch or the default branch is unknown (detached, unborn, or no origin).
     pub fn on_default_branch(&self) -> Option<bool> {
@@ -516,5 +522,108 @@ mod tests {
         let json = serde_json::to_string(&s).expect("serialize");
         let back: RepoSnapshot = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(s, back);
+    }
+}
+
+// ── Remote-host classification ───────────────────────────────────────────────
+// Pure parsing of a remote URL into "which forge is this" — derived on demand
+// from `remote_url`, never stored, so it costs nothing in serialization and can
+// never go stale. Lets a surface offer host-appropriate affordances (a PR link,
+// a GitLab MR label) or a future remote adapter pick the right API.
+
+/// Which hosting service a remote URL points at, by hostname. `Other` covers
+/// self-hosted forges (a self-hosted GitLab still classifies as `GitLab` only
+/// when its hostname says so — detection is by name, not by probing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteKind {
+    GitHub,
+    GitLab,
+    Bitbucket,
+    Other,
+}
+
+/// Extract the hostname from the git remote URL shapes in the wild:
+/// `git@host:path`, `ssh://[user@]host/path`, `http(s)://[user@]host/path`.
+/// Returns `None` for local/file remotes and anything unrecognizable.
+pub fn remote_host(url: &str) -> Option<String> {
+    let url = url.trim();
+    let rest = if let Some(scp) = url.strip_prefix("git@") {
+        // scp-like: host and path are separated by a colon.
+        scp.split(':').next().unwrap_or(scp).to_string()
+    } else {
+        let after = url
+            .strip_prefix("ssh://")
+            .or_else(|| url.strip_prefix("https://"))
+            .or_else(|| url.strip_prefix("http://"))?;
+        // Drop `user@`, then take up to the first `/`, then drop `:port`.
+        let host_port = after
+            .rsplit_once('@')
+            .map(|(_, h)| h)
+            .unwrap_or(after)
+            .split('/')
+            .next()
+            .unwrap_or("");
+        host_port.split(':').next().unwrap_or(host_port).to_string()
+    };
+    let rest = rest.to_ascii_lowercase();
+    (!rest.is_empty()).then_some(rest)
+}
+
+/// Classify a remote URL by its hostname. `None` when no host can be parsed.
+pub fn classify_remote(url: &str) -> Option<RemoteKind> {
+    let host = remote_host(url)?;
+    Some(if host == "github.com" {
+        RemoteKind::GitHub
+    } else if host == "gitlab.com" || host.starts_with("gitlab.") {
+        RemoteKind::GitLab
+    } else if host == "bitbucket.org" {
+        RemoteKind::Bitbucket
+    } else {
+        RemoteKind::Other
+    })
+}
+
+#[cfg(test)]
+mod remote_kind_tests {
+    use super::*;
+
+    #[test]
+    fn classifies_the_common_url_shapes() {
+        for url in [
+            "git@github.com:acme/pay.git",
+            "https://github.com/acme/pay",
+            "ssh://git@github.com/acme/pay.git",
+            "https://user@github.com:443/acme/pay",
+        ] {
+            assert_eq!(classify_remote(url), Some(RemoteKind::GitHub), "{url}");
+        }
+        assert_eq!(
+            classify_remote("git@gitlab.example.io:g/r.git"),
+            Some(RemoteKind::GitLab),
+            "self-hosted gitlab.* hostnames classify as GitLab"
+        );
+        assert_eq!(
+            classify_remote("git@git.example.io:g/r.git"),
+            Some(RemoteKind::Other),
+            "an unrecognized hostname is Other"
+        );
+        assert_eq!(
+            classify_remote("https://gitlab.acme.dev/g/r"),
+            Some(RemoteKind::GitLab)
+        );
+        assert_eq!(
+            classify_remote("git@bitbucket.org:t/r.git"),
+            Some(RemoteKind::Bitbucket)
+        );
+        assert_eq!(classify_remote("/local/bare.git"), None);
+    }
+
+    #[test]
+    fn snapshot_helper_derives_from_remote_url() {
+        let mut s = sample("a", "a", false, 0, 0, None);
+        assert_eq!(s.remote_kind(), None);
+        s.remote_url = Some("git@github.com:acme/a.git".into());
+        assert_eq!(s.remote_kind(), Some(RemoteKind::GitHub));
     }
 }
