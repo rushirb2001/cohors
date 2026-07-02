@@ -17,3 +17,15 @@ mod scanner;
 pub use detail::{DetailBundle, detail_bundle};
 pub use detect::detect_roots;
 pub use scanner::{FleetError, Scanner};
+
+// ── The read facade ──────────────────────────────────────────────────────────
+// Front-ends read the fleet through THIS crate only — never `cohors-git` or
+// `cohors-github` directly (a discipline test in tests/ enforces it). That makes
+// fleet the single choke point for read behavior: an adapter change lands here
+// once instead of flooding into every surface, and a new read capability added
+// here is immediately available to all of them. Writes go through
+// `cohors-actions`, the write-side peer of this facade.
+pub use cohors_git::{
+    ContentHit, collect_commits, repo_changes, repo_detail, search_content, snapshot_repo,
+};
+pub use cohors_github::{discover_token, enrich, fetch_repo_detail};

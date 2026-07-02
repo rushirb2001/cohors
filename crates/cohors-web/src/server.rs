@@ -146,7 +146,7 @@ fn handle(
 fn api_repos(req: tiny_http::Request, url: &str, scan: &ScanFn, token: Option<&str>) {
     let mut snapshots = scan();
     if query_param(url, "enrich").as_deref() == Some("1") {
-        cohors_github::enrich(&mut snapshots, token);
+        cohors_fleet::enrich(&mut snapshots, token);
     }
     respond_json(req, &snapshots);
 }

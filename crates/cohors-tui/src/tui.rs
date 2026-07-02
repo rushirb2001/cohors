@@ -708,7 +708,7 @@ fn open_detail(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
         let tx = tx.clone();
         let id = id.clone();
         std::thread::spawn(move || {
-            let detail = cohors_git::repo_detail(&path);
+            let detail = cohors_fleet::repo_detail(&path);
             let _ = tx.send(BgMsg::DetailReady {
                 id,
                 detail: Box::new(detail),
@@ -721,7 +721,7 @@ fn open_detail(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
         dv.remote_pending = true;
         let tx = tx.clone();
         std::thread::spawn(move || {
-            let remote = cohors_github::fetch_repo_detail(&token, &url).map(Box::new);
+            let remote = cohors_fleet::fetch_repo_detail(&token, &url).map(Box::new);
             let _ = tx.send(BgMsg::RemoteDetailReady { id, remote });
         });
     }
@@ -881,7 +881,7 @@ fn spawn_scan(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
 /// merging. Runs after the local scan so the dashboard never waits on network.
 fn spawn_enrich(mut repos: Vec<RepoSnapshot>, token: String, tx: Sender<BgMsg>) {
     std::thread::spawn(move || {
-        cohors_github::enrich(&mut repos, Some(&token));
+        cohors_fleet::enrich(&mut repos, Some(&token));
         let _ = tx.send(BgMsg::RemoteEnriched(repos));
     });
 }
@@ -900,7 +900,7 @@ fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
     std::thread::spawn(move || {
         let mut commits = Vec::new();
         for path in &paths {
-            commits.extend(cohors_git::collect_commits(path, &email, since, until));
+            commits.extend(cohors_fleet::collect_commits(path, &email, since, until));
         }
         let _ = tx.send(BgMsg::StandupReady(commits));
     });
@@ -1030,7 +1030,7 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        let snapshot = Some(Box::new(cohors_git::snapshot_repo(
+        let snapshot = Some(Box::new(cohors_fleet::snapshot_repo(
             &RepoRef {
                 id: id.clone(),
                 path: Some(path),

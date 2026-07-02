@@ -10,8 +10,7 @@ publish = false
 
 [dependencies]
 cohors-core = { workspace = true }
-cohors-git = { workspace = true }
-cohors-github = { workspace = true }
+cohors-fleet = { workspace = true }
 cohors-actions = { workspace = true }
 anyhow = { workspace = true }
 serde_json = { workspace = true }

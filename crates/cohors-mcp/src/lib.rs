@@ -14,9 +14,10 @@
 //! side-effect-free preview that needs no tier or confirm). Every read carries
 //! fail-loud diagnostics (see [`meta`]).
 //!
-//! This is the 4th adapter, its own crate (ADR-002/023): it depends on
-//! `cohors-actions` for the write half and the read adapters for enrichment, and
-//! the `cohors` binary's `mcp` subcommand calls [`serve_stdio`].
+//! This is the 4th adapter, its own crate (ADR-002/023): it reads through the
+//! `cohors-fleet` facade and writes through `cohors-actions` — never the raw
+//! git/github adapters. The `cohors` binary's `mcp` subcommand calls
+//! [`serve_stdio`].
 
 #![forbid(unsafe_code)]
 
@@ -554,7 +555,7 @@ fn remote_meta(ctx: &Ctx, snaps: &[RepoSnapshot], excluded: usize) -> Value {
 
 fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
     let mut snaps = (ctx.scan)();
-    cohors_github::enrich(&mut snaps, ctx.token);
+    cohors_fleet::enrich(&mut snaps, ctx.token);
     let selected = resolve_read(args, &snaps, now);
     let repos: Vec<Value> = selected
         .iter()
@@ -570,7 +571,7 @@ fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
 
 fn ci_status(args: &Value, ctx: &Ctx, now: i64) -> Value {
     let mut snaps = (ctx.scan)();
-    cohors_github::enrich(&mut snaps, ctx.token);
+    cohors_fleet::enrich(&mut snaps, ctx.token);
     let selected = resolve_read(args, &snaps, now);
     let repos: Vec<Value> = selected
         .iter()
@@ -631,7 +632,7 @@ fn get_repo(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     // Same GitHub detail the TUI shows on Enter (PRs / contributors / issues /
     // release), so inspecting a repo is consistent across the TUI and MCP.
     if let (Some(url), Some(token)) = (snap.remote_url.as_deref(), ctx.token)
-        && let Some(detail) = cohors_github::fetch_repo_detail(token, url)
+        && let Some(detail) = cohors_fleet::fetch_repo_detail(token, url)
         && let Value::Object(map) = &mut value
     {
         map.insert(
@@ -688,7 +689,7 @@ fn changes(args: &Value, ctx: &Ctx, now: i64) -> Value {
         .filter_map(|id| by_id.get(id.0.as_str()).copied())
         .filter_map(|snap| {
             let path = snap.path.as_deref()?; // skip path-less repos
-            let ch = cohors_git::repo_changes(path, include_patch, max_bytes);
+            let ch = cohors_fleet::repo_changes(path, include_patch, max_bytes);
             if ch.files.is_empty() {
                 return None; // nothing uncommitted — omit the repo entirely
             }
@@ -760,7 +761,7 @@ fn search(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
                 continue;
             };
             let remaining = max_results - hits.len();
-            for hit in cohors_git::search_content(path, &query, remaining + 1) {
+            for hit in cohors_fleet::search_content(path, &query, remaining + 1) {
                 if hits.len() >= max_results {
                     truncated = true;
                     break;
