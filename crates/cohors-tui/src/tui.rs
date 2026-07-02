@@ -156,7 +156,7 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
                     // Show the picker (a real feature worth demoing); set-default
                     // persists harmlessly; the launch itself is stubbed.
                     Cmd::OpenWith => {
-                        open_with_picker(&mut app, crate::prefs::default_editor());
+                        open_with_picker(&mut app, cohors_config::prefs::default_editor());
                     }
                     Cmd::OpenWithSetDefault => set_open_with_default(&mut app),
                     Cmd::OpenWithAccept => {
@@ -733,9 +733,9 @@ fn open_detail(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
 /// The default editor command: the user's saved pick first (set via the picker),
 /// then config `editor` / `$EDITOR` / `$VISUAL`, then the first installed editor.
 fn resolve_default_editor(scanner: &Arc<Scanner>) -> Option<String> {
-    crate::prefs::default_editor()
+    cohors_config::prefs::default_editor()
         .or_else(|| scanner.editor_command())
-        .or_else(|| crate::editors::first_detected_command().map(str::to_string))
+        .or_else(|| cohors_config::editors::first_detected_command().map(str::to_string))
 }
 
 /// Open the "Open with…" picker for the selected repo: detected editors, plus
@@ -746,7 +746,7 @@ fn open_with_picker(app: &mut App, default: Option<String>) {
         app.status = Some("no repo selected".to_string());
         return;
     }
-    let mut openers: Vec<Opener> = crate::editors::detected()
+    let mut openers: Vec<Opener> = cohors_config::editors::detected()
         .into_iter()
         .map(|e| Opener::Editor {
             command: e.command.to_string(),
@@ -754,7 +754,7 @@ fn open_with_picker(app: &mut App, default: Option<String>) {
         })
         .collect();
     openers.push(Opener::Reveal);
-    if crate::editors::installed("lazygit") {
+    if cohors_config::editors::installed("lazygit") {
         openers.push(Opener::Lazygit);
     }
     app.open_with = Some(OpenWith::new(openers, default));
@@ -813,7 +813,7 @@ fn set_open_with_default(app: &mut App) {
     };
     match chosen {
         Some((command, label)) => {
-            crate::prefs::set_default_editor(&command);
+            cohors_config::prefs::set_default_editor(&command);
             if let Some(ow) = app.open_with.as_mut() {
                 ow.default_command = Some(command);
             }

@@ -34,7 +34,8 @@ pub struct Config {
     pub stop_at_repo: bool,
     /// Follow symlinks during discovery.
     pub follow_symlinks: bool,
-    /// Safety knobs for the MCP server (ADR-025).
+    /// Safety knobs for the machine action surfaces — the `cohors mcp` agent
+    /// server AND the `cohors web` action endpoint share them (ADR-025).
     pub mcp: McpConfig,
     /// How the TUI renders status glyphs (auto / ascii / unicode / nerd).
     pub icons: IconMode,
@@ -294,7 +295,8 @@ follow_symlinks = false
 [groups]
 # payments = ["sushrutalgs-*", "billing"]
 
-# Safety knobs for the `cohors mcp` agent server.
+# Safety knobs for the machine action surfaces (`cohors mcp` and the
+# `cohors web --allow-writes/--allow-run` action endpoint).
 [mcp]
 # Restrict the `run` tool to commands matching these globs (empty = any command,
 # still gated by --allow-run + confirm).
