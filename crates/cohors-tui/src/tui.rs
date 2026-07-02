@@ -156,7 +156,7 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
                     // Show the picker (a real feature worth demoing); set-default
                     // persists harmlessly; the launch itself is stubbed.
                     Cmd::OpenWith => {
-                        open_with_picker(&mut app, crate::prefs::default_editor());
+                        open_with_picker(&mut app, cohors_config::prefs::default_editor());
                     }
                     Cmd::OpenWithSetDefault => set_open_with_default(&mut app),
                     Cmd::OpenWithAccept => {
@@ -356,7 +356,7 @@ fn run_loop(
 /// candidates the empty-state rescue offers. Bounded and shallow (see `detect`).
 fn suggest_roots(current: &[String]) -> Vec<String> {
     let home = cohors_config::paths::home_dir().ok();
-    crate::detect::detect_roots(home.as_deref())
+    cohors_fleet::detect_roots(home.as_deref())
         .into_iter()
         .filter(|cand| {
             let expanded = match &home {
@@ -388,7 +388,7 @@ fn use_suggested_roots(app: &mut App, scanner: &mut Arc<Scanner>, cli: &Cli, tx:
         app.suggested_roots = roots;
         return;
     }
-    match Scanner::from_cli(cli) {
+    match crate::scan::from_cli(cli) {
         Ok(rebuilt) => {
             *scanner = Arc::new(rebuilt);
             app.roots = scanner.roots();
@@ -708,7 +708,7 @@ fn open_detail(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
         let tx = tx.clone();
         let id = id.clone();
         std::thread::spawn(move || {
-            let detail = cohors_git::repo_detail(&path);
+            let detail = cohors_fleet::repo_detail(&path);
             let _ = tx.send(BgMsg::DetailReady {
                 id,
                 detail: Box::new(detail),
@@ -721,7 +721,7 @@ fn open_detail(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
         dv.remote_pending = true;
         let tx = tx.clone();
         std::thread::spawn(move || {
-            let remote = cohors_github::fetch_repo_detail(&token, &url).map(Box::new);
+            let remote = cohors_fleet::fetch_repo_detail(&token, &url).map(Box::new);
             let _ = tx.send(BgMsg::RemoteDetailReady { id, remote });
         });
     }
@@ -733,9 +733,9 @@ fn open_detail(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
 /// The default editor command: the user's saved pick first (set via the picker),
 /// then config `editor` / `$EDITOR` / `$VISUAL`, then the first installed editor.
 fn resolve_default_editor(scanner: &Arc<Scanner>) -> Option<String> {
-    crate::prefs::default_editor()
+    cohors_config::prefs::default_editor()
         .or_else(|| scanner.editor_command())
-        .or_else(|| crate::editors::first_detected_command().map(str::to_string))
+        .or_else(|| cohors_config::editors::first_detected_command().map(str::to_string))
 }
 
 /// Open the "Open with…" picker for the selected repo: detected editors, plus
@@ -746,7 +746,7 @@ fn open_with_picker(app: &mut App, default: Option<String>) {
         app.status = Some("no repo selected".to_string());
         return;
     }
-    let mut openers: Vec<Opener> = crate::editors::detected()
+    let mut openers: Vec<Opener> = cohors_config::editors::detected()
         .into_iter()
         .map(|e| Opener::Editor {
             command: e.command.to_string(),
@@ -754,7 +754,7 @@ fn open_with_picker(app: &mut App, default: Option<String>) {
         })
         .collect();
     openers.push(Opener::Reveal);
-    if crate::editors::installed("lazygit") {
+    if cohors_config::editors::installed("lazygit") {
         openers.push(Opener::Lazygit);
     }
     app.open_with = Some(OpenWith::new(openers, default));
@@ -813,7 +813,7 @@ fn set_open_with_default(app: &mut App) {
     };
     match chosen {
         Some((command, label)) => {
-            crate::prefs::set_default_editor(&command);
+            cohors_config::prefs::set_default_editor(&command);
             if let Some(ow) = app.open_with.as_mut() {
                 ow.default_command = Some(command);
             }
@@ -881,7 +881,7 @@ fn spawn_scan(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
 /// merging. Runs after the local scan so the dashboard never waits on network.
 fn spawn_enrich(mut repos: Vec<RepoSnapshot>, token: String, tx: Sender<BgMsg>) {
     std::thread::spawn(move || {
-        cohors_github::enrich(&mut repos, Some(&token));
+        cohors_fleet::enrich(&mut repos, Some(&token));
         let _ = tx.send(BgMsg::RemoteEnriched(repos));
     });
 }
@@ -900,7 +900,7 @@ fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
     std::thread::spawn(move || {
         let mut commits = Vec::new();
         for path in &paths {
-            commits.extend(cohors_git::collect_commits(path, &email, since, until));
+            commits.extend(cohors_fleet::collect_commits(path, &email, since, until));
         }
         let _ = tx.send(BgMsg::StandupReady(commits));
     });
@@ -1030,7 +1030,7 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        let snapshot = Some(Box::new(cohors_git::snapshot_repo(
+        let snapshot = Some(Box::new(cohors_fleet::snapshot_repo(
             &RepoRef {
                 id: id.clone(),
                 path: Some(path),

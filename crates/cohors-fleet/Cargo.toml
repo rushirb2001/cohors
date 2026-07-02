@@ -1,0 +1,22 @@
+[package]
+name = "cohors-fleet"
+description = "Fleet composition layer for cohors: config + git + github wired into one Scanner (discover → snapshot → groups/aliases) shared by every front-end."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+cohors-core = { workspace = true }
+cohors-config = { workspace = true }
+cohors-git = { workspace = true }
+cohors-github = { workspace = true }
+camino = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

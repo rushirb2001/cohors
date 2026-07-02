@@ -467,6 +467,7 @@ dependencies = [
  "camino",
  "directories",
  "serde",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "toml 0.8.23",
@@ -481,6 +482,21 @@ dependencies = [
  "nucleo-matcher",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "cohors-fleet"
+version = "0.4.39"
+dependencies = [
+ "camino",
+ "cohors-config",
+ "cohors-core",
+ "cohors-git",
+ "cohors-github",
+ "serde",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
@@ -519,8 +535,7 @@ dependencies = [
  "anyhow",
  "cohors-actions",
  "cohors-core",
- "cohors-git",
- "cohors-github",
+ "cohors-fleet",
  "serde_json",
  "tracing",
 ]
@@ -537,8 +552,7 @@ dependencies = [
  "cohors-actions",
  "cohors-config",
  "cohors-core",
- "cohors-git",
- "cohors-github",
+ "cohors-fleet",
  "cohors-mcp",
  "cohors-web",
  "insta",
@@ -559,10 +573,8 @@ dependencies = [
  "anyhow",
  "camino",
  "cohors-actions",
- "cohors-config",
  "cohors-core",
- "cohors-git",
- "cohors-github",
+ "cohors-fleet",
  "console_error_panic_hook",
  "gloo-net",
  "gloo-timers",

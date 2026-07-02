@@ -23,18 +23,19 @@ pub mod standalone {
 
     use anyhow::{Result, bail};
     use camino::Utf8PathBuf;
-    use cohors_git::{DiscoveryOptions, LocalGitProvider};
+    use cohors_fleet::Scanner;
 
     use crate::{Caps, serve};
 
     /// Parse `args` (everything after argv[0]) and run the server.
     ///
-    /// Usage: `cohors-web <dist_dir> [--port N] [--allow-writes] [--allow-run] <root>...`
+    /// Usage: `cohors-web <dist_dir> [--port N] [--config <path>] [--allow-writes] [--allow-run] <root>...`
     pub fn main(args: Vec<String>) -> Result<()> {
         let mut dist: Option<Utf8PathBuf> = None;
         let mut port: u16 = 8787;
         let mut caps = Caps::default();
         let mut roots: Vec<String> = Vec::new();
+        let mut config: Option<Utf8PathBuf> = None;
 
         let mut it = args.into_iter();
         while let Some(arg) = it.next() {
@@ -44,6 +45,9 @@ pub mod standalone {
                 "--port" => {
                     port = it.next().and_then(|p| p.parse().ok()).unwrap_or(port);
                 }
+                // Same override the TUI's --config carries, so groups/aliases
+                // resolve identically across surfaces (fleet parity).
+                "--config" => config = it.next().map(Utf8PathBuf::from),
                 _ if dist.is_none() => dist = Some(Utf8PathBuf::from(arg)),
                 _ => roots.push(arg),
             }
@@ -55,23 +59,33 @@ pub mod standalone {
                  (the primary launcher is `cohors web`; this standalone form needs an explicit dist dir + roots)"
             );
         };
-        if roots.is_empty() {
-            bail!("no roots given — pass one or more directories to scan");
-        }
+        // Roots may be empty: the fleet Scanner then falls back to the config's
+        // roots (or auto-detection), exactly like the TUI with no --root.
 
-        // A scan closure backed by a fresh discovery each call (so the page's
-        // `--watch` poll sees new commits). The provider is cheap to rebuild.
-        let opts = DiscoveryOptions {
-            roots: roots.clone(),
-            ..Default::default()
-        };
-        let scan = Arc::new(move || {
-            LocalGitProvider::new(opts.clone())
-                .scan()
-                .unwrap_or_default()
-        });
+        // The shared fleet Scanner: same config → discovery → groups/aliases
+        // path as the TUI and MCP, with the given roots as explicit overrides.
+        // This is the whole point of `cohors-fleet` — the standalone server no
+        // longer hand-rolls a lesser scan (it now gets ignore globs, groups,
+        // aliases, and the GitHub token for enrichment, exactly like `cohors web`).
+        let scanner = Arc::new(
+            Scanner::new(config.as_deref(), &roots)
+                .map_err(|e| anyhow::anyhow!("building scanner: {e}"))?,
+        );
+        let token = scanner.github_token();
+        let served_roots = scanner.roots();
+        let mcp = scanner.mcp_config();
+        let scan = Arc::new(move || scanner.scan());
 
-        // No GitHub token plumbed in the standalone form yet (local status only).
-        serve(&dist, port, scan, roots, None, false, caps, Vec::new(), 0)
+        serve(
+            &dist,
+            port,
+            scan,
+            served_roots,
+            token,
+            false,
+            caps,
+            mcp.run_allowlist,
+            mcp.max_action_targets,
+        )
     }
 }

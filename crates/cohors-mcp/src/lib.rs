@@ -14,9 +14,10 @@
 //! side-effect-free preview that needs no tier or confirm). Every read carries
 //! fail-loud diagnostics (see [`meta`]).
 //!
-//! This is the 4th adapter, its own crate (ADR-002/023): it depends on
-//! `cohors-actions` for the write half and the read adapters for enrichment, and
-//! the `cohors` binary's `mcp` subcommand calls [`serve_stdio`].
+//! This is the 4th adapter, its own crate (ADR-002/023): it reads through the
+//! `cohors-fleet` facade and writes through `cohors-actions` — never the raw
+//! git/github adapters. The `cohors` binary's `mcp` subcommand calls
+//! [`serve_stdio`].
 
 #![forbid(unsafe_code)]
 
@@ -334,183 +335,25 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         "search" => search(args, ctx, now),
         "list_prs" => Ok(list_prs(args, ctx, now)),
         "ci_status" => Ok(ci_status(args, ctx, now)),
-        "fetch" => fetch_tool(args, ctx, now),
-        "pull" => pull_tool(args, ctx, now),
-        "push" => push_tool(args, ctx, now),
-        "commit" => commit_tool(args, ctx, now),
-        "stash" => stash_tool(args, ctx, now),
-        "run" => run_tool(args, ctx, now),
+        // Every registry verb routes through the one shared dispatcher — the
+        // verb→primitive mapping and the tier/confirm gates live in
+        // `cohors-actions`, not per surface (ADR: one registry, one dispatch).
+        "fetch" | "pull" | "push" | "commit" | "stash" | "run" => cohors_actions::dispatch(
+            name,
+            args,
+            &(ctx.scan)(),
+            cohors_actions::Caps {
+                allow_writes: ctx.caps.allow_writes,
+                allow_run: ctx.caps.allow_run,
+            },
+            ctx.allowlist,
+            ctx.max_targets,
+            now,
+            "cohors mcp",
+        ),
         "open" => Err("`open` is not available in this build (local-desktop tool).".to_string()),
         other => Err(format!("unknown tool `{other}`")),
     }
-}
-
-// ── Action tools (ADR-025 safety tiers) ──────────────────────────────────────
-
-/// `--allow-writes` gate, with a message that tells the agent how to enable it.
-fn require_writes(ctx: &Ctx, tool: &str) -> Result<(), String> {
-    if ctx.caps.allow_writes {
-        Ok(())
-    } else {
-        Err(format!(
-            "`{tool}` is disabled: this server is read-only. Relaunch it with `cohors mcp --allow-writes` to enable write tools."
-        ))
-    }
-}
-
-/// `confirm: true` gate for the destructive / arbitrary-shell tools.
-fn require_confirm(args: &Value, tool: &str) -> Result<(), String> {
-    if args.get("confirm").and_then(Value::as_bool) == Some(true) {
-        Ok(())
-    } else {
-        Err(format!(
-            "`{tool}` needs a deliberate `confirm`: pass \"confirm\": true (preview first with \"dry_run\": true)."
-        ))
-    }
-}
-
-/// The surface-agnostic orchestration (selector → targets → cap → dry-run → run
-/// → audit) lives in `cohors_actions::orchestrate`; re-export the bits this
-/// module names so call sites stay short.
-use cohors_actions::{
-    action_selector, audit, command_allowed, dry_run_preview, git_action, is_dry_run, no_targets,
-    resolve_targets, within_cap,
-};
-
-fn fetch_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    let snaps = (ctx.scan)();
-    git_action(
-        "fetch",
-        json!("fetch"),
-        args,
-        &snaps,
-        ctx.max_targets,
-        now,
-        || require_writes(ctx, "fetch"),
-        cohors_actions::fetch,
-    )
-}
-
-fn pull_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    let snaps = (ctx.scan)();
-    git_action(
-        "pull",
-        json!("pull --ff-only"),
-        args,
-        &snaps,
-        ctx.max_targets,
-        now,
-        || require_writes(ctx, "pull"),
-        cohors_actions::pull_ff,
-    )
-}
-
-fn push_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    let snaps = (ctx.scan)();
-    git_action(
-        "push",
-        json!("push"),
-        args,
-        &snaps,
-        ctx.max_targets,
-        now,
-        || require_writes(ctx, "push"),
-        cohors_actions::push,
-    )
-}
-
-fn commit_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    // Required, like `run`'s command — so a commit always carries a message,
-    // even on a dry-run preview.
-    let message = args
-        .get("message")
-        .and_then(Value::as_str)
-        .filter(|m| !m.trim().is_empty())
-        .ok_or("missing required argument `message`")?
-        .to_string();
-    let snaps = (ctx.scan)();
-    git_action(
-        "commit",
-        json!({ "commit": message }),
-        args,
-        &snaps,
-        ctx.max_targets,
-        now,
-        || {
-            require_writes(ctx, "commit")?;
-            require_confirm(args, "commit")
-        },
-        |path, name| cohors_actions::commit(path, name, &message),
-    )
-}
-
-fn stash_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    let snaps = (ctx.scan)();
-    git_action(
-        "stash",
-        json!("stash push"),
-        args,
-        &snaps,
-        ctx.max_targets,
-        now,
-        || {
-            require_writes(ctx, "stash")?;
-            require_confirm(args, "stash")
-        },
-        cohors_actions::stash_push,
-    )
-}
-
-fn run_tool(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
-    let command = args
-        .get("command")
-        .and_then(Value::as_str)
-        .filter(|c| !c.trim().is_empty())
-        .ok_or("missing required argument `command`")?
-        .to_string();
-
-    let snaps = (ctx.scan)();
-    let selector = action_selector(args);
-    let targets = resolve_targets(&selector, &snaps, now);
-    if targets.is_empty() {
-        return Ok(no_targets());
-    }
-    within_cap(&selector, &targets, ctx.max_targets)?;
-    // Side-effect-free preview is allowed before the gates (see `git_action`).
-    if is_dry_run(args) {
-        return Ok(dry_run_preview(json!({ "run": command }), &targets));
-    }
-
-    // Real execution: the `run` tier, a deliberate confirm, and the allowlist.
-    if !ctx.caps.allow_run {
-        return Err(
-            "`run` is disabled: relaunch the server with `cohors mcp --allow-run` to enable arbitrary commands.".to_string(),
-        );
-    }
-    require_confirm(args, "run")?;
-    if !command_allowed(&command, ctx.allowlist) {
-        return Err(format!(
-            "`{command}` is not permitted by the configured run_allowlist ({:?}).",
-            ctx.allowlist
-        ));
-    }
-
-    let timeout = std::time::Duration::from_secs(
-        args.get("timeout_secs")
-            .and_then(Value::as_u64)
-            .unwrap_or(cohors_actions::DEFAULT_RUN_TIMEOUT_SECS)
-            .max(1),
-    );
-    let run_id = cohors_actions::next_run_id();
-    // Fan out across a bounded pool (ADR-020) so a large fleet finishes fast
-    // without spawning a process per repo at once; results stay in target order.
-    let results = cohors_actions::run_each(&targets, &command, timeout);
-    let ok = results.iter().filter(|r| r.ok).count();
-    audit("run", &selector, &targets, ok);
-    Ok(json!({
-        "run_id": run_id, "command": command, "targets": targets.len(),
-        "ok": ok, "failed": targets.len() - ok, "results": results
-    }))
 }
 
 // ── Remote read tools (GitHub enrichment) ────────────────────────────────────
@@ -554,7 +397,7 @@ fn remote_meta(ctx: &Ctx, snaps: &[RepoSnapshot], excluded: usize) -> Value {
 
 fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
     let mut snaps = (ctx.scan)();
-    cohors_github::enrich(&mut snaps, ctx.token);
+    cohors_fleet::enrich(&mut snaps, ctx.token);
     let selected = resolve_read(args, &snaps, now);
     let repos: Vec<Value> = selected
         .iter()
@@ -570,7 +413,7 @@ fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
 
 fn ci_status(args: &Value, ctx: &Ctx, now: i64) -> Value {
     let mut snaps = (ctx.scan)();
-    cohors_github::enrich(&mut snaps, ctx.token);
+    cohors_fleet::enrich(&mut snaps, ctx.token);
     let selected = resolve_read(args, &snaps, now);
     let repos: Vec<Value> = selected
         .iter()
@@ -631,7 +474,7 @@ fn get_repo(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     // Same GitHub detail the TUI shows on Enter (PRs / contributors / issues /
     // release), so inspecting a repo is consistent across the TUI and MCP.
     if let (Some(url), Some(token)) = (snap.remote_url.as_deref(), ctx.token)
-        && let Some(detail) = cohors_github::fetch_repo_detail(token, url)
+        && let Some(detail) = cohors_fleet::fetch_repo_detail(token, url)
         && let Value::Object(map) = &mut value
     {
         map.insert(
@@ -688,7 +531,7 @@ fn changes(args: &Value, ctx: &Ctx, now: i64) -> Value {
         .filter_map(|id| by_id.get(id.0.as_str()).copied())
         .filter_map(|snap| {
             let path = snap.path.as_deref()?; // skip path-less repos
-            let ch = cohors_git::repo_changes(path, include_patch, max_bytes);
+            let ch = cohors_fleet::repo_changes(path, include_patch, max_bytes);
             if ch.files.is_empty() {
                 return None; // nothing uncommitted — omit the repo entirely
             }
@@ -760,7 +603,7 @@ fn search(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
                 continue;
             };
             let remaining = max_results - hits.len();
-            for hit in cohors_git::search_content(path, &query, remaining + 1) {
+            for hit in cohors_fleet::search_content(path, &query, remaining + 1) {
                 if hits.len() >= max_results {
                     truncated = true;
                     break;

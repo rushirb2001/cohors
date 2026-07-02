@@ -47,9 +47,7 @@ wasm-bindgen-futures = "0.4"   # spawn the async fetch
 
 # ── Native server half (host target only) ────────────────────────────────────
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-cohors-config = { workspace = true }
-cohors-git = { workspace = true }
-cohors-github = { workspace = true }
+cohors-fleet = { workspace = true }
 cohors-actions = { workspace = true }
 anyhow = { workspace = true }
 camino = { workspace = true }
