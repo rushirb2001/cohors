@@ -35,13 +35,9 @@ use tiny_http::{Header, Method, Response, Server};
 /// the standalone binary can pass its own discovery, sharing one server.
 pub type ScanFn = dyn Fn() -> Vec<RepoSnapshot> + Send + Sync;
 
-/// Which mutating tiers the server permits, chosen at launch (ADR-025). Reads are
-/// always on; the action endpoint enforces these at the door.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Caps {
-    pub allow_writes: bool,
-    pub allow_run: bool,
-}
+/// Which mutating tiers the server permits, chosen at launch (ADR-025) — the
+/// shared `cohors-actions` type; enforcement lives in its `dispatch`.
+pub use cohors_actions::Caps;
 
 /// Everything `POST /api/action` needs that the read endpoints don't.
 #[derive(Clone)]
@@ -187,136 +183,21 @@ fn api_action(mut req: tiny_http::Request, ctx: &ActionCtx) {
     }
 }
 
-/// Resolve and run one action verb. Mirrors the MCP's per-tool dispatch, but the
-/// gate reads [`Caps`] (the web server's flags) instead of the MCP's.
+/// Resolve and run one action verb through the shared dispatcher. The verb→
+/// primitive mapping and every gate (writes tier, confirm, run allowlist) live
+/// in `cohors-actions`; this surface only supplies its Caps and its hint.
 fn run_action(verb: &str, args: &Value, ctx: &ActionCtx) -> Result<Value, String> {
-    let def = cohors_actions::find_action(verb)
-        .ok_or_else(|| format!("unknown action `{verb}` (no such registry verb)"))?;
     let snaps = (*ctx.scan)();
-    let now = now_secs();
-    let caps = ctx.caps;
-    let needs_confirm = def.needs_confirm;
-
-    match def.tier {
-        cohors_actions::Tier::Write => {
-            // commit carries a required message; the others take none.
-            let message = if verb == "commit" {
-                Some(
-                    args.get("message")
-                        .and_then(Value::as_str)
-                        .filter(|m| !m.trim().is_empty())
-                        .ok_or("missing required argument `message`")?
-                        .to_string(),
-                )
-            } else {
-                None
-            };
-            let authorize = || {
-                if !caps.allow_writes {
-                    return Err(format!(
-                        "`{verb}` is disabled: start the server with `cohors web --allow-writes` to enable write actions."
-                    ));
-                }
-                if needs_confirm && args.get("confirm").and_then(Value::as_bool) != Some(true) {
-                    return Err(format!(
-                        "`{verb}` needs a deliberate confirm: send \"confirm\": true (preview first with \"dry_run\": true)."
-                    ));
-                }
-                Ok(())
-            };
-            let action_label = match verb {
-                "commit" => json!({ "commit": message.clone().unwrap_or_default() }),
-                "pull" => json!("pull --ff-only"),
-                other => json!(other),
-            };
-            cohors_actions::git_action(
-                verb,
-                action_label,
-                args,
-                &snaps,
-                ctx.max_targets,
-                now,
-                authorize,
-                |path, name| match verb {
-                    "fetch" => cohors_actions::fetch(path, name),
-                    "pull" => cohors_actions::pull_ff(path, name),
-                    "push" => cohors_actions::push(path, name),
-                    "commit" => cohors_actions::commit(
-                        path,
-                        name,
-                        message.as_deref().expect("commit has a message"),
-                    ),
-                    "stash" => cohors_actions::stash_push(path, name),
-                    other => Err(format!("`{other}` is not a git write action")),
-                },
-            )
-        }
-        cohors_actions::Tier::Run => run_command_action(args, &snaps, ctx, now),
-        other => Err(format!(
-            "`{verb}` has tier {other:?}, which the web server doesn't expose"
-        )),
-    }
-}
-
-/// `run` over the fleet: bounded-pool execution, gated by `--allow-run` + confirm
-/// + the allowlist. Mirrors the MCP's `run_tool` but reads [`Caps`].
-fn run_command_action(
-    args: &Value,
-    snaps: &[RepoSnapshot],
-    ctx: &ActionCtx,
-    now: i64,
-) -> Result<Value, String> {
-    let command = args
-        .get("command")
-        .and_then(Value::as_str)
-        .filter(|c| !c.trim().is_empty())
-        .ok_or("missing required argument `command`")?
-        .to_string();
-
-    let selector = cohors_actions::action_selector(args);
-    let targets = cohors_actions::resolve_targets(&selector, snaps, now);
-    if targets.is_empty() {
-        return Ok(cohors_actions::no_targets());
-    }
-    cohors_actions::within_cap(&selector, &targets, ctx.max_targets)?;
-    if cohors_actions::is_dry_run(args) {
-        return Ok(cohors_actions::dry_run_preview(
-            json!({ "run": command }),
-            &targets,
-        ));
-    }
-    if !ctx.caps.allow_run {
-        return Err(
-            "`run` is disabled: start the server with `cohors web --allow-run` to enable arbitrary commands."
-                .to_string(),
-        );
-    }
-    if args.get("confirm").and_then(Value::as_bool) != Some(true) {
-        return Err(
-            "`run` needs a deliberate confirm: send \"confirm\": true (preview first with \"dry_run\": true)."
-                .to_string(),
-        );
-    }
-    if !cohors_actions::command_allowed(&command, &ctx.allowlist) {
-        return Err(format!(
-            "`{command}` is not permitted by the configured run_allowlist ({:?}).",
-            ctx.allowlist
-        ));
-    }
-    let timeout = std::time::Duration::from_secs(
-        args.get("timeout_secs")
-            .and_then(Value::as_u64)
-            .unwrap_or(cohors_actions::DEFAULT_RUN_TIMEOUT_SECS)
-            .max(1),
-    );
-    let run_id = cohors_actions::next_run_id();
-    let results = cohors_actions::run_each(&targets, &command, timeout);
-    let ok = results.iter().filter(|r| r.ok).count();
-    cohors_actions::audit("run", &selector, &targets, ok);
-    Ok(json!({
-        "run_id": run_id, "command": command, "targets": targets.len(),
-        "ok": ok, "failed": targets.len() - ok, "results": results
-    }))
+    cohors_actions::dispatch(
+        verb,
+        args,
+        &snaps,
+        ctx.caps,
+        &ctx.allowlist,
+        ctx.max_targets,
+        now_secs(),
+        "cohors web",
+    )
 }
 
 /// Serialize `value` to JSON and respond (500 with a JSON error on failure).
