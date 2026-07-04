@@ -121,12 +121,34 @@ pub fn dry_run_preview(action: Value, targets: &[RepoSnapshot]) -> Value {
     json!({ "dry_run": true, "action": action, "targets": repos.len(), "repos": repos })
 }
 
+/// Why a repo must be skipped by a worktree-mutating verb, or `None` if it's
+/// safe. A conflicted or mid-operation worktree is someone's half-finished
+/// merge/rebase — a bulk `commit` would silently complete it, a `pull`/`stash`
+/// would tangle it. `fetch`/`push` don't touch the worktree and aren't guarded.
+pub fn worktree_block(snap: &RepoSnapshot) -> Option<String> {
+    if snap.worktree.conflicted > 0 {
+        return Some(format!(
+            "{} unresolved conflict{} — resolve before bulk actions",
+            snap.worktree.conflicted,
+            if snap.worktree.conflicted == 1 {
+                ""
+            } else {
+                "s"
+            }
+        ));
+    }
+    snap.operation
+        .map(|op| format!("{} in progress — finish or abort it first", op.label()))
+}
+
 /// Run a per-repo git action (fetch / pull / stash …) over the targets resolved
 /// from `args`'s selector and collect `{repo, ok, message}` results.
 ///
 /// `authorize` is the surface's tier+confirm gate; it runs *after* the dry-run
 /// shortcut, so a preview works on a read-only surface (ADR-031). `op` is the
-/// per-repo primitive from [`crate::git`].
+/// per-repo primitive from [`crate::git`]. When `guard_worktree` is set (the
+/// worktree-mutating verbs), repos with a [`worktree_block`] are skipped with
+/// an explaining message instead of being operated on.
 #[allow(clippy::too_many_arguments)]
 pub fn git_action(
     tool: &str,
@@ -135,6 +157,7 @@ pub fn git_action(
     snaps: &[RepoSnapshot],
     max_targets: usize,
     now: i64,
+    guard_worktree: bool,
     authorize: impl Fn() -> Result<(), String>,
     op: impl Fn(&Utf8Path, &str) -> Result<String, String> + Sync,
 ) -> Result<Value, String> {
@@ -155,6 +178,9 @@ pub fn git_action(
     // fleet-wide fetch/pull finishes in pool-width waves instead of serially —
     // the difference between seconds and minutes at a few hundred repos.
     let results: Vec<Value> = crate::runner::map_bounded(targets.as_slice(), |s| {
+        if guard_worktree && let Some(reason) = worktree_block(s) {
+            return json!({ "repo": s.id.0, "ok": false, "skipped": true, "message": reason });
+        }
         let path = s.path.as_ref().expect("action targets have a path");
         match op(path, &s.name) {
             Ok(message) => json!({ "repo": s.id.0, "ok": true, "message": message }),
@@ -169,6 +195,27 @@ pub fn git_action(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn worktree_block_flags_conflicts_and_operations() {
+        let mut repos = cohors_core::demo::fleet(0);
+        repos[0].worktree.conflicted = 2;
+        repos[1].operation = Some(cohors_core::RepoOperation::Rebase);
+        repos[2].worktree.conflicted = 0;
+        repos[2].operation = None;
+
+        assert!(
+            worktree_block(&repos[0])
+                .expect("conflicts block")
+                .contains("2 unresolved conflicts")
+        );
+        assert!(
+            worktree_block(&repos[1])
+                .expect("operation blocks")
+                .contains("rebase in progress")
+        );
+        assert_eq!(worktree_block(&repos[2]), None);
+    }
 
     #[test]
     fn command_matches_globs() {

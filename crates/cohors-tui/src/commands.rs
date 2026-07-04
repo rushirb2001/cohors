@@ -138,9 +138,20 @@ pub fn run_action(cli: &Cli, action: CliAction, select: &str, dry_run: bool) -> 
         return Ok(());
     }
 
+    // Pull/stash/commit mutate the worktree: a conflicted or mid-operation
+    // repo is reported and skipped (same `worktree_block` rule every surface
+    // applies); fetch/push never touch the worktree.
+    let guard_worktree = matches!(
+        action,
+        CliAction::Pull | CliAction::Stash | CliAction::Commit(_)
+    );
     let mut ok = 0usize;
     for s in &targets {
         let path = s.path.as_ref().unwrap();
+        if guard_worktree && let Some(reason) = cohors_actions::worktree_block(s) {
+            println!("  - {}: {reason}", s.name);
+            continue;
+        }
         let result = match &action {
             CliAction::Fetch => crate::action::fetch(path, &s.name),
             CliAction::Pull => crate::action::pull_ff(path, &s.name),
