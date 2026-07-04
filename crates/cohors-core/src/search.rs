@@ -109,6 +109,15 @@ const ENV_TEMPLATES: &[&str] = &[".env.example", ".env.sample", ".env.template",
 /// surface can re-apply it defensively on hits it receives. Deliberately
 /// conservative: skipping a harmless file named `server.key` costs a missed
 /// hit, while surfacing a real one leaks a secret.
+/// Whether a single directory *name* is a secret store nothing should descend
+/// into (`.ssh`, `.aws`, `.git`, …). Narrower than [`is_sensitive_path`] on
+/// purpose: discovery prunes with this, and a *project* that happens to be
+/// named `credentials` must still show up in the fleet — only the well-known
+/// dot-directories are off limits.
+pub fn is_sensitive_dir(name: &str) -> bool {
+    SENSITIVE_DIRS.contains(&name.to_lowercase().as_str())
+}
+
 pub fn is_sensitive_path(path: &str) -> bool {
     path.split(['/', '\\']).any(|component| {
         let c = component.to_lowercase();

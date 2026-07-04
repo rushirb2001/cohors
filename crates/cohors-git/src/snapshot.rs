@@ -260,11 +260,11 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
             }
         }
     }
-    // The `origin` URL is local git data; cohors-github resolves it to a repo.
-    extras.remote_url = repo
-        .find_remote("origin")
-        .ok()
-        .and_then(|r| r.url().ok().map(str::to_string));
+    // The remote URL is local git data; cohors-github resolves it to a repo.
+    // Prefer `origin`, but fall back to the first configured remote (sorted,
+    // for determinism) — a fork tracking only `upstream` still enriches and
+    // still counts as backed-up for the attention layer.
+    extras.remote_url = remote_url(&repo);
 
     // `stash_foreach` needs `&mut`, so do it last after the shared borrows end.
     // Index 0 is the most recent stash; capture its oid to time it afterward.
@@ -283,6 +283,28 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
         .map(|commit| commit.time().seconds());
 
     extras
+}
+
+/// The URL cohors-github should resolve: `origin`'s if configured, else the
+/// first remote in sorted order (deterministic across scans), else `None`.
+#[cfg(feature = "git2-fallback")]
+fn remote_url(repo: &git2::Repository) -> Option<String> {
+    if let Some(url) = repo
+        .find_remote("origin")
+        .ok()
+        .and_then(|r| r.url().ok().map(str::to_string))
+    {
+        return Some(url);
+    }
+    let names = repo.remotes().ok()?;
+    let mut sorted: Vec<&str> = (0..names.len())
+        .filter_map(|i| names.get(i).ok().flatten())
+        .collect();
+    sorted.sort_unstable();
+    let first = sorted.first()?;
+    repo.find_remote(first)
+        .ok()
+        .and_then(|r| r.url().ok().map(str::to_string))
 }
 
 /// Map libgit2's repository state to a paused [`RepoOperation`], if any. `Clean`

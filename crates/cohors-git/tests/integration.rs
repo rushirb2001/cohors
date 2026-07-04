@@ -404,3 +404,55 @@ fn history_memo_invalidates_on_new_commit() {
     let third = snapshot_repo(&repo_ref, now);
     assert_eq!(third.ahead(), 1, "stale memo served after HEAD moved");
 }
+
+#[test]
+fn discovery_prunes_secret_directories_but_honors_explicit_roots() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    init_repo_with_commit(&root.join("normal"), "f", "1", "c");
+    // A repo hiding inside a secret store must not be discovered from above…
+    init_repo_with_commit(&root.join(".ssh").join("oops"), "f", "1", "c");
+
+    let refs = discover(&opts_for(root)).unwrap();
+    assert_eq!(refs.len(), 1, "found: {refs:?}");
+    assert!(refs[0].path.as_ref().unwrap().as_str().ends_with("normal"));
+
+    // …but a sensitive directory the user configured *as a root* is their call.
+    let refs = discover(&opts_for(&root.join(".ssh"))).unwrap();
+    assert_eq!(refs.len(), 1, "explicit root: {refs:?}");
+    assert!(refs[0].path.as_ref().unwrap().as_str().ends_with("oops"));
+}
+
+#[test]
+fn remote_url_falls_back_beyond_origin() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo_with_commit(dir, "f", "1", "c");
+    git(
+        dir,
+        &[
+            "remote",
+            "add",
+            "upstream",
+            "https://github.com/o/upstream-only.git",
+        ],
+    );
+
+    let snap = snapshot_repo(&repo_ref(dir), 0);
+    assert_eq!(
+        snap.remote_url.as_deref(),
+        Some("https://github.com/o/upstream-only.git"),
+        "a repo without `origin` still resolves its remote"
+    );
+
+    // With `origin` present it wins over other names.
+    git(
+        dir,
+        &["remote", "add", "origin", "https://github.com/o/origin.git"],
+    );
+    let snap = snapshot_repo(&repo_ref(dir), 0);
+    assert_eq!(
+        snap.remote_url.as_deref(),
+        Some("https://github.com/o/origin.git")
+    );
+}
