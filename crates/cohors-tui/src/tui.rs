@@ -383,7 +383,10 @@ fn use_suggested_roots(app: &mut App, scanner: &mut Arc<Scanner>, cli: &Cli, tx:
         app.suggested_roots = roots;
         return;
     };
-    if let Err(err) = cohors_config::write_starter(&path, true, &roots) {
+    // Merge (never clobber): seeds the starter when no config exists, and
+    // otherwise appends the detected roots while preserving the user's
+    // comments, aliases, and groups.
+    if let Err(err) = cohors_config::edit::add_roots(&path, &roots) {
         app.status = Some(format!("couldn't write config: {err}"));
         app.suggested_roots = roots;
         return;

@@ -44,6 +44,8 @@ nucleo-matcher = "0.3"
 
 # Config parsing + cross-platform base directories (cohors-config).
 toml = "0.8"
+# Comment-preserving config edits (`cohors config set`, appending detected roots).
+toml_edit = "0.22"
 directories = "5"
 
 # Local git adapter (cohors-git).

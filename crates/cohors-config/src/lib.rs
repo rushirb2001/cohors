@@ -6,6 +6,7 @@
 //!   exists.
 //! - [`paths`] resolves the config/cache/log locations (XDG-style; see ADR-011).
 //! - [`write_starter`] backs `cohors init`.
+//! - [`edit`] makes comment-preserving changes to an existing config file.
 //! - [`editors`] detects installed editors on `PATH`; [`prefs`] persists the
 //!   small picker-chosen preferences. Both are config-shaped resolution
 //!   ("which editor should open this repo?") that used to live in the TUI.
@@ -15,6 +16,7 @@
 #![forbid(unsafe_code)]
 
 mod config;
+pub mod edit;
 pub mod editors;
 mod error;
 pub mod paths;
