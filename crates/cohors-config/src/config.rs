@@ -1,20 +1,32 @@
 //! The cohors configuration model: parse `config.toml`, fall back to sensible
-//! defaults, and write a starter file for `cohors init`.
+//! defaults, apply environment overrides, and write a starter file for
+//! `cohors init`.
+//!
+//! Layering (lowest to highest precedence): built-in defaults → the config
+//! file → `COHORS_*` environment variables. Each layer only overrides what it
+//! actually sets — a file with one key, or a single env var, leaves everything
+//! else untouched.
 
 use std::collections::BTreeMap;
 
 use camino::Utf8Path;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::ConfigError;
 
 /// Resolved configuration.
 ///
+/// Deserializes directly with `#[serde(default)]`, so a partial file overrides
+/// only the keys it names (the old two-struct `RawConfig` mirror is gone — one
+/// struct, one place to add a key; a drift test guards [`KNOWN_KEYS`] and the
+/// starter template).
+///
 /// Roots, ignore globs, and alias keys are stored exactly as written (`~` and
 /// globs intact). Expansion happens later, at the discovery boundary, via
 /// [`expand_tilde`] — that way a `Config` value needs no home directory and
 /// [`Config::default`] can't fail.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     /// Directories (or globs) to search for repos.
     pub roots: Vec<String>,
@@ -36,7 +48,9 @@ pub struct Config {
     pub follow_symlinks: bool,
     /// Safety knobs for the machine action surfaces — the `cohors mcp` agent
     /// server AND the `cohors web` action endpoint share them (ADR-025).
-    pub mcp: McpConfig,
+    /// Accepted as `[actions]` (canonical) or `[mcp]` (the historical name).
+    #[serde(alias = "mcp")]
+    pub actions: ActionsConfig,
     /// How the TUI renders status glyphs (auto / ascii / unicode / nerd).
     pub icons: IconMode,
 }
@@ -46,7 +60,7 @@ pub struct Config {
 /// so a colourless `●` is ambiguous). `nerd` opts into Nerd-Font icons — only
 /// pick it if your terminal actually uses a Nerd Font, since it's never assumed.
 /// `ascii` forces plain-text labels everywhere (maximum portability).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IconMode {
     #[default]
@@ -56,9 +70,11 @@ pub enum IconMode {
     Nerd,
 }
 
-/// MCP server safety settings (the `[mcp]` table).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct McpConfig {
+/// Machine action-surface safety settings (the `[actions]` table; `[mcp]` is
+/// accepted as an alias since these knobs predate the web action endpoint).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ActionsConfig {
     /// Glob patterns restricting which commands `run` may execute. Empty allows
     /// any command (still gated by `--allow-run` + `confirm`).
     pub run_allowlist: Vec<String>,
@@ -67,7 +83,10 @@ pub struct McpConfig {
     pub max_action_targets: usize,
 }
 
-impl Default for McpConfig {
+/// The historical name, kept so downstream code and docs migrate gradually.
+pub type McpConfig = ActionsConfig;
+
+impl Default for ActionsConfig {
     fn default() -> Self {
         Self {
             run_allowlist: Vec::new(),
@@ -91,7 +110,7 @@ impl Default for Config {
             editor: None,
             stop_at_repo: true,
             follow_symlinks: false,
-            mcp: McpConfig::default(),
+            actions: ActionsConfig::default(),
             icons: IconMode::default(),
         }
     }
@@ -104,40 +123,9 @@ fn default_ignores() -> Vec<String> {
         .collect()
 }
 
-/// Mirror of [`Config`] where every field is optional, so an absent key falls
-/// back to the default rather than failing to parse. Unknown keys are ignored
-/// by serde; [`Config::parse`] separately warns about them.
-#[derive(Debug, Default, Deserialize)]
-struct RawConfig {
-    roots: Option<Vec<String>>,
-    max_depth: Option<usize>,
-    ignore: Option<Vec<String>>,
-    aliases: Option<BTreeMap<String, String>>,
-    groups: Option<BTreeMap<String, Vec<String>>>,
-    editor: Option<String>,
-    stop_at_repo: Option<bool>,
-    follow_symlinks: Option<bool>,
-    mcp: Option<RawMcp>,
-    icons: Option<IconMode>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-struct RawMcp {
-    run_allowlist: Option<Vec<String>>,
-    max_action_targets: Option<usize>,
-}
-
-impl RawMcp {
-    fn into_config(self) -> McpConfig {
-        let d = McpConfig::default();
-        McpConfig {
-            run_allowlist: self.run_allowlist.unwrap_or(d.run_allowlist),
-            max_action_targets: self.max_action_targets.unwrap_or(d.max_action_targets),
-        }
-    }
-}
-
-/// Recognized top-level keys, used to warn about anything else.
+/// Recognized top-level keys, used to warn about anything else. `mcp` is the
+/// accepted alias for `actions`. A test derives the canonical set from
+/// `Config::default()` serialization, so this list can't silently drift.
 const KNOWN_KEYS: &[&str] = &[
     "roots",
     "max_depth",
@@ -147,40 +135,31 @@ const KNOWN_KEYS: &[&str] = &[
     "editor",
     "stop_at_repo",
     "follow_symlinks",
+    "actions",
     "mcp",
     "icons",
 ];
 
-impl RawConfig {
-    fn into_config(self) -> Config {
-        let d = Config::default();
-        Config {
-            roots: self.roots.unwrap_or(d.roots),
-            max_depth: self.max_depth.unwrap_or(d.max_depth),
-            ignore: self.ignore.unwrap_or(d.ignore),
-            aliases: self.aliases.unwrap_or(d.aliases),
-            groups: self.groups.unwrap_or(d.groups),
-            editor: self.editor.or(d.editor),
-            stop_at_repo: self.stop_at_repo.unwrap_or(d.stop_at_repo),
-            follow_symlinks: self.follow_symlinks.unwrap_or(d.follow_symlinks),
-            mcp: self.mcp.map(RawMcp::into_config).unwrap_or(d.mcp),
-            icons: self.icons.unwrap_or(d.icons),
-        }
-    }
-}
-
 impl Config {
-    /// Load from an explicit path, or the default location when `path` is
-    /// `None`. A missing file yields [`Config::default`].
+    /// Load from an explicit path, the `COHORS_CONFIG` env var, or the default
+    /// location — in that precedence order. A missing file yields
+    /// [`Config::default`]. Environment overrides (`COHORS_*`) apply on top.
     pub fn load(path: Option<&Utf8Path>) -> Result<Config, ConfigError> {
-        let path = match path {
-            Some(p) => p.to_owned(),
-            None => crate::paths::config_file()?,
+        let env_path = std::env::var("COHORS_CONFIG")
+            .ok()
+            .filter(|p| !p.is_empty());
+        let path = match (path, env_path) {
+            (Some(p), _) => p.to_owned(),
+            (None, Some(p)) => p.into(),
+            (None, None) => crate::paths::config_file()?,
         };
-        Self::load_from(&path)
+        let mut config = Self::load_from(&path)?;
+        config.apply_env(|key| std::env::var(key).ok());
+        Ok(config)
     }
 
-    /// Load from a specific file. A missing file is not an error — the user
+    /// Load from a specific file (no env overrides — callers that want them go
+    /// through [`Config::load`]). A missing file is not an error — the user
     /// simply hasn't run `cohors init` yet, so they get defaults.
     pub fn load_from(path: &Utf8Path) -> Result<Config, ConfigError> {
         let content = match std::fs::read_to_string(path) {
@@ -202,9 +181,10 @@ impl Config {
         Self::parse(&content, path)
     }
 
-    /// Parse config text, warning about (and ignoring) unknown top-level keys.
+    /// Parse config text, warning about (and ignoring) unknown top-level keys
+    /// and logging any semantic validation warnings.
     pub fn parse(content: &str, path: &Utf8Path) -> Result<Config, ConfigError> {
-        let raw: RawConfig = toml::from_str(content).map_err(|source| ConfigError::Parse {
+        let config: Config = toml::from_str(content).map_err(|source| ConfigError::Parse {
             path: path.to_owned(),
             source,
         })?;
@@ -222,7 +202,76 @@ impl Config {
             }
         }
 
-        Ok(raw.into_config())
+        for warning in config.validate() {
+            tracing::warn!(%path, "{warning}");
+        }
+        Ok(config)
+    }
+
+    /// Semantic sanity checks that parsing can't catch. Warnings, never errors:
+    /// a questionable config still runs, but the user is told why it may
+    /// misbehave (the `cohors.log` shows these).
+    pub fn validate(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if self.max_depth == 0 {
+            warnings.push(
+                "max_depth = 0 only ever inspects the roots themselves; repos in subdirectories won't be found".into(),
+            );
+        }
+        for (name, globs) in &self.groups {
+            if globs.is_empty() {
+                warnings.push(format!("group `{name}` has no globs and will never match"));
+            }
+            if globs.iter().any(|g| g.trim().is_empty()) {
+                warnings.push(format!("group `{name}` contains an empty glob"));
+            }
+        }
+        if self.editor.as_deref().is_some_and(|e| e.trim().is_empty()) {
+            warnings.push("`editor` is set to an empty string; it will be ignored".into());
+        }
+        if self.roots.iter().any(|r| r.trim().is_empty()) {
+            warnings.push("`roots` contains an empty entry".into());
+        }
+        warnings
+    }
+
+    /// Apply `COHORS_*` environment overrides. `vars` is injected (a closure
+    /// over `std::env::var` in production) so this stays directly testable.
+    ///
+    /// Supported: `COHORS_ROOTS` (comma-separated), `COHORS_EDITOR`,
+    /// `COHORS_MAX_DEPTH`, `COHORS_ICONS` (auto|ascii|unicode|nerd). These exist
+    /// for the places editing a file is awkward — agents, CI, containers.
+    pub fn apply_env(&mut self, vars: impl Fn(&str) -> Option<String>) {
+        if let Some(roots) = vars("COHORS_ROOTS") {
+            let roots: Vec<String> = roots
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect();
+            if !roots.is_empty() {
+                self.roots = roots;
+            }
+        }
+        if let Some(editor) = vars("COHORS_EDITOR")
+            && !editor.trim().is_empty()
+        {
+            self.editor = Some(editor);
+        }
+        if let Some(depth) = vars("COHORS_MAX_DEPTH")
+            && let Ok(depth) = depth.trim().parse()
+        {
+            self.max_depth = depth;
+        }
+        if let Some(icons) = vars("COHORS_ICONS") {
+            match icons.trim().to_ascii_lowercase().as_str() {
+                "auto" => self.icons = IconMode::Auto,
+                "ascii" => self.icons = IconMode::Ascii,
+                "unicode" => self.icons = IconMode::Unicode,
+                "nerd" => self.icons = IconMode::Nerd,
+                other => tracing::warn!(%other, "ignoring unknown COHORS_ICONS value"),
+            }
+        }
     }
 
     /// The editor command to open repos with: config `editor`, then `$EDITOR`,
@@ -261,6 +310,8 @@ pub fn expand_tilde(pattern: &str, home: &Utf8Path) -> String {
 /// Commented starter config written by `cohors init`.
 pub const STARTER_CONFIG: &str = r#"# cohors configuration.
 # Edit this file, then run `cohors`. All paths support `~` and globs.
+# Env overrides for agents/CI: COHORS_CONFIG, COHORS_ROOTS (comma-separated),
+# COHORS_EDITOR, COHORS_MAX_DEPTH, COHORS_ICONS.
 
 # Where cohors looks for git repos.
 roots = ["~/projects"]
@@ -296,8 +347,9 @@ follow_symlinks = false
 # payments = ["sushrutalgs-*", "billing"]
 
 # Safety knobs for the machine action surfaces (`cohors mcp` and the
-# `cohors web --allow-writes/--allow-run` action endpoint).
-[mcp]
+# `cohors web --allow-writes/--allow-run` action endpoint). `[mcp]` is accepted
+# as an alias for this table.
+[actions]
 # Restrict the `run` tool to commands matching these globs (empty = any command,
 # still gated by --allow-run + confirm).
 # run_allowlist = ["pnpm *", "npm *", "cargo *", "git *", "rg *", "grep *"]
@@ -371,12 +423,46 @@ mod tests {
         assert_eq!(c.ignore, default_ignores());
     }
 
+    /// The drift guard: KNOWN_KEYS must exactly cover the serialized shape of
+    /// `Config` (plus the `mcp` alias). Add a field without updating the list
+    /// (or the starter template) and this fails.
+    #[test]
+    fn known_keys_match_the_config_shape_and_starter() {
+        let serialized = toml::to_string(&Config::default()).expect("serialize default");
+        let table: toml::Table = toml::from_str(&serialized).expect("round-trip");
+        for key in table.keys() {
+            assert!(
+                KNOWN_KEYS.contains(&key.as_str()),
+                "field `{key}` missing from KNOWN_KEYS"
+            );
+        }
+        // Every canonical key (alias + Option fields excepted) appears in the
+        // starter template so users can discover it.
+        for key in KNOWN_KEYS {
+            if *key == "mcp" {
+                continue; // alias, deliberately not in the starter
+            }
+            assert!(
+                STARTER_CONFIG.contains(key),
+                "key `{key}` undocumented in STARTER_CONFIG"
+            );
+        }
+    }
+
+    #[test]
+    fn actions_table_parses_under_both_names() {
+        for table in ["actions", "mcp"] {
+            let toml = format!("[{table}]\nrun_allowlist = [\"git *\"]\nmax_action_targets = 9\n");
+            let c = Config::parse(&toml, Utf8Path::new("t.toml")).expect("parse");
+            assert_eq!(c.actions.run_allowlist, ["git *"], "[{table}]");
+            assert_eq!(c.actions.max_action_targets, 9, "[{table}]");
+        }
+    }
+
     #[test]
     fn parse_icon_mode() {
-        // Default when absent.
         let c = Config::parse("", Utf8Path::new("t.toml")).expect("parse");
         assert_eq!(c.icons, IconMode::Auto);
-        // Explicit, case-as-written (lowercase).
         for (s, want) in [
             ("auto", IconMode::Auto),
             ("ascii", IconMode::Ascii),
@@ -390,34 +476,19 @@ mod tests {
     }
 
     #[test]
-    fn parse_reads_aliases_table() {
+    fn parse_reads_aliases_and_groups() {
         let toml = r#"
             [aliases]
             "~/work/payments-service" = "payments"
+            [groups]
+            payments = ["sushrutalgs-*", "billing"]
         "#;
         let c = Config::parse(toml, Utf8Path::new("test.toml")).expect("parse");
         assert_eq!(
             c.aliases.get("~/work/payments-service").map(String::as_str),
             Some("payments")
         );
-    }
-
-    #[test]
-    fn parse_reads_groups_table() {
-        let toml = r#"
-            [groups]
-            payments = ["sushrutalgs-*", "billing"]
-            infra = ["terraform-*"]
-        "#;
-        let c = Config::parse(toml, Utf8Path::new("test.toml")).expect("parse");
-        assert_eq!(
-            c.groups.get("payments").map(Vec::as_slice),
-            Some(["sushrutalgs-*".to_string(), "billing".to_string()].as_slice())
-        );
-        assert_eq!(c.groups.get("infra").map(|v| v.len()), Some(1));
-        // The starter template (which has only a commented example) → no groups.
-        let starter = Config::parse(STARTER_CONFIG, Utf8Path::new("s.toml")).expect("starter");
-        assert!(starter.groups.is_empty());
+        assert_eq!(c.groups.get("payments").map(|v| v.len()), Some(2));
     }
 
     #[test]
@@ -426,7 +497,6 @@ mod tests {
             roots = ["~/x"]
             colour_theme = "dracula"   # not a real key
         "#;
-        // Should parse fine (the key is ignored, with a warning logged).
         let c = Config::parse(toml, Utf8Path::new("test.toml")).expect("parse");
         assert_eq!(c.roots, ["~/x"]);
     }
@@ -435,6 +505,47 @@ mod tests {
     fn malformed_toml_is_an_error() {
         let err = Config::parse("this is = = not toml", Utf8Path::new("bad.toml"));
         assert!(matches!(err, Err(ConfigError::Parse { .. })));
+    }
+
+    #[test]
+    fn validate_flags_semantic_footguns() {
+        let mut c = Config::default();
+        assert!(c.validate().is_empty(), "defaults must be warning-free");
+        c.max_depth = 0;
+        c.groups.insert("empty".into(), Vec::new());
+        c.editor = Some("  ".into());
+        c.roots.push(String::new());
+        let warnings = c.validate();
+        assert_eq!(warnings.len(), 4, "{warnings:?}");
+    }
+
+    #[test]
+    fn env_overrides_apply_and_ignore_garbage() {
+        let mut c = Config::default();
+        let vars = |key: &str| -> Option<String> {
+            match key {
+                "COHORS_ROOTS" => Some("~/a, ~/b ,".into()),
+                "COHORS_EDITOR" => Some("hx".into()),
+                "COHORS_MAX_DEPTH" => Some("7".into()),
+                "COHORS_ICONS" => Some("ascii".into()),
+                _ => None,
+            }
+        };
+        c.apply_env(vars);
+        assert_eq!(c.roots, ["~/a", "~/b"]);
+        assert_eq!(c.editor.as_deref(), Some("hx"));
+        assert_eq!(c.max_depth, 7);
+        assert_eq!(c.icons, IconMode::Ascii);
+
+        // Garbage values leave the config untouched.
+        let mut c = Config::default();
+        c.apply_env(|key| match key {
+            "COHORS_MAX_DEPTH" => Some("not-a-number".into()),
+            "COHORS_ICONS" => Some("sparkly".into()),
+            "COHORS_ROOTS" => Some(" , ".into()),
+            _ => None,
+        });
+        assert_eq!(c, Config::default());
     }
 
     #[test]
@@ -470,7 +581,6 @@ mod tests {
         };
         let home = Utf8Path::new("/home/dev");
 
-        // By tilde-expanded absolute path.
         assert_eq!(
             c.alias_for(
                 Utf8Path::new("/home/dev/work/payments-service"),
@@ -480,13 +590,11 @@ mod tests {
             .as_deref(),
             Some("payments")
         );
-        // By directory name.
         assert_eq!(
             c.alias_for(Utf8Path::new("/somewhere/infra"), "infra", home)
                 .as_deref(),
             Some("infrastructure")
         );
-        // No match.
         assert_eq!(
             c.alias_for(Utf8Path::new("/x/unrelated"), "unrelated", home),
             None
@@ -495,11 +603,11 @@ mod tests {
 
     #[test]
     fn starter_config_is_valid_and_round_trips() {
-        // The template must itself parse into a Config.
         let c =
             Config::parse(STARTER_CONFIG, Utf8Path::new("starter.toml")).expect("starter parses");
         assert_eq!(c.roots, ["~/projects"]);
         assert!(c.stop_at_repo);
+        assert!(c.validate().is_empty(), "starter must be warning-free");
     }
 
     #[test]
@@ -508,18 +616,15 @@ mod tests {
         let path = Utf8PathBuf::from_path_buf(dir.path().join("nested").join("config.toml"))
             .expect("utf8 path");
 
-        // First write succeeds and creates parent dirs.
         write_starter(&path, false, &[]).expect("first write");
         assert!(path.exists());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), STARTER_CONFIG);
 
-        // Second write without force is refused.
         assert!(matches!(
             write_starter(&path, false, &[]),
             Err(ConfigError::AlreadyExists(_))
         ));
 
-        // With force it overwrites.
         write_starter(&path, true, &[]).expect("forced write");
     }
 

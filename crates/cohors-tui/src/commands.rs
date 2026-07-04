@@ -327,7 +327,7 @@ pub fn run_web(
     // poll `/api/repos` so a fresh scan shows up without a manual rescan. The
     // server lives in `cohors-web` now (the write seam is no longer trapped in
     // this binary); we hand it a scan closure + the shared safety config.
-    let mcp_config = scanner.mcp_config();
+    let actions_config = scanner.actions_config();
     let roots = scanner.roots();
     let caps = cohors_web::Caps {
         allow_writes,
@@ -345,8 +345,8 @@ pub fn run_web(
         token,
         cli.watch,
         caps,
-        mcp_config.run_allowlist,
-        mcp_config.max_action_targets,
+        actions_config.run_allowlist,
+        actions_config.max_action_targets,
     );
     let _ = watcher.kill();
     result
@@ -491,7 +491,7 @@ pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool)
     let roots = scanner.roots();
     let config_path = scanner.config_path();
     let token = scanner.github_token();
-    let mcp_config = scanner.mcp_config();
+    let actions_config = scanner.actions_config();
     let scan = || scanner.scan();
     cohors_mcp::serve_stdio(
         &scan,
@@ -499,8 +499,8 @@ pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool)
         &roots,
         &config_path,
         caps,
-        &mcp_config.run_allowlist,
-        mcp_config.max_action_targets,
+        &actions_config.run_allowlist,
+        actions_config.max_action_targets,
     )
 }
 

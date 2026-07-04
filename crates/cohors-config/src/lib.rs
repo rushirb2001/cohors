@@ -21,6 +21,7 @@ pub mod paths;
 pub mod prefs;
 
 pub use config::{
-    Config, IconMode, McpConfig, STARTER_CONFIG, expand_tilde, starter_config, write_starter,
+    ActionsConfig, Config, IconMode, McpConfig, STARTER_CONFIG, expand_tilde, starter_config,
+    write_starter,
 };
 pub use error::ConfigError;

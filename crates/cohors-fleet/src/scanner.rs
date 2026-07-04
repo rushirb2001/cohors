@@ -104,9 +104,10 @@ impl Scanner {
         self.config.editor_command()
     }
 
-    /// MCP safety settings (`run` allowlist, action-target cap).
-    pub fn mcp_config(&self) -> cohors_config::McpConfig {
-        self.config.mcp.clone()
+    /// Machine action-surface safety settings (`run` allowlist, target cap) —
+    /// shared by the MCP server and the web action endpoint.
+    pub fn actions_config(&self) -> cohors_config::ActionsConfig {
+        self.config.actions.clone()
     }
 
     /// The configured TUI icon mode (auto / ascii / unicode / nerd).
