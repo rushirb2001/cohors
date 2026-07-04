@@ -41,7 +41,7 @@ pub use model::{
     classify_remote, remote_host,
 };
 pub use provider::RepoProvider;
-pub use search::{SearchHit, SearchKind, is_sensitive_path, search_metadata};
+pub use search::{SearchHit, SearchKind, is_sensitive_dir, is_sensitive_path, search_metadata};
 pub use select::{
     AttentionLevel, ParseSelectorError, Selector, expand_tilde as expand_selector_tilde, glob_name,
     parse_shorthand, resolve,

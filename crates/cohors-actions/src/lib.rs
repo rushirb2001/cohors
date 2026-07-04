@@ -26,5 +26,6 @@ mod runner;
 // crate-internal — only `dispatch` composes it, so it can change freely.
 pub use dispatch::{Caps, dispatch};
 pub use git::{commit, fetch, pull_ff, push, run_command, stash_push};
+pub use orchestrate::worktree_block;
 pub use registry::{ActionDef, Tier, find as find_action, registry};
 pub use runner::{RunResult, run_each, spawn_bounded};

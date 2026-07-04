@@ -71,6 +71,9 @@ pub fn dispatch(
                 "stash" => json!("stash push"),
                 other => json!(other),
             };
+            // The worktree-mutating verbs skip conflicted / mid-operation repos
+            // (see `worktree_block`); fetch and push never touch the worktree.
+            let guard_worktree = matches!(verb, "pull" | "commit" | "stash");
             crate::orchestrate::git_action(
                 verb,
                 label,
@@ -78,6 +81,7 @@ pub fn dispatch(
                 snaps,
                 max_targets,
                 now,
+                guard_worktree,
                 authorize,
                 |path, name| match verb {
                     "fetch" => crate::git::fetch(path, name),
@@ -222,6 +226,49 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("message"), "{err}");
+    }
+
+    #[test]
+    fn worktree_mutations_skip_conflicted_and_mid_operation_repos() {
+        let mut repos = fleet();
+        repos[0].worktree.conflicted = 1;
+        repos[1].operation = Some(cohors_core::RepoOperation::Merge);
+        // Make the two guarded repos unambiguously actionable (a target must be
+        // readable and have a path), whatever the demo fleet's defaults are.
+        for r in &mut repos[..2] {
+            r.error = None;
+            r.path = Some("/nonexistent/cohors-guard-test".into());
+        }
+        let caps = Caps {
+            allow_writes: true,
+            allow_run: false,
+        };
+        let v = dispatch(
+            "stash",
+            &json!({"selector": {"all": true}, "confirm": true}),
+            &repos,
+            caps,
+            &[],
+            0,
+            NOW,
+            "t",
+        )
+        .unwrap();
+        let results = v["results"].as_array().unwrap();
+        let skipped: Vec<&Value> = results.iter().filter(|r| r["skipped"] == true).collect();
+        assert_eq!(skipped.len(), 2, "results: {results:?}");
+        assert!(skipped.iter().all(|r| r["ok"] == false));
+        // The skip message says why, so a bulk result reads as triage.
+        assert!(
+            skipped
+                .iter()
+                .any(|r| r["message"].as_str().unwrap().contains("conflict"))
+        );
+        assert!(
+            skipped
+                .iter()
+                .any(|r| r["message"].as_str().unwrap().contains("merge in progress"))
+        );
     }
 
     #[test]

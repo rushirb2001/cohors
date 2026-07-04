@@ -88,3 +88,38 @@ fn reports_branch_commits_and_changes() {
         detail.changed_files
     );
 }
+
+#[test]
+fn conflicted_files_carry_the_unmerged_porcelain_code() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    git(dir, &["-c", "init.defaultBranch=main", "init", "-q"]);
+    commit_file(dir, "f.txt", "base\n", "init");
+    git(dir, &["checkout", "-q", "-b", "side"]);
+    commit_file(dir, "f.txt", "side\n", "side change");
+    git(dir, &["checkout", "-q", "main"]);
+    commit_file(dir, "f.txt", "main\n", "main change");
+    // The merge conflicts by construction; git exits non-zero, which is the point.
+    let _ = git_cmd(dir)
+        .env("GIT_AUTHOR_NAME", "Author")
+        .env("GIT_AUTHOR_EMAIL", "me@example.com")
+        .env("GIT_COMMITTER_NAME", "Author")
+        .env("GIT_COMMITTER_EMAIL", "me@example.com")
+        .args(["merge", "side"])
+        .output()
+        .expect("failed to run git merge");
+
+    let path = Utf8Path::from_path(dir).expect("temp path is valid utf-8");
+    let detail = repo_detail(path);
+    let conflicted: Vec<_> = detail
+        .changed_files
+        .iter()
+        .filter(|f| f.path == "f.txt")
+        .collect();
+    assert_eq!(conflicted.len(), 1, "files: {:?}", detail.changed_files);
+    assert_eq!(conflicted[0].status, "UU");
+    assert!(
+        conflicted[0].is_conflicted(),
+        "core must read it as a conflict"
+    );
+}

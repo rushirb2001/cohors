@@ -223,6 +223,15 @@ fn changed_files(repo: &git2::Repository) -> Vec<ChangedFile> {
 fn porcelain_status(status: git2::Status) -> String {
     use git2::Status;
 
+    // An unmerged path first: libgit2 collapses all conflict shapes into one
+    // CONFLICTED flag (it doesn't distinguish AA/DD/AU/…), so surface the
+    // generic both-unmerged code. Checked before everything else — a conflicted
+    // entry also carries INDEX_/WT_ bits that would otherwise mislabel it as a
+    // plain staged/modified file.
+    if status.contains(Status::CONFLICTED) {
+        return "UU".to_string();
+    }
+
     if status.contains(Status::WT_NEW) && !status.intersects(INDEX_FLAGS) {
         return "??".to_string();
     }

@@ -95,6 +95,20 @@ pub fn discover(opts: &DiscoveryOptions) -> Result<Vec<RepoRef>, GitError> {
                 return WalkState::Skip;
             }
 
+            // Never descend into secret stores (`~` as a root must not walk
+            // `~/.ssh`, `~/.aws`, …) — the core privacy rule the content search
+            // uses. Depth 0 is exempt: a root the user configured explicitly is
+            // their call, even if it's a directory we'd otherwise prune.
+            if entry.depth() > 0
+                && entry
+                    .path()
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(cohors_core::is_sensitive_dir)
+            {
+                return WalkState::Skip;
+            }
+
             let Ok(dir) = Utf8PathBuf::from_path_buf(entry.path().to_path_buf()) else {
                 return WalkState::Continue; // non-UTF-8 path: skip quietly
             };
