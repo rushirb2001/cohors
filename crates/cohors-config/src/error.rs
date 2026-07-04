@@ -36,4 +36,7 @@ pub enum ConfigError {
         #[source]
         source: toml::de::Error,
     },
+
+    #[error("could not edit config at {path}: {message}")]
+    Edit { path: Utf8PathBuf, message: String },
 }

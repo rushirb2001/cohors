@@ -73,7 +73,7 @@ pub mod standalone {
         );
         let token = scanner.github_token();
         let served_roots = scanner.roots();
-        let mcp = scanner.mcp_config();
+        let mcp = scanner.actions_config();
         let scan = Arc::new(move || scanner.scan());
 
         serve(
