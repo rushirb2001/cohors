@@ -356,20 +356,26 @@ pub fn fetch_repo_detail(token: &str, remote_url: &str) -> Option<RemoteDetail> 
         .unwrap_or(0)
     };
 
-    // Is the default branch protected? Two hops: the repo call names the default
-    // branch, the branch call carries `protected`. Failure → `None` (unknown).
-    let default_branch_protected =
-        get_json::<RepoResponse>(&agent, token, &format!("/repos/{owner}/{repo}"))
-            .ok()
-            .and_then(|r| {
-                get_json::<BranchResponse>(
-                    &agent,
-                    token,
-                    &format!("/repos/{owner}/{repo}/branches/{}", r.default_branch),
-                )
+    // Is the default branch protected? The branch name usually sits in the
+    // enrich cache already (the fleet pass fetched it minutes ago) — only fall
+    // back to the repo endpoint on a cache miss, saving one request per
+    // drill-in. Failure → `None` (unknown).
+    let default_branch_protected = cached(&format!("{owner}/{repo}"))
+        .map(|info| info.default_branch)
+        .or_else(|| {
+            get_json::<RepoResponse>(&agent, token, &format!("/repos/{owner}/{repo}"))
                 .ok()
-            })
-            .map(|b| b.protected);
+                .map(|r| r.default_branch)
+        })
+        .and_then(|branch| {
+            get_json::<BranchResponse>(
+                &agent,
+                token,
+                &format!("/repos/{owner}/{repo}/branches/{branch}"),
+            )
+            .ok()
+        })
+        .map(|b| b.protected);
 
     // The most recent Actions workflow run (any branch), folded to a CiStatus.
     let latest_run = get_json::<WorkflowRunsResponse>(
