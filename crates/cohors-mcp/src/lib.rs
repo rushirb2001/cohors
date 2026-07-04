@@ -187,7 +187,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "get_repo",
-            "description": "Full status of ONE repository, found by id, name, or path — branch, upstream ahead/behind, worktree counts, stashes, recent activity, and last commit. Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
+            "description": "Full status of ONE repository, found by id, name, or path — branch, upstream ahead/behind, worktree counts, stashes, recent activity, last commit, plus a local drill-in `detail` (recent commits, per-branch sync, changed files, stash list). Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "repo": { "type": "string", "description": "Repo id, name/alias, or path." } },
@@ -471,6 +471,17 @@ fn get_repo(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let snaps = (ctx.scan)();
     let snap = find_repo(&snaps, &key).ok_or_else(|| format!("no repository matching `{key}`"))?;
     let mut value = repo_json(snap, now);
+    // The same local drill-in the TUI shows on Enter (recent commits, per-branch
+    // sync, stashes, changed files) — "full status of one repo" should not need
+    // a follow-up shell-out to `git log`/`git branch`.
+    if let Some(path) = snap.path.as_deref()
+        && let Value::Object(map) = &mut value
+    {
+        map.insert(
+            "detail".to_string(),
+            serde_json::to_value(cohors_fleet::repo_detail(path)).unwrap_or(Value::Null),
+        );
+    }
     // Same GitHub detail the TUI shows on Enter (PRs / contributors / issues /
     // release), so inspecting a repo is consistent across the TUI and MCP.
     if let (Some(url), Some(token)) = (snap.remote_url.as_deref(), ctx.token)
