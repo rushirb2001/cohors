@@ -41,6 +41,18 @@ pub struct ViewRow {
 /// 2. If there's a query, fuzzy-rank the survivors (best match first), ignoring
 ///    the sort mode.
 /// 3. Otherwise, order the survivors by the active sort mode.
+///
+/// Two decisions here are deliberate, because both alternatives are defensible:
+///
+/// - **Filters compose, search doesn't escape them.** A query typed while
+///   dirty-only is on searches *within* the narrowed set — an empty result
+///   means "no repo needing attention matches", not "the repo doesn't exist".
+///   Front-ends should keep the active filter visible so that reading is clear.
+/// - **A query suspends the sort mode entirely.** Match quality is the order
+///   the user asked for by typing; mixing in the sort mode would make the top
+///   hit depend on invisible state. The sort mode resumes when the query
+///   clears. Ties in match quality break deterministically (name match first,
+///   then name, then id — see [`fuzzy::rank`]).
 pub fn compute_view(repos: &[RepoSnapshot], params: &ViewParams<'_>) -> Vec<ViewRow> {
     let mut candidates: Vec<usize> = (0..repos.len()).collect();
     if params.dirty_only {

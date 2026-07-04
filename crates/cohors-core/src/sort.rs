@@ -91,10 +91,14 @@ fn recency(a: &RepoSnapshot, b: &RepoSnapshot) -> Ordering {
 }
 
 /// Case-insensitive name, then id, for a fully deterministic tiebreak.
+/// Compares char-by-char through the lowercase mapping instead of allocating
+/// two lowercased `String`s per comparison — this runs O(n log n) times per
+/// sort, and stays cheap at fleet scale.
 fn by_name(a: &RepoSnapshot, b: &RepoSnapshot) -> Ordering {
     a.name
-        .to_lowercase()
-        .cmp(&b.name.to_lowercase())
+        .chars()
+        .flat_map(char::to_lowercase)
+        .cmp(b.name.chars().flat_map(char::to_lowercase))
         .then_with(|| a.id.0.cmp(&b.id.0))
 }
 

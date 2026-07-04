@@ -20,6 +20,10 @@ pub struct FuzzyHit {
     /// Char positions in the name to highlight. Empty when the match was only
     /// in the path (so there's nothing to highlight in the visible name).
     pub name_highlights: Vec<u32>,
+    /// Whether the *name* matched (as opposed to only the path) — a match the
+    /// user can see in the Repo column ranks above an invisible path-only one
+    /// when scores tie.
+    pub name_matched: bool,
 }
 
 /// Rank `candidates` (indices into `repos`) against `query`, best match first.
@@ -74,6 +78,7 @@ pub fn rank(repos: &[RepoSnapshot], candidates: &[usize], query: &str) -> Vec<Fu
                 index: i,
                 score,
                 name_highlights,
+                name_matched: name_score.is_some(),
             })
         })
         .collect();
@@ -81,6 +86,7 @@ pub fn rank(repos: &[RepoSnapshot], candidates: &[usize], query: &str) -> Vec<Fu
     hits.sort_by(|a, b| {
         b.score
             .cmp(&a.score) // higher score first
+            .then_with(|| b.name_matched.cmp(&a.name_matched)) // visible name match beats path-only
             .then_with(|| {
                 repos[a.index]
                     .name
@@ -153,6 +159,21 @@ mod tests {
         assert_eq!(hits.len(), 1);
         // Matched via path, so no name highlights.
         assert!(hits[0].name_highlights.is_empty());
+    }
+
+    #[test]
+    fn name_match_outranks_path_only_match_on_score_ties() {
+        // Both repos can match "web": one in its visible name, one only in its
+        // path (`/repos/web-legacy` with an unrelated name). If scores tie, the
+        // match the user can *see* must come first.
+        let mut by_path = sample("web-legacy", "zzz-archive", false, 0, 0, Some(1));
+        by_path.path = Some("/repos/web-legacy".into());
+        let by_name = sample("aaa", "web-legacy", false, 0, 0, Some(1));
+        let repos = vec![by_path, by_name];
+        let hits = rank(&repos, &[0, 1], "web-legacy");
+        assert_eq!(hits.len(), 2);
+        assert!(hits[0].name_matched, "visible name match ranks first");
+        assert_eq!(repos[hits[0].index].name, "web-legacy");
     }
 
     #[test]
