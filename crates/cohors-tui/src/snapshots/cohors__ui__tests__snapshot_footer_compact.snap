@@ -1,5 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
+assertion_line: 3479
 expression: "render_to_string(&app, 56, 22)"
 ---
 ╭──────────────────────────────────────────────────────╮
@@ -8,7 +9,7 @@ expression: "render_to_string(&app, 56, 22)"
 │ ▀▐▖▀█▀▗▌▀                                            │
 ╰──────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────╮
-│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unre │
+│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stas │
 ╰──────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────╮
 │    Repo                    Sync      Changes  Last co│

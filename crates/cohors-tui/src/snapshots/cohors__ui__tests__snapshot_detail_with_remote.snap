@@ -1,31 +1,31 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-assertion_line: 3554
+assertion_line: 3655
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
 │ ▀▐▖▀█▀│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│       │
-╰───────│ │ Changes (3)                        █ │ │ a1b2c3d    2h  fix: retry charge on  ││───────╯
-╭ Attent│ │  M src/charge.rs                   █ │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
-│ 1 unpu│ │  M src/refund.rs                   █ │ │ c3d4e5f    1d  refactor: extract pro ││       │
-╰───────│ │ ?? notes.md                        █ │ │ d4e5f60    3d  feat: idempotency key ││───────╯
+╰───────│ │ Attention                          █ │ │ a1b2c3d    2h  fix: retry charge on  ││───────╯
+╭ Attent│ │ ↑2 unpushed                        █ │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
+│ 1 at r│ │ 4 uncommitted changes              █ │ │ c3d4e5f    1d  refactor: extract pro ││       │
+╰───────│ │ 1 stash                            █ │ │ d4e5f60    3d  feat: idempotency key ││───────╯
 ╭ Reposi│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││───────╮
-│    Rep│ │ Branches (3)                       █ │ │                                      ││       │
-│▌   leg│ │ ● main  ↑2                         █ │ │                                      ││t (per…│
-│    pay│ │   feat/idempotency  ↑3 ↓1          █ │ │                                      ││       │
-│    web│ │   spike/webhooks  · no upstream    █ │ │                                      ││       │
+│    Rep│ │ Changes (3)                        █ │ │                                      ││       │
+│▌   leg│ │  M src/charge.rs                   █ │ │                                      ││t (per…│
+│    pay│ │  M src/refund.rs                   █ │ │                                      ││       │
+│    web│ │ ?? notes.md                        ║ │ │                                      ││       │
 │    inf│ │                                    ║ │ │                                      ││ges    │
-│    aut│ │ Stashes (1)                        ║ │ │                                      ││       │
+│    aut│ │ Branches (3)                       ║ │ │                                      ││       │
+│       │ │ ● main  ↑2                         ║ │ │                                      ││       │
+│       │ │   feat/idempotency  ↑3 ↓1          ║ │ │                                      ││       │
+│       │ │   spike/webhooks  · no upstream    ║ │ │                                      ││       │
+│       │ │                                    ║ │ │                                      ││       │
+│       │ │ Stashes (1)                        ║ │ │                                      ││       │
 │       │ │ WIP on main: dashboard tweaks      ║ │ │                                      ││       │
-│       │ │                                    ║ │ │                                      ││       │
+│ legacy│ │                                    ║ │ │                                      ││detail │
 │       │ │ GitHub                             ║ │ │                                      ││       │
-│       │ │ 7 open issues  ·  latest v1.4.0    ║ │ │                                      ││       │
-│       │ │                                    ║ │ │                                      ││       │
-│       │ │ Pull requests (2)                  ║ │ │                                      ││       │
-│ legacy│ │ #142 fix: retry charge on 5xx  @may║ │ │                                      ││detail │
-│       │ │ #147 wip: webhook signatures  @sam ║ │ │                                      ││       │
 │ ⚠ coul│ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│       │
 ╰───────╰──────────────────────────────────────────────────────────────────────────────────╯───────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮

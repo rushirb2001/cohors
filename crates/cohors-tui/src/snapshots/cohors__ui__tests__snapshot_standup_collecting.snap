@@ -1,5 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
+assertion_line: 3852
 expression: "render_to_string(&app, 100, 18)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,7 +9,7 @@ expression: "render_to_string(&app, 100, 18)"
 │ ▀▐▖▀█▀│ Collecting your commits for this week…                                           │       │
 ╰───────│                                                                                  │───────╯
 ╭ Attent│                                                                                  │───────╮
-│ 1 unpu│                                                                                  │       │
+│ 1 at r│                                                                                  │       │
 ╰───────│                                                                                  │───────╯
 ╭ Reposi│                                                                                  │───────╮
 │    Rep│                                                                                  │       │

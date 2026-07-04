@@ -1,5 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
+assertion_line: 3721
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,7 +9,7 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▀▐▖▀│ ╭ Repos ─────────────────╮  ╭ payments ─────────────────────────────────────────────╮│     │
 ╰─────│ │ ✓ payments             │  │ exit 0                                                ││─────╯
 ╭ Atte│ │ ⠋ web-app              │  │                                                       ││─────╮
-│ 1 un│ │ ⠋ auth-service         │  │  M src/lib.rs                                         ││     │
+│ 1 at│ │ ⠋ auth-service         │  │  M src/lib.rs                                         ││     │
 ╰─────│ │                        │  │ ?? notes.txt                                          ││─────╯
 ╭ Repo│ │                        │  │                                                       ││─────╮
 │    R│ │                        │  │                                                       ││     │

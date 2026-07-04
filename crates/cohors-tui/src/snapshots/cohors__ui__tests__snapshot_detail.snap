@@ -1,33 +1,33 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-assertion_line: 3503
+assertion_line: 3604
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
-│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
-│ ▀▐▖▀█▀╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
-╰───────│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│───────╯
-╭ Attent│ │ Changes (3)                          │ │ a1b2c3d    2h  fix: retry charge on  ││───────╮
-│ 1 unpu│ │  M src/charge.rs                     │ │ b2c3d4e    5h  test: cover partial-r ││       │
-╰───────│ │  M src/refund.rs                     │ │ c3d4e5f    1d  refactor: extract pro ││───────╯
-╭ Reposi│ │ ?? notes.md                          │ │ d4e5f60    3d  feat: idempotency key ││───────╮
-│    Rep│ │                                      │ │ e5f6071    4d  chore: bump stripe sd ││       │
-│▌   leg│ │ Branches (3)                         │ │                                      ││t (per…│
-│    pay│ │ ● main  ↑2                           │ │                                      ││       │
-│    web│ │   feat/idempotency  ↑3 ↓1            │ │                                      ││       │
-│    inf│ │   spike/webhooks  · no upstream      │ │                                      ││ges    │
-│    aut│ │                                      │ │                                      ││       │
-│       │ │ Stashes (1)                          │ │                                      ││       │
-│       │ │ WIP on main: dashboard tweaks        │ │                                      ││       │
-│       │ │                                      │ │                                      ││       │
-│       │ │ Pull requests                        │ │                                      ││       │
-│       │ │ needs a GitHub remote + token        │ │                                      ││       │
-│       │ │                                      │ │                                      ││       │
-│ legacy│ │ Contributors                         │ │                                      ││detail │
-│       │ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│       │
-│ ⚠ coul╰──────────────────────────────────────────────────────────────────────────────────╯       │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+│ ▟██▌█▐╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
+│ ▀▐▖▀█▀│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│       │
+╰───────│ │ Attention                          █ │ │ a1b2c3d    2h  fix: retry charge on  ││───────╯
+╭ Attent│ │ ↑2 unpushed                        █ │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
+│ 1 at r│ │ 4 uncommitted changes              █ │ │ c3d4e5f    1d  refactor: extract pro ││       │
+╰───────│ │ 1 stash                            █ │ │ d4e5f60    3d  feat: idempotency key ││───────╯
+╭ Reposi│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││───────╮
+│    Rep│ │ Changes (3)                        █ │ │                                      ││       │
+│▌   leg│ │  M src/charge.rs                   █ │ │                                      ││t (per…│
+│    pay│ │  M src/refund.rs                   █ │ │                                      ││       │
+│    web│ │ ?? notes.md                        █ │ │                                      ││       │
+│    inf│ │                                    ║ │ │                                      ││ges    │
+│    aut│ │ Branches (3)                       ║ │ │                                      ││       │
+│       │ │ ● main  ↑2                         ║ │ │                                      ││       │
+│       │ │   feat/idempotency  ↑3 ↓1          ║ │ │                                      ││       │
+│       │ │   spike/webhooks  · no upstream    ║ │ │                                      ││       │
+│       │ │                                    ║ │ │                                      ││       │
+│       │ │ Stashes (1)                        ║ │ │                                      ││       │
+│       │ │ WIP on main: dashboard tweaks      ║ │ │                                      ││       │
+│ legacy│ │                                    ║ │ │                                      ││detail │
+│       │ │ Pull requests                      ║ │ │                                      ││       │
+│ ⚠ coul│ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│       │
+╰───────╰──────────────────────────────────────────────────────────────────────────────────╯───────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ↑/↓ scroll · g/G top / bottom · Esc close                                                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

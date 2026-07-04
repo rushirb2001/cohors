@@ -652,7 +652,11 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
         let mut spans: Vec<Span> = Vec::new();
 
         // Readable, word-labeled chips; skip any category with a zero count.
+        // The risk bucket leads: it's the "drop everything" number.
         let mut items: Vec<(String, Style)> = Vec::new();
+        if s.risk > 0 {
+            items.push((format!("{} at risk", s.risk), theme.risk()));
+        }
         if s.unpushed > 0 {
             if s.unpushed_aging > 0 {
                 items.push((
@@ -662,6 +666,9 @@ fn render_attention_panel(frame: &mut Frame, area: Rect, app: &App, now: i64, th
             } else {
                 items.push((format!("{} unpushed", s.unpushed), theme.ahead()));
             }
+        }
+        if s.conflicted > 0 {
+            items.push((format!("{} conflicted", s.conflicted), theme.risk()));
         }
         if s.behind > 0 {
             items.push((format!("{} behind", s.behind), theme.behind()));
@@ -1385,11 +1392,32 @@ fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> Option<Dock
     // out (no `s1`/`●`); colour carries urgency.
     let mut lines: Vec<Line> = Vec::new();
 
+    // A paused merge/rebase/… gets its own leading row — it's the most urgent
+    // fact about the repo and explains any conflict counts below it.
+    if let Some(op) = snap.operation {
+        dock_field(
+            &mut lines,
+            "Operation",
+            vec![Span::styled(
+                format!("{} in progress", op.label()),
+                theme.warn(),
+            )],
+            theme,
+        );
+    }
+
     // Working tree — the staged/modified/untracked breakdown the row's count hides.
     let w = &snap.worktree;
-    let changes_val = if w.staged + w.modified + w.untracked == 0 {
+    let changes_val = if w.total() == 0 {
         vec![Span::styled("clean", theme.dim())]
     } else {
+        let mut spans: Vec<Span> = Vec::new();
+        if w.conflicted > 0 {
+            spans.push(Span::styled(
+                format!("{} conflicted", w.conflicted),
+                theme.risk(),
+            ));
+        }
         let mut parts = Vec::new();
         if w.staged > 0 {
             parts.push(format!("{} staged", w.staged));
@@ -1400,12 +1428,18 @@ fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> Option<Dock
         if w.untracked > 0 {
             parts.push(format!("{} untracked", w.untracked));
         }
-        let style = if w.modified > 0 || w.untracked > 0 {
-            theme.modified()
-        } else {
-            theme.staged()
-        };
-        vec![Span::styled(parts.join(" · "), style)]
+        if !parts.is_empty() {
+            let style = if w.modified > 0 || w.untracked > 0 {
+                theme.modified()
+            } else {
+                theme.staged()
+            };
+            if !spans.is_empty() {
+                spans.push(Span::styled(" · ", theme.dim()));
+            }
+            spans.push(Span::styled(parts.join(" · "), style));
+        }
+        spans
     };
     dock_field(&mut lines, "Changes", changes_val, theme);
 
@@ -1450,6 +1484,18 @@ fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> Option<Dock
             spans
         }
     };
+    // A long-unfetched remote means ahead/behind may lie — say so inline.
+    let mut upstream_val = upstream_val;
+    if let Some(AttentionReason::StaleRemote { days }) = assess(snap, now)
+        .reasons
+        .iter()
+        .find(|r| matches!(r, AttentionReason::StaleRemote { .. }))
+    {
+        upstream_val.push(Span::styled(
+            format!("  ·  not fetched in {days}d"),
+            theme.warn(),
+        ));
+    }
     dock_field(&mut lines, "Upstream", upstream_val, theme);
 
     // Remote — CI health, open PRs, and any awaiting the user's review.
@@ -1485,6 +1531,26 @@ fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> Option<Dock
         }
     };
     dock_field(&mut lines, "Remote", remote_val, theme);
+
+    // Release — the newest reachable tag and how far the repo has moved since.
+    if let Some(tag) = &snap.latest_tag {
+        let val = if tag.commits_since == 0 {
+            vec![Span::styled(format!("{} (current)", tag.name), theme.ok())]
+        } else {
+            vec![
+                Span::raw(tag.name.clone()),
+                Span::styled(
+                    format!(
+                        "  ·  {} commit{} since",
+                        tag.commits_since,
+                        if tag.commits_since == 1 { "" } else { "s" }
+                    ),
+                    theme.dim(),
+                ),
+            ]
+        };
+        dock_field(&mut lines, "Release", val, theme);
+    }
 
     // Last commit — age + the full message (the row no longer shows it),
     // word-wrapped across the lines left in the pane rather than truncated.
@@ -1792,16 +1858,27 @@ fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> 
 fn changed_count_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     let w = &snap.worktree;
     let total = w.staged + w.modified + w.untracked;
+    let mut spans: Vec<Span> = Vec::new();
+    // Conflicts lead in red, exactly as in the wide Changes cell.
+    if w.conflicted > 0 {
+        spans.push(Span::styled(format!("!{}", w.conflicted), theme.risk()));
+        if total > 0 {
+            spans.push(Span::raw(" "));
+        }
+    }
     if total == 0 {
-        vec![Span::styled("0", theme.dim())]
+        if w.conflicted == 0 {
+            spans.push(Span::styled("0", theme.dim()));
+        }
     } else {
         let style = if w.modified > 0 || w.untracked > 0 {
             theme.modified()
         } else {
             theme.staged()
         };
-        vec![Span::styled(total.to_string(), style)]
+        spans.push(Span::styled(total.to_string(), style));
     }
+    spans
 }
 
 /// The "Stash" column (dock layout): the stash count, or a dim "0" when there are
@@ -2014,8 +2091,18 @@ fn changes_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     let w = &snap.worktree;
     let total = w.staged + w.modified + w.untracked;
     let mut spans: Vec<Span> = Vec::new();
+    // Conflicts lead the cell in red — they block everything else in the repo,
+    // so they must not hide inside (or worse, be missing from) the plain count.
+    if w.conflicted > 0 {
+        spans.push(Span::styled(format!("!{}", w.conflicted), theme.risk()));
+        if total > 0 {
+            spans.push(Span::raw(" "));
+        }
+    }
     if total == 0 {
-        spans.push(Span::styled("0", theme.dim()));
+        if w.conflicted == 0 {
+            spans.push(Span::styled("0", theme.dim()));
+        }
     } else {
         let style = if w.modified > 0 || w.untracked > 0 {
             theme.modified()
@@ -2629,8 +2716,24 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
         clines.push(Line::from(spans));
     }
 
-    // Left pane: changes · branches · stashes · PRs · contributors.
+    // Left pane: attention · changes · branches · stashes · PRs · contributors.
     let mut lines: Vec<Line> = Vec::new();
+
+    // Why this repo needs you, most urgent first — the same reasons the row's
+    // Status column abbreviates, spelled out in one place.
+    if let Some(snap) = app.repos.iter().find(|r| r.name == dv.repo_name) {
+        let assessment = assess(snap, now);
+        if !assessment.reasons.is_empty() {
+            detail_section(&mut lines, "Attention".to_string());
+            for reason in &assessment.reasons {
+                lines.push(Line::from(Span::styled(
+                    reason.label(),
+                    severity_style(reason.severity(), theme),
+                )));
+            }
+        }
+    }
+
     detail_section(&mut lines, format!("Changes ({})", d.changed_files.len()));
     if d.changed_files.is_empty() {
         lines.push(Line::from(Span::styled("clean", theme.dim())));

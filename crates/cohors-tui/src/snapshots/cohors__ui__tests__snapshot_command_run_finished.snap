@@ -1,5 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
+assertion_line: 3755
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,7 +9,7 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▀▐▖▀│ ╭ Repos ─────────────────╮  ╭ web-app ──────────────────────────────────────────────╮│     │
 ╰─────│ │ ✓ payments             │  │ exit 1                                                ││─────╯
 ╭ Atte│ │ ✗ web-app 1            │  │                                                       ││─────╮
-│ 1 un│ │                        │  │ running 3 tests                                       ││     │
+│ 1 at│ │                        │  │ running 3 tests                                       ││     │
 ╰─────│ │                        │  │ ── stderr ──                                          ││─────╯
 ╭ Repo│ │                        │  │ test cart::total failed                               ││─────╮
 │    R│ │                        │  │ error: 1 test failed                                  ││     │
