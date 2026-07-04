@@ -219,9 +219,31 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
     // Most urgent first (stable sort, so ties keep insertion order).
     reasons.sort_by_key(|r| std::cmp::Reverse(r.severity()));
     let primary = reasons.first().cloned();
-    let severity = primary
+    let base = primary
         .as_ref()
         .map_or(Severity::Ok, AttentionReason::severity);
+
+    // Compound trouble escalates one tier: independent problems multiply the
+    // odds something gets lost, so a repo carrying several of them outranks a
+    // repo with the single worst one. Two reasons at Warn+ read as Risk; a
+    // Notice-level repo with a second Notice reason reads as Warn. A single
+    // reason is never escalated — its own severity stands.
+    let warn_plus = reasons
+        .iter()
+        .filter(|r| r.severity() >= Severity::Warn)
+        .count();
+    let notice_plus = reasons
+        .iter()
+        .filter(|r| r.severity() >= Severity::Notice)
+        .count();
+    let severity = if warn_plus >= 2 {
+        Severity::Risk
+    } else if base == Severity::Notice && notice_plus >= 2 {
+        Severity::Warn
+    } else {
+        base
+    };
+
     Assessment {
         reasons,
         primary,
@@ -264,11 +286,17 @@ pub fn rank(repo: &RepoSnapshot) -> u32 {
     tier * 1000 + magnitude
 }
 
-/// Fleet-wide counts for the header summary strip.
+/// Fleet-wide counts for the header summary strip. Every count is derived from
+/// the same per-repo [`assess`] reasons the rows show — the summary *inherits*
+/// the attention judgment rather than re-deciding what "unpushed" or "dirty"
+/// means with its own field checks.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct FleetSummary {
     pub total: usize,
     pub needs_attention: usize,
+    /// Repos whose overall assessment reaches [`Severity::Risk`] — the "drop
+    /// everything" bucket.
+    pub risk: usize,
     pub unpushed: usize,
     pub unpushed_aging: usize,
     pub behind: usize,
@@ -279,39 +307,46 @@ pub struct FleetSummary {
     pub errors: usize,
 }
 
-/// Aggregate the fleet into headline counts, evaluated against `now`.
+/// Aggregate the fleet into headline counts, evaluated against `now`. One
+/// [`assess`] per repo drives everything, so a repo counts as "unpushed" here
+/// exactly when its row says so (a diverged repo counts as both unpushed and
+/// behind — its `↑`/`↓` belong in both headline numbers).
 pub fn fleet_summary(repos: &[RepoSnapshot], now: i64) -> FleetSummary {
     let mut s = FleetSummary {
         total: repos.len(),
         ..Default::default()
     };
     for repo in repos {
-        if assess(repo, now).needs_attention() {
+        let a = assess(repo, now);
+        if a.needs_attention() {
             s.needs_attention += 1;
         }
-        if repo.has_error() {
-            s.errors += 1;
+        if a.severity >= Severity::Risk {
+            s.risk += 1;
         }
-        if repo.ahead() > 0 {
-            s.unpushed += 1;
-            if repo
-                .last_commit_time()
-                .is_some_and(|t| now - t > UNPUSHED_AGING_SECS)
-            {
-                s.unpushed_aging += 1;
+        for reason in &a.reasons {
+            match reason {
+                AttentionReason::Unreadable => s.errors += 1,
+                AttentionReason::Unpushed { aging, .. } => {
+                    s.unpushed += 1;
+                    if *aging {
+                        s.unpushed_aging += 1;
+                    }
+                }
+                AttentionReason::Diverged { .. } => {
+                    s.unpushed += 1;
+                    s.behind += 1;
+                }
+                AttentionReason::Behind { .. } => s.behind += 1,
+                AttentionReason::Conflicted { .. } => s.conflicted += 1,
+                AttentionReason::Uncommitted { .. } => s.dirty += 1,
+                AttentionReason::Stash { .. } => s.stash += 1,
+                // Row-level context with no headline number (yet).
+                AttentionReason::Unpublished
+                | AttentionReason::Operation(_)
+                | AttentionReason::StaleRemote { .. }
+                | AttentionReason::Detached => {}
             }
-        }
-        if repo.behind() > 0 {
-            s.behind += 1;
-        }
-        if repo.is_dirty() {
-            s.dirty += 1;
-        }
-        if repo.worktree.conflicted > 0 {
-            s.conflicted += 1;
-        }
-        if repo.stash_count > 0 {
-            s.stash += 1;
         }
     }
     s
@@ -634,5 +669,50 @@ mod tests {
         assert_eq!(s.errors, 1);
         // needs_attention excludes the fresh stash (Info) and the clean repo.
         assert_eq!(s.needs_attention, 4);
+        // Risk bucket: the errored repo and the aging-unpushed repo.
+        assert_eq!(s.risk, 2);
+    }
+
+    #[test]
+    fn compound_trouble_escalates_one_tier() {
+        // Two Warn-level reasons (diverged + stale stash) read as Risk.
+        let two_warns = repo(
+            main_branch(),
+            2,
+            3,
+            (0, 0, 0),
+            1,
+            Some(NOW - 10 * DAY),
+            Some(NOW),
+            None,
+        );
+        let a = assess(&two_warns, NOW);
+        assert_eq!(a.severity, Severity::Risk);
+        // The primary reason keeps its own severity — only the overall escalates.
+        assert_eq!(
+            a.primary,
+            Some(AttentionReason::Diverged {
+                ahead: 2,
+                behind: 3
+            })
+        );
+
+        // Behind AND dirty (two Notices) reads as Warn — more than either alone.
+        let behind_dirty = repo(main_branch(), 0, 4, (0, 2, 0), 0, None, Some(NOW), None);
+        assert_eq!(assess(&behind_dirty, NOW).severity, Severity::Warn);
+
+        // A single reason is never escalated.
+        let just_behind = repo(main_branch(), 0, 4, (0, 0, 0), 0, None, Some(NOW), None);
+        assert_eq!(assess(&just_behind, NOW).severity, Severity::Notice);
+    }
+
+    #[test]
+    fn fleet_summary_inherits_the_assessment_judgment() {
+        // A diverged repo counts in BOTH unpushed and behind — its arrows sit
+        // in both headline numbers, exactly as the row shows them.
+        let diverged = repo(main_branch(), 2, 3, (0, 0, 0), 0, None, Some(NOW), None);
+        let s = fleet_summary(&[diverged], NOW);
+        assert_eq!((s.unpushed, s.behind), (1, 1));
+        assert_eq!(s.needs_attention, 1);
     }
 }
