@@ -539,16 +539,36 @@ fn start_action_targets(
     kind: ActionKind,
     batch: &mut Option<Batch>,
 ) {
-    let targets: Vec<(RepoId, Utf8PathBuf, String)> = app
-        .action_targets()
-        .iter()
-        .filter_map(|id| app.repos.iter().find(|r| &r.id == id))
-        .filter(|r| !r.has_error())
-        .filter_map(|r| r.path.clone().map(|p| (r.id.clone(), p, r.name.clone())))
-        .filter(|(id, _, _)| !app.busy.contains(id))
-        .collect();
+    // Pull/stash/commit mutate the worktree, so a conflicted or mid-operation
+    // repo is skipped with a reason (the same `worktree_block` rule the
+    // MCP/web dispatch applies); fetch/push never touch the worktree.
+    let guard_worktree = matches!(
+        kind,
+        ActionKind::Pull | ActionKind::Stash | ActionKind::Commit(_)
+    );
+    let mut targets: Vec<(RepoId, Utf8PathBuf, String)> = Vec::new();
+    let mut skipped: Option<String> = None;
+    let mut skipped_count = 0usize;
+    for id in app.action_targets() {
+        let Some(r) = app.repos.iter().find(|r| r.id == id) else {
+            continue;
+        };
+        if r.has_error() || app.busy.contains(&r.id) {
+            continue;
+        }
+        let Some(path) = r.path.clone() else { continue };
+        if guard_worktree && let Some(reason) = cohors_actions::worktree_block(r) {
+            skipped_count += 1;
+            skipped = Some(format!("{}: {reason}", r.name));
+            continue;
+        }
+        targets.push((r.id.clone(), path, r.name.clone()));
+    }
     if targets.is_empty() {
-        app.status = Some("no repo selected".to_string());
+        app.status = Some(match skipped {
+            Some(reason) => format!("skipped — {reason}"),
+            None => "no repo selected".to_string(),
+        });
         return;
     }
     let (doing, done) = match &kind {
@@ -558,15 +578,21 @@ fn start_action_targets(
         ActionKind::Stash => ("stashing", "stashed"),
         ActionKind::Commit(_) => ("committing", "committed"),
     };
+    // Surface any guarded skips alongside the progress note.
+    let skip_note = if skipped_count > 0 {
+        format!("  ·  {skipped_count} skipped (conflict/operation)")
+    } else {
+        String::new()
+    };
     if targets.len() > 1 {
         *batch = Some(Batch {
             total: targets.len(),
             doing,
             done,
         });
-        app.status = Some(format!("{doing} {} repos…", targets.len()));
+        app.status = Some(format!("{doing} {} repos…{skip_note}", targets.len()));
     } else {
-        app.status = Some(format!("{doing} {}…", targets[0].2));
+        app.status = Some(format!("{doing} {}…{skip_note}", targets[0].2));
     }
     for (id, path, name) in targets {
         app.busy.insert(id.clone());
