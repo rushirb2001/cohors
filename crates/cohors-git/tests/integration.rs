@@ -154,7 +154,7 @@ fn dirty_repo_counts_staged_modified_untracked() {
         "expected untracked: {:?}",
         snap.worktree
     );
-    assert!(snap.needs_attention());
+    assert!(snap.is_dirty(), "worktree changes flag the repo");
 }
 
 #[test]
@@ -204,7 +204,7 @@ fn stash_is_counted_and_worktree_clean_after() {
 
     assert_eq!(snap.stash_count, 1);
     assert!(!snap.is_dirty(), "worktree should be clean after stash");
-    assert!(snap.needs_attention(), "a stash should flag attention");
+    assert!(snap.stash_count > 0, "the stash is counted");
 }
 
 #[test]

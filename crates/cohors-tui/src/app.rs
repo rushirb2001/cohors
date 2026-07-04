@@ -266,6 +266,9 @@ impl StandupView {
 
 /// All dashboard state.
 pub struct App {
+    /// Unix seconds, refreshed once per event-loop tick — the single clock the
+    /// view filter and renderers share (WASM-safe core takes it injected).
+    pub now: i64,
     pub repos: Vec<RepoSnapshot>,
     pub sort: SortMode,
     pub dirty_only: bool,
@@ -393,6 +396,7 @@ impl OpenWith {
 impl App {
     pub fn new(roots: Vec<String>, config_path: String) -> Self {
         Self {
+            now: 0,
             repos: Vec::new(),
             sort: SortMode::default(),
             dirty_only: false,
@@ -435,6 +439,7 @@ impl App {
                 sort: self.sort,
                 dirty_only: self.dirty_only,
                 query: &self.filter,
+                now: self.now,
             },
         )
     }

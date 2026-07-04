@@ -129,6 +129,7 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
     const TOAST_TTL: Duration = Duration::from_secs(6);
 
     loop {
+        app.now = now;
         terminal.draw(|f| ui::render(f, &app, now))?;
 
         if event::poll(POLL)? {
@@ -270,7 +271,8 @@ fn run_loop(
     let mut last_watch = Instant::now();
 
     loop {
-        terminal.draw(|f| ui::render(f, &app, now_secs()))?;
+        app.now = now_secs();
+        terminal.draw(|f| ui::render(f, &app, app.now))?;
 
         if event::poll(POLL)? {
             match event::read()? {

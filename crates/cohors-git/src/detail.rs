@@ -67,6 +67,19 @@ pub fn repo_changes(path: &Utf8Path, include_patch: bool, max_patch_bytes: usize
     }
 }
 
+/// The capped working-tree patch alone, for callers that already hold the
+/// changed-file list (the drill-in bundle reads [`repo_detail`] first) and
+/// shouldn't pay for a second status walk. `(None, false)` when the repo can't
+/// be opened.
+#[cfg(feature = "git2-fallback")]
+pub fn working_tree_patch(path: &Utf8Path, max_bytes: usize) -> (Option<String>, bool) {
+    let Ok(repo) = git2::Repository::open(path.as_std_path()) else {
+        return (None, false);
+    };
+    let (text, truncated) = worktree_patch(&repo, max_bytes);
+    (Some(text), truncated)
+}
+
 /// A unified diff of the working tree (staged + unstaged + untracked) against
 /// `HEAD`, rendered as text and capped at `max_bytes`. Returns `(patch, truncated)`.
 /// Best-effort: an unreadable diff yields an empty string.
@@ -332,4 +345,11 @@ pub fn repo_detail(path: &Utf8Path) -> RepoDetail {
 pub fn repo_changes(path: &Utf8Path, include_patch: bool, max_patch_bytes: usize) -> RepoChanges {
     let _ = (path, include_patch, max_patch_bytes);
     RepoChanges::default()
+}
+
+/// Without libgit2 the patch read is unavailable; degrade to none.
+#[cfg(not(feature = "git2-fallback"))]
+pub fn working_tree_patch(path: &Utf8Path, max_bytes: usize) -> (Option<String>, bool) {
+    let _ = (path, max_bytes);
+    (None, false)
 }

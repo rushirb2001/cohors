@@ -29,10 +29,23 @@ pub fn detail_bundle(
     patch_bytes: usize,
 ) -> DetailBundle {
     let (local, changes) = match path {
-        Some(p) => (
-            cohors_git::repo_detail(p),
-            cohors_git::repo_changes(p, true, patch_bytes),
-        ),
+        Some(p) => {
+            let local = cohors_git::repo_detail(p);
+            // One status walk, not two: the detail read already produced the
+            // changed-file list, so only the capped patch is read separately
+            // (and skipped entirely when the worktree is clean).
+            let (patch, truncated) = if local.changed_files.is_empty() {
+                (None, false)
+            } else {
+                cohors_git::working_tree_patch(p, patch_bytes)
+            };
+            let changes = RepoChanges {
+                files: local.changed_files.clone(),
+                patch,
+                truncated,
+            };
+            (local, changes)
+        }
         None => (RepoDetail::default(), RepoChanges::default()),
     };
     let remote = match (token, remote_url) {

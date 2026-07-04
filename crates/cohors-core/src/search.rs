@@ -79,6 +79,62 @@ fn contains(haystack: &str, needle: &str) -> bool {
     haystack.to_lowercase().contains(needle)
 }
 
+/// Directory names whose *contents* are secrets or repo internals — a search
+/// must never descend into (or report from) these.
+const SENSITIVE_DIRS: &[&str] = &[
+    ".git", ".ssh", ".gnupg", ".aws", ".kube", ".gcloud", ".azure", ".docker",
+];
+
+/// Exact file names that carry credentials.
+const SENSITIVE_FILES: &[&str] = &[
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    ".git-credentials",
+    "credentials",
+];
+
+/// File extensions that are key material.
+const SENSITIVE_EXTS: &[&str] = &["pem", "key", "p12", "pfx", "jks", "keystore"];
+
+/// `.env` variants that are *templates*, not real secrets — the one exception
+/// to the `.env*` block.
+const ENV_TEMPLATES: &[&str] = &[".env.example", ".env.sample", ".env.template", ".env.dist"];
+
+/// The fleet-wide privacy rule for search: whether a path (relative or
+/// absolute) points at — or into — something that must never appear in search
+/// results (key material, credential stores, `.env` files, repo internals).
+///
+/// This is the *judgment*; adapters apply it before reading a file, and any
+/// surface can re-apply it defensively on hits it receives. Deliberately
+/// conservative: skipping a harmless file named `server.key` costs a missed
+/// hit, while surfacing a real one leaks a secret.
+pub fn is_sensitive_path(path: &str) -> bool {
+    path.split(['/', '\\']).any(|component| {
+        let c = component.to_lowercase();
+        if c.is_empty() {
+            return false;
+        }
+        if SENSITIVE_DIRS.contains(&c.as_str()) || SENSITIVE_FILES.contains(&c.as_str()) {
+            return true;
+        }
+        // `.env`, `.env.local`, `.env.production`, … — but not the templates.
+        if c.starts_with(".env") && !ENV_TEMPLATES.contains(&c.as_str()) {
+            return true;
+        }
+        // Private key files by conventional name or extension.
+        if c.starts_with("id_rsa")
+            || c.starts_with("id_ecdsa")
+            || c.starts_with("id_ed25519")
+            || c.starts_with("id_dsa")
+        {
+            return true;
+        }
+        c.rsplit_once('.')
+            .is_some_and(|(_, ext)| SENSITIVE_EXTS.contains(&ext))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +181,40 @@ mod tests {
     #[test]
     fn content_kind_is_empty_here() {
         assert!(search_metadata(&fleet(), "anything", SearchKind::Content).is_empty());
+    }
+
+    #[test]
+    fn sensitive_paths_are_flagged() {
+        for path in [
+            ".env",
+            ".env.local",
+            "config/.env.production",
+            ".git/config",
+            "sub/.ssh/id_rsa",
+            "id_ed25519.pub",
+            "certs/server.pem",
+            "keys/signing.key",
+            ".aws/credentials",
+            "app/credentials",
+            ".npmrc",
+            r"win\.ssh\key.pem",
+        ] {
+            assert!(is_sensitive_path(path), "{path} should be sensitive");
+        }
+    }
+
+    #[test]
+    fn ordinary_paths_and_env_templates_are_not_flagged() {
+        for path in [
+            "src/main.rs",
+            "docs/environment.md", // "environment" ≠ ".env"
+            ".env.example",
+            "config/.env.template",
+            "keyboard.rs",  // contains "key" but isn't a .key file
+            "monkey.patch", // ends in neither list
+            ".github/workflows/ci.yml",
+        ] {
+            assert!(!is_sensitive_path(path), "{path} should be fine");
+        }
     }
 }

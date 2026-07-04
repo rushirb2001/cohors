@@ -64,7 +64,8 @@ pub struct Selector {
     pub ids: Vec<String>,
     /// Glob over the repo's alias / directory name (case-insensitive), e.g. `pay*`.
     pub name: Option<String>,
-    /// Glob over the canonical path, e.g. `~/work/**` (expand `~` before resolving).
+    /// Glob over the canonical path, e.g. `~/work/**` (expand `~` before
+    /// resolving). `*`/`?` stay within one path segment; `**` crosses `/`.
     pub path_glob: Option<String>,
     /// Limit to repos under one root directory (a canonical path prefix).
     pub root: Option<String>,
@@ -88,6 +89,10 @@ pub struct Selector {
     pub has_stash: bool,
     /// Detached `HEAD`.
     pub detached: bool,
+    /// Repos with unmerged (conflicted) files.
+    pub conflicted: bool,
+    /// Repos with a multi-step git operation (merge/rebase/…) in progress.
+    pub in_operation: bool,
     /// The repo failed to read.
     pub error: bool,
     /// Current branch equals this exact name.
@@ -125,6 +130,8 @@ impl Selector {
             && !self.no_upstream
             && !self.has_stash
             && !self.detached
+            && !self.conflicted
+            && !self.in_operation
             && !self.error
             && self.branch.is_none()
             && self.attention.is_none()
@@ -178,6 +185,12 @@ impl Selector {
             return false;
         }
         if self.has_stash && repo.stash_count == 0 {
+            return false;
+        }
+        if self.conflicted && repo.worktree.conflicted == 0 {
+            return false;
+        }
+        if self.in_operation && repo.operation.is_none() {
             return false;
         }
         if self.detached && !matches!(repo.branch, Branch::Detached(_)) {
@@ -244,7 +257,9 @@ pub fn resolve(
     indices.into_iter().map(|i| repos[i].id.clone()).collect()
 }
 
-/// Case-insensitive glob over a name.
+/// Case-insensitive glob over a name. Uses Rust's locale-independent Unicode
+/// lowercasing on both sides, so the result is the same on every machine
+/// (no Turkish-İ style locale surprises).
 fn glob_ci(pattern: &str, text: &str) -> bool {
     glob_match(&pattern.to_lowercase(), &text.to_lowercase())
 }
@@ -255,45 +270,97 @@ pub fn glob_name(pattern: &str, text: &str) -> bool {
     glob_ci(pattern, text)
 }
 
-/// A tiny dependency-free glob matcher: `*` matches any sequence (including
-/// path separators, so `**` works as a plain "match anything") and `?` matches
-/// exactly one character. Linear time with backtracking on `*`.
-fn glob_match(pattern: &str, text: &str) -> bool {
-    let p: Vec<char> = pattern.chars().collect();
-    let t: Vec<char> = text.chars().collect();
-    let (mut pi, mut ti) = (0usize, 0usize);
-    // The most recent `*` in the pattern and where in `text` we last tried to
-    // start matching after it — used to backtrack and consume one more char.
-    let mut star: Option<usize> = None;
-    let mut resume = 0usize;
-    while ti < t.len() {
-        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
-            pi += 1;
-            ti += 1;
-        } else if pi < p.len() && p[pi] == '*' {
-            star = Some(pi);
-            resume = ti;
-            pi += 1;
-        } else if let Some(s) = star {
-            // Mismatch: let the last `*` swallow one more character of `text`.
-            pi = s + 1;
-            resume += 1;
-            ti = resume;
-        } else {
-            return false;
-        }
-    }
-    // Any trailing pattern must be all `*` to match the empty remainder.
-    while pi < p.len() && p[pi] == '*' {
-        pi += 1;
-    }
-    pi == p.len()
+/// One compiled glob token: a literal char, `?` (one char, not `/`), `*` (any
+/// run within one path segment), or `**` (any run, crossing `/`).
+enum GlobTok {
+    Lit(char),
+    One,
+    Star,
+    StarStar,
 }
 
-/// Whether `path` is `root` itself or lives beneath it.
+/// A tiny dependency-free glob matcher with path-aware semantics: `?` matches
+/// exactly one character except `/`, `*` matches any run of characters within
+/// one path segment (never crossing `/`), and `**` matches any run including
+/// separators. For repo *names* (which carry no `/`) `*` and `**` behave the
+/// same. Implemented as a token-by-token DP sweep — O(pattern × text) worst
+/// case with no backtracking, so no pattern can blow it up.
+fn glob_match(pattern: &str, text: &str) -> bool {
+    // Compile the pattern, collapsing runs of `*` (three-or-more reads as `**`).
+    let mut toks: Vec<GlobTok> = Vec::new();
+    let mut chars = pattern.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '*' => {
+                let mut stars = 1;
+                while chars.peek() == Some(&'*') {
+                    chars.next();
+                    stars += 1;
+                }
+                toks.push(if stars >= 2 {
+                    GlobTok::StarStar
+                } else {
+                    GlobTok::Star
+                });
+            }
+            '?' => toks.push(GlobTok::One),
+            c => toks.push(GlobTok::Lit(c)),
+        }
+    }
+
+    let t: Vec<char> = text.chars().collect();
+    // dp[j] = "the tokens consumed so far can match text[..j]".
+    let mut dp = vec![false; t.len() + 1];
+    dp[0] = true;
+    for tok in &toks {
+        let mut next = vec![false; t.len() + 1];
+        match tok {
+            GlobTok::StarStar => {
+                // Matches any (possibly empty) suffix extension of every
+                // reachable prefix.
+                let mut reachable = false;
+                for j in 0..=t.len() {
+                    reachable |= dp[j];
+                    next[j] = reachable;
+                }
+            }
+            GlobTok::Star => {
+                // Same, but the extension may not cross a `/`.
+                for j in 0..=t.len() {
+                    next[j] = dp[j] || (j > 0 && next[j - 1] && t[j - 1] != '/');
+                }
+            }
+            GlobTok::One => {
+                for j in 1..=t.len() {
+                    next[j] = dp[j - 1] && t[j - 1] != '/';
+                }
+            }
+            GlobTok::Lit(c) => {
+                for j in 1..=t.len() {
+                    next[j] = dp[j - 1] && t[j - 1] == *c;
+                }
+            }
+        }
+        dp = next;
+    }
+    dp[t.len()]
+}
+
+/// Whether `path` is `root` itself or lives beneath it. An empty root matches
+/// nothing (a blank `root:` must not silently select the fleet); `/` matches
+/// every absolute path. Trailing slashes on the root are ignored.
 fn path_under(path: &str, root: &str) -> bool {
+    if root.is_empty() {
+        return false;
+    }
     let root = root.trim_end_matches('/');
-    path == root || path.starts_with(&format!("{root}/"))
+    if root.is_empty() {
+        return path.starts_with('/'); // the root was literally "/"
+    }
+    path == root
+        || path
+            .strip_prefix(root)
+            .is_some_and(|rest| rest.starts_with('/'))
 }
 
 #[cfg(test)]
@@ -606,6 +673,49 @@ mod tests {
         assert!(glob_match("exact", "exact"));
         assert!(!glob_match("exact", "exactly"));
     }
+
+    #[test]
+    fn glob_star_stays_within_one_path_segment() {
+        // `*` and `?` never cross `/`; `**` does. Repo names carry no `/`,
+        // so name globs are unaffected.
+        assert!(glob_match("/repos/*", "/repos/api"));
+        assert!(!glob_match("/repos/*", "/repos/api/sub"));
+        assert!(glob_match("/repos/**", "/repos/api/sub"));
+        assert!(glob_match("/repos/*/sub", "/repos/api/sub"));
+        assert!(!glob_match("/repos/?pi", "/repos/api/x"));
+        // Three-or-more stars collapse to `**`.
+        assert!(glob_match("/repos/***", "/repos/a/b"));
+    }
+
+    #[test]
+    fn glob_edge_cases_never_panic_or_overmatch() {
+        assert!(glob_match("", ""));
+        assert!(!glob_match("", "x"));
+        assert!(glob_match("**", ""));
+        assert!(glob_match("*", ""));
+        assert!(!glob_match("?", ""));
+        // A repeat-heavy pattern that blows up naive backtracking matchers
+        // resolves instantly under the DP sweep.
+        assert!(!glob_match("*a*a*a*a*a*a*a*a*a*b", &"a".repeat(64)));
+        // Unicode: case-insensitive matching folds both sides identically on
+        // every machine (locale-independent lowercasing).
+        assert!(glob_name("CAFÉ*", "café-infra"));
+        // ß lowercases to itself while SS lowercases to "ss" — simple folding,
+        // not full case-equivalence, and the same answer on every machine.
+        assert!(!glob_name("straße", "STRASSE"));
+    }
+
+    #[test]
+    fn path_under_edges() {
+        assert!(path_under("/repos/api", "/repos"));
+        assert!(path_under("/repos/api", "/repos/"));
+        assert!(path_under("/repos", "/repos"));
+        // Prefix of a *component* is not containment.
+        assert!(!path_under("/repos-archive/api", "/repos"));
+        // "/" contains every absolute path; "" contains nothing.
+        assert!(path_under("/anything", "/"));
+        assert!(!path_under("/anything", ""));
+    }
 }
 
 // ── Shorthand parsing ────────────────────────────────────────────────────────
@@ -628,25 +738,49 @@ impl std::error::Error for ParseSelectorError {}
 
 /// Parse comma-separated shorthand tokens into a [`Selector`] (tokens AND
 /// together). Bare flags (`dirty`, `behind`, …) set booleans; `key:value`
-/// tokens (`name:pay*`, `ci:failing`, `prs:1`, `branch:main`, `root:~/work`)
-/// set the scoped predicates; a few named views (`clean`, `attention`) expand
-/// to their selectors.
+/// tokens (`name:pay*`, `id:payments-api`, `ci:failing`, `prs:1`,
+/// `branch:main`, `root:~/work`) set the scoped predicates; a few named views
+/// (`clean`, `attention`) expand to their selectors. A `!` prefix negates any
+/// token (`!dirty`, `!name:pay*`) — negations AND in, so `dirty,!behind` reads
+/// "dirty and not behind".
 pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
     let mut sel = Selector::default();
+    // Negated tokens accumulate here and fold into `sel.not` at the end:
+    // NOT(a) AND NOT(b) is NOT(a OR b), which the single `not` slot expresses.
+    let mut negated: Vec<Selector> = Vec::new();
     for raw in query.split(',') {
         let token = raw.trim();
         if token.is_empty() {
+            continue;
+        }
+        if let Some(rest) = token.strip_prefix('!') {
+            let rest = rest.trim();
+            if rest.is_empty() {
+                return Err(ParseSelectorError(
+                    "`!` needs a token to negate, e.g. `!dirty`".to_string(),
+                ));
+            }
+            negated.push(parse_shorthand(rest)?);
             continue;
         }
         if let Some((key, value)) = token.split_once(':') {
             let value = value.trim().to_string();
             match key.trim() {
                 "name" => sel.name = Some(value),
+                "id" => sel.ids.push(value),
                 "branch" => sel.branch = Some(value),
                 "root" => sel.root = Some(value),
                 "path" => sel.path_glob = Some(value),
                 "group" => sel.group = Some(value),
-                "ci" => sel.ci = Some(parse_ci(&value)?),
+                // `FromStr` on CiStatus is the same case-insensitive vocabulary
+                // the wire uses, so `ci:none` (no CI configured) works too.
+                "ci" => {
+                    sel.ci = Some(value.parse().map_err(|_| {
+                        ParseSelectorError(format!(
+                            "unknown ci status `{value}` (passing | failing | pending | none)"
+                        ))
+                    })?)
+                }
                 "prs" | "min-prs" => {
                     sel.min_prs = Some(value.parse().map_err(|_| {
                         ParseSelectorError(format!("`prs:` expects a number, got `{value}`"))
@@ -670,63 +804,62 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
             "no-upstream" => sel.no_upstream = true,
             "stash" | "has-stash" => sel.has_stash = true,
             "detached" => sel.detached = true,
+            "conflicted" | "conflicts" => sel.conflicted = true,
+            "operation" | "in-progress" => sel.in_operation = true,
             "error" | "errors" => sel.error = true,
             "attention" | "needs-attention" => sel.attention = Some(AttentionLevel::Any),
             "prs-open" => sel.min_prs = Some(1),
             "red-ci" => sel.ci = Some(CiStatus::Failing),
-            // "clean" = nothing the attention layer would flag and readable.
+            // "clean" = nothing the attention layer would flag and readable —
+            // expressed as negations so it composes with explicit `!` tokens.
             "clean" => {
-                sel.not = Some(Box::new(Selector {
-                    any_of: vec![
-                        Selector {
-                            dirty: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            ahead: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            behind: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            has_stash: true,
-                            ..Default::default()
-                        },
-                        Selector {
-                            error: true,
-                            ..Default::default()
-                        },
-                    ],
-                    ..Default::default()
-                }))
+                for flagged in [
+                    Selector {
+                        dirty: true,
+                        ..Default::default()
+                    },
+                    Selector {
+                        ahead: true,
+                        ..Default::default()
+                    },
+                    Selector {
+                        behind: true,
+                        ..Default::default()
+                    },
+                    Selector {
+                        has_stash: true,
+                        ..Default::default()
+                    },
+                    Selector {
+                        error: true,
+                        ..Default::default()
+                    },
+                ] {
+                    negated.push(flagged);
+                }
             }
             other => {
                 return Err(ParseSelectorError(format!(
-                    "unknown selector `{other}` (try: dirty, behind, ahead, attention, clean, name:<glob>)"
+                    "unknown selector `{other}` (try: dirty, behind, ahead, conflicted, operation, attention, clean, name:<glob>, or !token to negate)"
                 )));
             }
         }
     }
+    if !negated.is_empty() {
+        sel.not = Some(Box::new(if negated.len() == 1 {
+            negated.pop().expect("len checked")
+        } else {
+            Selector {
+                any_of: negated,
+                ..Default::default()
+            }
+        }));
+    }
     Ok(sel)
 }
 
-fn parse_ci(value: &str) -> Result<CiStatus, ParseSelectorError> {
-    Ok(match value {
-        "passing" => CiStatus::Passing,
-        "failing" => CiStatus::Failing,
-        "pending" => CiStatus::Pending,
-        other => {
-            return Err(ParseSelectorError(format!(
-                "unknown ci status `{other}` (passing | failing | pending)"
-            )));
-        }
-    })
-}
-
 fn parse_attention(value: &str) -> Result<AttentionLevel, ParseSelectorError> {
-    Ok(match value {
+    Ok(match value.to_ascii_lowercase().as_str() {
         "any" => AttentionLevel::Any,
         "notice" => AttentionLevel::Notice,
         "warn" => AttentionLevel::Warn,
@@ -810,8 +943,78 @@ mod parse_tests {
     }
 
     #[test]
+    fn conflicted_and_operation_predicates() {
+        let sel = parse_shorthand("conflicted,operation").unwrap();
+        assert!(sel.conflicted && sel.in_operation);
+        let mut repos = fleet_for_new_predicates();
+        repos[0].worktree.conflicted = 2;
+        repos[1].operation = Some(crate::model::RepoOperation::Rebase);
+        let hits = resolve(
+            &repos,
+            &Selector {
+                conflicted: true,
+                ..Default::default()
+            },
+            SortMode::Name,
+            0,
+        );
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, repos[0].id.0);
+        let hits = resolve(
+            &repos,
+            &Selector {
+                in_operation: true,
+                ..Default::default()
+            },
+            SortMode::Name,
+            0,
+        );
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, repos[1].id.0);
+    }
+
+    fn fleet_for_new_predicates() -> Vec<RepoSnapshot> {
+        vec![
+            crate::model::sample("a", "a", false, 0, 0, Some(1)),
+            crate::model::sample("b", "b", false, 0, 0, Some(1)),
+        ]
+    }
+
+    #[test]
     fn unknown_token_errors() {
         assert!(parse_shorthand("frobnicate").is_err());
         assert!(parse_shorthand("ci:sideways").is_err());
+        assert!(parse_shorthand("!").is_err());
+    }
+
+    #[test]
+    fn bang_negates_flags_and_key_values() {
+        // One negation lands directly in `not`.
+        let sel = parse_shorthand("dirty,!behind").unwrap();
+        assert!(sel.dirty);
+        assert!(sel.not.as_ref().unwrap().behind);
+
+        // Several negations OR inside `not` (NOT a AND NOT b == NOT (a OR b)).
+        let sel = parse_shorthand("!dirty,!name:pay*").unwrap();
+        let not = sel.not.unwrap();
+        assert_eq!(not.any_of.len(), 2);
+        assert!(not.any_of.iter().any(|s| s.dirty));
+        assert!(not.any_of.iter().any(|s| s.name.as_deref() == Some("pay*")));
+    }
+
+    #[test]
+    fn id_key_and_ci_none() {
+        let sel = parse_shorthand("id:payments-api,id:billing").unwrap();
+        assert_eq!(sel.ids, ["payments-api", "billing"]);
+        // `ci:` speaks the full wire vocabulary, case-insensitively.
+        assert_eq!(parse_shorthand("ci:none").unwrap().ci, Some(CiStatus::None));
+        assert_eq!(
+            parse_shorthand("ci:FAILING").unwrap().ci,
+            Some(CiStatus::Failing)
+        );
+        assert_eq!(
+            parse_shorthand("attention:WARN").unwrap().attention,
+            Some(AttentionLevel::Warn)
+        );
     }
 }

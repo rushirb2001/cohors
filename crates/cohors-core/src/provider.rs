@@ -27,4 +27,36 @@ pub trait RepoProvider {
     /// aborts a whole scan. Reserve `Err` for failures that prevent producing
     /// any snapshot at all.
     fn snapshot(&self, repo: &RepoRef) -> Result<RepoSnapshot, Self::Error>;
+
+    /// Discover and snapshot the whole fleet: [`list`](Self::list), then one
+    /// [`snapshot`](Self::snapshot) per repo. A per-repo `Err` degrades to an
+    /// errored snapshot rather than aborting the scan.
+    ///
+    /// This provided default is **sequential** (core stays WASM-safe — no
+    /// threads); native providers override it with a parallel fan-out (the
+    /// local git provider uses `rayon`).
+    fn scan_fleet(&self) -> Result<Vec<RepoSnapshot>, Self::Error> {
+        let refs = self.list()?;
+        Ok(refs
+            .iter()
+            .map(|r| {
+                self.snapshot(r).unwrap_or_else(|_| {
+                    RepoSnapshot::errored(
+                        r.id.clone(),
+                        r.path
+                            .as_ref()
+                            .and_then(|p| p.file_name())
+                            .unwrap_or("(unknown)"),
+                        r.path.clone(),
+                        "provider failed to snapshot this repo",
+                    )
+                })
+            })
+            .collect())
+    }
+
+    /// A human label for this data source (for logs/diagnostics).
+    fn source_name(&self) -> &'static str {
+        "unknown"
+    }
 }
