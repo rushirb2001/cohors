@@ -158,7 +158,7 @@ fn handle(request: &Value, ctx: &Ctx, now: i64) -> Option<Value> {
 /// Server-level guidance surfaced to the model on `initialize` (the MCP
 /// `instructions` field). This is the highest-leverage place to make an agent
 /// reach for cohors instead of shelling out to `git`/`find`.
-const INSTRUCTIONS: &str = "cohors is the user's git repository fleet — every repo under their configured roots — with live local status (branch, ahead/behind, dirty worktree, stashes, last commit) and optional GitHub enrichment (CI, PRs). Whenever the user asks about \"my repos\", \"my projects\", the \"fleet\", what is dirty / unpushed / behind / needs attention, where a repo lives, or to find or change code across repos, use these cohors tools — do NOT shell out to find, cd, or per-repo git, and do not ask the user where their repos are. Start with fleet_summary (cheapest) or list_repos. Reads are always available; the write tools (fetch/pull/push/commit/stash) and run are gated and will tell you how to enable them. Target repos with the shared selector predicate, e.g. {\"dirty\": true}, {\"behind\": true}, {\"name\": \"pay*\"}, or {\"all\": true}.";
+const INSTRUCTIONS: &str = "cohors is the user's git repository fleet — every repo under their configured roots — with live local status (branch, ahead/behind, dirty worktree, stashes, last commit) and optional GitHub enrichment (CI, PRs). Whenever the user asks about \"my repos\", \"my projects\", the \"fleet\", what is dirty / unpushed / behind / needs attention, where a repo lives, or to find or change code across repos, use these cohors tools — do NOT shell out to find, cd, or per-repo git, and do not ask the user where their repos are. Start with fleet_summary (cheapest) or list_repos. Reads are always available; the write tools (fetch/pull/push/commit/stash) and run are gated and will tell you how to enable them. Target repos with the shared selector predicate, e.g. {\"dirty\": true}, {\"behind\": true}, {\"conflicted\": true}, {\"in_operation\": true} (merge/rebase mid-flight), {\"name\": \"pay*\"}, or {\"all\": true}.";
 
 /// The catalog returned by `tools/list`. JSON-Schema'd inputs; `repo` accepts an
 /// id, name, or path. Descriptions lead with *when* to use the tool, so an agent
@@ -180,7 +180,7 @@ fn tool_catalog() -> Value {
                 "properties": {
                     "selector": selector_schema.clone(),
                     "sort": { "type": "string", "enum": ["dirty-first", "recent", "name", "ahead-behind"], "description": "Order of the returned repos (default dirty-first)." },
-                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project each repo to just these top-level keys (id and name are always kept) to keep the response small. Valid keys: branch, upstream, worktree, last_commit, activity, groups, stash_count, stash_latest, remote, assessment, path, error. Note: ahead/behind live inside `upstream`, and staged/modified/untracked inside `worktree` — request those parent keys, not the leaf names." },
+                    "fields": { "type": "array", "items": { "type": "string" }, "description": "Project each repo to just these top-level keys (id and name are always kept) to keep the response small. Valid keys: branch, upstream, worktree, last_commit, activity, groups, stash_count, stash_latest, remote, remote_url, operation, default_branch, last_fetch, latest_tag, assessment, path, error. Note: ahead/behind live inside `upstream`, and staged/modified/untracked inside `worktree` — request those parent keys, not the leaf names." },
                     "limit": { "type": "integer", "minimum": 1, "description": "Return at most this many repos (after sorting)." }
                 }
             }
@@ -196,12 +196,12 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "fleet_summary",
-            "description": "The cheapest \"is anything on fire?\" call: fleet-wide counts only — total, needs-attention, unpushed, behind, dirty, stashed, errors. Use it first to gauge overall state, then drill in with list_repos. Takes no arguments.",
+            "description": "The cheapest \"is anything on fire?\" call: fleet-wide counts only — total, needs-attention, risk (the \"drop everything\" bucket), unpushed, behind, dirty, conflicted, stashed, errors. Use it first to gauge overall state, then drill in with list_repos. Takes no arguments.",
             "inputSchema": { "type": "object", "properties": {} }
         },
         {
             "name": "search",
-            "description": "Find code or repos ACROSS the whole fleet without cd-ing into each one. kind=content greps file contents (ripgrep/git grep/fallback, fixed-string — the default); kind=path|name|branch matches repo metadata. An optional selector limits which repos are searched. This is the entry point for cross-repo audits and refactors — use it instead of running grep/rg in each repo yourself.",
+            "description": "Find code or repos ACROSS the whole fleet without cd-ing into each one. kind=content greps file contents (ripgrep/git grep/fallback, fixed-string — the default); kind=path|name|branch matches repo metadata (case-insensitive substring). Sensitive paths (.env, keys, credential stores) never appear in content results. An optional selector limits which repos are searched. This is the entry point for cross-repo audits and refactors — use it instead of running grep/rg in each repo yourself.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -215,7 +215,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "changes",
-            "description": "What is actually uncommitted in each selected repo: the changed-file list (each path with its git porcelain status) and, with include_patch:true, a size-capped unified diff of the working tree. Use this to summarize or review uncommitted work — e.g. \"what's the work sitting in hybrid-flow?\" — instead of cd-ing in and running git status / git diff. Clean repos are omitted. Omit the selector to cover every dirty repo, or scope it (e.g. {\"name\": \"hybrid-flow\"}) to one.",
+            "description": "What is actually uncommitted in each selected repo: the changed-file list (each path with its git porcelain status) and, with include_patch:true, a size-capped unified diff of the working tree (diffs of sensitive files like .env or key material are withheld; the file list still names them). Use this to summarize or review uncommitted work — e.g. \"what's the work sitting in hybrid-flow?\" — instead of cd-ing in and running git status / git diff. Clean repos are omitted. Omit the selector to cover every dirty repo, or scope it (e.g. {\"name\": \"hybrid-flow\"}) to one.",
             "inputSchema": {
                 "type": "object",
                 "properties": {

@@ -123,3 +123,29 @@ fn conflicted_files_carry_the_unmerged_porcelain_code() {
         "core must read it as a conflict"
     );
 }
+
+#[test]
+fn patch_withholds_sensitive_file_contents() {
+    use cohors_git::repo_changes;
+
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    git(dir, &["-c", "init.defaultBranch=main", "init", "-q"]);
+    commit_file(dir, "code.rs", "fn main() {}\n", "init");
+    // A dirty tracked file and a brand-new .env holding a secret.
+    std::fs::write(dir.join("code.rs"), "fn main() { changed() }\n").unwrap();
+    std::fs::write(dir.join(".env"), "API_KEY=SUPER_SECRET_VALUE\n").unwrap();
+
+    let path = Utf8Path::from_path(dir).expect("temp path is valid utf-8");
+    let ch = repo_changes(path, true, 1_000_000);
+
+    // The file list still *names* the .env (that's metadata, not content)…
+    assert!(ch.files.iter().any(|f| f.path == ".env"), "{:?}", ch.files);
+    // …but the patch text must not carry its contents.
+    let patch = ch.patch.expect("patch requested");
+    assert!(patch.contains("changed()"), "normal diffs still present");
+    assert!(
+        !patch.contains("SUPER_SECRET_VALUE"),
+        "sensitive file contents leaked into the patch"
+    );
+}

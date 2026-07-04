@@ -101,10 +101,23 @@ fn worktree_patch(repo: &git2::Repository, max_bytes: usize) -> (String, bool) {
 
     let mut out = String::new();
     let mut truncated = false;
-    let _ = diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+    let _ = diff.print(git2::DiffFormat::Patch, |delta, _hunk, line| {
         if out.len() >= max_bytes {
             truncated = true;
             return false; // abort printing — we've hit the cap
+        }
+        // The *contents* of sensitive files (a dirty `.env`, key material) must
+        // never ride out in a patch — this text reaches agents over MCP and the
+        // web drawer. The changed-file *list* still names the path; only its
+        // diff is withheld (core's `is_sensitive_path` rule).
+        let sensitive = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .and_then(|p| p.to_str())
+            .is_some_and(cohors_core::is_sensitive_path);
+        if sensitive {
+            return true; // skip this delta's lines, keep printing the rest
         }
         // `+`/`-`/` ` lines carry their origin marker apart from the content;
         // file/hunk headers already include their own leading text.
