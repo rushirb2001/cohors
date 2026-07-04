@@ -88,6 +88,10 @@ pub struct Selector {
     pub has_stash: bool,
     /// Detached `HEAD`.
     pub detached: bool,
+    /// Repos with unmerged (conflicted) files.
+    pub conflicted: bool,
+    /// Repos with a multi-step git operation (merge/rebase/…) in progress.
+    pub in_operation: bool,
     /// The repo failed to read.
     pub error: bool,
     /// Current branch equals this exact name.
@@ -125,6 +129,8 @@ impl Selector {
             && !self.no_upstream
             && !self.has_stash
             && !self.detached
+            && !self.conflicted
+            && !self.in_operation
             && !self.error
             && self.branch.is_none()
             && self.attention.is_none()
@@ -178,6 +184,12 @@ impl Selector {
             return false;
         }
         if self.has_stash && repo.stash_count == 0 {
+            return false;
+        }
+        if self.conflicted && repo.worktree.conflicted == 0 {
+            return false;
+        }
+        if self.in_operation && repo.operation.is_none() {
             return false;
         }
         if self.detached && !matches!(repo.branch, Branch::Detached(_)) {
@@ -670,6 +682,8 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
             "no-upstream" => sel.no_upstream = true,
             "stash" | "has-stash" => sel.has_stash = true,
             "detached" => sel.detached = true,
+            "conflicted" | "conflicts" => sel.conflicted = true,
+            "operation" | "in-progress" => sel.in_operation = true,
             "error" | "errors" => sel.error = true,
             "attention" | "needs-attention" => sel.attention = Some(AttentionLevel::Any),
             "prs-open" => sel.min_prs = Some(1),
@@ -704,7 +718,7 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
             }
             other => {
                 return Err(ParseSelectorError(format!(
-                    "unknown selector `{other}` (try: dirty, behind, ahead, attention, clean, name:<glob>)"
+                    "unknown selector `{other}` (try: dirty, behind, ahead, conflicted, operation, attention, clean, name:<glob>)"
                 )));
             }
         }
@@ -807,6 +821,44 @@ mod parse_tests {
         expand_tilde(&mut sel, Some("/home/test"));
         assert_eq!(sel.root.as_deref(), Some("/home/test/work"));
         assert_eq!(sel.path_glob.as_deref(), Some("/home/test/oss/**"));
+    }
+
+    #[test]
+    fn conflicted_and_operation_predicates() {
+        let sel = parse_shorthand("conflicted,operation").unwrap();
+        assert!(sel.conflicted && sel.in_operation);
+        let mut repos = fleet_for_new_predicates();
+        repos[0].worktree.conflicted = 2;
+        repos[1].operation = Some(crate::model::RepoOperation::Rebase);
+        let hits = resolve(
+            &repos,
+            &Selector {
+                conflicted: true,
+                ..Default::default()
+            },
+            SortMode::Name,
+            0,
+        );
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, repos[0].id.0);
+        let hits = resolve(
+            &repos,
+            &Selector {
+                in_operation: true,
+                ..Default::default()
+            },
+            SortMode::Name,
+            0,
+        );
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, repos[1].id.0);
+    }
+
+    fn fleet_for_new_predicates() -> Vec<RepoSnapshot> {
+        vec![
+            crate::model::sample("a", "a", false, 0, 0, Some(1)),
+            crate::model::sample("b", "b", false, 0, 0, Some(1)),
+        ]
     }
 
     #[test]
