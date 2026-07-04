@@ -2569,11 +2569,15 @@ fn detail_section(lines: &mut Vec<Line<'static>>, title: String) {
     )));
 }
 
-/// Colour for a porcelain status: untracked dim, staged green, unstaged yellow.
-fn changed_file_style(status: &str, theme: &Theme) -> Style {
-    if status.starts_with("??") {
+/// Colour for a changed file: conflicts red, untracked dim, staged green,
+/// unstaged yellow. Uses the typed porcelain interpretation from `cohors-core`
+/// rather than matching status characters here.
+fn changed_file_style(f: &cohors_core::ChangedFile, theme: &Theme) -> Style {
+    if f.is_conflicted() {
+        theme.risk()
+    } else if f.is_untracked() {
         theme.dim()
-    } else if !status.starts_with(' ') {
+    } else if f.is_staged() {
         theme.staged()
     } else {
         theme.modified()
@@ -2633,10 +2637,7 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
     }
     for f in &d.changed_files {
         lines.push(Line::from(vec![
-            Span::styled(
-                format!("{} ", f.status),
-                changed_file_style(&f.status, theme),
-            ),
+            Span::styled(format!("{} ", f.status), changed_file_style(f, theme)),
             Span::raw(f.path.clone()),
         ]));
     }
