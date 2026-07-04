@@ -76,6 +76,10 @@ fn git_grep(root: &Utf8Path, query: &str, max_results: usize) -> Option<Vec<Cont
 }
 
 /// Parse `path:line:text` lines (the shared `rg`/`git grep` format) into hits.
+/// Hits inside sensitive paths (key material, credential stores, `.env`, repo
+/// internals — the core's [`cohors_core::is_sensitive_path`] rule) are dropped:
+/// `git grep` in particular searches *tracked* files, and an accidentally
+/// committed secret must not surface through the fleet search.
 fn parse_grep_lines(stdout: &str, max_results: usize) -> Vec<ContentHit> {
     let mut hits = Vec::new();
     for raw in stdout.lines() {
@@ -91,6 +95,9 @@ fn parse_grep_lines(stdout: &str, max_results: usize) -> Vec<ContentHit> {
         let Ok(line) = line.parse::<u32>() else {
             continue;
         };
+        if cohors_core::is_sensitive_path(path) {
+            continue;
+        }
         hits.push(ContentHit {
             path: Utf8PathBuf::from(path.trim_start_matches("./")),
             line,
@@ -115,15 +122,20 @@ fn walk_fallback(root: &Utf8Path, query: &str, max_results: usize) -> Vec<Conten
         if !entry.file_type().is_some_and(|t| t.is_file()) {
             continue;
         }
-        let Ok(contents) = std::fs::read_to_string(entry.path()) else {
-            continue; // binary / non-UTF-8 / unreadable — skip.
-        };
         let rel = entry
             .path()
             .strip_prefix(root.as_std_path())
             .unwrap_or(entry.path());
         let Ok(rel) = Utf8PathBuf::from_path_buf(rel.to_path_buf()) else {
             continue;
+        };
+        // Never even *open* a sensitive file (the walker visits hidden files,
+        // so `.env`, `.ssh/`, and `.git/` internals all come through here).
+        if cohors_core::is_sensitive_path(rel.as_str()) {
+            continue;
+        }
+        let Ok(contents) = std::fs::read_to_string(entry.path()) else {
+            continue; // binary / non-UTF-8 / unreadable — skip.
         };
         for (i, line) in contents.lines().enumerate() {
             if hits.len() >= max_results {
@@ -171,6 +183,30 @@ mod tests {
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
         fs::write(root.join("f.txt"), "hit\nhit\nhit\nhit\n").unwrap();
         assert_eq!(walk_fallback(&root, "hit", 2).len(), 2);
+    }
+
+    #[test]
+    fn walk_never_reads_sensitive_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
+        fs::write(root.join("app.rs"), "SECRET_TOKEN=in-code\n").unwrap();
+        fs::write(root.join(".env"), "SECRET_TOKEN=real-secret\n").unwrap();
+        fs::create_dir_all(root.join(".ssh")).unwrap();
+        fs::write(root.join(".ssh/id_rsa"), "SECRET_TOKEN too\n").unwrap();
+
+        let hits = walk_fallback(&root, "SECRET_TOKEN", 100);
+        assert_eq!(hits.len(), 1, "only the source file may surface");
+        assert_eq!(hits[0].path, Utf8PathBuf::from("app.rs"));
+    }
+
+    #[test]
+    fn grep_output_from_sensitive_paths_is_dropped() {
+        // git grep searches *tracked* files, so a committed secret would
+        // otherwise leak straight through.
+        let out = ".env:1:TOKEN=abc\n./src/ok.rs:2:TOKEN name\ncerts/tls.key:3:TOKEN\n";
+        let hits = parse_grep_lines(out, 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].path, Utf8PathBuf::from("src/ok.rs"));
     }
 
     #[test]
