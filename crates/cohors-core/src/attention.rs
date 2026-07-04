@@ -9,7 +9,7 @@
 
 use serde::Serialize;
 
-use crate::model::{Branch, RepoSnapshot};
+use crate::model::{Branch, RepoOperation, RepoSnapshot};
 
 /// How urgently a repo wants attention, least to most. Ordered (declaration
 /// order = severity order) so `max`/comparison work directly.
@@ -27,6 +27,8 @@ pub enum Severity {
 const UNPUSHED_AGING_SECS: i64 = 2 * 24 * 60 * 60; // 2 days
 /// A stash older than this (seconds) is "stale" — probably forgotten.
 const STALE_STASH_SECS: i64 = 7 * 24 * 60 * 60; // 1 week
+/// A remote not fetched for this long (seconds) is "stale" — ahead/behind may lie.
+const STALE_FETCH_SECS: i64 = 14 * 24 * 60 * 60; // 2 weeks
 
 /// A single reason a repo wants attention.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +44,14 @@ pub enum AttentionReason {
     /// On a named branch that has a remote available but no upstream — local-only
     /// work that was never pushed, so it isn't backed up anywhere (data-loss risk).
     Unpublished,
+    /// Unmerged (conflicted) files — a merge/rebase stopped mid-flight and
+    /// nothing else can proceed until they're resolved.
+    Conflicted { files: u32 },
+    /// A multi-step git operation (merge/rebase/…) is paused in this repo.
+    Operation(RepoOperation),
+    /// The remote hasn't been fetched for a long time, so ahead/behind (and the
+    /// CI/PR signals keyed off it) may be stale.
+    StaleRemote { days: i64 },
     /// Uncommitted changes in the working tree.
     Uncommitted {
         staged: u32,
@@ -59,6 +69,9 @@ impl AttentionReason {
     pub fn severity(&self) -> Severity {
         match self {
             AttentionReason::Unreadable => Severity::Risk,
+            // Conflicts block everything else in the repo; treat like data risk.
+            AttentionReason::Conflicted { .. } => Severity::Risk,
+            AttentionReason::Operation(_) => Severity::Warn,
             AttentionReason::Unpushed { aging: true, .. } => Severity::Risk,
             AttentionReason::Unpushed { aging: false, .. } => Severity::Warn,
             AttentionReason::Diverged { .. } => Severity::Warn,
@@ -70,6 +83,7 @@ impl AttentionReason {
             AttentionReason::Uncommitted { .. } => Severity::Notice,
             AttentionReason::Stash { stale: false, .. } => Severity::Info,
             AttentionReason::Detached => Severity::Info,
+            AttentionReason::StaleRemote { .. } => Severity::Info,
         }
     }
 
@@ -77,6 +91,14 @@ impl AttentionReason {
     pub fn label(&self) -> String {
         match self {
             AttentionReason::Unreadable => "could not read repo".to_string(),
+            AttentionReason::Conflicted { files } => {
+                format!(
+                    "{files} conflict{} — resolve",
+                    if *files == 1 { "" } else { "s" }
+                )
+            }
+            AttentionReason::Operation(op) => format!("{} in progress", op.label()),
+            AttentionReason::StaleRemote { days } => format!("not fetched in {days}d"),
             AttentionReason::Unpushed { commits, aging } => {
                 if *aging {
                     format!("↑{commits} unpushed · aging")
@@ -155,6 +177,14 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
             reasons.push(AttentionReason::Unpublished);
         }
 
+        if repo.worktree.conflicted > 0 {
+            reasons.push(AttentionReason::Conflicted {
+                files: repo.worktree.conflicted,
+            });
+        }
+        if let Some(op) = repo.operation {
+            reasons.push(AttentionReason::Operation(op));
+        }
         let w = &repo.worktree;
         if w.is_dirty() {
             reasons.push(AttentionReason::Uncommitted {
@@ -174,6 +204,15 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
         }
         if matches!(repo.branch, Branch::Detached(_)) {
             reasons.push(AttentionReason::Detached);
+        }
+        // Only meaningful when the repo has a remote and has fetched at least once.
+        if repo.remote_url.is_some()
+            && let Some(fetched) = repo.last_fetch
+            && now - fetched > STALE_FETCH_SECS
+        {
+            reasons.push(AttentionReason::StaleRemote {
+                days: (now - fetched) / (24 * 60 * 60),
+            });
         }
     }
 
@@ -234,6 +273,8 @@ pub struct FleetSummary {
     pub unpushed_aging: usize,
     pub behind: usize,
     pub dirty: usize,
+    /// Repos with unmerged (conflicted) files.
+    pub conflicted: usize,
     pub stash: usize,
     pub errors: usize,
 }
@@ -266,6 +307,9 @@ pub fn fleet_summary(repos: &[RepoSnapshot], now: i64) -> FleetSummary {
         if repo.is_dirty() {
             s.dirty += 1;
         }
+        if repo.worktree.conflicted > 0 {
+            s.conflicted += 1;
+        }
         if repo.stash_count > 0 {
             s.stash += 1;
         }
@@ -280,6 +324,68 @@ mod tests {
 
     const NOW: i64 = 1_700_000_000;
     const DAY: i64 = 24 * 60 * 60;
+
+    #[test]
+    fn conflicts_and_operations_outrank_plain_dirtiness() {
+        let mut repo = repo(
+            Branch::Named("main".into()),
+            0,
+            0,
+            (0, 2, 0),
+            0,
+            None,
+            Some(NOW),
+            None,
+        );
+        repo.worktree.conflicted = 3;
+        repo.operation = Some(RepoOperation::Merge);
+        let a = assess(&repo, NOW);
+        assert_eq!(a.severity, Severity::Risk);
+        assert_eq!(
+            a.primary,
+            Some(AttentionReason::Conflicted { files: 3 }),
+            "conflicts are the headline, not the dirty count"
+        );
+        assert!(
+            a.reasons
+                .contains(&AttentionReason::Operation(RepoOperation::Merge))
+        );
+        assert_eq!(
+            AttentionReason::Conflicted { files: 1 }.label(),
+            "1 conflict — resolve"
+        );
+        assert_eq!(
+            AttentionReason::Operation(RepoOperation::Rebase).label(),
+            "rebase in progress"
+        );
+    }
+
+    #[test]
+    fn stale_remote_is_informational_and_needs_a_remote() {
+        let mut repo = repo(
+            Branch::Named("main".into()),
+            0,
+            0,
+            (0, 0, 0),
+            0,
+            None,
+            Some(NOW),
+            None,
+        );
+        repo.upstream = Some(Upstream {
+            name: "origin/main".into(),
+            ahead: 0,
+            behind: 0,
+        });
+        repo.remote_url = Some("git@github.com:a/b.git".into());
+        repo.last_fetch = Some(NOW - 30 * DAY);
+        let a = assess(&repo, NOW);
+        assert_eq!(a.primary, Some(AttentionReason::StaleRemote { days: 30 }));
+        assert_eq!(a.severity, Severity::Info, "a stale remote nags gently");
+        // Without a remote URL, an old (or absent) fetch stamp says nothing.
+        repo.remote_url = None;
+        assert!(assess(&repo, NOW).reasons.is_empty());
+    }
 
     #[allow(clippy::too_many_arguments)]
     fn repo(

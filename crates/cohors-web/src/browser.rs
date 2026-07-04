@@ -294,6 +294,7 @@ fn dashboard(
             sort: sort.get(),
             dirty_only: dirty_only.get(),
             query: &filter.get(),
+            now,
         };
         compute_view(&r, &params)
             .into_iter()
@@ -901,6 +902,9 @@ fn reason_body(r: &AttentionReason) -> AnyView {
             view! { {edit_icon()}<span>{n.to_string()}</span> }.into_any()
         }
         Stash { count, .. } => view! { {stash_icon()}<span>{count.to_string()}</span> }.into_any(),
+        Conflicted { files } => view! { <span>{format!("✖{files}")}</span> }.into_any(),
+        Operation(op) => view! { <span>{format!("{}…", op.label())}</span> }.into_any(),
+        StaleRemote { days } => view! { <span>{format!("{days}d stale")}</span> }.into_any(),
         Detached => view! { {branch_icon()} }.into_any(),
         // Branch never pushed: it lives only on this disk, so a cloud-off glyph —
         // the same "not backed up to a remote" idea the Sync cell uses.

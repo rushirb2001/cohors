@@ -6,6 +6,7 @@
 //! verbatim by the TUI and (later) the web app. Keeping it here, returning
 //! plain indices, means the front-ends only map a view-model onto widgets.
 
+use crate::attention::assess;
 use crate::fuzzy;
 use crate::model::RepoSnapshot;
 use crate::sort::{SortMode, sort_indices};
@@ -17,6 +18,10 @@ pub struct ViewParams<'a> {
     pub sort: SortMode,
     pub dirty_only: bool,
     pub query: &'a str,
+    /// Unix seconds "now", injected (WASM-safe) — the needs-attention filter is
+    /// the same clock-aware [`assess`] judgment the header count uses, so the
+    /// dirty-only toggle and the summary strip can never disagree.
+    pub now: i64,
 }
 
 /// One row of the rendered list.
@@ -39,7 +44,7 @@ pub struct ViewRow {
 pub fn compute_view(repos: &[RepoSnapshot], params: &ViewParams<'_>) -> Vec<ViewRow> {
     let mut candidates: Vec<usize> = (0..repos.len()).collect();
     if params.dirty_only {
-        candidates.retain(|&i| repos[i].needs_attention());
+        candidates.retain(|&i| assess(&repos[i], params.now).needs_attention());
     }
 
     let query = params.query.trim();
@@ -89,6 +94,7 @@ mod tests {
                 sort: SortMode::DirtyFirst,
                 dirty_only: false,
                 query: "",
+                now: 0,
             },
         );
         // payments needs attention → first; then clean by recency.
@@ -105,6 +111,7 @@ mod tests {
                 sort: SortMode::DirtyFirst,
                 dirty_only: true,
                 query: "",
+                now: 0,
             },
         );
         assert_eq!(names(&rows, &repos), ["payments"]);
@@ -119,6 +126,7 @@ mod tests {
                 sort: SortMode::Name,
                 dirty_only: false,
                 query: "auth",
+                now: 0,
             },
         );
         assert_eq!(names(&rows, &repos), ["auth"]);
@@ -133,6 +141,7 @@ mod tests {
                 sort: SortMode::Recent,
                 dirty_only: false,
                 query: "   ",
+                now: 0,
             },
         );
         assert_eq!(names(&rows, &repos), ["web-app", "payments", "auth"]);
@@ -148,6 +157,7 @@ mod tests {
                 sort: SortMode::DirtyFirst,
                 dirty_only: true,
                 query: "web",
+                now: 0,
             },
         );
         assert!(rows.is_empty());

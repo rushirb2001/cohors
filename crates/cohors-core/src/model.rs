@@ -383,15 +383,6 @@ impl RepoSnapshot {
         self.last_commit.as_ref().map(|c| c.timestamp)
     }
 
-    /// Does this repo want the user's attention?
-    ///
-    /// Matches the dirty-only toggle exactly (MVP-SPEC §5): a dirty working
-    /// tree, commits to push, or a stash. Also the primary key for the
-    /// dirty-first sort.
-    pub fn needs_attention(&self) -> bool {
-        self.is_dirty() || self.ahead() > 0 || self.stash_count > 0
-    }
-
     /// Whether this snapshot represents a repo that failed to read.
     pub fn has_error(&self) -> bool {
         self.error.is_some()
@@ -498,14 +489,6 @@ mod tests {
     }
 
     #[test]
-    fn needs_attention_covers_dirty_ahead_and_stash() {
-        assert!(!sample("a", "a", false, 0, 0, Some(1)).needs_attention());
-        assert!(sample("a", "a", true, 0, 0, Some(1)).needs_attention()); // dirty
-        assert!(sample("a", "a", false, 2, 0, Some(1)).needs_attention()); // ahead
-        assert!(sample("a", "a", false, 0, 1, Some(1)).needs_attention()); // stash
-    }
-
-    #[test]
     fn ahead_behind_default_to_zero_without_upstream() {
         let s = sample("a", "a", false, 0, 0, Some(1));
         assert_eq!(s.ahead(), 0);
@@ -528,7 +511,6 @@ mod tests {
         let s = RepoSnapshot::errored(RepoId("x".into()), "x", None, "permission denied");
         assert!(s.has_error());
         assert_eq!(s.error.as_deref(), Some("permission denied"));
-        assert!(!s.needs_attention());
     }
 
     #[test]
