@@ -143,6 +143,77 @@ struct Extras {
     activity: Vec<u8>,
 }
 
+/// The history inputs a [`HistoryMemo`] is keyed on. If none of these moved,
+/// the commit walk, ahead/behind graph walk, and tag describe would produce the
+/// same answers — so they're skipped (see ADR: incremental refresh, promised in
+/// v0.2). The worktree status is NOT memoized: dirtiness lives in the working
+/// tree, which can change without touching any of these.
+#[cfg(feature = "git2-fallback")]
+#[derive(PartialEq, Eq, Clone)]
+struct HistoryKey {
+    head: Option<git2::Oid>,
+    upstream: Option<git2::Oid>,
+    /// A new tag can appear without HEAD moving; stamp the tag refs cheaply
+    /// (mtimes of `.git/packed-refs` and `.git/refs/tags`, in whole seconds).
+    tag_stamp: (Option<i64>, Option<i64>),
+    /// Activity buckets shift weekly; roll the memo over with them.
+    week: i64,
+}
+
+/// Memoized history-derived fields, reused while the [`HistoryKey`] matches.
+#[cfg(feature = "git2-fallback")]
+#[derive(Clone)]
+struct HistoryMemo {
+    key: HistoryKey,
+    upstream: Option<Upstream>,
+    activity: Vec<u8>,
+    latest_tag: Option<TagInfo>,
+}
+
+/// Process-wide memo store: repo path → last computed history fields. Sized by
+/// the fleet (one entry per repo), so no eviction is needed. Long-lived
+/// processes (`--watch`, the MCP/web servers) skip the per-repo history walks
+/// on every rescan where the repo's refs didn't move — the difference between
+/// a free tick and re-walking up to 2,000 commits × N repos every few seconds.
+#[cfg(feature = "git2-fallback")]
+fn history_memo() -> &'static std::sync::Mutex<std::collections::HashMap<String, HistoryMemo>> {
+    use std::sync::{Mutex, OnceLock};
+    static MEMO: OnceLock<Mutex<std::collections::HashMap<String, HistoryMemo>>> = OnceLock::new();
+    MEMO.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+
+/// Build the current [`HistoryKey`] for a repo (cheap: two ref reads + 2 stats).
+#[cfg(feature = "git2-fallback")]
+fn history_key(repo: &git2::Repository, now: i64) -> HistoryKey {
+    let head = repo.head().ok().and_then(|h| h.target());
+    let upstream = repo
+        .head()
+        .ok()
+        .filter(|h| h.is_branch())
+        .and_then(|h| git2::Branch::wrap(h).upstream().ok())
+        .and_then(|u| u.get().target());
+    let mtime = |p: std::path::PathBuf| -> Option<i64> {
+        std::fs::metadata(p)
+            .ok()?
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|d| d.as_secs() as i64)
+    };
+    let tag_stamp = (
+        mtime(repo.path().join("packed-refs")),
+        mtime(repo.path().join("refs/tags")),
+    );
+    const WEEK: i64 = 7 * 24 * 60 * 60;
+    HistoryKey {
+        head,
+        upstream,
+        tag_stamp,
+        week: now / WEEK,
+    }
+}
+
 #[cfg(feature = "git2-fallback")]
 fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
     let mut extras = Extras::default();
@@ -154,13 +225,41 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
         }
     };
 
+    // Always fresh: the worktree can change without any ref moving.
     extras.worktree = worktree_status(&repo);
-    extras.upstream = upstream_info(&repo);
-    extras.activity = commit_activity(&repo, now);
     extras.operation = repo_operation(&repo);
     extras.default_branch = default_branch(&repo);
     extras.last_fetch = last_fetch_time(&repo);
-    extras.latest_tag = tag_info(&repo);
+
+    // History-derived fields: reuse the memo while the refs haven't moved.
+    let key = history_key(&repo, now);
+    let cached = history_memo()
+        .lock()
+        .ok()
+        .and_then(|m| m.get(path.as_str()).filter(|memo| memo.key == key).cloned());
+    match cached {
+        Some(memo) => {
+            extras.upstream = memo.upstream;
+            extras.activity = memo.activity;
+            extras.latest_tag = memo.latest_tag;
+        }
+        None => {
+            extras.upstream = upstream_info(&repo);
+            extras.activity = commit_activity(&repo, now);
+            extras.latest_tag = tag_info(&repo);
+            if let Ok(mut m) = history_memo().lock() {
+                m.insert(
+                    path.as_str().to_string(),
+                    HistoryMemo {
+                        key,
+                        upstream: extras.upstream.clone(),
+                        activity: extras.activity.clone(),
+                        latest_tag: extras.latest_tag.clone(),
+                    },
+                );
+            }
+        }
+    }
     // The `origin` URL is local git data; cohors-github resolves it to a repo.
     extras.remote_url = repo
         .find_remote("origin")

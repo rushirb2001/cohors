@@ -363,3 +363,44 @@ fn repo_changes_lists_files_and_caps_patch() {
     assert!(ch.truncated, "a 10-byte cap must truncate");
     assert!(ch.patch.unwrap().len() <= 10);
 }
+
+/// The history memo must never serve stale data: a new commit (HEAD moved) has
+/// to invalidate it, so ahead-of-upstream and the activity sparkline update on
+/// the very next scan. And while nothing moves, repeated snapshots agree.
+#[test]
+fn history_memo_invalidates_on_new_commit() {
+    let tmp = TempDir::new().unwrap();
+    let root = Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+    let bare = root.join("origin.git");
+    let work = root.join("work");
+    git(tmp.path(), &["init", "-q", "--bare", bare.as_str()]);
+    git(tmp.path(), &["init", "-q", "-b", "main", work.as_str()]);
+    let w = work.as_std_path();
+    git(w, &["config", "user.email", "t@example.com"]);
+    git(w, &["config", "user.name", "Tester"]);
+    std::fs::write(work.join("f.txt"), "1").unwrap();
+    git(w, &["add", "-A"]);
+    git(w, &["commit", "-q", "-m", "one"]);
+    git(w, &["remote", "add", "origin", bare.as_str()]);
+    git(w, &["push", "-q", "-u", "origin", "main"]);
+
+    let repo_ref = RepoRef {
+        id: RepoId(work.as_str().to_string()),
+        path: Some(work.clone()),
+    };
+    let now = 1_700_000_000;
+
+    // Two scans with nothing moved: the memoized fields agree exactly.
+    let first = snapshot_repo(&repo_ref, now);
+    let second = snapshot_repo(&repo_ref, now);
+    assert_eq!(first.upstream, second.upstream);
+    assert_eq!(first.activity, second.activity);
+    assert_eq!(first.ahead(), 0);
+
+    // A new commit moves HEAD → the memo must roll over, not serve ahead=0.
+    std::fs::write(work.join("f.txt"), "2").unwrap();
+    git(w, &["add", "-A"]);
+    git(w, &["commit", "-q", "-m", "two"]);
+    let third = snapshot_repo(&repo_ref, now);
+    assert_eq!(third.ahead(), 1, "stale memo served after HEAD moved");
+}
