@@ -27,4 +27,4 @@ mod runner;
 pub use dispatch::{Caps, dispatch};
 pub use git::{commit, fetch, pull_ff, push, run_command, stash_push};
 pub use registry::{ActionDef, Tier, find as find_action, registry};
-pub use runner::{RunResult, run_each};
+pub use runner::{RunResult, run_each, spawn_bounded};

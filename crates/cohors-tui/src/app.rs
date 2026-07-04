@@ -1072,6 +1072,7 @@ mod tests {
             operation: None,
             default_branch: None,
             last_fetch: None,
+            latest_tag: None,
             remote: None,
             last_commit: Some(CommitMeta {
                 short_id: "abc1234".to_string(),

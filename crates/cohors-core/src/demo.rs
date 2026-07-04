@@ -9,9 +9,10 @@
 
 use camino::Utf8PathBuf;
 
-use crate::detail::{ChangedFile, RepoDetail};
+use crate::detail::{BranchInfo, ChangedFile, RepoDetail};
 use crate::model::{
-    Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, Upstream, WorktreeStatus,
+    Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, TagInfo, Upstream,
+    WorktreeStatus,
 };
 use crate::standup::StandupCommit;
 
@@ -218,6 +219,11 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         operation: None,
         default_branch: Some("main".into()),
         last_fetch: None,
+        // Deterministic tag flavor: remoted repos show a release + drift.
+        latest_tag: on_remote.then(|| TagInfo {
+            name: "v1.4.0".into(),
+            commits_since: (s.name.len() % 7) as u32,
+        }),
         remote,
         last_commit: (s.error.is_none()).then(|| CommitMeta {
             short_id: "abc1234".into(),
@@ -322,9 +328,24 @@ pub fn detail(now: i64) -> RepoDetail {
             },
         ],
         branches: vec![
-            "main".to_string(),
-            "feat/idempotency".to_string(),
-            "spike/webhooks".to_string(),
+            BranchInfo {
+                name: "main".to_string(),
+                ahead: 2,
+                behind: 0,
+                has_upstream: true,
+                is_current: true,
+            },
+            BranchInfo {
+                name: "feat/idempotency".to_string(),
+                ahead: 3,
+                behind: 1,
+                has_upstream: true,
+                is_current: false,
+            },
+            BranchInfo {
+                name: "spike/webhooks".to_string(),
+                ..BranchInfo::default()
+            },
         ],
         stashes: vec!["WIP on main: dashboard tweaks".to_string()],
     }

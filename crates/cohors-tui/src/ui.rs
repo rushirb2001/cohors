@@ -2641,16 +2641,35 @@ fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, theme: &The
         ]));
     }
     detail_section(&mut lines, format!("Branches ({})", d.branches.len()));
-    for (i, b) in d.branches.iter().enumerate() {
-        let current = i == 0 && branch.as_deref() == Some(b.as_str());
-        let style = if current {
+    for b in &d.branches {
+        let style = if b.is_current {
             theme.ahead().add_modifier(Modifier::BOLD)
         } else {
             Style::new()
         };
+        // Per-branch sync against its own upstream: "↑2 ↓1", or "no upstream"
+        // for a local-only branch (in-sync tracked branches show nothing).
+        let sync = if !b.has_upstream {
+            "  · no upstream".to_string()
+        } else if b.ahead > 0 || b.behind > 0 {
+            let mut s = String::from("  ");
+            if b.ahead > 0 {
+                s.push_str(&format!("↑{}", b.ahead));
+            }
+            if b.behind > 0 {
+                if b.ahead > 0 {
+                    s.push(' ');
+                }
+                s.push_str(&format!("↓{}", b.behind));
+            }
+            s
+        } else {
+            String::new()
+        };
         lines.push(Line::from(vec![
-            Span::styled(if current { "● " } else { "  " }, style),
-            Span::styled(b.clone(), style),
+            Span::styled(if b.is_current { "● " } else { "  " }, style),
+            Span::styled(b.name.clone(), style),
+            Span::styled(sync, theme.dim()),
         ]));
     }
     if !d.stashes.is_empty() {
@@ -3173,6 +3192,7 @@ mod tests {
             operation: None,
             default_branch: None,
             last_fetch: None,
+            latest_tag: None,
             remote: None,
             last_commit: commit.map(|(ts, summary)| CommitMeta {
                 short_id: "a1b2c3d".to_string(),

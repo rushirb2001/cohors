@@ -104,8 +104,11 @@ pub fn discover(opts: &DiscoveryOptions) -> Result<Vec<RepoRef>, GitError> {
                 return WalkState::Skip;
             }
 
-            // A directory containing `.git` (dir or file) is a repo.
-            if dir.join(".git").exists() {
+            // A directory containing `.git` (dir or file) is a repo — and a
+            // directory that IS a git dir (a bare repo / mirror: `HEAD` +
+            // `objects/` + `refs/`, no worktree) counts too, so server-style
+            // clones like `foo.git` show up in the fleet.
+            if dir.join(".git").exists() || is_bare_repo(&dir) {
                 let canonical = dir.canonicalize_utf8().unwrap_or(dir);
                 if let Ok(mut guard) = found.lock() {
                     guard.push(canonical);
@@ -178,4 +181,10 @@ fn add_glob(builder: &mut GlobSetBuilder, pattern: &str) -> Result<(), GitError>
     })?;
     builder.add(glob);
     Ok(())
+}
+
+/// Does `dir` look like a bare repository (it *is* the git dir)? All three
+/// hallmarks are required, so an ordinary source tree can't false-positive.
+fn is_bare_repo(dir: &Utf8PathBuf) -> bool {
+    dir.join("HEAD").is_file() && dir.join("objects").is_dir() && dir.join("refs").is_dir()
 }

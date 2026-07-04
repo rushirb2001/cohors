@@ -522,6 +522,7 @@ name = "cohors-github"
 version = "0.4.39"
 dependencies = [
  "cohors-core",
+ "rayon",
  "serde",
  "serde_json",
  "tracing",

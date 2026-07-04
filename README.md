@@ -110,12 +110,15 @@ Inside the dashboard: `↑`/`↓` move · `Enter` inspect · `/` fuzzy filter ·
 
 A Rust workspace around a pure, I/O-free core with thin adapters — so the *same* analysis powers the terminal, the agent, and the browser:
 
-- `cohors-core` — pure, WASM-safe models and analysis: attention scoring, the selector language, search.
-- `cohors-config` · `cohors-git` ([gitoxide](https://github.com/GitoxideLabs/gitoxide)) · `cohors-github` — config, local git, and GitHub adapters.
-- `cohors-tui` ([ratatui](https://ratatui.rs)) — the `cohors` binary: dashboard, CLI, MCP server, and the `cohors web` server.
-- `cohors-web` ([Leptos](https://leptos.dev), WASM) — the browser front-end: `cohors-core` compiled to WebAssembly, rendering the same fleet the server scans.
+- `cohors-core` — pure, WASM-safe models and analysis: attention scoring, the selector language (+ its shorthand parser), search.
+- `cohors-config` · `cohors-git` ([gitoxide](https://github.com/GitoxideLabs/gitoxide)) · `cohors-github` — config, local git (bare repos included, history-memoized rescans), and GitHub (parallel, rate-limit-aware) adapters.
+- `cohors-actions` — the write layer: the git action primitives, the one action registry every surface is wired from, and the `dispatch()` the machine surfaces share.
+- `cohors-fleet` — the composition layer: one `Scanner` (config + git + github wired once) and the read facade every front-end goes through — enforced by tests, not convention.
+- `cohors-mcp` — the MCP server (hand-rolled JSON-RPC over stdio), launched by `cohors mcp`.
+- `cohors-tui` ([ratatui](https://ratatui.rs)) — the `cohors` binary: dashboard and CLI.
+- `cohors-web` ([Leptos](https://leptos.dev), WASM) — the browser front-end plus the native `cohors web` server (which can also run gated bulk actions via `POST /api/action`).
 
-Because the core is independent of its data sources and front-ends, one selector language and one analysis serve every surface.
+Because the core is independent of its data sources and front-ends, one selector language, one analysis, and one action registry serve every surface — and structural tests fail the build if any surface drifts.
 
 ## Contributing
 

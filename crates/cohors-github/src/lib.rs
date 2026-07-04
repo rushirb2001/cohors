@@ -44,44 +44,39 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
         return;
     };
 
-    // One agent (and so one connection pool) for the whole pass, with the
+    // One agent (and so one shared connection pool) for the whole pass, with the
     // timeout baked in so no single request can hang the background thread.
     let agent = ureq::AgentBuilder::new().timeout(HTTP_TIMEOUT).build();
 
-    // Once GitHub tells us the rate limit is exhausted, stop making network
-    // calls this round — further requests would just 403. Cache hits are still
-    // served below since they don't touch the network.
-    let mut rate_limited = false;
+    // Once GitHub says the rate limit is exhausted, in-flight workers finish but
+    // no new fetches start — shared across the pool, hence atomic. Cache hits
+    // are still served below since they don't touch the network.
+    let rate_limited = std::sync::atomic::AtomicBool::new(false);
 
-    for snap in snapshots.iter_mut() {
-        let Some(remote_url) = snap.remote_url.as_deref() else {
-            continue;
-        };
-        let Some((owner, repo)) = url::parse_repo(remote_url) else {
-            // Non-GitHub or unparseable — leave `remote` as `None`.
-            continue;
-        };
-        let key = format!("{owner}/{repo}");
+    // Phase 1 (cheap, sequential): resolve which repos are GitHub and which of
+    // those miss the cache. Cache hits cost nothing and are applied at the end.
+    let pending: Vec<(String, String, String)> = snapshots
+        .iter()
+        .filter_map(|snap| {
+            let (owner, repo) = url::parse_repo(snap.remote_url.as_deref()?)?;
+            let key = format!("{owner}/{repo}");
+            cached(&key).is_none().then_some((owner, repo, key))
+        })
+        .collect();
 
-        // Serve from cache if still fresh.
-        if let Some(info) = cached(&key) {
-            snap.remote = Some(info);
-            continue;
+    // Phase 2: fetch the misses on a bounded pool. Each repo costs up to four
+    // HTTP round-trips, so a sequential pass over a large fleet took minutes;
+    // ENRICH_POOL_SIZE keeps it fast without hammering the API (which would
+    // trip secondary rate limits — deliberately NOT one-task-per-repo).
+    let fetch_one = |(owner, repo, key): &(String, String, String)| {
+        if rate_limited.load(std::sync::atomic::Ordering::Relaxed) {
+            return;
         }
-
-        if rate_limited {
-            // Skip the network; a later scan (after the limit resets) fills it in.
-            continue;
-        }
-
-        match fetch_remote(&agent, token, &owner, &repo) {
-            Ok(info) => {
-                store(&key, info.clone());
-                snap.remote = Some(info);
-            }
+        match fetch_remote(&agent, token, owner, repo) {
+            Ok(info) => store(key, info),
             Err(FetchError::RateLimited) => {
                 tracing::warn!(repo = %key, "github rate limit hit; skipping remaining repos this round");
-                rate_limited = true;
+                rate_limited.store(true, std::sync::atomic::Ordering::Relaxed);
             }
             Err(FetchError::Other(reason)) => {
                 // One bad repo (network blip, private/404, transient 5xx) must
@@ -89,8 +84,33 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
                 tracing::debug!(repo = %key, error = %reason, "github enrich failed; leaving remote empty");
             }
         }
+    };
+    match rayon::ThreadPoolBuilder::new()
+        .num_threads(ENRICH_POOL_SIZE)
+        .build()
+    {
+        Ok(pool) => pool.install(|| {
+            use rayon::prelude::*;
+            pending.par_iter().for_each(fetch_one);
+        }),
+        Err(_) => pending.iter().for_each(fetch_one),
+    }
+
+    // Phase 3: apply from the cache — covers both prior hits and fresh stores.
+    for snap in snapshots.iter_mut() {
+        if snap.remote.is_none()
+            && let Some(url) = snap.remote_url.as_deref()
+            && let Some((owner, repo)) = url::parse_repo(url)
+        {
+            snap.remote = cached(&format!("{owner}/{repo}"));
+        }
     }
 }
+
+/// How many repos enrich concurrently. Each costs up to four requests; four is
+/// GitHub-polite (their guidance discourages heavy request concurrency) while
+/// still collapsing a 200-repo cold pass from minutes to seconds.
+const ENRICH_POOL_SIZE: usize = 4;
 
 /// Acquire a GitHub token for native use: `gh auth token`, then `$GITHUB_TOKEN`.
 /// Empty values count as absent. Never panics or blocks indefinitely.

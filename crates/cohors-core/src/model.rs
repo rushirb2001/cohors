@@ -169,6 +169,15 @@ impl RepoOperation {
     }
 }
 
+/// The repo's most recent tag (by `git describe`) and how far HEAD has moved
+/// past it — "v1.4.0 +5" tells a release-aware project it has unshipped work.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagInfo {
+    pub name: String,
+    /// Commits on HEAD since the tag (0 = HEAD is exactly the tag).
+    pub commits_since: u32,
+}
+
 /// Remote (GitHub) info for a repo, populated by `cohors-github` (v0.2). `None`
 /// on a snapshot means "not a GitHub repo, or not fetched yet".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -290,6 +299,10 @@ pub struct RepoSnapshot {
     /// (haven't fetched in a while) signal without touching the network.
     #[serde(default)]
     pub last_fetch: Option<i64>,
+    /// The newest tag reachable from HEAD + commits since it (`git describe`).
+    /// `None` when the repo has no tags (or the git2 walk is unavailable).
+    #[serde(default)]
+    pub latest_tag: Option<TagInfo>,
     /// GitHub-derived info (v0.2), filled asynchronously after the local scan;
     /// `None` until fetched (or for non-GitHub repos).
     #[serde(default)]
@@ -336,6 +349,7 @@ impl RepoSnapshot {
             operation: None,
             default_branch: None,
             last_fetch: None,
+            latest_tag: None,
             remote: None,
             error: Some(error.into()),
             activity: Vec::new(),
@@ -381,6 +395,12 @@ impl RepoSnapshot {
     /// Whether this snapshot represents a repo that failed to read.
     pub fn has_error(&self) -> bool {
         self.error.is_some()
+    }
+
+    /// Which forge the repo's remote points at, derived from `remote_url` on
+    /// demand (never stored — see [`classify_remote`]).
+    pub fn remote_kind(&self) -> Option<RemoteKind> {
+        self.remote_url.as_deref().and_then(classify_remote)
     }
 
     /// Whether HEAD is on the repo's known default branch. `None` when the current
@@ -430,6 +450,7 @@ pub(crate) fn sample(
         operation: None,
         default_branch: Some("main".to_string()),
         last_fetch: None,
+        latest_tag: None,
         remote: None,
         last_commit: commit_ts.map(|t| CommitMeta {
             short_id: "abc1234".to_string(),
@@ -516,5 +537,108 @@ mod tests {
         let json = serde_json::to_string(&s).expect("serialize");
         let back: RepoSnapshot = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(s, back);
+    }
+}
+
+// ── Remote-host classification ───────────────────────────────────────────────
+// Pure parsing of a remote URL into "which forge is this" — derived on demand
+// from `remote_url`, never stored, so it costs nothing in serialization and can
+// never go stale. Lets a surface offer host-appropriate affordances (a PR link,
+// a GitLab MR label) or a future remote adapter pick the right API.
+
+/// Which hosting service a remote URL points at, by hostname. `Other` covers
+/// self-hosted forges (a self-hosted GitLab still classifies as `GitLab` only
+/// when its hostname says so — detection is by name, not by probing).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteKind {
+    GitHub,
+    GitLab,
+    Bitbucket,
+    Other,
+}
+
+/// Extract the hostname from the git remote URL shapes in the wild:
+/// `git@host:path`, `ssh://[user@]host/path`, `http(s)://[user@]host/path`.
+/// Returns `None` for local/file remotes and anything unrecognizable.
+pub fn remote_host(url: &str) -> Option<String> {
+    let url = url.trim();
+    let rest = if let Some(scp) = url.strip_prefix("git@") {
+        // scp-like: host and path are separated by a colon.
+        scp.split(':').next().unwrap_or(scp).to_string()
+    } else {
+        let after = url
+            .strip_prefix("ssh://")
+            .or_else(|| url.strip_prefix("https://"))
+            .or_else(|| url.strip_prefix("http://"))?;
+        // Drop `user@`, then take up to the first `/`, then drop `:port`.
+        let host_port = after
+            .rsplit_once('@')
+            .map(|(_, h)| h)
+            .unwrap_or(after)
+            .split('/')
+            .next()
+            .unwrap_or("");
+        host_port.split(':').next().unwrap_or(host_port).to_string()
+    };
+    let rest = rest.to_ascii_lowercase();
+    (!rest.is_empty()).then_some(rest)
+}
+
+/// Classify a remote URL by its hostname. `None` when no host can be parsed.
+pub fn classify_remote(url: &str) -> Option<RemoteKind> {
+    let host = remote_host(url)?;
+    Some(if host == "github.com" {
+        RemoteKind::GitHub
+    } else if host == "gitlab.com" || host.starts_with("gitlab.") {
+        RemoteKind::GitLab
+    } else if host == "bitbucket.org" {
+        RemoteKind::Bitbucket
+    } else {
+        RemoteKind::Other
+    })
+}
+
+#[cfg(test)]
+mod remote_kind_tests {
+    use super::*;
+
+    #[test]
+    fn classifies_the_common_url_shapes() {
+        for url in [
+            "git@github.com:acme/pay.git",
+            "https://github.com/acme/pay",
+            "ssh://git@github.com/acme/pay.git",
+            "https://user@github.com:443/acme/pay",
+        ] {
+            assert_eq!(classify_remote(url), Some(RemoteKind::GitHub), "{url}");
+        }
+        assert_eq!(
+            classify_remote("git@gitlab.example.io:g/r.git"),
+            Some(RemoteKind::GitLab),
+            "self-hosted gitlab.* hostnames classify as GitLab"
+        );
+        assert_eq!(
+            classify_remote("git@git.example.io:g/r.git"),
+            Some(RemoteKind::Other),
+            "an unrecognized hostname is Other"
+        );
+        assert_eq!(
+            classify_remote("https://gitlab.acme.dev/g/r"),
+            Some(RemoteKind::GitLab)
+        );
+        assert_eq!(
+            classify_remote("git@bitbucket.org:t/r.git"),
+            Some(RemoteKind::Bitbucket)
+        );
+        assert_eq!(classify_remote("/local/bare.git"), None);
+    }
+
+    #[test]
+    fn snapshot_helper_derives_from_remote_url() {
+        let mut s = sample("a", "a", false, 0, 0, None);
+        assert_eq!(s.remote_kind(), None);
+        s.remote_url = Some("git@github.com:acme/a.git".into());
+        assert_eq!(s.remote_kind(), Some(RemoteKind::GitHub));
     }
 }

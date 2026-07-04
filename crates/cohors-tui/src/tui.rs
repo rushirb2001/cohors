@@ -1012,10 +1012,12 @@ fn cap_output(s: String) -> String {
     out
 }
 
-/// Run a git action on a worker thread, then re-snapshot the repo so the row
-/// reflects the new ahead/behind, and report back.
+/// Run a git action on the shared bounded action pool (not one OS thread per
+/// repo — "fetch all" on a 500-repo fleet must not open 500 concurrent
+/// connections), then re-snapshot the repo so the row reflects the new
+/// ahead/behind, and report back. Rows stream in as each repo finishes.
 fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathBuf, name: String) {
-    std::thread::spawn(move || {
+    cohors_actions::spawn_bounded(move || {
         let outcome = match kind {
             ActionKind::Fetch => action::fetch(&path, &name),
             ActionKind::Pull => action::pull_ff(&path, &name),
