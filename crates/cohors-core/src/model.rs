@@ -261,6 +261,54 @@ pub struct RemoteDetail {
     pub latest_run: Option<CiStatus>,
 }
 
+/// String round-trips for the status enums, so adapters, plugins, and text
+/// surfaces (CLI flags, MCP args, log lines) can speak them without JSON.
+/// `Display` matches the serde `snake_case` wire form; `FromStr` accepts it
+/// back (case-insensitive).
+macro_rules! string_roundtrip {
+    ($ty:ty { $($variant:path => $text:literal),+ $(,)? }) => {
+        impl std::fmt::Display for $ty {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str(match self { $($variant => $text),+ })
+            }
+        }
+        impl std::str::FromStr for $ty {
+            type Err = String;
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s.to_ascii_lowercase().as_str() {
+                    $($text => Ok($variant),)+
+                    other => Err(format!(
+                        concat!("unknown ", stringify!($ty), " `{}`"), other
+                    )),
+                }
+            }
+        }
+    };
+}
+
+string_roundtrip!(CiStatus {
+    CiStatus::Passing => "passing",
+    CiStatus::Failing => "failing",
+    CiStatus::Pending => "pending",
+    CiStatus::None => "none",
+});
+
+string_roundtrip!(RepoOperation {
+    RepoOperation::Merge => "merge",
+    RepoOperation::Rebase => "rebase",
+    RepoOperation::CherryPick => "cherry_pick",
+    RepoOperation::Revert => "revert",
+    RepoOperation::Bisect => "bisect",
+    RepoOperation::Mailbox => "mailbox",
+});
+
+string_roundtrip!(RemoteKind {
+    RemoteKind::GitHub => "github",
+    RemoteKind::GitLab => "gitlab",
+    RemoteKind::Bitbucket => "bitbucket",
+    RemoteKind::Other => "other",
+});
+
 /// A full point-in-time view of one repo — the unit the dashboard renders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepoSnapshot {
@@ -511,6 +559,25 @@ mod tests {
         let s = RepoSnapshot::errored(RepoId("x".into()), "x", None, "permission denied");
         assert!(s.has_error());
         assert_eq!(s.error.as_deref(), Some("permission denied"));
+    }
+
+    #[test]
+    fn status_enums_round_trip_as_strings() {
+        for (s, v) in [("passing", CiStatus::Passing), ("none", CiStatus::None)] {
+            assert_eq!(v.to_string(), s);
+            assert_eq!(s.parse::<CiStatus>().unwrap(), v);
+        }
+        assert_eq!(
+            "REBASE".parse::<RepoOperation>().unwrap(),
+            RepoOperation::Rebase
+        );
+        assert_eq!(RemoteKind::GitLab.to_string(), "gitlab");
+        assert!("sparkly".parse::<CiStatus>().is_err());
+        // Display matches the serde snake_case wire form exactly.
+        for v in [RepoOperation::CherryPick, RepoOperation::Mailbox] {
+            let wire = serde_json::to_string(&v).unwrap();
+            assert_eq!(wire.trim_matches('"'), v.to_string());
+        }
     }
 
     #[test]

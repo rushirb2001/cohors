@@ -47,6 +47,15 @@ fn now_secs() -> i64 {
 }
 
 impl RepoProvider for LocalGitProvider {
+    /// Override the trait's sequential default with the parallel fan-out.
+    fn scan_fleet(&self) -> Result<Vec<RepoSnapshot>, Self::Error> {
+        self.scan()
+    }
+
+    fn source_name(&self) -> &'static str {
+        "local-git"
+    }
+
     type Error = GitError;
 
     fn list(&self) -> Result<Vec<RepoRef>, GitError> {
