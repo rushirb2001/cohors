@@ -438,7 +438,6 @@ fn dashboard(
                                     <th class="mk">"Mark"</th>
                                     {sort_th("Repo", SortMode::Name, sort)}
                                     {sort_th("Sync", SortMode::AheadBehind, sort)}
-                                    <th>"Changes"</th>
                                     <th>"Stash"</th>
                                     <th>"PRs"</th>
                                     <th>"CI"</th>
@@ -1081,7 +1080,6 @@ fn repo_row(
                 <td></td>
                 <td></td>
                 <td></td>
-                <td></td>
                 <td class="last"></td>
                 <td class="spark-cell"></td>
                 <td class="status risk">{reason}</td>
@@ -1104,7 +1102,6 @@ fn repo_row(
             {mark_td}
             <td class=name_class>{repo_cell(s)}</td>
             <td>{sync_cell(s)}</td>
-            <td>{changes_cell(s)}</td>
             <td>{stash_cell(s)}</td>
             <td>{prs_cell(s, busy)}</td>
             <td>{ci_cell(s, busy)}</td>
@@ -1179,31 +1176,6 @@ fn sync_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
             });
             view! { <span>{ahead}{sep}{behind}</span> }.into_any()
         }
-    }
-}
-
-/// The Changes cell: the count of uncommitted changes next to a pencil icon
-/// (green when all staged, amber when there's unstaged work), or "clean".
-fn changes_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
-    let w = &s.worktree;
-    let total = w.staged + w.modified + w.untracked;
-    if total == 0 {
-        ok_glyph("clean working tree")
-    } else {
-        let color = if w.modified > 0 || w.untracked > 0 {
-            "modified"
-        } else {
-            "staged"
-        };
-        let tip = format!(
-            "{} uncommitted change{} — {} staged · {} modified · {} untracked",
-            total,
-            if total == 1 { "" } else { "s" },
-            w.staged,
-            w.modified,
-            w.untracked
-        );
-        count_icon(total, edit_icon(), color, tip)
     }
 }
 
@@ -1345,11 +1317,6 @@ fn iconw<V: IntoView>(icon: V, class: &'static str, tip: &'static str) -> AnyVie
 /// A count next to its column icon (e.g. `3 ✎`), colored by `color`.
 fn count_icon<V: IntoView>(n: u32, icon: V, color: &'static str, tip: String) -> AnyView {
     view! { <span class=format!("count {color}") title=tip>{n.to_string()}{icon}</span> }.into_any()
-}
-
-/// A faint check for a cleared/good empty cell (clean, up to date), tooltipped.
-fn ok_glyph(tip: &'static str) -> AnyView {
-    iconw(check_icon(), "muted", tip)
 }
 
 /// The Stash cell: a box icon + count (amber), or a faint box when there are none.
