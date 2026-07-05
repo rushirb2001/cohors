@@ -11,16 +11,16 @@ expression: "render_to_string(&app, 56, 22)"
 │ 1 at risk · 2 warning · 1 minor · 1 calm             │
 ╰──────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────╮
-│    Repo                    Sync   CI  Last  Status   │
 │                       ↓ 4 more                       │
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────
-╭────────────────╮ ╭────────────────╮ ╭────────────────╮
-│     select     │ │ act  → legacy- │ │      view      │
-│ ────────────── │ │ ────────────── │ │ ────────────── │
-│ a mark │ Esc c │ │ ⏎ open │ P pus │ │ ↑/↓ mo │ ? hel │
-│ / filt │       │ │ f fetc │ S sta │ │ s sort │ q qui │
-│ ────────────── │ │ p pull │       │ │ ────────────── │
-│ Space mark rep │ │ ────────────── │ │ d attention    │
-│                │ │ ! run command  │ │ Tab standup    │
-╰────────────────╯ ╰────────────────╯ ╰────────────────╯
+╭──────────────────────────────────────────────────────╮
+│ select                                               │
+│   ␣ mrk repo · a mrk all · / filter · Esc clear      │
+│ act  → legacy-billing                                │
+│   ⏎ open · f fetch · p pull · P push · S stash       │
+│   ! run cmd                                          │
+│ view                                                 │
+│   ↑/↓ move · s sort · d attn · ⇥ standup · ? help    │
+│   q quit                                             │
+╰──────────────────────────────────────────────────────╯

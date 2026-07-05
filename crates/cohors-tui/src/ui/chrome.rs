@@ -172,58 +172,49 @@ pub(crate) fn footer_item_w(key: &str, desc: &str) -> usize {
     key.chars().count() + 1 + desc.chars().count()
 }
 
-/// Hints at or below this width pack into the two-column grid; wider ones
-/// ("run command", "mark repo"…) drop to full-width rows below the grid, so the
-/// columns stay narrow enough to always fit two-up — even on a compact terminal.
-pub(crate) const FOOTER_GRID_MAX: usize = 10;
-
-/// One footer hint: `(key, description)`.
-type Hint<'a> = &'a (&'a str, &'a str);
-
-/// Split a group's hints into the two-column "short" set and the full-width
-/// "long" set, preserving order.
-pub(crate) fn footer_partition<'a>(
-    items: &'a [(&'a str, &'a str)],
-) -> (Vec<Hint<'a>>, Vec<Hint<'a>>) {
-    items
-        .iter()
-        .partition(|(k, d)| footer_item_w(k, d) <= FOOTER_GRID_MAX)
+/// Which Normal-mode footer to draw at a given width.
+#[derive(Clone, Copy, PartialEq)]
+enum FooterStyle {
+    /// The consolidated one-box bar (widest): three sections side by side.
+    Bar,
+    /// Sections stacked, hints packed to full width (never truncates).
+    Stacked,
+    /// A single curated line of the top keys (ultra-narrow).
+    Essentials,
 }
 
-/// A group box's content height: the in-box title row + its divider rule, the
-/// two-column grid rows, the full-width long rows, and a 1-row horizontal divider
-/// between them when both are present.
-pub(crate) fn footer_group_rows(items: &[(&str, &str)]) -> u16 {
-    let (short, long) = footer_partition(items);
-    let hr = if !short.is_empty() && !long.is_empty() {
-        1
+/// Pick the richest footer style that fits `width`.
+fn footer_normal_style(app: &App, width: u16) -> FooterStyle {
+    let (_, _, bar_total) = footer_bar_geometry(app);
+    if bar_total <= width {
+        FooterStyle::Bar
+    } else if width >= 30 {
+        FooterStyle::Stacked
     } else {
-        0
-    };
-    (2 + short.len().div_ceil(2) + hr + long.len()) as u16
+        FooterStyle::Essentials
+    }
 }
 
-/// The footer's total height (including borders). In Normal mode it's the three
-/// group boxes, sized to the tallest after responsive column collapse; in the
-/// overlay modes it's a single box of wrapped hint rows.
+/// The footer's total height (including borders). In Normal mode it's the hint
+/// bar / stacked / essentials layout; in the overlay modes it's a single box of
+/// wrapped hint rows.
 pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
     if app.mode == Mode::Normal {
         // The hint bar is collapsed to just its toggle divider.
         if app.hints_hidden {
             return 1;
         }
-        // The consolidated one-box bar when it fits; the three stacked group
-        // boxes otherwise (narrow terminals).
-        let (_, bar_rows, bar_total) = footer_bar_geometry(app);
-        if bar_total <= width {
-            return bar_rows + 2 + 1; // borders + the toggle divider row
-        }
-        let rows = footer_groups(app)
-            .iter()
-            .map(|(_, items)| footer_group_rows(items))
-            .max()
-            .unwrap_or(1);
-        rows + 2 + 1 // group-box border + the toggle divider row
+        // Richest footer that fits: the one-box bar, else the stacked layout,
+        // else the ultra-narrow essentials line. Plus box borders + the toggle
+        // divider row.
+        let content = match footer_normal_style(app, width) {
+            FooterStyle::Bar => footer_bar_geometry(app).1,
+            FooterStyle::Stacked => footer_stacked_rows(app, width.saturating_sub(2)),
+            FooterStyle::Essentials => {
+                pack_count(FOOTER_ESSENTIALS, width.saturating_sub(4).max(1) as usize)
+            }
+        };
+        content + 2 + 1
     } else {
         let lines = footer_lines(app, theme);
         let inner = width.saturating_sub(4).max(1);
@@ -249,11 +240,10 @@ pub(crate) fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Th
             Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
         render_hint_divider(frame, divider, app.hints_hidden, theme);
         if !app.hints_hidden {
-            let (_, _, bar_total) = footer_bar_geometry(app);
-            if bar_total <= area.width {
-                render_footer_bar(frame, boxes, app, theme);
-            } else {
-                render_footer_boxed(frame, boxes, app, theme);
+            match footer_normal_style(app, area.width) {
+                FooterStyle::Bar => render_footer_bar(frame, boxes, app, theme),
+                FooterStyle::Stacked => render_footer_stacked(frame, boxes, app, theme),
+                FooterStyle::Essentials => render_footer_essentials(frame, boxes, theme),
             }
         }
     } else {
@@ -301,137 +291,189 @@ pub(crate) fn render_footer_simple(
     );
 }
 
-/// Three titled group boxes side by side, directly in the footer area (no outer
-/// box, to save space).
-pub(crate) fn render_footer_boxed(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    let groups = footer_groups(app);
-    let cols = Layout::horizontal(vec![Constraint::Fill(1); groups.len()])
-        .spacing(1)
-        .split(area);
-    for (i, (label, items)) in groups.iter().enumerate() {
-        render_group_box(frame, cols[i], label, items, app, theme);
+/// The abbreviated hint groups for the compact (stacked / essentials) footers:
+/// short descriptions and symbol keys (`␣` Space, `⇥` Tab) so more fits per row.
+/// The wide one-box bar keeps the full labels from [`footer_groups`].
+fn footer_groups_short(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
+    if app.mode != Mode::Normal {
+        return footer_groups(app); // overlays are already terse
     }
+    vec![
+        (
+            "select",
+            vec![
+                ("␣", "mrk repo"),
+                ("a", "mrk all"),
+                ("/", "filter"),
+                ("Esc", "clear"),
+            ],
+        ),
+        (
+            "act",
+            vec![
+                ("⏎", "open"),
+                ("f", "fetch"),
+                ("p", "pull"),
+                ("P", "push"),
+                ("S", "stash"),
+                ("!", "run cmd"),
+            ],
+        ),
+        (
+            "view",
+            vec![
+                ("↑/↓", "move"),
+                ("s", "sort"),
+                ("d", "attn"),
+                ("⇥", "standup"),
+                ("?", "help"),
+                ("q", "quit"),
+            ],
+        ),
+    ]
 }
 
-/// A single titled group box. Short hints fill a two-column grid split by a thin
-/// `│` divider; multi-word hints stack full-width below it. No inner padding, so
-/// the two columns stay two-up even on a compact terminal. The `act` box carries
-/// the live action-target on its bottom edge.
-pub(crate) fn render_group_box(
-    frame: &mut Frame,
-    area: Rect,
-    label: &str,
-    items: &[(&'static str, &'static str)],
-    app: &App,
+/// The curated top keys for the ultra-narrow essentials footer (the rest live
+/// behind `?`).
+const FOOTER_ESSENTIALS: &[(&str, &str)] = &[
+    ("↑/↓", "move"),
+    ("⏎", "open"),
+    ("/", "filter"),
+    ("?", "help"),
+    ("q", "quit"),
+];
+
+/// How many rows packing `items` into `avail` columns needs (` · ` between
+/// hints, never splitting one). Mirrors the width maths in [`pack_hints`].
+fn pack_count(items: &[(&str, &str)], avail: usize) -> u16 {
+    let mut rows = 0u16;
+    let mut cur = 0usize;
+    let mut any = false;
+    for (k, d) in items {
+        let w = footer_item_w(k, d);
+        if any && cur + 3 + w > avail {
+            rows += 1;
+            cur = 0;
+            any = false;
+        }
+        cur += if any { 3 + w } else { w };
+        any = true;
+    }
+    rows + u16::from(any)
+}
+
+/// Pack (key, desc) hints into styled lines that each fit `avail` columns,
+/// separated by ` · `. Never truncates a hint.
+fn pack_hints(
+    items: &[(&str, &str)],
+    avail: usize,
+    key_style: Style,
     theme: &Theme,
-) {
+) -> Vec<Line<'static>> {
+    let mut lines: Vec<Line> = Vec::new();
+    let mut cur: Vec<Span> = Vec::new();
+    let mut cur_w = 0usize;
+    for (k, d) in items {
+        let w = footer_item_w(k, d);
+        if !cur.is_empty() && cur_w + 3 + w > avail {
+            lines.push(Line::from(std::mem::take(&mut cur)));
+            cur_w = 0;
+        }
+        if !cur.is_empty() {
+            cur.push(Span::styled(" · ", theme.dim()));
+            cur_w += 3;
+        }
+        cur.push(Span::styled((*k).to_string(), key_style));
+        cur.push(Span::styled(format!(" {d}"), theme.dim()));
+        cur_w += w;
+    }
+    if !cur.is_empty() {
+        lines.push(Line::from(cur));
+    }
+    lines
+}
+
+/// Content rows the stacked footer needs at `inner_w`: a label row plus the
+/// packed hint rows for each group.
+fn footer_stacked_rows(app: &App, inner_w: u16) -> u16 {
+    let avail = inner_w.saturating_sub(2) as usize; // 2-col hint indent
+    footer_groups_short(app)
+        .iter()
+        .map(|(_, items)| 1 + pack_count(items, avail))
+        .sum()
+}
+
+/// The stacked footer: one box, each section a dim label row (the `act` one
+/// carries the live target) over its hints packed to full width. Never
+/// truncates — the fallback when the one-box bar won't fit horizontally.
+fn render_footer_stacked(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
         .padding(Padding::horizontal(1));
-    let outer_inner = block.inner(area);
+    let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // The group title lives *inside* the box now: a centered header row with a
-    // divider rule beneath it, not on the border.
-    let [title_area, rule_area, inner] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Min(0),
-    ])
-    .areas(outer_inner);
-    // The "act" box shows its live action-target beside the title — the whole
-    // "act  → <repo>" unit is centered (not on the bottom border).
-    let mut title_spans = vec![Span::styled(
-        label.to_string(),
-        theme.dim().add_modifier(Modifier::BOLD),
-    )];
-    if label == "act"
-        && let Some((_, target)) = action_target_hint(app)
-    {
-        title_spans.push(Span::raw("  "));
-        title_spans.push(Span::styled(format!("→ {target}"), theme.highlight()));
-    }
-    frame.render_widget(
-        Paragraph::new(Line::from(title_spans)).alignment(Alignment::Center),
-        title_area,
-    );
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "─".repeat(rule_area.width as usize),
-            theme.dim(),
-        ))),
-        rule_area,
-    );
-
     let key_style = theme.ahead().add_modifier(Modifier::BOLD);
-    let hint = |key: &str, desc: &str| {
-        Line::from(vec![
-            Span::styled(key.to_string(), key_style),
-            Span::styled(format!(" {desc}"), theme.dim()),
-        ])
-    };
-
-    let (short, long) = footer_partition(items);
-    let grid_rows = short.len().div_ceil(2) as u16;
-    // A horizontal rule separates the grid from the full-width rows when both
-    // are present.
-    let need_hr = !short.is_empty() && !long.is_empty();
-    let chunks = if need_hr {
-        Layout::vertical([
-            Constraint::Length(grid_rows),
-            Constraint::Length(1),
-            Constraint::Min(0),
-        ])
-        .split(inner)
-    } else {
-        Layout::vertical([Constraint::Length(grid_rows), Constraint::Min(0)]).split(inner)
-    };
-    let grid_area = chunks[0];
-    let (hr_area, long_area) = if need_hr {
-        (Some(chunks[1]), chunks[2])
-    } else {
-        (None, chunks[1])
-    };
-
-    // Two columns with a 1-col `│` divider between them.
-    if !short.is_empty() {
-        let [c1, divider, c2] = Layout::horizontal([
-            Constraint::Fill(1),
-            Constraint::Length(1),
-            Constraint::Fill(1),
-        ])
-        .spacing(1)
-        .areas(grid_area);
-        let half = short.len().div_ceil(2);
-        let col = |chunk: &[&(&str, &str)]| {
-            Text::from(chunk.iter().map(|(k, d)| hint(k, d)).collect::<Vec<_>>())
-        };
-        frame.render_widget(Paragraph::new(col(&short[..half])), c1);
-        frame.render_widget(Paragraph::new(col(&short[half..])), c2);
-        let bar: Vec<Line> = (0..grid_rows)
-            .map(|_| Line::from(Span::styled("│", theme.dim())))
-            .collect();
-        frame.render_widget(Paragraph::new(Text::from(bar)), divider);
-    }
-
-    // The horizontal rule, edge to edge (touches both borders since there's no
-    // inner padding).
-    if let Some(hr) = hr_area {
+    let avail = inner.width.saturating_sub(2) as usize;
+    let mut y = inner.y;
+    for (label, items) in footer_groups_short(app) {
+        if y >= inner.y + inner.height {
+            break;
+        }
+        let mut lab = vec![Span::styled(
+            label.to_string(),
+            theme.dim().add_modifier(Modifier::BOLD),
+        )];
+        if label == "act"
+            && let Some((_, target)) = action_target_hint(app)
+        {
+            let room = inner.width.saturating_sub(label.chars().count() as u16 + 5) as usize;
+            lab.push(Span::styled(
+                format!("  → {}", ellipsize(&target, room)),
+                theme.highlight(),
+            ));
+        }
         frame.render_widget(
-            Paragraph::new(Line::from(Span::styled(
-                "─".repeat(hr.width as usize),
-                theme.dim(),
-            ))),
-            hr,
+            Paragraph::new(Line::from(lab)),
+            Rect {
+                x: inner.x,
+                y,
+                width: inner.width,
+                height: 1,
+            },
         );
+        y += 1;
+        for line in pack_hints(&items, avail, key_style, theme) {
+            if y >= inner.y + inner.height {
+                break;
+            }
+            frame.render_widget(
+                Paragraph::new(line),
+                Rect {
+                    x: inner.x + 2,
+                    y,
+                    width: inner.width.saturating_sub(2),
+                    height: 1,
+                },
+            );
+            y += 1;
+        }
     }
+}
 
-    // Multi-word hints, full-width below the grid.
-    if !long.is_empty() {
-        let lines: Vec<Line> = long.iter().map(|(k, d)| hint(k, d)).collect();
-        frame.render_widget(Paragraph::new(Text::from(lines)), long_area);
-    }
+/// The essentials footer for an ultra-narrow terminal: a curated packed line of
+/// the top keys.
+fn render_footer_essentials(frame: &mut Frame, area: Rect, theme: &Theme) {
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
+    let lines = pack_hints(FOOTER_ESSENTIALS, inner.width as usize, key_style, theme);
+    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
 /// Each hint-bar section packs its items column-major into at most this many

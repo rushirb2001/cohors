@@ -14,10 +14,10 @@ expression: "render_to_string(&app, 88, 32)"
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────╮
 │    Repo                    Sync   PRs    CI       Last  Status                       │
 │▌   legacy-billing                                       could not read .git (permiss…│
-│    payments @main          ↑2     2      passing    2h  ↑2 unpushed                  │
-│    web-app @feat/checkout  ↓5     0      failing   20m  ↓5 behind — pull             │
-│    infra @a1b2c3d          local  local  local      1w  4 uncommitted changes        │
-│    auth-service @main      local  1      pending    3d  up to date                   │
+│  ○ payments @main          ↑2     2      passing    2h  ↑2 unpushed                  │
+│  ○ web-app @feat/checkout  ↓5     0      failing   20m  ↓5 behind — pull             │
+│  ○ infra @a1b2c3d          local  local  local      1w  4 uncommitted changes        │
+│  ○ auth-service @main      local  1      pending    3d  up to date                   │
 │                                                                                      │
 │                                                                                      │
 │                                                                                      │

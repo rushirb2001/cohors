@@ -78,6 +78,17 @@ impl Glyphs {
         }
     }
 
+    /// The selection-gutter marker for an *unmarked* repo: an empty circle that
+    /// fills (to [`marked`]) when the repo is picked — a checkbox affordance, so
+    /// the gutter always reads as "tick me" rather than being blank. A hollow `○`
+    /// in the glyph tiers, a plain `o` under Ascii.
+    pub fn unmarked(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "o",
+            IconKind::Unicode | IconKind::Nerd => "○",
+        }
+    }
+
     /// The 8-level ramp for activity sparklines (fleet heartbeat + per-repo
     /// cadence), lowest to highest. Block elements in the glyph tiers; a plain
     /// ASCII density ramp otherwise — the *shape* carries the reading either

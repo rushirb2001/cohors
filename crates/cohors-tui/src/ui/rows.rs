@@ -1056,10 +1056,14 @@ pub(crate) fn name_cell<'a>(
         Severity::Warn | Severity::Risk => Style::new().add_modifier(Modifier::BOLD),
         Severity::Notice => Style::new(),
     };
+    // Checkbox gutter: an empty circle that fills brand-purple when marked.
     let gutter = if marked {
-        Span::styled(format!("{} ", theme.glyphs.marked()), theme.ahead())
+        Span::styled(
+            format!("{} ", theme.glyphs.marked()),
+            theme.fg(SPIDER_PURPLE),
+        )
     } else {
-        Span::raw("  ")
+        Span::styled(format!("{} ", theme.glyphs.unmarked()), theme.dim())
     };
     let mut spans = vec![gutter];
     if highlights.is_empty() {

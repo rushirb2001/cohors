@@ -15,8 +15,8 @@ expression: "render_to_string(&app, 100, 20)"
 │▌   legacy-billing    │ payments, web-app                                  │ not read .git (permi…│
 │  ● payments @main    │                                                    │pushed                │
 │  ● web-app @feat/chec╰────────────────────────────────────────────────────╯hind — pull           │
-│    infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes      │
-│    auth-service @main      local  1      pending    3d     quiet      up to date                 │
+│  ○ infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes      │
+│  ○ auth-service @main      local  1      pending    3d     quiet      up to date                 │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮

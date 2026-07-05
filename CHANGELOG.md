@@ -19,16 +19,38 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-07-05
+
+TUI design polish (no behaviour changes):
+
+### Changed
+
+- **Fleet-activity sparkline moved into the header's right side**, filling the
+  space the info column left; the attention strip became a full-width severity
+  bar over the four bucket counts.
+- **The docked context pane is a grey two-column card** (local/remote facts |
+  release + last commit) under a solid separator that joins the box borders.
+- **The key hints degrade gracefully** — the consolidated one-box bar when it
+  fits, then a stacked layout, then an essentials line — with short labels and
+  `␣`/`⇥` symbols in the compact tiers, so nothing truncates.
+- **The repos table degrades across three width tiers** (Wide → Medium → Narrow)
+  instead of one cliff, keeping a colour-coded **CI square** (green pass / red
+  fail / amber pending / grey none) in its own column when there's no room for
+  the word.
+- **Marked repos show a brand-purple filled circle** in a checkbox-style gutter
+  (an empty `○` when unmarked).
+
 ## [0.5.0] — 2026-07-05
 
-The first release with prebuilt binaries. Highlights of everything since 0.4.21,
-detailed in the sections below: the web dashboard grew a first-run guided tour,
-always-live polling, a severity-bucketed attention breakdown, row tints, and a
-detail panel whose empty state mirrors the filled one; the TUI reached design
-parity — fleet-activity and attention cards in the header, consolidated table
-columns ending in Last + Status with per-repo activity sparklines, a one-box
-hint bar, and a two-column grey dock card; repo groups, the MCP `changes` tool,
-and per-repo commit-activity data landed in the core.
+The first release with prebuilt binaries (Homebrew, pip, and a checksummed shell
+installer, all from one cargo-dist pipeline). Highlights of everything since
+0.4.21, detailed in the sections below: the web dashboard grew a first-run guided
+tour, always-live polling, a severity-bucketed attention breakdown, row tints,
+and a detail panel whose empty state mirrors the filled one; the TUI reached
+design parity with the web — a fleet-activity + attention overview, consolidated
+table columns ending in Last + Status with per-repo activity sparklines, a
+one-box hint bar, and a two-column dock card; repo groups, the MCP `changes`
+tool, and per-repo commit-activity data landed in the core.
 
 ### Added
 

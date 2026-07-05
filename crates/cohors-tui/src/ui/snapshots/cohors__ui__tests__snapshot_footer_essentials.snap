@@ -1,0 +1,22 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 26, 18)"
+---
+╭────────────────────────╮
+│ ▜▒▟███▙▒▛  cohors  v0. │
+│ ▟██▌█▐██▙  …jects (+1) │
+│ ▀▐▖▀█▀▗▌▀              │
+╰────────────────────────╯
+╭ Attention (4 of 5 repos╮
+│ 1 at risk · 2 warning  │
+╰────────────────────────╯
+╭ Repositories (5) · sort╮
+│    Rep  Sync   CI  La  │
+│        ↓ 4 more        │
+╰────────────────────────╯
+─ press h to hide hints ──
+╭────────────────────────╮
+│ ↑/↓ move · ⏎ open      │
+│ / filter · ? help      │
+│ q quit                 │
+╰────────────────────────╯
