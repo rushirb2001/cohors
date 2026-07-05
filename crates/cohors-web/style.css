@@ -40,8 +40,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  max-width: 1320px;
-  margin: 0 auto;
+  /* Full-width: the action dropdowns, mark column, and detail aside need the
+     room — the fleet is a working surface, not an article. */
+  max-width: none;
+  margin: 0;
   padding: 1.1rem 1.3rem;
 }
 .topbar, .attention, .controls { flex-shrink: 0; }
