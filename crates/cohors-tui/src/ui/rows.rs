@@ -190,7 +190,10 @@ pub(crate) fn render_repos_panel(
         .iter()
         .map(|vr| {
             let snap = &app.repos[vr.index];
-            let busy = app.busy.contains(&snap.id).then_some(spin);
+            // A row spins in its Sync cell while an action runs on it — or
+            // while a rescan is refreshing the whole fleet (the animation
+            // lives in the column, not on the box border).
+            let busy = (app.scanning || app.busy.contains(&snap.id)).then_some(spin);
             let marked = app.selection.contains(&snap.id);
             repo_row(snap, &vr.name_highlights, now, theme, busy, marked, &fmt)
         })

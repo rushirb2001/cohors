@@ -863,10 +863,8 @@ pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
             .status
             .clone()
             .unwrap_or_else(|| "scanning…".to_string());
-        return Some(Line::from(Span::styled(
-            format!(" {} {msg} ", spinner_frame(app.spinner)),
-            theme.dim(),
-        )));
+        // Text only — the animation lives in the rows' Sync cells, not here.
+        return Some(Line::from(Span::styled(format!(" {msg} "), theme.dim())));
     }
     let msg = app.status.as_ref()?;
     // A failure reads red; everything else is a confirmation (green + ✓).
