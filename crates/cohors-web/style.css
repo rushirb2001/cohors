@@ -519,16 +519,44 @@ td.act { width: 2.4em; text-align: center; }
 .modal .confirm:hover { filter: brightness(1.08); }
 
 /* ── 3-container layout: Overview / Repositories / Detail ──────────────── */
-.card-title.subhead {
-  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em;
-  text-transform: uppercase; color: var(--faint);
-  border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 8px;
+/* Every card opens with a `panel-head`: an uppercase mono label on the left and
+   that panel's controls pinned right (scan status, or the act dropdowns). One
+   consistent bar, so the three containers read as siblings. */
+.panel-head {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
 }
-.overview { flex-shrink: 0; padding: 12px 16px; }
-.overview .fleet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
-.toolbar .dd-btn { border: 1px solid var(--border); border-radius: 8px; padding: 5px 12px; background: var(--panel); }
-.toolbar .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
-.toolbar-hint { color: var(--faint); font-size: 12px; margin-left: auto; }
+.panel-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint);
+}
+
+/* Overview: a slim card — the subhead bar, then the chips. No wasted height. */
+.overview { flex-shrink: 0; }
+.overview .attention { padding: 10px 14px; }
+
+/* The act controls in the Repositories subhead row. */
+.act-controls { display: flex; align-items: center; gap: 8px; }
+.act-controls .dd-btn {
+  border: 1px solid var(--border); border-radius: 7px; padding: 4px 12px;
+  background: var(--panel); color: var(--text); font-size: 12.5px;
+}
+.act-controls .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* The "act on all" is the primary action — give it the accent so it leads. */
+.act-controls > .dd:last-child .dd-btn {
+  border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+}
+.act-controls > .dd:last-child .dd-btn:hover { background: #ece9f9; }
+
 th.mk, td.mk { width: 3em; }
 th.act, td.act { width: 3.2em; }
+/* Row-level act trigger: a quiet chip that only lifts on hover, so the column
+   of triggers doesn't shout down the data. */
+td.act .dd-btn {
+  border: 1px solid transparent; border-radius: 6px; padding: 2px 7px;
+  background: transparent; color: var(--faint); font-size: 12px;
+}
+td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); background: var(--panel); }
+.fleet tbody tr:hover td.act .dd-btn { color: var(--dim); }

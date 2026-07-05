@@ -313,10 +313,11 @@ fn dashboard(
     view! {
         <>
             // 1 · Overview: the fleet-wide judgment at a glance.
+            // 1 · Overview: fleet-wide judgment at a glance. The subhead row
+            // carries the scan status on the right; the chips sit beneath it.
             <section class="card overview">
-                <div class="card-title subhead">"Overview"</div>
-                <div class="fleet-head">
-                    <section class="attention">{summary}</section>
+                <header class="panel-head">
+                    <span class="panel-label">"Overview"</span>
                     <div class="conn">
                         {move || {
                             let demo = mode.get() == Mode::Demo;
@@ -328,42 +329,43 @@ fn dashboard(
                             }
                         }}
                     </div>
-                </div>
+                </header>
+                <section class="attention">{summary}</section>
             </section>
             <div class="grid">
-                // 2 · Repositories: act + filter + the fleet table.
+                // 2 · Repositories: the act controls live in the subhead row,
+                // then filter/sort, then the fleet table.
                 <section class="card fleet-wrap">
-                    <div class="card-title subhead">"Repositories"</div>
-                    <section class="toolbar">
-                        {act_dropdown(
-                            "act on all".to_string(),
-                            "all".to_string(),
-                            serde_json::json!({ "all": true }),
-                            menu,
-                            pending,
-                            action_arg,
-                            notice,
-                        )}
-                        {move || {
-                            let m = marked.get();
-                            (!m.is_empty())
-                                .then(|| {
-                                    let ids: Vec<String> = m.iter().cloned().collect();
-                                    act_dropdown(
-                                        format!("act on selected ({})", ids.len()),
-                                        "selected".to_string(),
-                                        serde_json::json!({ "ids": ids }),
-                                        menu,
-                                        pending,
-                                        action_arg,
-                                        notice,
-                                    )
-                                })
-                        }}
-                        <span class="toolbar-hint">
-                            "mark rows to target a subset · every action previews its repos before running"
-                        </span>
-                    </section>
+                    <header class="panel-head">
+                        <span class="panel-label">"Repositories"</span>
+                        <div class="act-controls">
+                            {move || {
+                                let m = marked.get();
+                                (!m.is_empty())
+                                    .then(|| {
+                                        let ids: Vec<String> = m.iter().cloned().collect();
+                                        act_dropdown(
+                                            format!("selected · {}", ids.len()),
+                                            "selected".to_string(),
+                                            serde_json::json!({ "ids": ids }),
+                                            menu,
+                                            pending,
+                                            action_arg,
+                                            notice,
+                                        )
+                                    })
+                            }}
+                            {act_dropdown(
+                                "act on all".to_string(),
+                                "all".to_string(),
+                                serde_json::json!({ "all": true }),
+                                menu,
+                                pending,
+                                action_arg,
+                                notice,
+                            )}
+                        </div>
+                    </header>
                     <section class="controls">
                         <input
                             class="filter"
