@@ -23,14 +23,14 @@ pub struct RepoDetailResponse {
     pub remote: Option<RemoteDetail>,
 }
 
-/// Session metadata: the roots being scanned and whether `--watch` is on.
+/// Session metadata: the roots being scanned. (The page always polls now, so the
+/// server's `--watch` flag is ignored client-side and not deserialized.)
 #[derive(Deserialize, Clone, Default)]
 pub struct Meta {
     pub roots: Vec<String>,
-    pub watch: bool,
 }
 
-/// The server's session metadata (roots + `--watch`).
+/// The server's session metadata (the scanned roots).
 pub async fn fetch_meta() -> Meta {
     get_json("/api/meta").await.unwrap_or_default()
 }

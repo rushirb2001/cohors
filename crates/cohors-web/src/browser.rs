@@ -13,7 +13,7 @@
 use crate::api;
 use cohors_core::{
     AttentionReason, Branch, CiStatus, RepoSnapshot, Severity, SortMode, ViewParams, assess,
-    compute_view, demo, fleet_summary, time,
+    compute_view, demo, time,
 };
 use leptos::prelude::*;
 use std::collections::HashSet;
@@ -138,21 +138,17 @@ fn App() -> impl IntoView {
         });
     };
 
-    let reload = move |_| load();
     load();
 
-    // Pull the session metadata (which folder is being scanned), and — when the
-    // server was started with `--watch` — poll for a fresh scan so the page tracks
-    // the folder live (re-scanning is cheap; remote is server-cached). Skips while
-    // showing the demo fleet.
+    // Pull the session metadata (which folder is being scanned), then poll for a
+    // fresh scan so the page always tracks the folder live — no manual rescan. A
+    // re-scan is cheap (parallel, memoized) and the remote half is server-cached.
+    // Skips while showing the demo fleet.
     spawn_local(async move {
         let meta = api::fetch_meta().await;
         roots.set(meta.roots);
-        if !meta.watch {
-            return;
-        }
         loop {
-            gloo_timers::future::TimeoutFuture::new(5_000).await;
+            gloo_timers::future::TimeoutFuture::new(6_000).await;
             if mode.get_untracked() != Mode::Live {
                 continue;
             }
@@ -325,7 +321,6 @@ fn App() -> impl IntoView {
                         mode,
                         roots,
                     },
-                    reload,
                 )
                 .into_any(),
                 Mode::Live => dashboard(
@@ -346,7 +341,6 @@ fn App() -> impl IntoView {
                         mode,
                         roots,
                     },
-                    reload,
                 )
                 .into_any(),
             }}
@@ -382,10 +376,7 @@ struct DashCtx {
 /// stats), the fleet table whose column headers *are* the sort control, and the
 /// per-repo detail aside. Reads `repos` reactively so the enrichment pass
 /// updates the rows live.
-fn dashboard(
-    cx: DashCtx,
-    reload: impl Fn(leptos::ev::MouseEvent) + Copy + Send + 'static,
-) -> impl IntoView {
+fn dashboard(cx: DashCtx) -> impl IntoView {
     let DashCtx {
         repos,
         now,
@@ -403,7 +394,6 @@ fn dashboard(
         mode,
         roots,
     } = cx;
-    let summary = move || summary_chips(&repos.get(), now);
     let visible = move || {
         let r = repos.get();
         let params = ViewParams {
@@ -482,17 +472,13 @@ fn dashboard(
                             {move || {
                                 let demo = mode.get() == Mode::Demo;
                                 view! {
-                                    <span class=if demo { "src demo" } else { "src" }>
-                                        {if demo { "demo fleet" } else { "● local scan" }}
+                                    <span class=if demo { "src demo" } else { "src live" }>
+                                        {if demo { "demo fleet" } else { "live" }}
                                     </span>
-                                    <button class="ghost" on:click=reload>
-                                        "rescan"
-                                    </button>
                                 }
                             }}
                         </div>
                     </div>
-                    <section class="attention">{summary}</section>
                 </section>
                 // The fleet's activity and attention breakdown, promoted to the
                 // top strip so they're always in view (not just the empty aside).
@@ -624,47 +610,6 @@ fn severity_class(sev: Severity) -> &'static str {
 
 /// The attention summary strip, from `cohors-core`'s `fleet_summary` — the same
 /// counts the TUI's header shows.
-fn summary_chips(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
-    let s = fleet_summary(repos, now);
-    let enriching = repos.iter().filter(|r| r.remote.is_none()).count();
-
-    let mut chips: Vec<(String, &'static str)> =
-        vec![(format!("{} repositories", s.total), "accent")];
-    if s.needs_attention > 0 {
-        chips.push((format!("{} need attention", s.needs_attention), "warn"));
-    }
-    if s.errors > 0 {
-        chips.push((format!("{} unreadable", s.errors), "risk"));
-    }
-    if s.unpushed > 0 {
-        let label = if s.unpushed_aging > 0 {
-            format!("{} unpushed · {} aging", s.unpushed, s.unpushed_aging)
-        } else {
-            format!("{} unpushed", s.unpushed)
-        };
-        chips.push((label, "ahead"));
-    }
-    if s.behind > 0 {
-        chips.push((format!("{} behind", s.behind), "notice"));
-    }
-    if s.dirty > 0 {
-        chips.push((format!("{} dirty", s.dirty), "modified"));
-    }
-    if s.stash > 0 {
-        chips.push((format!("{} stashed", s.stash), "dim"));
-    }
-    if s.needs_attention == 0 && s.errors == 0 {
-        chips.push(("all clear".to_string(), "ok"));
-    }
-    if enriching == repos.len() && !repos.is_empty() {
-        chips.push(("enriching remote…".to_string(), "dim"));
-    }
-    chips
-        .into_iter()
-        .map(|(text, cls)| view! { <span class=format!("chip {cls}")>{text}</span> })
-        .collect::<Vec<_>>()
-}
-
 /// One action staged for the confirm modal: the verb, its resolved target
 /// selector, and the repo names it will hit (from a server-side dry run).
 #[derive(Clone)]
@@ -1981,32 +1926,45 @@ fn activity_widget(repos: &[RepoSnapshot]) -> impl IntoView + use<> {
     }
 }
 
-/// Top-strip widget: the fleet's attention breakdown as a stacked bar (risk /
-/// warn / notice / calm) with a count.
+/// Top-strip widget: the fleet's attention breakdown as a stacked bar with a
+/// per-severity legend (the counts the old chips used to show, now here). Each
+/// bucket has a distinct hue so the bar reads at a glance.
 fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
+    // counts: [Ok, Info, Notice, Warn, Risk]
     let mut counts = [0usize; 5];
     for r in repos {
         counts[sev_index(assess(r, now).severity)] += 1;
     }
-    let total = repos.len().max(1);
-    let attention = counts[2] + counts[3] + counts[4];
+    let total = repos.len();
     let calm = counts[0] + counts[1];
+    let denom = total.max(1);
     let seg = |n: usize, cls: &'static str| {
         (n > 0).then(|| {
-            let w = n as f64 / total as f64 * 100.0;
+            let w = n as f64 / denom as f64 * 100.0;
             view! { <div class=format!("seg {cls}") style=format!("width:{w}%")></div> }
         })
     };
+    let leg = |n: usize, cls: &'static str, label: &'static str| {
+        view! {
+            <span class=format!("leg {cls}")>
+                <i class="dot"></i>
+                {format!("{label} {n}")}
+            </span>
+        }
+    };
     view! {
-        <section class="card stat-card">
-            <div class="stat-h">"Attention"</div>
+        <section class="card stat-card attn-card">
+            <div class="stat-head">
+                <span class="stat-h">"Attention"</span>
+                <span class="stat-total">{format!("{total} repos")}</span>
+            </div>
             <div class="pulse-stack">
                 {seg(counts[4], "risk")} {seg(counts[3], "warn")} {seg(counts[2], "notice")}
                 {seg(calm, "calm")}
             </div>
-            <div class="pulse-legend">
-                <span class="need">{format!("{attention} need you")}</span>
-                <span class="calm">{format!("{calm} calm")}</span>
+            <div class="attn-legend">
+                {leg(counts[4], "risk", "At risk")} {leg(counts[3], "warn", "Warning")}
+                {leg(counts[2], "notice", "Minor")} {leg(calm, "calm", "Calm")}
             </div>
         </section>
     }

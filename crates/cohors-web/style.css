@@ -14,6 +14,12 @@
   --red: #b42318;
   --amber: #92610a;
   --blue: #1f5fcf;
+  /* Distinct severity hues for the attention breakdown — four clearly-separated
+     colours (red → orange → indigo → green), not the muddy red/brown/blue mix. */
+  --sev-risk: #e5484d;
+  --sev-warn: #f2870a;
+  --sev-notice: #4f6bed;
+  --sev-calm: #17a34a;
   /* Fonts are fetched from the Google Fonts CDN in index.html; the stacks fall
      back to system fonts if it's unavailable (offline). Data/code uses the
      monospace pair, UI prose the sans pair. */
@@ -133,6 +139,12 @@ body {
 .ghost:hover { color: var(--text); }
 .src { font-family: var(--mono); font-size: 0.8rem; color: var(--green); }
 .src.demo { color: var(--dim); }
+/* "live" — a gently pulsing dot signalling the fleet auto-polls (no rescan). */
+.src.live::before {
+  content: "●"; margin-right: 0.35rem; color: var(--green);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* A quiet inline notice (e.g. "no GitHub login — showing demo"). */
 .banner {
@@ -184,16 +196,30 @@ body {
 }
 .pulse-stack .seg { animation: seg-in 0.5s ease backwards; }
 @keyframes seg-in { from { width: 0 !important; } }
-.pulse-stack .seg.risk { background: var(--red); }
-.pulse-stack .seg.warn { background: var(--amber); }
-.pulse-stack .seg.notice { background: var(--blue); }
-.pulse-stack .seg.calm { background: #c7d2c0; }
-.pulse-legend {
-  display: flex; justify-content: space-between; margin-top: 0.55rem;
-  font-family: var(--mono); font-size: 0.74rem;
+.pulse-stack .seg.risk { background: var(--sev-risk); }
+.pulse-stack .seg.warn { background: var(--sev-warn); }
+.pulse-stack .seg.notice { background: var(--sev-notice); }
+.pulse-stack .seg.calm { background: var(--sev-calm); }
+
+/* The attention card is wider — it carries the per-severity legend that
+   replaced the old summary chips. */
+.attn-card { width: 20rem; }
+.stat-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 0.55rem;
 }
-.pulse-legend .need { color: var(--amber); font-weight: 600; }
-.pulse-legend .calm { color: var(--faint); }
+.stat-head .stat-h { margin-bottom: 0; }
+.stat-total { font-family: var(--mono); font-size: 0.72rem; color: var(--faint); }
+.attn-legend {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; margin-top: 0.6rem;
+  font-family: var(--mono); font-size: 0.72rem;
+}
+.leg { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--dim); }
+.leg .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.leg.risk .dot { background: var(--sev-risk); }
+.leg.warn .dot { background: var(--sev-warn); }
+.leg.notice .dot { background: var(--sev-notice); }
+.leg.calm .dot { background: var(--sev-calm); }
 
 /* Empty detail aside: a skeleton of the drill-in — the same section headers a
    selected repo shows, each with a faint placeholder body. */
