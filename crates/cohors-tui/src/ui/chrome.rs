@@ -858,13 +858,10 @@ fn render_attention_card(frame: &mut Frame, area: Rect, s: &FleetSummary, theme:
 /// In-progress messages stay until the work finishes; results clear after a few
 /// seconds (the event loop owns the timer).
 pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
+    // Scanning shows no toast at all — the refresh announces itself via the
+    // braille spinners animating inside the table's Sync/PRs/CI cells.
     if app.scanning {
-        let msg = app
-            .status
-            .clone()
-            .unwrap_or_else(|| "scanning…".to_string());
-        // Text only — the animation lives in the rows' Sync cells, not here.
-        return Some(Line::from(Span::styled(format!(" {msg} "), theme.dim())));
+        return None;
     }
     let msg = app.status.as_ref()?;
     // A failure reads red; everything else is a confirmation (green + ✓).

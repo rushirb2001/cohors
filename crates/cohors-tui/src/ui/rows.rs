@@ -799,17 +799,28 @@ pub(crate) fn repo_row<'a>(
     let blink_synced = theme.glyphs.blink_synced();
 
     if fmt.expanded {
-        // While an action runs, the Sync cell shows a spinner instead.
+        // While an action or a rescan runs, every cell being refreshed — Sync,
+        // PRs, and CI — shows the spinner instead of a value that's about to
+        // change under the reader.
+        let spin_cell = |spin: &str| Cell::from(Span::styled(spin.to_string(), theme.ahead()));
         let sync = match busy {
-            Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
+            Some(spin) => spin_cell(spin),
             None if synced && blink_synced && !fmt.blink_on => Cell::from(Span::raw(" ")),
             None => Cell::from(Line::from(ahead_behind_spans(snap, theme))),
+        };
+        let prs = match busy {
+            Some(spin) => spin_cell(spin),
+            None => Cell::from(Line::from(prs_spans(snap, theme))),
+        };
+        let ci = match busy {
+            Some(spin) => spin_cell(spin),
+            None => Cell::from(Line::from(ci_spans(snap, theme))),
         };
         Row::new(vec![
             name,
             sync,
-            Cell::from(Line::from(prs_spans(snap, theme))),
-            Cell::from(Line::from(ci_spans(snap, theme))),
+            prs,
+            ci,
             age_cell(snap, now, fmt.age_w as usize, theme),
             activity_cell(snap, theme),
             reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
