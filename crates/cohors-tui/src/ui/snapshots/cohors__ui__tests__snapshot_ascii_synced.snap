@@ -30,9 +30,9 @@ expression: "render_to_string(&app, 100, 34)"
 │ Remote       no GitHub remote                                                                    │
 │ Last commit  1h ago — chore: nothing to do                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭─ select ───────────────────┬─ act → 1 selected ─────┬─ view ─────────────────────────────────────╮
-│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup                   │
-│ a mark all       Esc clear │ f fetch  ! run command │ s sort       ? help                        │
-│                            │ p pull   S stash       │ d attention  q quit                        │
+╭────────────────────────────┬────────────────────────┬────────────────────────────────────────────╮
+│ select                     │ act → 1 selected       │ view                                       │
+│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup   q quit          │
+│ a mark all       Esc clear │ f fetch  ! run command │ s sort       h hide hints                  │
+│                            │ p pull   S stash       │ d attention  ? help                        │
 ╰────────────────────────────┴────────────────────────┴────────────────────────────────────────────╯

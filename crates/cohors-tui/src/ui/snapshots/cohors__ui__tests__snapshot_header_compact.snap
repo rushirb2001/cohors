@@ -7,7 +7,6 @@ expression: "render_to_string(&app, 60, 16)"
 │ ▟██▌█▐██▙  ~/projects (+1)                               │
 │ ▀▐▖▀█▀▗▌▀                                                │
 ╰──────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────╮
 ────────────────── press h to hide hints ───────────────────
 ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮
 │     select      │ │ act  → legacy-bi │ │      view       │
@@ -17,4 +16,5 @@ expression: "render_to_string(&app, 60, 16)"
 │ ─────────────── │ │ p pull  │        │ │ ─────────────── │
 │ Space mark repo │ │ ──────────────── │ │ d attention     │
 │                 │ │ ! run command    │ │ Tab standup     │
+│                 │ │                  │ │ h hide hints    │
 ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯

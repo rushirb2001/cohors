@@ -16,9 +16,9 @@ expression: "render_to_string(&app, 100, 20)"
 │▌   legacy-billing                                 could not read .git (permission denied)        │
 │                                             ↓ 4 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭─ select ───────────────────┬─ act → 2 selected ─────┬─ view ─────────────────────────────────────╮
-│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup                   │
-│ a mark all       Esc clear │ f fetch  ! run command │ s sort       ? help                        │
-│                            │ p pull   S stash       │ d attention  q quit                        │
+╭────────────────────────────┬────────────────────────┬────────────────────────────────────────────╮
+│ select                     │ act → 2 selected       │ view                                       │
+│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup   q quit          │
+│ a mark all       Esc clear │ f fetch  ! run command │ s sort       h hide hints                  │
+│                            │ p pull   S stash       │ d attention  ? help                        │
 ╰────────────────────────────┴────────────────────────┴────────────────────────────────────────────╯

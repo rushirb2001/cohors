@@ -30,9 +30,9 @@ expression: "render_to_string(&app, 100, 34)"
 │ Last commit  1w ago — chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC   │
 │              pgbench) + ignore results and refresh the CI perf matrix                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭─ select ───────────────────┬─ act → load-tester ────┬─ view ─────────────────────────────────────╮
-│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup                   │
-│ a mark all       Esc clear │ f fetch  ! run command │ s sort       ? help                        │
-│                            │ p pull   S stash       │ d attention  q quit                        │
+╭────────────────────────────┬────────────────────────┬────────────────────────────────────────────╮
+│ select                     │ act → load-tester      │ view                                       │
+│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup   q quit          │
+│ a mark all       Esc clear │ f fetch  ! run command │ s sort       h hide hints                  │
+│                            │ p pull   S stash       │ d attention  ? help                        │
 ╰────────────────────────────┴────────────────────────┴────────────────────────────────────────────╯

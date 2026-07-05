@@ -8,9 +8,9 @@ expression: "render_to_string(&app, 100, 12)"
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active —                                   │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
                                 No git repos found under: ~/projects                                
-────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭─ select ───────────────────┬─ act ──────────────────┬─ view ─────────────────────────────────────╮
-│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup                   │
-│ a mark all       Esc clear │ f fetch  ! run command │ s sort       ? help                        │
-│                            │ p pull   S stash       │ d attention  q quit                        │
+╭────────────────────────────┬────────────────────────┬────────────────────────────────────────────╮
+│ select                     │ act                    │ view                                       │
+│ Space mark repo  / filter  │ ⏎ open   P push        │ ↑/↓ move     Tab standup   q quit          │
+│ a mark all       Esc clear │ f fetch  ! run command │ s sort       h hide hints                  │
+│                            │ p pull   S stash       │ d attention  ? help                        │
 ╰────────────────────────────┴────────────────────────┴────────────────────────────────────────────╯
