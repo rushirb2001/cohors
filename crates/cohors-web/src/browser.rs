@@ -2081,112 +2081,204 @@ fn set_tour_seen() {
 }
 
 /// One step of the guided tour: an optional element to spotlight (a CSS
-/// selector), the copy, and a demo action.
+/// selector), the copy — split into a punchy `lead` and a dimmer supporting
+/// `body` so each card scans in a glance — an optional strip of visual `chips`
+/// (for steps whose prose would otherwise just list things the UI shows in
+/// colour), and a demo action.
 struct TourStep {
     target: Option<&'static str>,
     title: &'static str,
+    lead: &'static str,
     body: &'static str,
+    chips: TourChips,
     act: TourAct,
+}
+
+/// A small visual accent under a step's text: instead of naming the four
+/// severities or the six action verbs in a sentence, show them as the same
+/// chips the app itself uses, so the words map straight onto what's on screen.
+#[derive(Clone, Copy, PartialEq)]
+enum TourChips {
+    None,
+    Severities,
+    Verbs,
 }
 
 const TOUR: &[TourStep] = &[
     TourStep {
         target: None,
         title: "Welcome to cohors",
-        body: "Every git repo you have, on one screen: their status and what needs you. Here's a quick tour. It only looks around and stages a preview; it never runs git.",
+        lead: "Every git repo you have, on one screen.",
+        body: "Here's a quick tour. It only looks around and stages previews; it never runs git.",
+        chips: TourChips::None,
         act: TourAct::Clear,
     },
     TourStep {
         target: Some(".ov-top .fleet-name"),
         title: "This is your fleet",
-        body: "cohors scanned this folder. Every repository below lives somewhere under it, with no setup and no config to point at each one.",
+        lead: "cohors scanned this folder.",
+        body: "Every repository below lives somewhere under it. No setup, no config to point at each one.",
+        chips: TourChips::None,
         act: TourAct::None,
     },
     TourStep {
         target: Some(".overview .conn"),
         title: "Always live",
-        body: "cohors reads your repos straight from disk and keeps re-scanning on its own. Change something in a terminal and it just shows up. No refresh button to remember.",
+        lead: "It re-scans on its own.",
+        body: "Change something in a terminal and it just shows up. No refresh button to remember.",
+        chips: TourChips::None,
         act: TourAct::None,
     },
     TourStep {
         target: Some(".act-stat"),
         title: "The fleet's heartbeat",
-        body: "Every repo's commit activity over the last 12 weeks, summed into one sparkline: a quick read on how busy things have been.",
+        lead: "Commit activity, all repos at once.",
+        body: "The last 12 weeks summed into one sparkline: a quick read on how busy things have been.",
+        chips: TourChips::None,
         act: TourAct::None,
     },
     TourStep {
         target: Some(".attn-block"),
         title: "Attention at a glance",
-        body: "Where the fleet stands: how many repos are at risk, need work, are minor, or calm. These are the same four severities that colour every row below.",
+        lead: "Where the fleet stands right now.",
+        body: "How many repos fall into each severity. The same four colours tint every row below.",
+        chips: TourChips::Severities,
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1)"),
         title: "One row, one repo",
-        body: "Read a row left to right: name and branch, sync with the remote, stashes, PRs, CI, last commit, and activity, ending with Status, the headline reason it needs you. Each row carries a faint tint of that severity, so trouble stands out.",
+        lead: "Read a row left to right.",
+        body: "Name, branch, remote sync, stashes, PRs, CI, last commit, activity, then Status: the headline reason it needs you. A faint tint of that severity washes the whole row.",
+        chips: TourChips::None,
         act: TourAct::None,
     },
     TourStep {
         target: Some(".repos-head .filter"),
         title: "Filter by name",
-        body: "Start typing to narrow the fleet. Handy once you're tracking dozens or hundreds of repos.",
+        lead: "Type to narrow the fleet.",
+        body: "Handy once you're tracking dozens or hundreds of repos.",
+        chips: TourChips::None,
         act: TourAct::None,
     },
     TourStep {
         target: Some(".repos-head .toggle"),
         title: "Focus on what matters",
-        body: "Flip \"needs attention\" to hide the calm repos and see only the ones that want something from you.",
+        lead: "Hide the calm repos.",
+        body: "Flip \"needs attention\" to see only the repos that want something from you.",
+        chips: TourChips::None,
         act: TourAct::None,
     },
     TourStep {
         target: Some(".fleet thead th.sorted"),
         title: "Sort any column",
-        body: "Click a column header to sort by attention, recency, name, or how far out of sync. The active column shows an arrow.",
+        lead: "Click a header to sort.",
+        body: "By attention, recency, name, or how far out of sync. The active column shows an arrow.",
+        chips: TourChips::None,
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1) td.mk"),
         title: "Pick a subset",
-        body: "Tick rows to build a selection. We've checked the first one for you, so you can act on just those repos.",
+        lead: "Tick rows to build a selection.",
+        body: "We've checked the first one for you, so you can act on just those repos.",
+        chips: TourChips::None,
         act: TourAct::Mark,
     },
     TourStep {
         target: Some(".act-controls"),
         title: "Act on the fleet",
-        body: "\"act on selected\" targets your ticked repos; \"act on all\" targets everything. Either way you pick a verb: fetch, pull, push, commit, stash, or a shell command.",
+        lead: "Selected repos, or all of them.",
+        body: "\"act on selected\" targets your ticked repos; \"act on all\" targets everything. Then pick a verb:",
+        chips: TourChips::Verbs,
         act: TourAct::None,
     },
     TourStep {
         target: Some(".modal"),
         title: "Preview before it runs",
-        body: "Nothing happens by surprise. First, cohors shows you the exact repositories an action will touch, like this, and waits for you to confirm.",
+        lead: "Nothing happens by surprise.",
+        body: "cohors first shows the exact repositories an action will touch, like this, and waits for you to confirm.",
+        chips: TourChips::None,
         act: TourAct::ShowConfirm,
     },
     TourStep {
         target: Some(".modal.results"),
         title: "See what happened",
-        body: "After it runs, you get a per-repo report: what succeeded, what was skipped and why, and any command output.",
+        lead: "A per-repo report, every time.",
+        body: "What succeeded, what was skipped and why, and any command output.",
+        chips: TourChips::None,
         act: TourAct::ShowResults,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1) td.act"),
         title: "Or act on one repo",
-        body: "Prefer one at a time? Every row has its own Git menu with the same actions, scoped to that single repository.",
+        lead: "Prefer one at a time?",
+        body: "Every row has its own Git menu with the same actions, scoped to that single repo.",
+        chips: TourChips::None,
         act: TourAct::Clear,
     },
     TourStep {
         target: Some(".side"),
         title: "Look closer",
-        body: "Click a repo to open it. Its recent commits, branches, working-tree changes, and pull requests all fill in right here in the Detail panel.",
+        lead: "Open a repo for the full picture.",
+        body: "Recent commits, branches, working-tree changes, and pull requests all fill in here in the Detail panel.",
+        chips: TourChips::None,
         act: TourAct::Select,
     },
     TourStep {
         target: None,
         title: "That's the tour",
-        body: "Reads are always on. Relaunch with --allow-writes to enable the actions you just saw. Happy shipping.",
+        lead: "Reads are always on.",
+        body: "Relaunch with --allow-writes to enable the actions you just saw. Happy shipping.",
+        chips: TourChips::None,
         act: TourAct::Clear,
     },
 ];
+
+/// Render a step's chip strip: the four severity swatches, the six action verbs,
+/// or nothing. The chips reuse the app's own colours/typography so the copy maps
+/// straight onto what the user is looking at.
+fn tour_chips(kind: TourChips) -> impl IntoView {
+    match kind {
+        TourChips::None => ().into_any(),
+        TourChips::Severities => {
+            let sev = [
+                ("At risk", "var(--sev-risk)"),
+                ("Warning", "var(--sev-warn)"),
+                ("Minor", "var(--sev-notice)"),
+                ("Calm", "var(--sev-calm)"),
+            ];
+            view! {
+                <div class="tour-chips">
+                    {sev
+                        .into_iter()
+                        .map(|(label, colour)| {
+                            view! {
+                                <span class="tchip">
+                                    <i class="tdot" style=format!("background:{colour}")></i>
+                                    {label}
+                                </span>
+                            }
+                        })
+                        .collect_view()}
+                </div>
+            }
+            .into_any()
+        }
+        TourChips::Verbs => {
+            let verbs = ["fetch", "pull", "push", "commit", "stash", "run"];
+            view! {
+                <div class="tour-chips">
+                    {verbs
+                        .into_iter()
+                        .map(|v| view! { <span class="tchip mono">{v}</span> })
+                        .collect_view()}
+                </div>
+            }
+            .into_any()
+        }
+    }
+}
 
 /// The on-screen rect (left, top, width, height) of the first element matching
 /// `sel`, scrolling it into view first. `None` if it isn't in the DOM.
@@ -2304,9 +2396,17 @@ fn tour_overlay(
             <div class="tour">
                 <div class="tour-spot" style=spot_style></div>
                 <div class="tour-card" style=card_style>
-                    <div class="tour-step">{move || format!("{} / {}", idx() + 1, TOUR.len())}</div>
-                    <h3>{move || TOUR[idx()].title}</h3>
-                    <p>{move || TOUR[idx()].body}</p>
+                    <div class="tour-head">
+                        <span class="tour-step">
+                            {move || format!("{} / {}", idx() + 1, TOUR.len())}
+                        </span>
+                        <h3 class="tour-title">{move || TOUR[idx()].title}</h3>
+                    </div>
+                    <div class="tour-copy">
+                        <p class="tour-lead">{move || TOUR[idx()].lead}</p>
+                        <p class="tour-body">{move || TOUR[idx()].body}</p>
+                    </div>
+                    {move || tour_chips(TOUR[idx()].chips)}
                     <div class="tour-actions">
                         <button class="ghost" on:click=move |_| end()>
                             "Skip"

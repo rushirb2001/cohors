@@ -820,12 +820,44 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
   transition: left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
               top 0.38s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.tour-step {
-  font-family: var(--mono); font-size: 0.7rem; color: var(--faint);
-  letter-spacing: 0.06em;
+/* Head: the step counter as a pill on the left, the title on the right. */
+.tour-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
 }
-.tour-card h3 { margin: 3px 0 8px; font-size: 1.05rem; color: var(--text); }
-.tour-card p { margin: 0 0 14px; color: var(--dim); font-size: 0.9rem; line-height: 1.5; }
+.tour-step {
+  flex: none;
+  font-family: var(--mono); font-size: 0.66rem; font-weight: 600;
+  color: var(--accent); background: var(--accent-soft);
+  border-radius: 999px; padding: 3px 10px; letter-spacing: 0.04em;
+}
+.tour-title {
+  margin: 0; font-size: 1rem; line-height: 1.25; color: var(--text);
+  text-align: right;
+}
+/* The copy sits in a tinted callout so it reads as one distinct block. */
+.tour-copy {
+  background: var(--accent-soft); border-radius: 10px;
+  border-left: 3px solid var(--accent);
+  padding: 11px 13px; margin-bottom: 13px;
+}
+/* Two-tier copy: a bold lead the eye lands on, then dimmer supporting detail. */
+.tour-copy .tour-lead {
+  margin: 0 0 6px; color: var(--text); font-size: 0.95rem;
+  font-weight: 600; line-height: 1.4;
+}
+.tour-copy .tour-body { margin: 0; color: var(--dim); font-size: 0.85rem; line-height: 1.5; }
+/* Visual accents: the app's own severity swatches / verb pills, so the words in
+   the copy map straight onto what's on screen. */
+.tour-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.tour-chips .tchip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.74rem; color: var(--dim);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 3px 9px; background: var(--panel);
+}
+.tour-chips .tchip.mono { font-family: var(--mono); font-size: 0.72rem; color: var(--text); }
+.tour-chips .tdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .tour-actions { display: flex; align-items: center; justify-content: space-between; }
 .tour-nav { display: inline-flex; gap: 8px; }
 .tour-card .confirm {
