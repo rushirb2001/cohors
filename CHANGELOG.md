@@ -19,7 +19,7 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-## [0.5.1] — 2026-07-05
+## [0.5.2] — 2026-07-05
 
 TUI design polish (no behaviour changes):
 
