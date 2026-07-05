@@ -19,7 +19,7 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-## [0.5.4] — 2026-07-05
+## [0.5.5] — 2026-07-05
 
 TUI design polish (no behaviour changes):
 
@@ -43,6 +43,10 @@ TUI design polish (no behaviour changes):
   separator joined into the borders (Command, Shell, Confirm, Open-with, Detail,
   Standup, Help) — so the root footer keeps the `select`/`act`/`view` keys
   instead of being taken over by the overlay's.
+- **Every modal's title moved off the top border to a header row inside the box**,
+  under the same solid `├─┤` separator as the hints — so titles and dividers read
+  as full-strength structural lines matching the box borders, not dim text baked
+  into the frame.
 
 ## [0.5.0] — 2026-07-05
 

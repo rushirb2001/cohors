@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-actions"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "camino",
  "cohors-core",
@@ -462,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-config"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "camino",
  "directories",
@@ -477,7 +477,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-core"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "camino",
  "nucleo-matcher",
@@ -487,7 +487,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-fleet"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "camino",
  "cohors-config",
@@ -502,7 +502,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-git"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "camino",
  "cohors-core",
@@ -520,7 +520,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-github"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "cohors-core",
  "rayon",
@@ -532,7 +532,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-mcp"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "anyhow",
  "cohors-actions",
@@ -544,7 +544,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-tui"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "anyhow",
  "arboard",

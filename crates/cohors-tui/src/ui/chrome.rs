@@ -1007,29 +1007,7 @@ pub(crate) fn render_modal_hints(
     }
     let rule_y = inner.y + inner.height - 2;
     let hint_y = inner.y + inner.height - 1;
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "─".repeat(area.width as usize),
-            theme.dim(),
-        ))),
-        Rect {
-            x: area.x,
-            y: rule_y,
-            width: area.width,
-            height: 1,
-        },
-    );
-    for (x, ch) in [(area.x, "├"), (area.x + area.width.saturating_sub(1), "┤")] {
-        frame.render_widget(
-            Paragraph::new(Span::styled(ch, theme.dim())),
-            Rect {
-                x,
-                y: rule_y,
-                width: 1,
-                height: 1,
-            },
-        );
-    }
+    modal_rule(frame, area, rule_y);
     frame.render_widget(
         Paragraph::new(modal_hint_line(app, theme).centered()),
         Rect {
@@ -1042,6 +1020,57 @@ pub(crate) fn render_modal_hints(
     Rect {
         height: inner.height - 2,
         ..inner
+    }
+}
+
+/// A modal's title *inside* the box — a header row, then a solid separator joined
+/// into the side borders — returning the content area below it. The companion to
+/// [`render_modal_hints`]; pass the block's `inner` and the outer `area`.
+pub(crate) fn render_modal_header(
+    frame: &mut Frame,
+    area: Rect,
+    inner: Rect,
+    title: Line<'static>,
+) -> Rect {
+    if inner.height < 3 {
+        return inner;
+    }
+    frame.render_widget(Paragraph::new(title), Rect { height: 1, ..inner });
+    modal_rule(frame, area, inner.y + 1);
+    Rect {
+        y: inner.y + 2,
+        height: inner.height - 2,
+        ..inner
+    }
+}
+
+/// A solid, full-strength horizontal rule across a modal at row `y`, joined into
+/// its side borders with `├`/`┤`. Full strength (the default border style, not
+/// dim) so it reads as a real structural line, matching the box borders.
+fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
+    let style = Style::new();
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "─".repeat(area.width as usize),
+            style,
+        ))),
+        Rect {
+            x: area.x,
+            y,
+            width: area.width,
+            height: 1,
+        },
+    );
+    for (x, ch) in [(area.x, "├"), (area.x + area.width.saturating_sub(1), "┤")] {
+        frame.render_widget(
+            Paragraph::new(Span::styled(ch, style)),
+            Rect {
+                x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
     }
 }
 
@@ -1142,21 +1171,26 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     };
     let desc_style = if shell { accent } else { theme.dim() };
 
-    // +2 rows for the in-box hint footer (a rule + the keys).
-    let area = centered_modal(full, 74, rows.len() as u16 + 6);
+    // +2 for the header (title + rule), +2 for the hint footer (rule + keys).
+    let area = centered_modal(full, 74, rows.len() as u16 + 8);
     frame.render_widget(Clear, area);
-    let title = if shell {
-        " Shell command "
-    } else {
-        " Command "
-    };
+    let title = if shell { "Shell command" } else { "Command" };
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(if shell { accent } else { Style::new() })
-        .title(Line::from(title).bold())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let title_style = if shell { accent } else { Style::new() };
+    let inner = render_modal_header(
+        frame,
+        area,
+        inner,
+        Line::from(Span::styled(
+            title,
+            title_style.add_modifier(Modifier::BOLD),
+        )),
+    );
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Prompt · horizontal divider · the two-column grid.

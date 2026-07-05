@@ -103,8 +103,8 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
 
     // Collapse the box to its content (capped at 90% of the screen height) so the
     // help doesn't sit in a tall, mostly-empty modal. + padding (2) + border (2)
-    // + the in-box hint footer (2).
-    let want_h = lines.len() as u16 + 6;
+    // + the in-box header (2) + the in-box hint footer (2).
+    let want_h = lines.len() as u16 + 8;
     let h = want_h.min((full.height * 90 / 100).max(10));
     let w = (full.width * 70 / 100).max(40);
     let area = Rect {
@@ -117,10 +117,10 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
 
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(" Help ")
         .padding(Padding::new(2, 2, 1, 1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let inner = render_modal_header(frame, area, inner, Line::from("Help").bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
     frame.render_widget(
         Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
@@ -265,16 +265,22 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     frame.render_widget(Clear, area);
 
     let window = app.standup_window.label();
-    // The outer frame, padded so the inner boxes breathe.
+    // The outer frame, padded so the inner boxes breathe. Title + hints ride
+    // inside the box, not on its borders.
     let outer = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(format!(" Standup · {window} ")).bold())
         .padding(Padding::new(1, 1, 1, 0));
 
     // Still walking the commits: a placeholder.
     let Some(view) = &app.standup else {
         let inner = outer.inner(area);
         frame.render_widget(outer, area);
+        let inner = render_modal_header(
+            frame,
+            area,
+            inner,
+            Line::from(format!("Standup · {window}")).bold(),
+        );
         frame.render_widget(
             Paragraph::new(Span::styled(
                 format!("Collecting your commits for {window}…"),
@@ -287,16 +293,21 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
 
     let total = view.commits.len();
     let repos = view.groups.len();
-    let summary = format!(
-        " {total} commit{} · {repos} repo{} ",
-        if total == 1 { "" } else { "s" },
-        if repos == 1 { "" } else { "s" },
-    );
-    // The count rides the top-right of the frame; the bottom row inside carries
-    // the key hints.
-    let outer = outer.title(Line::from(summary).right_aligned().style(theme.dim()));
+    // The header carries the title and the count, inside the box.
+    let header = Line::from(vec![
+        Span::styled(format!("Standup · {window}"), Style::new().bold()),
+        Span::styled(
+            format!(
+                "   ·   {total} commit{} · {repos} repo{}",
+                if total == 1 { "" } else { "s" },
+                if repos == 1 { "" } else { "s" },
+            ),
+            theme.dim(),
+        ),
+    ]);
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
+    let inner = render_modal_header(frame, area, inner, header);
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     if view.groups.is_empty() {
@@ -534,14 +545,14 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
 
     // Still loading: a small centred box, not a full-size empty one.
     let Some(d) = &dv.detail else {
-        let area = detail_rect(full, 3); // 1 content row + 2 for the hint footer
+        let area = detail_rect(full, 5); // 1 content row + 2 header + 2 hint footer
         frame.render_widget(Clear, area);
         let block = Block::bordered()
             .border_type(BorderType::Rounded)
-            .title(Line::from(title).bold())
             .padding(Padding::new(1, 0, 0, 0));
         let inner = block.inner(area);
         frame.render_widget(block, area);
+        let inner = render_modal_header(frame, area, inner, Line::from(title.clone()).bold());
         let inner = render_modal_hints(frame, area, inner, app, theme);
         frame.render_widget(
             Paragraph::new(Span::styled("Reading repo…", theme.dim())),
@@ -637,14 +648,14 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
     // border) rather than a fixed 84% box, so short repos don't show acres of
     // whitespace. `detail_rect` caps it at 84% of the screen.
     let content_rows = clines.len().max(lines.len()) as u16;
-    let area = detail_rect(full, content_rows + 2); // +2 for the hint footer
+    let area = detail_rect(full, content_rows + 4); // +2 header, +2 hint footer
     frame.render_widget(Clear, area);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(title).bold())
         .padding(Padding::new(1, 0, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let inner = render_modal_header(frame, area, inner, Line::from(title).bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Two panes (like the standup): repo state on the left, commits on the right.
@@ -834,11 +845,14 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
     };
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(format!(" Run · {} ", run.command)).bold())
-        .title(Line::from(summary).right_aligned())
         .padding(Padding::new(1, 0, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let header = Line::from(vec![
+        Span::styled(format!("Run · {}", run.command), Style::new().bold()),
+        Span::styled(format!("   ·  {}", summary.trim()), theme.dim()),
+    ]);
+    let inner = render_modal_header(frame, area, inner, header);
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Two boxed panes — a "Repos" list and the focused repo's output — matching
@@ -970,10 +984,10 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
     frame.render_widget(Clear, area);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(" Confirm ").bold())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let inner = render_modal_header(frame, area, inner, Line::from("Confirm").bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
     let lines = vec![
         Line::from(Span::styled(
@@ -1021,9 +1035,9 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
     let note_h: u16 = if no_editor { 2 } else { 0 };
 
     // Size to the content: fixed-ish width, height = items + note + borders + 2
-    // for the in-box hint footer (rule + keys).
+    // for the header (title + rule) + 2 for the hint footer (rule + keys).
     let w = 52.min(full.width.saturating_sub(2)).max(20);
-    let h = (ow.openers.len() as u16 + note_h + 4)
+    let h = (ow.openers.len() as u16 + note_h + 6)
         .min(full.height.saturating_sub(2))
         .max(3);
     let x = full.x + full.width.saturating_sub(w) / 2;
@@ -1038,10 +1052,10 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
 
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .title(Line::from(title).bold())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let inner = render_modal_header(frame, area, inner, Line::from(title).bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Split off the note row(s) when there are no detected editors.
