@@ -10,6 +10,11 @@ on:
   push:
     tags: ["v*"]
 
+# The default workflow token is read-only; creating the release and uploading
+# the binaries needs write access to repository contents.
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
