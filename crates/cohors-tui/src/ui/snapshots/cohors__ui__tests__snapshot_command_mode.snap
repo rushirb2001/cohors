@@ -3,13 +3,13 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
-│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
-│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
+│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
+│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
-│ ▁▁▁▁▁▁▁▁▁▁▁╭ Command ───────────────────────────────────────────────────────────────╮███████████ │
-│ quiet · 12 │ : sort name▏                                                           │            │
+╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
+│ ███████████╭ Command ───────────────────────────────────────────────────────────────╮███████████ │
+│ 1 at risk ·│ : sort name▏                                                           │            │
 ╰────────────│ ────────────────────────────────────────────────────────────────────── │────────────╯
 ╭ Repositorie│ :fetch :pull :push         │ sync the targets with their remotes       │────────────╮
 │    Repo    │ :!<cmd>                    │ run any shell command across the targets  │            │

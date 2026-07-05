@@ -3,13 +3,13 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
 │ ▟██▌╭ Run · git status -s ─────────────────────────────────────────────────────────────────╮     │
 │ ▀▐▖▀│ ╭ Repos ─────────────────╮  ╭ payments ─────────────────────────────────────────────╮│     │
 ╰─────│ │ ✓ payments             │  │ exit 0                                                ││─────╯
-╭ Flee│ │ ⠋ web-app              │  │                                                       ││─────╮
-│ ▁▁▁▁│ │ ⠋ auth-service         │  │  M src/lib.rs                                         ││████ │
-│ quie│ │                        │  │ ?? notes.txt                                          ││     │
+╭ Atte│ │ ⠋ web-app              │  │                                                       ││─────╮
+│ ████│ │ ⠋ auth-service         │  │  M src/lib.rs                                         ││████ │
+│ 1 at│ │                        │  │ ?? notes.txt                                          ││     │
 ╰─────│ │                        │  │                                                       ││─────╯
 ╭ Repo│ │                        │  │                                                       ││─────╮
 │    R│ │                        │  │                                                       ││     │

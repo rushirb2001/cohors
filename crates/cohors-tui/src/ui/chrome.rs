@@ -1,6 +1,6 @@
 use super::*;
 
-pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
+pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .border_style(theme.dim())
@@ -66,8 +66,9 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, 
         Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
     ]);
 
-    // Full brand block (lede + taglines) and the info column, both sized to
-    // their content so the bar packs left instead of leaving a gap mid-line.
+    // Brand block: the lede, the tagline, and the scanned root path — so the
+    // header keeps orientation (where am I looking?) on the left, and the
+    // otherwise-empty right fills with the fleet-activity sparkline.
     let brand = Text::from(vec![
         lede.clone(),
         Line::from(Span::styled(
@@ -75,17 +76,17 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, 
             theme.dim(),
         )),
         Line::from(Span::styled(
-            "status · fetch · pull · weekly standup",
+            truncate_tail(&header_dir(app), 40),
             theme.dim(),
         )),
     ]);
-    let info = header_info(app, now, 34, theme);
+    let activity = fleet_activity_lines(app, theme);
     let text_w = brand.width() as u16;
-    let info_w = info.width() as u16;
-    let full_need = ICON_W + 2 + text_w + 2 + 1 + 2 + info_w;
+    let act_w = activity.iter().map(|l| l.width() as u16).max().unwrap_or(0);
+    let full_need = ICON_W + 2 + text_w + 2 + 1 + 2 + act_w;
 
     // Compact fallback for narrow terminals: spider + lede, then just the
-    // directory — no taglines, divider, or info column.
+    // directory — no tagline, divider, or activity widget.
     if inner.width < full_need {
         let [icon_area, text_area] =
             Layout::horizontal([Constraint::Length(ICON_W), Constraint::Min(0)])
@@ -103,12 +104,12 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, 
         return;
     }
 
-    // Full layout, packed left: spider · brand · divider · info · (spacer).
-    let [icon_area, text_area, div_area, info_area, _rest] = Layout::horizontal([
+    // Full layout, packed left: spider · brand · divider · fleet activity.
+    let [icon_area, text_area, div_area, act_area, _rest] = Layout::horizontal([
         Constraint::Length(ICON_W),
         Constraint::Length(text_w),
         Constraint::Length(1),
-        Constraint::Length(info_w),
+        Constraint::Length(act_w),
         Constraint::Min(0),
     ])
     .spacing(2)
@@ -124,7 +125,7 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, now: i64, 
         ])),
         div_area,
     );
-    frame.render_widget(Paragraph::new(info), info_area);
+    frame.render_widget(Paragraph::new(Text::from(activity)), act_area);
 }
 
 /// The configured root(s) as a compact, home-abbreviated string.
@@ -134,33 +135,6 @@ pub(crate) fn header_dir(app: &App) -> String {
         [one] => abbrev_home(one),
         [first, rest @ ..] => format!("{} (+{})", abbrev_home(first), rest.len()),
     }
-}
-
-/// The header's right-hand info column: session orientation that isn't shown
-/// elsewhere — where we're watching, the config in effect, and the fleet's most
-/// recent activity. Three aligned `label value` rows trimmed to `width`.
-pub(crate) fn header_info(app: &App, now: i64, width: u16, theme: &Theme) -> Text<'static> {
-    let val = width.saturating_sub(7) as usize;
-
-    // Where — the configured root(s), home-abbreviated and tail-trimmed.
-    let dir = truncate_tail(&header_dir(app), val);
-
-    // Which config is in effect.
-    let config = truncate_tail(&abbrev_home(&app.config_path), val);
-
-    // The fleet's pulse — the single most recent commit across every repo.
-    let latest = app.repos.iter().filter_map(|r| r.last_commit_time()).max();
-    let active = match latest {
-        Some(ts) => time::relative(ts, now),
-        None => "—".to_string(),
-    };
-
-    let label = |t: &'static str| Span::styled(format!("{t:<6} "), theme.dim());
-    Text::from(vec![
-        Line::from(vec![label("dir"), Span::styled(dir, Style::new())]),
-        Line::from(vec![label("config"), Span::styled(config, theme.dim())]),
-        Line::from(vec![label("active"), Span::styled(active, Style::new())]),
-    ])
 }
 
 /// Replace a leading `$HOME` with `~` for a compact path display.
@@ -664,17 +638,12 @@ pub(crate) fn render_attention_panel(
 ) {
     let s = fleet_summary(&app.repos, now);
 
-    // Wide terminals get the web's overview strip: a fleet-activity card (the
-    // heartbeat sparkline) beside the attention card (a severity bar + the four
-    // bucket counts). Narrow ones keep a single-line chip summary — two cards
-    // would crush each other.
-    if area.height >= 4 && area.width >= 76 {
-        let [act_area, attn_area] =
-            Layout::horizontal([Constraint::Length(34), Constraint::Min(0)])
-                .spacing(1)
-                .areas(area);
-        render_activity_card(frame, act_area, app, theme);
-        render_attention_card(frame, attn_area, &s, theme);
+    // The fleet-activity sparkline now lives in the header, so the whole strip is
+    // the Attention panel. With vertical room it's the full-width card (the
+    // severity bar over the four bucket counts); on a short terminal it collapses
+    // to the single-line bucket summary.
+    if area.height >= 4 {
+        render_attention_card(frame, area, &s, theme);
         return;
     }
 
@@ -742,26 +711,17 @@ pub(crate) fn severity_bucket_spans(s: &FleetSummary, theme: &Theme) -> Vec<Span
     spans
 }
 
-/// The fleet-activity card: every repo's weekly commit counts summed into one
-/// 12-week sparkline (each week two cells wide, so the shape reads), captioned
-/// with the totals — the TUI's version of the web's "fleet activity" block.
-fn render_activity_card(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .title(Line::from(Span::styled(
-            " Fleet activity ",
-            Style::new().add_modifier(Modifier::BOLD),
-        )))
-        .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
+/// The fleet-activity mini widget for the **header's right side**: a dim label,
+/// every repo's weekly commit counts summed into one 12-week sparkline (each
+/// week two cells wide so the shape reads, in brand purple), and the totals
+/// caption. Three lines, sized to fill the header card's otherwise-empty right.
+pub(crate) fn fleet_activity_lines(app: &App, theme: &Theme) -> Vec<Line<'static>> {
     // Element-wise sum of each repo's 12-week activity (oldest first). Repos
     // scanned before the activity field existed contribute nothing.
     let mut weeks = [0u64; 12];
     for repo in &app.repos {
-        for (w, n) in repo.activity.iter().take(12).enumerate() {
-            weeks[w] += u64::from(*n);
+        for (wk, n) in repo.activity.iter().take(12).enumerate() {
+            weeks[wk] += u64::from(*n);
         }
     }
     let total: u64 = weeks.iter().sum();
@@ -777,7 +737,7 @@ fn render_activity_card(frame: &mut Frame, area: Rect, app: &App, theme: &Theme)
         };
         let ch = ramp[idx.min(7)];
         spark.push(ch);
-        spark.push(ch); // two cells per week: wide enough to read as a bar
+        spark.push(ch);
     }
 
     let caption = if total == 0 {
@@ -785,11 +745,14 @@ fn render_activity_card(frame: &mut Frame, area: Rect, app: &App, theme: &Theme)
     } else {
         format!("{total} commits · 12 weeks")
     };
-    let lines = vec![
+    vec![
+        Line::from(Span::styled(
+            "Fleet activity",
+            theme.dim().add_modifier(Modifier::BOLD),
+        )),
         Line::from(Span::styled(spark, theme.fg(SPIDER_PURPLE))),
         Line::from(Span::styled(caption, theme.dim())),
-    ];
-    frame.render_widget(Paragraph::new(lines), inner);
+    ]
 }
 
 /// The attention card: a full-width severity bar (segments proportional to the

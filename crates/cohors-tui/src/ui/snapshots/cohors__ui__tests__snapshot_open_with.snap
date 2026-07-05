@@ -3,21 +3,21 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
-│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
-│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
+│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
+│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
-│ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████ │
-│ quiet · 12 weeks      ╭ Open legacy-billing with… ───────────────────────╮m                      │
-╰───────────────────────│ ▌ VS Code  · default                             │───────────────────────╯
-╭ Repositories (5) · sor│   Neovim                                         │───────────────────────╮
-│    Repo               │   Reveal in file manager                         │us                     │
-│▌   legacy-billing     │   Open in lazygit                                │d not read .git (permi…│
-│    payments @main     ╰──────────────────────────────────────────────────╯npushed                │
-│    web-app @feat/checkout  ↓5     0      failing   20m     quiet      ↓5 behind — pull           │
+╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
+│ 1 at risk · 2 warning · 1 minor · 1 calm                                                         │
+╰───────────────────────╭ Open legacy-billing with… ───────────────────────╮───────────────────────╯
+╭ Repositories (5) · sor│ ▌ VS Code  · default                             │───────────────────────╮
+│    Repo               │   Neovim                                         │us                     │
+│▌   legacy-billing     │   Reveal in file manager                         │d not read .git (permi…│
+│    payments @main     │   Open in lazygit                                │npushed                │
+│    web-app @feat/check╰──────────────────────────────────────────────────╯ehind — pull           │
 │    infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes      │
 │    auth-service @main      local  1      pending    3d     quiet      up to date                 │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ↑/↓ choose · ⏎ open · d set default · Esc cancel                                                 │

@@ -7,9 +7,9 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▟██▌█▐│                                                                                  │       │
 │ ▀▐▖▀█▀│ You authored 29 commits this week across 2 repos, shipping 24 features and       │       │
 ╰───────│ fixing 5 bugs.                                                                   │───────╯
-╭ Fleet │                                                                                  │───────╮
-│ ▁▁▁▁▁▁│                                                                                  │██████ │
-│ quiet │ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │       │
+╭ Attent│                                                                                  │───────╮
+│ ██████│                                                                                  │██████ │
+│ 1 at r│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │       │
 ╰───────│ │ payments  24           │  │ aa00010  feat: payments work item 10            ║│ │───────╯
 ╭ Reposi│ │ web-app  5             │  │ aa00011  feat: payments work item 11            ║│ │───────╮
 │    Rep│ │                        │  │ aa00012  feat: payments work item 12            ║│ │       │

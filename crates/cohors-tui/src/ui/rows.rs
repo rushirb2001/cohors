@@ -142,10 +142,12 @@ pub(crate) fn render_repos_panel(
     // No Stash column either: like Changes, the stash count is Status's job
     // ("1 stash · stale"), and the dock card spells it out for the selection.
     //
-    // Which column set renders depends on WIDTH alone — a wide terminal keeps
-    // the full PRs / CI / Activity columns even when it's too short for the
-    // dock. Only genuinely narrow terminals fall back to the fused Sync
-    // (`↑2 ● 2pr`) set.
+    // The column set degrades gracefully with WIDTH, so a normal-width terminal
+    // keeps the modern split columns instead of cliffing to the fused legacy
+    // set. Three tiers, richest-that-fits (each keeps a legible Status):
+    //   Wide   Repo · Sync · PRs · CI · Last · Activity · Status
+    //   Medium Repo · Sync · PRs · CI · Last · Status         (drops the sparkline)
+    //   Narrow Repo · Sync · Last · Status                    (Sync fuses ↑2 ● 2pr)
     // While scanning, the refreshed columns' floors grow by 2 so the header
     // spinner (` ⠋`) has room beside the label.
     let hpad: u16 = if app.scanning { 2 } else { 0 };
@@ -153,36 +155,64 @@ pub(crate) fn render_repos_panel(
     let prs_w = col_w(prs_spans, 3 + hpad, 5);
     let ci_w = col_w(ci_spans, 2 + hpad, 8);
     let act_w: u16 = ACTIVITY_WEEKS as u16; // one cell per week
-    let fixed_x = 2 + repo_w + sync_x_w + prs_w + ci_w + age_w + act_w;
-    // Expanded whenever a legible Status column (≥18 cols) still fits.
-    let expanded = (inner.width as usize) >= fixed_x as usize + 2 * 6 + 18;
-    let (widths, reason_max): (Vec<Constraint>, usize) = if expanded {
-        let status_w = (inner.width as usize).saturating_sub(fixed_x as usize + 2 * 6); // 7 cols ⇒ 6 gaps
-        let widths = vec![
-            Constraint::Length(repo_w), // Repo @branch (incl. 2-col gutter)
-            Constraint::Length(sync_x_w),
-            Constraint::Length(prs_w),
-            Constraint::Length(ci_w),
-            Constraint::Length(age_w),
-            Constraint::Length(act_w),
-            Constraint::Fill(1), // Status (primary attention reason)
-        ];
-        (widths, status_w)
+    let w = inner.width as usize;
+    let wide_fixed = (2 + repo_w + sync_x_w + prs_w + ci_w + age_w + act_w) as usize;
+    let med_fixed = (2 + repo_w + sync_x_w + prs_w + ci_w + age_w) as usize;
+    let layout = if w >= wide_fixed + 2 * 6 + 18 {
+        Tier::Wide
+    } else if w >= med_fixed + 2 * 5 + 16 {
+        Tier::Medium
     } else {
-        let sync_w = col_w(sync_spans, 4 + hpad, 12);
-        let fixed = 2 + repo_w + sync_w + age_w;
-        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 3); // 4 cols ⇒ 3 gaps
-        let widths = vec![
-            Constraint::Length(repo_w),
-            Constraint::Length(sync_w),
-            Constraint::Length(age_w),
-            Constraint::Fill(1), // Status (primary attention reason)
-        ];
-        (widths, status_w)
+        Tier::Narrow
+    };
+    let (widths, reason_max): (Vec<Constraint>, usize) = match layout {
+        Tier::Wide => {
+            let status_w = w.saturating_sub(wide_fixed + 2 * 6); // 7 cols ⇒ 6 gaps
+            (
+                vec![
+                    Constraint::Length(repo_w), // Repo @branch (incl. 2-col gutter)
+                    Constraint::Length(sync_x_w),
+                    Constraint::Length(prs_w),
+                    Constraint::Length(ci_w),
+                    Constraint::Length(age_w),
+                    Constraint::Length(act_w),
+                    Constraint::Fill(1), // Status (primary attention reason)
+                ],
+                status_w,
+            )
+        }
+        Tier::Medium => {
+            let status_w = w.saturating_sub(med_fixed + 2 * 5); // 6 cols ⇒ 5 gaps
+            (
+                vec![
+                    Constraint::Length(repo_w),
+                    Constraint::Length(sync_x_w),
+                    Constraint::Length(prs_w),
+                    Constraint::Length(ci_w),
+                    Constraint::Length(age_w),
+                    Constraint::Fill(1),
+                ],
+                status_w,
+            )
+        }
+        Tier::Narrow => {
+            let sync_w = col_w(sync_spans, 4 + hpad, 12);
+            let fixed = (2 + repo_w + sync_w + age_w) as usize;
+            let status_w = w.saturating_sub(fixed + 2 * 3); // 4 cols ⇒ 3 gaps
+            (
+                vec![
+                    Constraint::Length(repo_w),
+                    Constraint::Length(sync_w),
+                    Constraint::Length(age_w),
+                    Constraint::Fill(1),
+                ],
+                status_w,
+            )
+        }
     };
 
     let fmt = RowFmt {
-        expanded,
+        layout,
         reason_max,
         age_w,
         // ~400ms on / ~400ms off at the 100ms tick cadence.
@@ -206,10 +236,10 @@ pub(crate) fn render_repos_panel(
     // but aligned to the data table: a 2-col reserve for the highlight symbol,
     // then the same column widths/spacing. "Repo" is padded by 2 to line up with
     // the names' selection gutter.
-    let labels: &[&str] = if expanded {
-        &["  Repo", "Sync", "PRs", "CI", "Last", "Activity", "Status"]
-    } else {
-        &["  Repo", "Sync", "Last", "Status"]
+    let labels: &[&str] = match layout {
+        Tier::Wide => &["  Repo", "Sync", "PRs", "CI", "Last", "Activity", "Status"],
+        Tier::Medium => &["  Repo", "Sync", "PRs", "CI", "Last", "Status"],
+        Tier::Narrow => &["  Repo", "Sync", "Last", "Status"],
     };
     let header_style = Style::new().add_modifier(Modifier::BOLD);
     let [_sym, header_cols] =
@@ -731,12 +761,21 @@ pub(crate) fn severity_style(sev: Severity, theme: &Theme) -> Style {
     }
 }
 
-/// How to render a row's columns, which depend on whether the dock is up (and so
-/// carrying the commit message, freeing the table to expand its stat columns).
+/// The width tier that decides a row's column set, so the width arithmetic, the
+/// header labels, and the row cells all agree.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) enum Tier {
+    /// Repo · Sync · Last · Status (Sync fuses arrows + PR + CI as `↑2 ● 2pr`).
+    Narrow,
+    /// Repo · Sync · PRs · CI · Last · Status (split remote columns, no sparkline).
+    Medium,
+    /// Repo · Sync · PRs · CI · Last · Activity · Status.
+    Wide,
+}
+
+/// How to render a row's columns, chosen by the terminal's width [`Tier`].
 pub(crate) struct RowFmt {
-    /// Wide terminal ⇒ expanded columns (Sync / PRs / CI / Last / Activity /
-    /// Status); else the narrow, fused columns (Sync / Last / Status).
-    expanded: bool,
+    layout: Tier,
     /// Max chars for the reason label (the trailing "Status" column).
     reason_max: usize,
     /// Width of the age column, for right-aligning the age (the dock layout).
@@ -770,8 +809,8 @@ pub(crate) fn repo_row<'a>(
             ellipsize(reason, fmt.reason_max),
             theme.risk(),
         ));
-        return if fmt.expanded {
-            Row::new(vec![
+        return match fmt.layout {
+            Tier::Wide => Row::new(vec![
                 name,
                 blank(), // Sync
                 blank(), // PRs
@@ -779,14 +818,21 @@ pub(crate) fn repo_row<'a>(
                 blank(), // Last
                 blank(), // Activity
                 status,
-            ])
-        } else {
-            Row::new(vec![
+            ]),
+            Tier::Medium => Row::new(vec![
+                name,
+                blank(), // Sync
+                blank(), // PRs
+                blank(), // CI
+                blank(), // Last
+                status,
+            ]),
+            Tier::Narrow => Row::new(vec![
                 name,
                 blank(), // Sync
                 blank(), // Last
                 status,
-            ])
+            ]),
         };
     }
 
@@ -808,47 +854,52 @@ pub(crate) fn repo_row<'a>(
     let synced = matches!(&snap.upstream, Some(u) if u.ahead == 0 && u.behind == 0);
     let blink_synced = theme.glyphs.blink_synced();
 
-    if fmt.expanded {
-        // While an action or a rescan runs, every cell being refreshed — Sync,
-        // PRs, and CI — shows the spinner instead of a value that's about to
-        // change under the reader.
-        let spin_cell = |spin: &str| Cell::from(Span::styled(spin.to_string(), theme.ahead()));
-        let sync = match busy {
-            Some(spin) => spin_cell(spin),
-            None if synced && blink_synced && !fmt.blink_on => Cell::from(Span::raw(" ")),
-            None => Cell::from(Line::from(ahead_behind_spans(snap, theme))),
-        };
-        let prs = match busy {
-            Some(spin) => spin_cell(spin),
-            None => Cell::from(Line::from(prs_spans(snap, theme))),
-        };
-        let ci = match busy {
-            Some(spin) => spin_cell(spin),
-            None => Cell::from(Line::from(ci_spans(snap, theme))),
-        };
-        Row::new(vec![
-            name,
-            sync,
-            prs,
-            ci,
-            age_cell(snap, now, fmt.age_w as usize, theme),
-            activity_cell(snap, theme),
-            reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
-        ])
-    } else {
-        let sync = match busy {
-            Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
-            None if synced && snap.remote.is_none() && blink_synced && !fmt.blink_on => {
-                Cell::from(Span::raw(" "))
+    let age = age_cell(snap, now, fmt.age_w as usize, theme);
+    let status = reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme);
+    match fmt.layout {
+        Tier::Wide | Tier::Medium => {
+            // Split remote columns. While an action or a rescan runs, every cell
+            // being refreshed — Sync, PRs, and CI — shows the spinner instead of
+            // a value about to change under the reader.
+            let spin_cell = |spin: &str| Cell::from(Span::styled(spin.to_string(), theme.ahead()));
+            let sync = match busy {
+                Some(spin) => spin_cell(spin),
+                None if synced && blink_synced && !fmt.blink_on => Cell::from(Span::raw(" ")),
+                None => Cell::from(Line::from(ahead_behind_spans(snap, theme))),
+            };
+            let prs = match busy {
+                Some(spin) => spin_cell(spin),
+                None => Cell::from(Line::from(prs_spans(snap, theme))),
+            };
+            let ci = match busy {
+                Some(spin) => spin_cell(spin),
+                None => Cell::from(Line::from(ci_spans(snap, theme))),
+            };
+            if fmt.layout == Tier::Wide {
+                Row::new(vec![
+                    name,
+                    sync,
+                    prs,
+                    ci,
+                    age,
+                    activity_cell(snap, theme),
+                    status,
+                ])
+            } else {
+                Row::new(vec![name, sync, prs, ci, age, status])
             }
-            None => sync_cell(snap, theme),
-        };
-        Row::new(vec![
-            name,
-            sync,
-            age_cell(snap, now, fmt.age_w as usize, theme),
-            reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
-        ])
+        }
+        Tier::Narrow => {
+            // Fused Sync (`↑2 ● 2pr`), no separate PRs/CI columns.
+            let sync = match busy {
+                Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
+                None if synced && snap.remote.is_none() && blink_synced && !fmt.blink_on => {
+                    Cell::from(Span::raw(" "))
+                }
+                None => sync_cell(snap, theme),
+            };
+            Row::new(vec![name, sync, age, status])
+        }
     }
 }
 

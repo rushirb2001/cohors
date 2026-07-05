@@ -3,14 +3,13 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 26)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    (demo)                              │
-│ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
-│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
+│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▆▆██▇▇██▇▇▆▆▆▆▄▄▇▇▅▅██▇▇                    │
+│ ▀▐▖▀█▀▗▌▀  (demo)                                 │  535 commits · 12 weeks                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Fleet activity ────────────────╮ ╭ Attention (10 of 12 repositories) ────────────────────────────╮
-│ ▆▆██▇▇██▇▇▆▆▆▆▄▄▇▇▅▅██▇▇       │ │ █████████████████████████████████████████████████████████████ │
-│ 535 commits · 12 weeks         │ │ 2 at risk · 4 warning · 4 minor · 2 calm                      │
-╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
+╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
+│ 2 at risk · 4 warning · 4 minor · 2 calm                                                         │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
 │    Repo                     Sync   PRs    CI       Last  Activity      Status                    │
 │▌   legacy-billing                                                      could not read .git (perm…│
@@ -18,7 +17,8 @@ expression: "render_to_string(&app, 100, 26)"
 │    payments @main           ↑2     2      passing    2h  ▅▁▅▁▆▂▇▃█▄█▅  ↑2 unpushed               │
 │    analytics @main          ↑1     0      passing    4d  ▃█▄█▅▁▆▂▇▃█▄  ↑1 unpushed · aging       │
 │    design-system @main      ↑1     1      passing    6h  ▃█▄█▅▁▆▂▇▃█▄  ↑1 unpushed               │
-│                                             ↓ 7 more                                             │
+│    web-app @feat/checkout   ↓5     1      pending   20m  ▄█▅▁▆▂▇▃█▄█▅  ↓5 behind — pull          │
+│                                             ↓ 6 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭──────────────────────────────────┬──────────────────────────────┬────────────────────────────────╮

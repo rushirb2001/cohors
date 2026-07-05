@@ -114,7 +114,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         Constraint::Length(footer_h),
     ])
     .areas(area);
-    render_header(frame, header_area, app, now, &theme);
+    render_header(frame, header_area, app, &theme);
     render_footer(frame, footer_area, app, &theme);
 
     if app.repos.is_empty() {
@@ -127,11 +127,12 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         // A strip on top — the fuzzy input while filtering, otherwise the
         // Attention panel — then the Repositories panel, which hosts the context
         // pane inside its own box (bottom rows) when the terminal is tall enough.
-        // Wide terminals give the strip an extra row: the attention panel splits
-        // into the fleet-activity + attention cards, whose bodies are two rows.
+        // With vertical room the attention panel is its full-width card (severity
+        // bar + bucket counts, two body rows); on a short terminal it collapses
+        // to a single bucket line.
         let strip_height = if app.mode == Mode::Filter {
             1
-        } else if body_area.width >= 76 {
+        } else if body_area.height >= 14 {
             4
         } else {
             3

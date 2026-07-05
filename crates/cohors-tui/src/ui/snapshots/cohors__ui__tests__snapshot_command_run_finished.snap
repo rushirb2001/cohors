@@ -3,13 +3,13 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
 │ ▟██▌╭ Run · cargo test ────────────────────────────────────────────────────────────────────╮     │
 │ ▀▐▖▀│ ╭ Repos ─────────────────╮  ╭ web-app ──────────────────────────────────────────────╮│     │
 ╰─────│ │ ✓ payments             │  │ exit 1                                                ││─────╯
-╭ Flee│ │ ✗ web-app 1            │  │                                                       ││─────╮
-│ ▁▁▁▁│ │                        │  │ running 3 tests                                       ││████ │
-│ quie│ │                        │  │ ── stderr ──                                          ││     │
+╭ Atte│ │ ✗ web-app 1            │  │                                                       ││─────╮
+│ ████│ │                        │  │ running 3 tests                                       ││████ │
+│ 1 at│ │                        │  │ ── stderr ──                                          ││     │
 ╰─────│ │                        │  │ test cart::total failed                               ││─────╯
 ╭ Repo│ │                        │  │ error: 1 test failed                                  ││─────╮
 │    R│ │                        │  │                                                       ││     │

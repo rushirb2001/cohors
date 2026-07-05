@@ -159,6 +159,14 @@ fn snapshot_list() {
     insta::assert_snapshot!(render_to_string(&app, 100, 20));
 }
 
+/// The medium width tier: too narrow for the Activity sparkline, but the modern
+/// split Sync / PRs / CI columns survive (it does NOT cliff to the fused set).
+#[test]
+fn snapshot_list_medium() {
+    let app = demo_app();
+    insta::assert_snapshot!(render_to_string(&app, 88, 32));
+}
+
 /// On a narrow terminal the header collapses to the spider + lede + the
 /// directory only — no taglines, divider, or info column.
 #[test]

@@ -8,19 +8,19 @@ expression: "render_to_string(&app, 50, 24)"
 │ ▀▐╭ Standup · this week ───────────────────╮   │
 ╰───│                                        │───╯
 ╭ At│ You authored 11 commits this week      │───╮
-│ 1 │ across 2 repos, shipping 8 features    │   │
-╰───│ and fixing 3 bugs.                     │───╯
-╭ Re│                                        │───╮
-│   │ ╭ Repos ─────────────────────────────╮ │tat│
-│▌  │ │ payments  8                        │ │ou…│
-│   │ │ web-app  3                         │ │2 …│
+│ ██│ across 2 repos, shipping 8 features    │██ │
+│ 1 │ and fixing 3 bugs.                     │   │
+╰───│                                        │───╯
+╭ Re│ ╭ Repos ─────────────────────────────╮ │───╮
+│   │ │ payments  8                        │ │tat│
+│▌  │ │ web-app  3                         │ │ou…│
+│   │ │                                    │ │2 …│
 │   │ │                                    │ │5 …│
 │   │ │                                    │ │ u…│
 │   │ │                                    │ │p …│
-├───│ │                                    │ │───┤
-│ le│ ╰────────────────────────────────────╯ │il │
+│   │ ╰────────────────────────────────────╯ │   │
 │   │                                        │   │
-│ ⚠ │ ╭ payments  ·  8 commits ────────────╮ │   │
+│   │ ╭ payments  ·  8 commits ────────────╮ │   │
 ╰───╰────────────────── 11 commits · 2 repos ╯───╯
 ╭────────────────────────────────────────────────╮
 │ ↑/↓ repo · →/⏎ view commits · w window · y     │
