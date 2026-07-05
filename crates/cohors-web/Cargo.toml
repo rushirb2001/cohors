@@ -12,7 +12,7 @@
 # `trunk build` (wasm32) compiles the page and never tiny_http.
 [package]
 name = "cohors-web"
-version = "0.4.27"
+version.workspace = true
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"

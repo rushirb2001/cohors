@@ -19,6 +19,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-07-05
+
+### Changed
+
+- **`cohors-web` now inherits the workspace version** (`version.workspace = true`)
+  instead of pinning its own, so every crate moves in lockstep on each release.
+
 ## [0.5.5] — 2026-07-05
 
 TUI design polish (no behaviour changes):
