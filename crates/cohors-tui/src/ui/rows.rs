@@ -146,9 +146,12 @@ pub(crate) fn render_repos_panel(
     // the full PRs / CI / Activity columns even when it's too short for the
     // dock. Only genuinely narrow terminals fall back to the fused Sync
     // (`↑2 ● 2pr`) set.
-    let sync_x_w = col_w(ahead_behind_spans, 4, 9);
-    let prs_w = col_w(prs_spans, 3, 5);
-    let ci_w = col_w(ci_spans, 2, 8);
+    // While scanning, the refreshed columns' floors grow by 2 so the header
+    // spinner (` ⠋`) has room beside the label.
+    let hpad: u16 = if app.scanning { 2 } else { 0 };
+    let sync_x_w = col_w(ahead_behind_spans, 4 + hpad, 9);
+    let prs_w = col_w(prs_spans, 3 + hpad, 5);
+    let ci_w = col_w(ci_spans, 2 + hpad, 8);
     let act_w: u16 = ACTIVITY_WEEKS as u16; // one cell per week
     let fixed_x = 2 + repo_w + sync_x_w + prs_w + ci_w + age_w + act_w;
     // Expanded whenever a legible Status column (≥18 cols) still fits.
@@ -166,7 +169,7 @@ pub(crate) fn render_repos_panel(
         ];
         (widths, status_w)
     } else {
-        let sync_w = col_w(sync_spans, 4, 12);
+        let sync_w = col_w(sync_spans, 4 + hpad, 12);
         let fixed = 2 + repo_w + sync_w + age_w;
         let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 3); // 4 cols ⇒ 3 gaps
         let widths = vec![
@@ -190,10 +193,10 @@ pub(crate) fn render_repos_panel(
         .iter()
         .map(|vr| {
             let snap = &app.repos[vr.index];
-            // A row spins in its Sync cell while an action runs on it — or
-            // while a rescan is refreshing the whole fleet (the animation
-            // lives in the column, not on the box border).
-            let busy = (app.scanning || app.busy.contains(&snap.id)).then_some(spin);
+            // A row spins in its Sync/PRs/CI cells while an action runs on it.
+            // A fleet-wide rescan animates beside the column headers instead —
+            // replacing every cell made the whole table flicker.
+            let busy = app.busy.contains(&snap.id).then_some(spin);
             let marked = app.selection.contains(&snap.id);
             repo_row(snap, &vr.name_highlights, now, theme, busy, marked, &fmt)
         })
@@ -214,8 +217,15 @@ pub(crate) fn render_repos_panel(
     let col_rects = Layout::horizontal(widths.clone())
         .spacing(2)
         .split(header_cols);
+    // While a rescan runs, the spinner rides BESIDE the headers of the columns
+    // being refreshed (Sync / PRs / CI) — next to the label, never replacing
+    // the data underneath.
     for (rect, label) in col_rects.iter().zip(labels.iter()) {
-        frame.render_widget(Paragraph::new(Span::styled(*label, header_style)), *rect);
+        let mut spans = vec![Span::styled(*label, header_style)];
+        if app.scanning && matches!(*label, "Sync" | "PRs" | "CI") {
+            spans.push(Span::styled(format!(" {spin}"), theme.ahead()));
+        }
+        frame.render_widget(Paragraph::new(Line::from(spans)), *rect);
     }
 
     let table = Table::new(rows, widths)
