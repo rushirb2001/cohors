@@ -18,13 +18,13 @@ expression: "render_to_string(&app, 100, 26)"
 │    payments @main           ↑2 ● 2pr     0        2h  ↑2 unpushed                                │
 │    analytics @main          ↑1 ●         2        4d  ↑1 unpushed · aging                        │
 │    design-system @main      ↑1 ● 1pr     1        6h  ↑1 unpushed                                │
-│    web-app @feat/checkout   ↓5 ● 1pr     0       20m  ↓5 behind — pull                           │
-│                                             ↓ 6 more                                             │
+│                                             ↓ 7 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭──────────────────────────────┬──────────────────────────┬────────────────────────────────────────╮
-│            select            │   act → legacy-billing   │                  view                  │
-│ ──────────────────────────── │ ──────────────────────── │ ────────────────────────────────────── │
-│ Space mark repo │ / filter   │ ⏎ open  │ P push         │  ↑/↓ move    │ Tab standup  │ q quit   │
-│ a mark all      │ Esc clear  │ f fetch │ ! run command  │  s sort      │ h hide hints │          │
-│                              │ p pull  │ S stash        │  d attention │ ? help       │          │
-╰──────────────────────────────┴──────────────────────────┴────────────────────────────────────────╯
+────────────────────────────────────── press h to hide hints ───────────────────────────────────────
+╭──────────────────────────────────┬──────────────────────────────┬────────────────────────────────╮
+│              select              │     act → legacy-billing     │              view              │
+│ ──────────────────────────────── │ ──────────────────────────── │ ────────────────────────────── │
+│   Space mark repo │ / filter     │   ⏎ open  │ P push           │   ↑/↓ move    │ Tab standup    │
+│   a mark all      │ Esc clear    │   f fetch │ ! run command    │   s sort      │ ? help         │
+│                                  │   p pull  │ S stash          │   d attention │ q quit         │
+╰──────────────────────────────────┴──────────────────────────────┴────────────────────────────────╯

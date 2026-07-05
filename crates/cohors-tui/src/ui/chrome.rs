@@ -230,11 +230,10 @@ pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
             return 1;
         }
         // The consolidated one-box bar when it fits; the three stacked group
-        // boxes otherwise (narrow terminals). The bar needs no toggle divider —
-        // `h hide hints` is one of its own view hints.
+        // boxes otherwise (narrow terminals).
         let (_, bar_rows, bar_total) = footer_bar_geometry(app);
         if bar_total <= width {
-            return bar_rows + 2; // + the borders
+            return bar_rows + 2 + 1; // borders + the toggle divider row
         }
         let rows = footer_groups(app)
             .iter()
@@ -261,21 +260,18 @@ pub(crate) fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Th
     if app.mode == Mode::Normal {
         // A divider that doubles as the show/hide affordance, then the boxes
         // (unless the user has collapsed them with `h`).
-        // Hidden: just the divider advertising the toggle. Shown: the one-box
-        // bar (which carries its own `h hide hints` hint, so no divider row),
-        // or the stacked group boxes behind a divider on narrow terminals.
-        if app.hints_hidden {
-            render_hint_divider(frame, area, true, theme);
-            return;
-        }
-        let (_, _, bar_total) = footer_bar_geometry(app);
-        if bar_total <= area.width {
-            render_footer_bar(frame, area, app, theme);
-        } else {
-            let [divider, boxes] =
-                Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
-            render_hint_divider(frame, divider, false, theme);
-            render_footer_boxed(frame, boxes, app, theme);
+        // A divider that doubles as the show/hide affordance, then the one-box
+        // bar (or the stacked group boxes on narrow terminals).
+        let [divider, boxes] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+        render_hint_divider(frame, divider, app.hints_hidden, theme);
+        if !app.hints_hidden {
+            let (_, _, bar_total) = footer_bar_geometry(app);
+            if bar_total <= area.width {
+                render_footer_bar(frame, boxes, app, theme);
+            } else {
+                render_footer_boxed(frame, boxes, app, theme);
+            }
         }
     } else {
         render_footer_simple(frame, area, footer_lines(app, theme), theme);
@@ -974,7 +970,6 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
                     ("s", "sort"),
                     ("d", "attention"),
                     ("Tab", "standup"),
-                    ("h", "hide hints"),
                     ("?", "help"),
                     ("q", "quit"),
                 ],

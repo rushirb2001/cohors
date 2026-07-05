@@ -11,6 +11,7 @@ expression: "render_to_string(&app, 56, 22)"
 │ 1 at risk · 2 warning · 1 minor · 1 calm             │
 ╰──────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────╮
+│    Repo                    Sync      Stash  Last  Sta│
 │                       ↓ 4 more                       │
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────
@@ -22,5 +23,4 @@ expression: "render_to_string(&app, 56, 22)"
 │ ────────────── │ │ p pull │       │ │ ────────────── │
 │ Space mark rep │ │ ────────────── │ │ d attention    │
 │                │ │ ! run command  │ │ Tab standup    │
-│                │ │                │ │ h hide hints   │
 ╰────────────────╯ ╰────────────────╯ ╰────────────────╯
