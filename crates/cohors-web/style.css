@@ -463,34 +463,57 @@ body {
 .scroll::-webkit-scrollbar-thumb { background: #e2e4e8; border-radius: 6px; border: 3px solid var(--panel); }
 .scroll::-webkit-scrollbar-thumb:hover { background: #d2d5db; }
 
-/* ── action bar + row marks (write parity) ─────────────────────────────── */
-.actionbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.actionbar .target { color: var(--dim, #8b8fa3); font-size: 12px; white-space: nowrap; }
-.actionbar .action-arg { min-width: 200px; }
-.actionbar .pending { display: inline-flex; gap: 6px; }
-.actionbar .confirm { background: #b91c1c; color: #fff; border: none; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
-td.mk { width: 1.6em; text-align: center; }
-td.mk input { cursor: pointer; }
-th.mk { width: 1.6em; }
+/* ── select + act: row marks, action dropdowns, confirm modal ──────────── */
+/* Same language as the rest of the page: white panels, --border hairlines,
+   the violet accent only where attention belongs. */
+td.mk, th.mk { width: 1.8em; text-align: center; }
+td.mk input { cursor: pointer; accent-color: var(--accent); }
+td.act { width: 2.4em; text-align: center; }
 
-/* ── action dropdowns + confirm modal ──────────────────────────────────── */
 .dd { position: relative; display: inline-block; }
-.dd-menu { position: absolute; right: 0; top: 100%; z-index: 30; min-width: 8em;
-  background: var(--card, #16181f); border: 1px solid var(--border, #2a2d38);
-  border-radius: 6px; padding: 4px; display: flex; flex-direction: column; }
-.dd-item { background: none; border: none; text-align: left; padding: 5px 10px;
-  color: inherit; cursor: pointer; border-radius: 4px; font: inherit; }
-.dd-item:hover { background: rgba(127, 127, 127, 0.15); }
-td.act { width: 2em; text-align: center; }
-td.act .dd-btn { padding: 0 6px; }
-.overlay { position: fixed; inset: 0; z-index: 40; background: rgba(0, 0, 0, 0.55);
-  display: flex; align-items: center; justify-content: center; }
-.modal { background: var(--card, #16181f); border: 1px solid var(--border, #2a2d38);
-  border-radius: 10px; padding: 18px 20px; min-width: 340px; max-width: 480px; }
-.modal h3 { margin: 0 0 10px; }
-.modal .targets { max-height: 40vh; overflow-y: auto; margin: 0 0 12px;
-  padding-left: 1.2em; }
-.modal .action-arg { width: 100%; box-sizing: border-box; margin-bottom: 12px; }
+.dd-btn { font-family: var(--mono); }
+.dd-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 9em;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  padding: 4px; display: flex; flex-direction: column;
+}
+.dd-item {
+  background: none; border: none; text-align: left; padding: 6px 12px;
+  color: var(--text); cursor: pointer; border-radius: 6px;
+  font-family: var(--mono); font-size: 12.5px;
+}
+.dd-item:hover { background: var(--accent-soft); color: var(--accent); }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 40; background: rgba(31, 35, 40, 0.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(31, 35, 40, 0.18);
+  padding: 20px 22px; min-width: 360px; max-width: 520px;
+}
+.modal h3 {
+  margin: 0 0 12px; font-family: var(--mono); font-size: 14px; color: var(--text);
+}
+.modal .targets {
+  max-height: 40vh; overflow-y: auto; margin: 0 0 14px; padding: 8px 12px;
+  list-style: none; border: 1px solid var(--line); border-radius: 8px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--dim);
+}
+.modal .targets li { padding: 2px 0; }
+.modal .action-arg {
+  width: 100%; margin-bottom: 14px; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  font-family: var(--mono); font-size: 12.5px; color: var(--text);
+}
+.modal .action-arg:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
-.modal .confirm { background: #b91c1c; color: #fff; border: none; border-radius: 5px;
-  padding: 6px 14px; cursor: pointer; }
+.modal .confirm {
+  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  padding: 7px 16px; cursor: pointer; font-family: var(--mono); font-size: 12.5px;
+}
+.modal .confirm:hover { filter: brightness(1.08); }
