@@ -124,13 +124,13 @@ fn App() -> impl IntoView {
                 }
                 Ok(_) => {
                     notice.set(Some(
-                        "No git repositories found to scan — showing the demo fleet.".to_string(),
+                        "No git repositories found to scan. Showing the demo fleet.".to_string(),
                     ));
                     repos.set(demo::fleet(DEMO_NOW));
                     mode.set(Mode::Demo);
                 }
                 Err(e) => {
-                    notice.set(Some(format!("{e} — showing the demo fleet.")));
+                    notice.set(Some(format!("{e}. Showing the demo fleet.")));
                     repos.set(demo::fleet(DEMO_NOW));
                     mode.set(Mode::Demo);
                 }
@@ -195,11 +195,13 @@ fn App() -> impl IntoView {
     });
 
     // First-ever visit: auto-run the tour once, after the fleet has rendered so
-    // the spotlight targets exist. A localStorage flag makes it show only once.
-    if !tour_seen() {
+    // the spotlight targets exist. A localStorage flag makes it show only once —
+    // but `?tour` in the URL forces it, so a returning user can replay it without
+    // a dedicated button cluttering the UI.
+    if tour_requested() || !tour_seen() {
         spawn_local(async move {
             gloo_timers::future::TimeoutFuture::new(750).await;
-            if !tour_seen() {
+            if tour_requested() || !tour_seen() {
                 tour.set(Some(0));
             }
         });
@@ -264,7 +266,7 @@ fn App() -> impl IntoView {
                         repo: r.name.clone(),
                         state: if n == 2 { "skip" } else { "ok" },
                         message: if n == 2 {
-                            "1 conflict — resolve first".to_string()
+                            "1 conflict, resolve first".to_string()
                         } else {
                             "pulled".to_string()
                         },
@@ -288,10 +290,17 @@ fn App() -> impl IntoView {
         }
         let target = step.target;
         spawn_local(async move {
-            gloo_timers::future::TimeoutFuture::new(90).await;
-            let rect = target.and_then(element_rect);
-            tour_rect.set(rect);
-            tour_card_pos.set(Some(card_position(rect)));
+            // Measure twice: an early pass so the spotlight appears promptly, then
+            // a later pass that corrects for anything that reflows *after* the demo
+            // action — a marked row re-rendering, a modal mounting, or the scroll
+            // from `scroll_into_view` settling. The spot's CSS transition makes the
+            // correction a smooth slide rather than a jump.
+            for delay in [90u32, 420] {
+                gloo_timers::future::TimeoutFuture::new(delay).await;
+                let rect = target.and_then(element_rect);
+                tour_rect.set(rect);
+                tour_card_pos.set(Some(card_position(rect)));
+            }
         });
     });
 
@@ -501,7 +510,7 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                         <span class="panel-label">"Repositories"</span>
                         <input
                             class="filter"
-                            placeholder="filter repos — name…"
+                            placeholder="filter repos by name…"
                             prop:value=move || filter.get()
                             on:input=move |ev| filter.set(event_target_value(&ev))
                         />
@@ -787,7 +796,7 @@ fn confirm_modal(
                 "commit message"
             };
             let title = format!(
-                "{} — {} repositor{}",
+                "{}: {} repositor{}",
                 p.verb,
                 p.targets.len(),
                 if p.targets.len() == 1 { "y" } else { "ies" },
@@ -1011,7 +1020,7 @@ fn result_modal(result: RwSignal<Option<ActionResult>>) -> impl IntoView {
     });
     move || {
         result.get().map(|r| {
-            let title = format!("{} — {}", r.verb, r.summary);
+            let title = format!("{}: {}", r.verb, r.summary);
             let is_run = r.verb == "run";
             let modal_class = if is_run {
                 "modal results run"
@@ -1265,7 +1274,7 @@ fn repo_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
 /// local-only branch, or `↑2 ↓5` ahead/behind arrows.
 fn sync_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
     match &s.upstream {
-        None => iconw(cloud_off_icon(), "muted", "no upstream — local branch"),
+        None => iconw(cloud_off_icon(), "muted", "no upstream, local branch"),
         Some(up) if up.ahead == 0 && up.behind == 0 => {
             iconw(cloud_icon(), "ok", "in sync with upstream")
         }
@@ -1581,7 +1590,7 @@ fn status_cell(a: &cohors_core::Assessment) -> impl IntoView + use<> {
             .into_any()
         }
         None => view! {
-            <span class="st ok" title="up to date — nothing needs attention">
+            <span class="st ok" title="up to date, nothing needs attention">
                 <span class="st-full muted">"up to date"</span>
                 <span class="st-compact">{check_icon()}</span>
             </span>
@@ -2011,7 +2020,7 @@ fn hint_panel() -> impl IntoView {
         <div class="card detail">
             <div class="card-title">"Detail"</div>
             <div class="scroll">
-                <p class="hint-lead">"Select a repository — these fill in for it."</p>
+                <p class="hint-lead">"Select a repository, and these fill in for it."</p>
                 {section("Needs attention")}
                 {section("Changes")}
                 {section("Recent commits")}
@@ -2044,6 +2053,18 @@ enum TourAct {
 /// localStorage key marking that this browser has seen the intro tour.
 const TOUR_FLAG: &str = "cohors_toured";
 
+/// Whether the page URL explicitly asks for the tour (`?tour` or `#tour`), so a
+/// returning user (or a test) can replay it on demand without a replay button.
+fn tour_requested() -> bool {
+    web_sys::window()
+        .map(|w| w.location())
+        .map(|l| {
+            l.search().unwrap_or_default().contains("tour")
+                || l.hash().unwrap_or_default().contains("tour")
+        })
+        .unwrap_or(false)
+}
+
 /// Whether the intro tour has already run in this browser.
 fn tour_seen() -> bool {
     web_sys::window()
@@ -2072,43 +2093,43 @@ const TOUR: &[TourStep] = &[
     TourStep {
         target: None,
         title: "Welcome to cohors",
-        body: "Every git repo you have, on one screen — their status and what needs you. Here's a quick tour. It only looks around and stages a preview; it never runs git.",
+        body: "Every git repo you have, on one screen: their status and what needs you. Here's a quick tour. It only looks around and stages a preview; it never runs git.",
         act: TourAct::Clear,
     },
     TourStep {
         target: Some(".ov-top .fleet-name"),
         title: "This is your fleet",
-        body: "cohors scanned this folder. Every repository below lives somewhere under it — no setup, no config to point at each one.",
+        body: "cohors scanned this folder. Every repository below lives somewhere under it, with no setup and no config to point at each one.",
         act: TourAct::None,
     },
     TourStep {
         target: Some(".overview .conn"),
         title: "Always live",
-        body: "cohors reads your repos straight from disk and keeps re-scanning on its own — change something in a terminal and it just shows up. No refresh button to remember.",
+        body: "cohors reads your repos straight from disk and keeps re-scanning on its own. Change something in a terminal and it just shows up. No refresh button to remember.",
         act: TourAct::None,
     },
     TourStep {
         target: Some(".act-stat"),
         title: "The fleet's heartbeat",
-        body: "Every repo's commit activity over the last 12 weeks, summed into one sparkline — a quick read on how busy things have been.",
+        body: "Every repo's commit activity over the last 12 weeks, summed into one sparkline: a quick read on how busy things have been.",
         act: TourAct::None,
     },
     TourStep {
         target: Some(".attn-block"),
         title: "Attention at a glance",
-        body: "Where the fleet stands: how many repos are at risk, need work, are minor, or calm — the same four severities that colour every row below.",
+        body: "Where the fleet stands: how many repos are at risk, need work, are minor, or calm. These are the same four severities that colour every row below.",
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1)"),
         title: "One row, one repo",
-        body: "Read a row left to right: name and branch, sync with the remote, stashes, PRs, CI, last commit, and activity — ending with Status, the headline reason it needs you. Each row carries a faint tint of that severity, so trouble stands out.",
+        body: "Read a row left to right: name and branch, sync with the remote, stashes, PRs, CI, last commit, and activity, ending with Status, the headline reason it needs you. Each row carries a faint tint of that severity, so trouble stands out.",
         act: TourAct::None,
     },
     TourStep {
         target: Some(".repos-head .filter"),
         title: "Filter by name",
-        body: "Start typing to narrow the fleet — useful once you're tracking dozens or hundreds of repos.",
+        body: "Start typing to narrow the fleet. Handy once you're tracking dozens or hundreds of repos.",
         act: TourAct::None,
     },
     TourStep {
@@ -2120,25 +2141,25 @@ const TOUR: &[TourStep] = &[
     TourStep {
         target: Some(".fleet thead th.sorted"),
         title: "Sort any column",
-        body: "Click a column header to sort — by attention, recency, name, or how far out of sync. The active column shows an arrow.",
+        body: "Click a column header to sort by attention, recency, name, or how far out of sync. The active column shows an arrow.",
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1) td.mk"),
         title: "Pick a subset",
-        body: "Tick rows to build a selection — we've checked the first one for you. Now you can act on just those repos.",
+        body: "Tick rows to build a selection. We've checked the first one for you, so you can act on just those repos.",
         act: TourAct::Mark,
     },
     TourStep {
         target: Some(".act-controls"),
         title: "Act on the fleet",
-        body: "\"act on selected\" targets your ticked repos; \"act on all\" targets everything. Either way you pick a verb — fetch, pull, push, commit, stash, or a shell command.",
+        body: "\"act on selected\" targets your ticked repos; \"act on all\" targets everything. Either way you pick a verb: fetch, pull, push, commit, stash, or a shell command.",
         act: TourAct::None,
     },
     TourStep {
         target: Some(".modal"),
         title: "Preview before it runs",
-        body: "Nothing happens by surprise. First, cohors shows you the exact repositories an action will touch — like this — and waits for you to confirm.",
+        body: "Nothing happens by surprise. First, cohors shows you the exact repositories an action will touch, like this, and waits for you to confirm.",
         act: TourAct::ShowConfirm,
     },
     TourStep {
@@ -2156,7 +2177,7 @@ const TOUR: &[TourStep] = &[
     TourStep {
         target: Some(".side"),
         title: "Look closer",
-        body: "Click a repo to open it — its recent commits, branches, working-tree changes, and pull requests all fill in right here in the Detail panel.",
+        body: "Click a repo to open it. Its recent commits, branches, working-tree changes, and pull requests all fill in right here in the Detail panel.",
         act: TourAct::Select,
     },
     TourStep {

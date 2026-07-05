@@ -44,6 +44,12 @@ body {
   overflow: hidden;
 }
 
+/* Form controls don't inherit the page font by default — without this, buttons
+   and inputs fall back to the browser's default face and look out of place next
+   to the UI (most visibly the tour card's Skip/Back/Next). Class rules that set
+   their own family (the mono controls) still win on specificity. */
+button, input, select, textarea { font-family: inherit; }
+
 /* Full-height shell: fixed header/controls, the grid fills the rest. */
 .app {
   height: 100vh;
@@ -401,9 +407,13 @@ body {
 }
 .fleet tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; }
 .fleet tbody tr:last-child { border-bottom: none; }
-/* Leave room for the sticky header when a row is scrolled into view (the guided
-   tour does this) so it lands below the header, not tucked under it. */
-.fleet tbody tr { scroll-margin-top: 3rem; }
+/* Leave room for the sticky header when a row *or a cell* is scrolled into view
+   (the guided tour spotlights whole rows and individual cells) so the target
+   lands clearly below the sticky thead, not tucked under it. Cells need this too
+   — scroll-into-view aligns whatever element it's given, and td has no margin of
+   its own. 4rem comfortably clears the ~31px header plus the spotlight ring. */
+.fleet tbody tr,
+.fleet tbody td { scroll-margin-top: 4rem; }
 /* A 10% severity wash on the row — hover and selection override it. */
 .fleet tbody tr.sev-risk:not(:hover):not(.selected) {
   background: color-mix(in srgb, var(--sev-risk) 10%, transparent);
