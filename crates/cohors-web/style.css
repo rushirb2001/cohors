@@ -156,33 +156,28 @@ body {
 .link a:hover { text-decoration: underline; }
 .empty { padding: 1.2rem 0.95rem; color: var(--faint); font-size: 0.82rem; }
 
-/* Empty-state for the detail aside: a live "fleet pulse" — a combined activity
-   sparkline that grows in, and an attention breakdown bar — drawn from the
-   loaded fleet. Onboarding lives in the tour now, so this is a status glance. */
-.scroll.hint { padding: 0; }
-.hint-lead {
-  margin: 0; padding: 0.8rem 0.95rem; color: var(--dim); font-size: 0.86rem;
+/* Top-strip stat cards: the fleet's activity sparkline and attention breakdown,
+   sat beside the Overview in the header row. */
+.stat-card {
+  flex: none; width: 15rem; justify-content: center;
+  padding: 12px 16px;
 }
-.pulse-card {
-  margin: 0.2rem 0.8rem 0.9rem; padding: 0.85rem 0.9rem;
-  background: var(--bg); border: 1px solid var(--border); border-radius: 9px;
-}
-.pulse-h {
+.stat-h {
   font-family: var(--mono); font-size: 0.66rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.07em; color: var(--dim);
-  margin-bottom: 0.6rem;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint);
+  margin-bottom: 0.55rem;
 }
-.pulse-spark { display: flex; align-items: flex-end; gap: 3px; height: 54px; }
+.stat-cap {
+  margin-top: 0.5rem; color: var(--faint); font-size: 0.74rem; font-family: var(--mono);
+}
+.pulse-spark { display: flex; align-items: flex-end; gap: 3px; height: 40px; }
 .pulse-bar {
-  flex: 1; min-height: 4px; background: var(--accent); border-radius: 2px 2px 0 0;
+  flex: 1; min-height: 3px; background: var(--accent); border-radius: 2px 2px 0 0;
   transform-origin: bottom; animation: pulse-grow 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
 @keyframes pulse-grow {
   from { transform: scaleY(0); opacity: 0.2; }
   to { transform: scaleY(1); opacity: 1; }
-}
-.pulse-cap {
-  margin-top: 0.55rem; color: var(--faint); font-size: 0.76rem; font-family: var(--mono);
 }
 .pulse-stack {
   display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line);
@@ -195,10 +190,28 @@ body {
 .pulse-stack .seg.calm { background: #c7d2c0; }
 .pulse-legend {
   display: flex; justify-content: space-between; margin-top: 0.55rem;
-  font-family: var(--mono); font-size: 0.76rem;
+  font-family: var(--mono); font-size: 0.74rem;
 }
 .pulse-legend .need { color: var(--amber); font-weight: 600; }
 .pulse-legend .calm { color: var(--faint); }
+
+/* Empty detail aside: a skeleton of the drill-in — the same section headers a
+   selected repo shows, each with a faint placeholder body. */
+.hint-lead {
+  margin: 0; padding: 0.8rem 0.95rem; color: var(--dim); font-size: 0.86rem;
+  border-bottom: 1px solid var(--line);
+}
+.sec.skel { opacity: 0.6; }
+.sec.skel .sec-h { cursor: default; }
+.skel-body {
+  height: 2.4rem; margin-top: 0.5rem; border-radius: 6px;
+  background: linear-gradient(90deg, var(--line) 25%, #eef0f3 50%, var(--line) 75%);
+  background-size: 200% 100%; animation: skel-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skel-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
 
 /* ── Attention chips (quiet: muted text, no coloured fills) ─────────────── */
 .attention { display: flex; flex-wrap: wrap; gap: 0.45rem; }
@@ -773,15 +786,6 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 }
 .tour-card .confirm:hover { filter: brightness(1.08); }
 
-/* The "Replay the tour" button under the fleet-pulse cards. */
-.tour-start {
-  margin: 0.1rem 0.8rem 0.9rem; width: calc(100% - 1.6rem);
-  background: var(--accent-soft); color: var(--accent);
-  border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px;
-  padding: 8px 12px; cursor: pointer; font-weight: 600; font-size: 0.82rem;
-  transition: background 0.15s ease;
-}
-.tour-start:hover { background: #ece9f9; }
 
 /* ── Micro-animations: small moments across the page ─────────────────────── */
 /* Action modals fade + rise in. */

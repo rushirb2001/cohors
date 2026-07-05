@@ -324,7 +324,6 @@ fn App() -> impl IntoView {
                         enriching,
                         mode,
                         roots,
-                        tour,
                     },
                     reload,
                 )
@@ -346,7 +345,6 @@ fn App() -> impl IntoView {
                         enriching,
                         mode,
                         roots,
-                        tour,
                     },
                     reload,
                 )
@@ -378,7 +376,6 @@ struct DashCtx {
     enriching: RwSignal<bool>,
     mode: RwSignal<Mode>,
     roots: RwSignal<Vec<String>>,
-    tour: RwSignal<Option<usize>>,
 }
 
 /// The dashboard body: a header-band Overview (brand + fleet + at-a-glance
@@ -405,7 +402,6 @@ fn dashboard(
         enriching,
         mode,
         roots,
-        tour,
     } = cx;
     let summary = move || summary_chips(&repos.get(), now);
     let visible = move || {
@@ -440,7 +436,7 @@ fn dashboard(
             .and_then(|id| list.iter().find(|s| s.id.0 == id).cloned())
         {
             Some(s) => detail_panel(&s, now, detail).into_any(),
-            None => hint_panel(&list, now, tour).into_any(),
+            None => hint_panel().into_any(),
         }
     };
 
@@ -498,6 +494,16 @@ fn dashboard(
                     </div>
                     <section class="attention">{summary}</section>
                 </section>
+                // The fleet's activity and attention breakdown, promoted to the
+                // top strip so they're always in view (not just the empty aside).
+                {move || {
+                    let r = repos.get();
+                    activity_widget(&r)
+                }}
+                {move || {
+                    let r = repos.get();
+                    attention_widget(&r, now)
+                }}
             </div>
             <div class="grid">
                 // 2 · Repositories: filter + act controls in the subhead row; the
@@ -1931,7 +1937,7 @@ fn working_tree_block(state: DetailState) -> AnyView {
     view! { {files}{patch} }.into_any()
 }
 
-/// The severity → bucket index used by the fleet-pulse breakdown.
+/// The severity → bucket index used by the attention breakdown.
 fn sev_index(s: Severity) -> usize {
     match s {
         Severity::Ok => 0,
@@ -1942,12 +1948,9 @@ fn sev_index(s: Severity) -> usize {
     }
 }
 
-/// The detail aside when nothing is selected. Onboarding now lives in the tour,
-/// so instead of tips this shows a live "fleet pulse" — a combined activity
-/// sparkline and an attention breakdown, drawn from the loaded fleet — plus a
-/// button to replay the tour.
-fn hint_panel(repos: &[RepoSnapshot], now: i64, tour: RwSignal<Option<usize>>) -> impl IntoView {
-    // Element-wise sum of every repo's weekly activity into one fleet sparkline.
+/// Top-strip widget: the whole fleet's commit activity as one sparkline — every
+/// repo's weekly buckets summed together, bars growing in.
+fn activity_widget(repos: &[RepoSnapshot]) -> impl IntoView + use<> {
     let weeks = repos.iter().map(|r| r.activity.len()).max().unwrap_or(0);
     let mut agg = vec![0u32; weeks];
     for r in repos {
@@ -1958,24 +1961,34 @@ fn hint_panel(repos: &[RepoSnapshot], now: i64, tour: RwSignal<Option<usize>>) -
         }
     }
     let peak = agg.iter().copied().max().unwrap_or(1).max(1);
-    let total_commits: u32 = agg.iter().sum();
-    let repo_count = repos.len();
+    let total: u32 = agg.iter().sum();
+    let count = repos.len();
     let bars = agg
         .iter()
         .enumerate()
         .map(|(i, &v)| {
             let h = (v as f64 / peak as f64 * 100.0).max(4.0);
-            let delay = i as f64 * 45.0;
+            let delay = i as f64 * 40.0;
             view! { <div class="pulse-bar" style=format!("height:{h}%;animation-delay:{delay}ms")></div> }
         })
         .collect::<Vec<_>>();
+    view! {
+        <section class="card stat-card">
+            <div class="stat-h">"Fleet activity · 12 wks"</div>
+            <div class="pulse-spark">{bars}</div>
+            <div class="stat-cap">{format!("{total} commits · {count} repos")}</div>
+        </section>
+    }
+}
 
-    // Attention breakdown by severity.
+/// Top-strip widget: the fleet's attention breakdown as a stacked bar (risk /
+/// warn / notice / calm) with a count.
+fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
     let mut counts = [0usize; 5];
     for r in repos {
         counts[sev_index(assess(r, now).severity)] += 1;
     }
-    let total = repo_count.max(1);
+    let total = repos.len().max(1);
     let attention = counts[2] + counts[3] + counts[4];
     let calm = counts[0] + counts[1];
     let seg = |n: usize, cls: &'static str| {
@@ -1984,35 +1997,43 @@ fn hint_panel(repos: &[RepoSnapshot], now: i64, tour: RwSignal<Option<usize>>) -
             view! { <div class=format!("seg {cls}") style=format!("width:{w}%")></div> }
         })
     };
-
     view! {
-        <div class="card">
+        <section class="card stat-card">
+            <div class="stat-h">"Attention"</div>
+            <div class="pulse-stack">
+                {seg(counts[4], "risk")} {seg(counts[3], "warn")} {seg(counts[2], "notice")}
+                {seg(calm, "calm")}
+            </div>
+            <div class="pulse-legend">
+                <span class="need">{format!("{attention} need you")}</span>
+                <span class="calm">{format!("{calm} calm")}</span>
+            </div>
+        </section>
+    }
+}
+
+/// The detail aside when nothing is selected: a skeleton of the drill-in — the
+/// same section headers a selected repo shows, each empty — so the panel reads
+/// as "pick a repo and these fill in," not dead space.
+fn hint_panel() -> impl IntoView {
+    let section = |name: &'static str| {
+        view! {
+            <div class="sec skel">
+                <div class="sec-h">{name}</div>
+                <div class="skel-body"></div>
+            </div>
+        }
+    };
+    view! {
+        <div class="card detail">
             <div class="card-title">"Detail"</div>
-            <div class="scroll hint">
-                <p class="hint-lead">
-                    "Pick a repository to inspect it — or take in the fleet's pulse."
-                </p>
-                <div class="pulse-card">
-                    <div class="pulse-h">"Fleet activity · last 12 weeks"</div>
-                    <div class="pulse-spark">{bars}</div>
-                    <div class="pulse-cap">
-                        {format!("{total_commits} commits across {repo_count} repos")}
-                    </div>
-                </div>
-                <div class="pulse-card">
-                    <div class="pulse-h">"Attention"</div>
-                    <div class="pulse-stack">
-                        {seg(counts[4], "risk")} {seg(counts[3], "warn")}
-                        {seg(counts[2], "notice")} {seg(calm, "calm")}
-                    </div>
-                    <div class="pulse-legend">
-                        <span class="need">{format!("{attention} need you")}</span>
-                        <span class="calm">{format!("{calm} calm")}</span>
-                    </div>
-                </div>
-                <button class="tour-start" on:click=move |_| tour.set(Some(0))>
-                    "↻ Replay the tour"
-                </button>
+            <div class="scroll">
+                <p class="hint-lead">"Select a repository — these fill in for it."</p>
+                {section("Needs attention")}
+                {section("Changes")}
+                {section("Recent commits")}
+                {section("Open PRs")}
+                {section("Contributors")}
             </div>
         </div>
     }
@@ -2152,7 +2173,7 @@ const TOUR: &[TourStep] = &[
     TourStep {
         target: None,
         title: "That's the tour",
-        body: "Reads are always on. Relaunch with --allow-writes to enable the actions you just saw. Happy shipping — you can replay this tour anytime from the Detail panel.",
+        body: "Reads are always on. Relaunch with --allow-writes to enable the actions you just saw. Happy shipping.",
         act: TourAct::Clear,
     },
 ];
