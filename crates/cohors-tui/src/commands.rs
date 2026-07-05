@@ -297,7 +297,10 @@ pub fn run_web(
     if scanner.scan().is_empty() {
         let home = cohors_config::paths::home_dir().ok();
         let detected = cohors_fleet::detect_roots(home.as_deref());
-        eprint!("{}", web_setup_hint(&scanner.roots(), &detected));
+        eprint!(
+            "{}",
+            web_setup_hint(&scanner.roots(), &detected, stderr_wants_color())
+        );
         return Ok(());
     }
 
@@ -377,28 +380,102 @@ pub fn run_web(
     result
 }
 
+/// Whether the setup hint (which goes to stderr) should emit ANSI styling: only
+/// for a real terminal with colour allowed, so pipes, redirects, and `NO_COLOR`
+/// get clean plain text.
+fn stderr_wants_color() -> bool {
+    use std::io::IsTerminal;
+    std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+}
+
 /// The guidance `cohors web` prints when it's run before any repos are set up.
-/// Mirrors the TUI's empty-state rescue: the dashboard needs to know where the
-/// repos are, so route the user through `cohors` (which detects and *saves* the
-/// roots) and back. When roots were auto-detected elsewhere, name them so the
-/// two-step is obvious; otherwise fall back to the same `init` / `--root` nudge
-/// the `scan` command gives. Pure (takes the roots + detections) so it's unit-
-/// testable without a filesystem.
-fn web_setup_hint(roots: &[String], detected: &[String]) -> String {
-    let mut out = format!(
-        "cohors web: no git repositories found under {}.\n\n",
-        roots.join(", ")
-    );
-    if detected.is_empty() {
-        out.push_str(
-            "  Run `cohors init` (or `cohors web --root <dir>`) to point cohors at your\n",
-        );
-        out.push_str("  code, then run `cohors web` again to launch the dashboard.\n");
+/// Mirrors the TUI's empty-state welcome — the brand mark, a greeting, the two
+/// ways in (adopt the detected roots, or scope with `--root`), and the default-
+/// root / super-fleet note — so the CLI and the dashboard read as one product.
+/// `color` gates the ANSI so the output degrades to plain text; the string is
+/// otherwise pure (roots + detections in) so it stays unit-testable.
+fn web_setup_hint(roots: &[String], detected: &[String], color: bool) -> String {
+    let (r, g, b) = crate::ui::SPIDER_PURPLE_RGB;
+    let brand = |s: &str| {
+        if color {
+            format!("\x1b[1;38;2;{r};{g};{b}m{s}\x1b[0m")
+        } else {
+            s.to_string()
+        }
+    };
+    let bold = |s: &str| {
+        if color {
+            format!("\x1b[1m{s}\x1b[0m")
+        } else {
+            s.to_string()
+        }
+    };
+    let dim = |s: &str| {
+        if color {
+            format!("\x1b[2m{s}\x1b[0m")
+        } else {
+            s.to_string()
+        }
+    };
+
+    let mut out = String::from("\n");
+
+    // Brand header: the mark beside a greeting + tagline (mirrors the TUI header).
+    // The block-glyph mark only appears with colour on — piped/plain output skips
+    // it and stays clean ASCII-ish text.
+    if color {
+        let m = &crate::ui::SPIDER_MARK;
+        out.push_str(&format!(
+            "  {}   Welcome to {}\n",
+            brand(m[0]),
+            brand("cohors")
+        ));
+        out.push_str(&format!(
+            "  {}   {}\n",
+            brand(m[1]),
+            dim("All your git repositories at a glance")
+        ));
+        out.push_str(&format!("  {}\n\n", brand(m[2])));
     } else {
-        out.push_str(&format!("  Found repos under: {}\n\n", detected.join(", ")));
-        out.push_str("  Run `cohors` first to adopt these roots (it saves them to your config),\n");
-        out.push_str("  then run `cohors web` again to launch the dashboard.\n");
+        out.push_str("  Welcome to cohors\n");
+        out.push_str("  All your git repositories at a glance\n\n");
     }
+
+    // The two ways in. When we detected repos elsewhere, offer the immediate
+    // `--root` launch plus the save-to-config path; otherwise nudge them to point
+    // cohors at their code.
+    if detected.is_empty() {
+        out.push_str(&format!(
+            "  No git repos under {} yet — that's the default root.\n\n",
+            bold(&roots.join(", "))
+        ));
+        out.push_str(&format!(
+            "  Point cohors at your projects   {}\n\n",
+            bold("cohors web --root ~/code")
+        ));
+    } else {
+        out.push_str(&format!(
+            "  No repos under {}, but found some under:\n",
+            bold(&roots.join(", "))
+        ));
+        out.push_str(&format!("    {}\n\n", bold(&detected.join(", "))));
+        out.push_str(&format!(
+            "  Launch now   {}\n",
+            bold(&format!("cohors web --root {}", detected[0]))
+        ));
+        out.push_str(&format!(
+            "  Or save it   run {} first {}, then {}\n\n",
+            bold("cohors"),
+            dim("(writes your config)"),
+            bold("cohors web")
+        ));
+    }
+
+    // Shared model note: the default is the whole super fleet; --root scopes it.
+    out.push_str(&dim(
+        "  Tip: with no --root, cohors scans every folder it detects — your super fleet.",
+    ));
+    out.push('\n');
     out
 }
 
@@ -573,21 +650,35 @@ mod tests {
 
     #[test]
     fn web_setup_hint_offers_detected_roots() {
+        // Plain (color = false) so we assert on content, not escapes.
         let hint = web_setup_hint(
             &["/home/me/projects".to_string()],
             &["~/code".to_string(), "~/work".to_string()],
+            false,
         );
-        assert!(hint.contains("no git repositories found under /home/me/projects"));
-        assert!(hint.contains("Found repos under: ~/code, ~/work"));
-        assert!(hint.contains("Run `cohors` first"));
-        assert!(hint.contains("run `cohors web` again"));
+        assert!(hint.contains("Welcome to cohors"));
+        assert!(hint.contains("~/code, ~/work")); // the detected roots
+        assert!(hint.contains("cohors web --root ~/code")); // launch-now uses the first
+        assert!(hint.contains("cohors web")); // the save-then-launch path
+        assert!(hint.contains("super fleet")); // the default-root note
+        assert!(!hint.contains('\x1b')); // no ANSI when color is off
     }
 
     #[test]
-    fn web_setup_hint_falls_back_to_init_when_nothing_detected() {
-        let hint = web_setup_hint(&["/home/me/projects".to_string()], &[]);
-        assert!(!hint.contains("Found repos under"));
-        assert!(hint.contains("cohors init"));
-        assert!(hint.contains("--root"));
+    fn web_setup_hint_nudges_when_nothing_detected() {
+        let hint = web_setup_hint(&["/home/me/projects".to_string()], &[], false);
+        assert!(hint.contains("Welcome to cohors"));
+        assert!(!hint.contains("found some under")); // the detected-branch phrasing
+        assert!(hint.contains("cohors web --root ~/code")); // the sample command
+        assert!(hint.contains("super fleet"));
+        assert!(!hint.contains('\x1b'));
+    }
+
+    #[test]
+    fn web_setup_hint_emits_ansi_when_colored() {
+        let colored = web_setup_hint(&["p".to_string()], &["~/code".to_string()], true);
+        assert!(colored.contains('\x1b')); // styled…
+        let plain = web_setup_hint(&["p".to_string()], &["~/code".to_string()], false);
+        assert!(!plain.contains('\x1b')); // …only when asked
     }
 }

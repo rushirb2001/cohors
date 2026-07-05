@@ -19,6 +19,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.5.10] — 2026-07-05
+
+### Changed
+
+- **`cohors web`'s first-run setup hint is now branded and styled to match the
+  dashboard.** It leads with the purple spider mark + "Welcome to cohors", shows
+  the two ways in (`cohors web --root <detected>` to launch now, or `cohors` then
+  `cohors web` to save a config), and closes with the default-root / super-fleet
+  note. ANSI is gated on a real terminal — piped output and `NO_COLOR` stay plain.
+  The spider mark is factored into a shared `SPIDER_MARK` const the TUI header and
+  the CLI both draw from.
+
 ## [0.5.9] — 2026-07-05
 
 ### Changed

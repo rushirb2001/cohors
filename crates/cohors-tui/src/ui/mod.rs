@@ -208,6 +208,17 @@ pub(crate) fn dim_area(buf: &mut Buffer, area: Rect) {
 /// pinkish ANSI magenta). Dropped under `NO_COLOR` via [`Theme::fg`].
 pub(crate) const SPIDER_PURPLE: Color = Color::Rgb(0xA8, 0x55, 0xF7);
 
+/// The cohors mark — three rows of block "pixels" (width 9). Shared by the TUI
+/// header and the CLI's `cohors web` setup hint so the brand reads the same
+/// everywhere. Purple where colour is available; the silhouette still reads
+/// under `NO_COLOR`.
+pub(crate) const SPIDER_MARK: [&str; 3] = ["▜▒▟███▙▒▛", "▟██▌█▐██▙", "▀▐▖▀█▀▗▌▀"];
+
+/// The brand purple as an RGB triple, for surfaces that emit their own ANSI
+/// (the CLI) rather than going through ratatui's [`Theme`]. Kept in lockstep
+/// with [`SPIDER_PURPLE`] by construction.
+pub(crate) const SPIDER_PURPLE_RGB: (u8, u8, u8) = (0xA8, 0x55, 0xF7);
+
 // The UI is one module split across focused files: `chrome` (header, footer,
 // attention panel, command box), `rows` (the repos table, its cells, and the
 // dock), and `modals` (detail, help, standup, confirm, run output). Items are

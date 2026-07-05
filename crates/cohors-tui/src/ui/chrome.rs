@@ -51,11 +51,12 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Th
     // ────────────────────────────────────────────────────────────────────────
     let mark = theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD);
     const ICON_W: u16 = 9;
-    let spider = Text::from(vec![
-        Line::from(Span::styled("▜▒▟███▙▒▛", mark)),
-        Line::from(Span::styled("▟██▌█▐██▙", mark)),
-        Line::from(Span::styled("▀▐▖▀█▀▗▌▀", mark)),
-    ]);
+    let spider = Text::from(
+        SPIDER_MARK
+            .iter()
+            .map(|row| Line::from(Span::styled(*row, mark)))
+            .collect::<Vec<_>>(),
+    );
 
     // The wordmark + version — the lede, shared by the full and compact layouts.
     let lede = Line::from(vec![
