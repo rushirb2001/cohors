@@ -9,7 +9,7 @@ expression: "render_to_string(&app, 100, 64)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
 │ ▁▁▁▁▁▁▁▁▁▁▁▁▁╭ Help ──────────────────────────────────────────────────────────────╮█████████████ │
-│ 0 commits · 1│                                                                    │              │
+│ quiet · 12 we│                                                                    │              │
 ╰──────────────│  Legend — what each column shows                                   │──────────────╯
 ╭ Repositories │    ↑2              commits ahead of upstream                       │──────────────╮
 │    Repo      │    ↓5              commits behind upstream                         │              │

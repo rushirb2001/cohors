@@ -229,6 +229,12 @@ pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
         if app.hints_hidden {
             return 1;
         }
+        // The consolidated one-box bar when it fits; the three stacked group
+        // boxes otherwise (narrow terminals).
+        let (_, bar_rows, bar_total) = footer_bar_geometry(app);
+        if bar_total <= width {
+            return bar_rows + 2 + 1; // borders + the toggle divider row
+        }
         let rows = footer_groups(app)
             .iter()
             .map(|(_, items)| footer_group_rows(items))
@@ -258,7 +264,12 @@ pub(crate) fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Th
             Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
         render_hint_divider(frame, divider, app.hints_hidden, theme);
         if !app.hints_hidden {
-            render_footer_boxed(frame, boxes, app, theme);
+            let (_, _, bar_total) = footer_bar_geometry(app);
+            if bar_total <= area.width {
+                render_footer_bar(frame, boxes, app, theme);
+            } else {
+                render_footer_boxed(frame, boxes, app, theme);
+            }
         }
     } else {
         render_footer_simple(frame, area, footer_lines(app, theme), theme);
@@ -438,6 +449,146 @@ pub(crate) fn render_group_box(
     }
 }
 
+/// The consolidated hint bar's geometry: each section's fitted inner width
+/// (its two hint columns sized to their own content, so nothing wraps or
+/// overflows), the grid row count (the tallest section), and the total width
+/// the bar needs. Used to decide whether the one-box layout fits.
+pub(crate) fn footer_bar_geometry(app: &App) -> (Vec<u16>, u16, u16) {
+    let groups = footer_groups(app);
+    let mut widths: Vec<u16> = Vec::new();
+    let mut rows: u16 = 1;
+    for (label, items) in &groups {
+        let half = items.len().div_ceil(2);
+        rows = rows.max(half as u16);
+        let col_w = |chunk: &[(&str, &str)]| {
+            chunk
+                .iter()
+                .map(|(k, d)| footer_item_w(k, d))
+                .max()
+                .unwrap_or(0) as u16
+        };
+        let grid = col_w(&items[..half]) + 2 + col_w(&items[half..]);
+        let title = label.chars().count() as u16 + 2; // the border title must fit too
+        widths.push(grid.max(title) + 2); // 1-col padding each side
+    }
+    let dividers = widths.len().saturating_sub(1) as u16;
+    let total = widths.iter().sum::<u16>() + dividers + 2; // + the outer borders
+    (widths, rows, total)
+}
+
+/// The consolidated hint bar: ONE bordered box, split into the `select` /
+/// `act` / `view` sections by thin `│` dividers (with `┬`/`┴` junctions on the
+/// borders). Each section is exactly as wide as its content needs — so every
+/// hint ("Space mark repo", "! run command", "Tab standup") fits in its two
+/// columns — and the group labels ride the top border like box titles. Height:
+/// the tallest section's rows + the two border rows, roughly half the old
+/// three-box footer.
+pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let groups = footer_groups(app);
+    let (widths, _rows, _total) = footer_bar_geometry(app);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim());
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Alternate section / divider constraints; the last section takes the
+    // leftover width so the box always spans edge to edge.
+    let mut cons: Vec<Constraint> = Vec::new();
+    for (i, w) in widths.iter().enumerate() {
+        if i > 0 {
+            cons.push(Constraint::Length(1));
+        }
+        if i == widths.len() - 1 {
+            cons.push(Constraint::Fill(1));
+        } else {
+            cons.push(Constraint::Length(*w));
+        }
+    }
+    let rects = Layout::horizontal(cons).split(inner);
+
+    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
+    let mut section = 0usize;
+    for (ri, rect) in rects.iter().enumerate() {
+        // Odd chunks are the 1-col dividers: a `│` per row, junctions on the
+        // borders above and below.
+        if ri % 2 == 1 {
+            let bar: Vec<Line> = (0..rect.height)
+                .map(|_| Line::from(Span::styled("│", theme.dim())))
+                .collect();
+            frame.render_widget(Paragraph::new(Text::from(bar)), *rect);
+            for (y, ch) in [(area.y, "┬"), (area.y + area.height - 1, "┴")] {
+                frame.render_widget(
+                    Paragraph::new(Span::styled(ch, theme.dim())),
+                    Rect {
+                        x: rect.x,
+                        y,
+                        width: 1,
+                        height: 1,
+                    },
+                );
+            }
+            continue;
+        }
+
+        let (label, items) = &groups[section];
+        section += 1;
+
+        // The group label on the top border (the `act` one carries the live
+        // target), space-padded so it breaks the dash run like a real title.
+        let mut title = vec![Span::styled(
+            format!(" {label} "),
+            theme.dim().add_modifier(Modifier::BOLD),
+        )];
+        if *label == "act"
+            && let Some((_, target)) = action_target_hint(app)
+        {
+            let room = rect.width.saturating_sub(label.chars().count() as u16 + 4) as usize;
+            title.push(Span::styled(
+                format!("→ {} ", ellipsize(&target, room.saturating_sub(3))),
+                theme.highlight(),
+            ));
+        }
+        let title_w: u16 = title.iter().map(|s| s.content.chars().count() as u16).sum();
+        frame.render_widget(
+            Paragraph::new(Line::from(title)),
+            Rect {
+                x: rect.x + 1,
+                y: area.y,
+                width: title_w.min(rect.width.saturating_sub(2)),
+                height: 1,
+            },
+        );
+
+        // The two fitted hint columns, order preserved down-then-across.
+        let content = Rect {
+            x: rect.x + 1,
+            width: rect.width.saturating_sub(2),
+            ..*rect
+        };
+        let half = items.len().div_ceil(2);
+        let col1_w = items[..half]
+            .iter()
+            .map(|(k, d)| footer_item_w(k, d))
+            .max()
+            .unwrap_or(0) as u16;
+        let [c1, c2] = Layout::horizontal([Constraint::Length(col1_w), Constraint::Min(0)])
+            .spacing(2)
+            .areas(content);
+        let hint = |(k, d): &(&str, &str)| {
+            Line::from(vec![
+                Span::styled((*k).to_string(), key_style),
+                Span::styled(format!(" {d}"), theme.dim()),
+            ])
+        };
+        let col = |chunk: &[(&'static str, &'static str)]| {
+            Text::from(chunk.iter().map(hint).collect::<Vec<_>>())
+        };
+        frame.render_widget(Paragraph::new(col(&items[..half])), c1);
+        frame.render_widget(Paragraph::new(col(&items[half..])), c2);
+    }
+}
+
 /// The "Attention" panel: a titled box summarizing what needs the user, in
 /// plain words ("3 dirty · 1 behind") rather than terse glyphs.
 pub(crate) fn render_attention_panel(
@@ -565,12 +716,14 @@ fn render_activity_card(frame: &mut Frame, area: Rect, app: &App, theme: &Theme)
         spark.push(ch); // two cells per week: wide enough to read as a bar
     }
 
+    let caption = if total == 0 {
+        "quiet · 12 weeks".to_string()
+    } else {
+        format!("{total} commits · 12 weeks")
+    };
     let lines = vec![
         Line::from(Span::styled(spark, theme.fg(SPIDER_PURPLE))),
-        Line::from(Span::styled(
-            format!("{total} commits · 12 weeks"),
-            theme.dim(),
-        )),
+        Line::from(Span::styled(caption, theme.dim())),
     ];
     frame.render_widget(Paragraph::new(lines), inner);
 }

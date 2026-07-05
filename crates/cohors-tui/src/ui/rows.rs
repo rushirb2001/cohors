@@ -748,21 +748,20 @@ pub(crate) fn repo_row<'a>(
 pub(crate) const ACTIVITY_WEEKS: usize = 12;
 
 /// The "Activity" column: the repo's weekly commit counts as a 12-cell
-/// sparkline (oldest first), the same cadence signal the web row shows. Quiet
-/// (dim) on purpose — it's context, not a call to action. Snapshots without
-/// activity data render as a flat baseline.
+/// sparkline (oldest first), the same cadence signal the web row shows. Dim on
+/// purpose — it's context, not a call to action. A repo with no commits in the
+/// window says "quiet" instead of drawing a flat baseline, which reads as
+/// data, not as an empty cell.
 pub(crate) fn activity_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
-    let ramp = theme.glyphs.spark_ramp();
     let max = snap.activity.iter().copied().max().unwrap_or(0);
+    if max == 0 {
+        return Cell::from(Span::styled("quiet", theme.dim()));
+    }
+    let ramp = theme.glyphs.spark_ramp();
     let mut spark = String::with_capacity(ACTIVITY_WEEKS * 3);
     for w in 0..ACTIVITY_WEEKS {
         let n = snap.activity.get(w).copied().unwrap_or(0) as usize;
-        let idx = if max == 0 {
-            0
-        } else {
-            (n * 7).div_ceil(max as usize)
-        };
-        spark.push(ramp[idx.min(7)]);
+        spark.push(ramp[(n * 7).div_ceil(max as usize).min(7)]);
     }
     Cell::from(Span::styled(spark, theme.dim()))
 }

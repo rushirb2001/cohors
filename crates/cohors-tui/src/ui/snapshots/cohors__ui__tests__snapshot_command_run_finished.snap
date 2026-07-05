@@ -9,7 +9,7 @@ expression: "render_to_string(&app, 100, 22)"
 ╰─────│ │ ✓ payments             │  │ exit 1                                                ││─────╯
 ╭ Flee│ │ ✗ web-app 1            │  │                                                       ││─────╮
 │ ▁▁▁▁│ │                        │  │ running 3 tests                                       ││████ │
-│ 0 co│ │                        │  │ ── stderr ──                                          ││     │
+│ quie│ │                        │  │ ── stderr ──                                          ││     │
 ╰─────│ │                        │  │ test cart::total failed                               ││─────╯
 ╭ Repo│ │                        │  │ error: 1 test failed                                  ││─────╮
 │    R│ │                        │  │                                                       ││     │

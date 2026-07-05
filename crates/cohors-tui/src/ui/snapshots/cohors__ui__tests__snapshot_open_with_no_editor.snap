@@ -9,7 +9,7 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
 │ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████ │
-│ 0 commits · 12 weeks  ╭ Open legacy-billing with… ───────────────────────╮m                      │
+│ quiet · 12 weeks      ╭ Open legacy-billing with… ───────────────────────╮m                      │
 ╰───────────────────────│ No editor CLI found on your PATH.                │───────────────────────╯
 ╭ Repositories (5) · sor│ Install its shell command to list it here.       │───────────────────────╮
 │    Repo               │ ▌ Reveal in file manager                         │                       │

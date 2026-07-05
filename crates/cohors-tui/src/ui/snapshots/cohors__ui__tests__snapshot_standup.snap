@@ -9,7 +9,7 @@ expression: "render_to_string(&app, 100, 22)"
 ╰───────│ fixing 5 bugs.                                                                   │───────╯
 ╭ Fleet │                                                                                  │───────╮
 │ ▁▁▁▁▁▁│                                                                                  │██████ │
-│ 0 comm│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │       │
+│ quiet │ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │       │
 ╰───────│ │ payments  24           │  │ aa00010  feat: payments work item 10            ║│ │───────╯
 ╭ Reposi│ │ web-app  5             │  │ aa00011  feat: payments work item 11            ║│ │───────╮
 │    Rep│ │                        │  │ aa00012  feat: payments work item 12            ║│ │       │
