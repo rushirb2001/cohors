@@ -715,7 +715,7 @@ pub(crate) fn repo_row<'a>(
             Cell::from(Line::from(prs_spans(snap, theme))),
             Cell::from(Line::from(ci_spans(snap, theme))),
             age_cell(snap, now, fmt.age_w as usize, theme),
-            reason_cell(assessment.primary.as_ref(), fmt.reason_max, theme),
+            reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
         ])
     } else {
         let sync = match busy {
@@ -744,18 +744,21 @@ pub(crate) fn age_cell<'a>(snap: &RepoSnapshot, now: i64, age_w: usize, theme: &
     Cell::from(Span::styled(format!("{age:>age_w$}"), theme.dim()))
 }
 
-/// The "Status" column: the repo's primary attention reason, colored by severity
-/// — the same signal that drives the dirty-first sort, made visible per row. A
-/// dim "up to date" when the repo wants nothing (rather than a bare dot).
+/// The "Status" column: the repo's primary attention reason as text, colored by
+/// the repo's *overall* severity (which compounds — a repo can escalate past its
+/// single loudest reason). Using the overall severity keeps the Status color in
+/// step with the row's weight and the Attention summary, instead of reflecting
+/// only the primary reason. A dim "up to date" when the repo wants nothing.
 pub(crate) fn reason_cell<'a>(
     primary: Option<&AttentionReason>,
+    severity: Severity,
     max: usize,
     theme: &Theme,
 ) -> Cell<'a> {
     match primary {
         Some(r) => Cell::from(Span::styled(
             ellipsize(&r.label(), max),
-            severity_style(r.severity(), theme),
+            severity_style(severity, theme),
         )),
         None => Cell::from(Span::styled(ellipsize("up to date", max), theme.dim())),
     }
