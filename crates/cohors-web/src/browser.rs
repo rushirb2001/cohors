@@ -1943,7 +1943,7 @@ fn activity_widget(repos: &[RepoSnapshot]) -> impl IntoView + use<> {
         })
         .collect::<Vec<_>>();
     view! {
-        <div class="stat-block">
+        <div class="stat-block act-stat">
             <div class="stat-h">"Fleet activity · 12 wks"</div>
             <div class="pulse-spark">{bars}</div>
             <div class="stat-cap">{format!("{total} commits · {count} repos")}</div>
@@ -2083,20 +2083,26 @@ const TOUR: &[TourStep] = &[
     },
     TourStep {
         target: Some(".overview .conn"),
-        title: "A live local scan",
-        body: "It reads your repos straight from disk. Made changes in a terminal? Hit Rescan and the fleet catches up.",
+        title: "Always live",
+        body: "cohors reads your repos straight from disk and keeps re-scanning on its own — change something in a terminal and it just shows up. No refresh button to remember.",
         act: TourAct::None,
     },
     TourStep {
-        target: Some(".overview .attention"),
-        title: "Your fleet's pulse",
-        body: "The at-a-glance count: how many repositories you have, and how many need attention, are dirty, or hold stashes. Watch it drop as you deal with things.",
+        target: Some(".act-stat"),
+        title: "The fleet's heartbeat",
+        body: "Every repo's commit activity over the last 12 weeks, summed into one sparkline — a quick read on how busy things have been.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some(".attn-block"),
+        title: "Attention at a glance",
+        body: "Where the fleet stands: how many repos are at risk, need work, are minor, or calm — the same four severities that colour every row below.",
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1)"),
         title: "One row, one repo",
-        body: "Read a row left to right: its name and branch, sync with the remote, stashes, PRs, CI, last commit, and activity — ending with the Status column, the headline that says exactly why it needs you.",
+        body: "Read a row left to right: name and branch, sync with the remote, stashes, PRs, CI, last commit, and activity — ending with Status, the headline reason it needs you. Each row carries a faint tint of that severity, so trouble stands out.",
         act: TourAct::None,
     },
     TourStep {
