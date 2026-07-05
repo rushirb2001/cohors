@@ -119,6 +119,7 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
             Block::bordered()
                 .border_type(BorderType::Rounded)
                 .title(" Help ")
+                .title_bottom(modal_hint_line(app, theme).centered())
                 .padding(Padding::new(2, 2, 1, 1)),
         )
         .wrap(Wrap { trim: false });
@@ -266,6 +267,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     let outer = Block::bordered()
         .border_type(BorderType::Rounded)
         .title(Line::from(format!(" Standup · {window} ")).bold())
+        .title_bottom(modal_hint_line(app, theme).centered())
         .padding(Padding::new(1, 1, 1, 0));
 
     // Still walking the commits: a placeholder.
@@ -289,7 +291,9 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         if total == 1 { "" } else { "s" },
         if repos == 1 { "" } else { "s" },
     );
-    let outer = outer.title_bottom(Line::from(summary).right_aligned());
+    // The count rides the top-right of the frame; the bottom is left for the
+    // key hints so the two never collide.
+    let outer = outer.title(Line::from(summary).right_aligned().style(theme.dim()));
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
 
@@ -533,6 +537,7 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
         let block = Block::bordered()
             .border_type(BorderType::Rounded)
             .title(Line::from(title).bold())
+            .title_bottom(modal_hint_line(app, theme).centered())
             .padding(Padding::new(1, 0, 0, 0));
         let inner = block.inner(area);
         frame.render_widget(block, area);
@@ -828,6 +833,7 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
         .border_type(BorderType::Rounded)
         .title(Line::from(format!(" Run · {} ", run.command)).bold())
         .title_bottom(Line::from(summary).right_aligned())
+        .title_bottom(modal_hint_line(app, theme).centered())
         .padding(Padding::new(1, 0, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -962,6 +968,7 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .title(Line::from(" Confirm ").bold())
+        .title_bottom(modal_hint_line(app, theme).centered())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -1028,6 +1035,7 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
         .title(Line::from(title).bold())
+        .title_bottom(modal_hint_line(app, theme).centered())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);

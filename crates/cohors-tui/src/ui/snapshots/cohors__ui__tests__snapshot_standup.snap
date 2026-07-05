@@ -3,24 +3,24 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███╭ Standup · this week ─────────────────────────────────────────────────────────────╮       │
+│ ▜▒▟███╭ Standup · this week ─────────────────────────────────────── 29 commits · 2 repos ╮       │
 │ ▟██▌█▐│                                                                                  │       │
 │ ▀▐▖▀█▀│ You authored 29 commits this week across 2 repos, shipping 24 features and       │       │
 ╰───────│ fixing 5 bugs.                                                                   │───────╯
 ╭ Attent│                                                                                  │───────╮
-│ ██████│                                                                                  │██████ │
-│ 1 at r│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │       │
-╰───────│ │ payments  24           │  │ aa00010  feat: payments work item 10            ║│ │───────╯
-╭ Reposi│ │ web-app  5             │  │ aa00011  feat: payments work item 11            ║│ │───────╮
-│    Rep│ │                        │  │ aa00012  feat: payments work item 12            ║│ │       │
-│▌   leg│ │                        │  │ aa00013  feat: payments work item 13            █│ │(permi…│
-│  ○ pay│ │                        │  │ aa00014  feat: payments work item 14            █│ │       │
-│  ○ web│ │                        │  │ aa00015  feat: payments work item 15            █│ │       │
-│  ○ inf│ │                        │  │ aa00016  feat: payments work item 16            █│ │s      │
-│  ○ aut│ │                        │  │ aa00017  feat: payments work item 17            ║│ │       │
+│ 1 at r│                                                                                  │       │
+╰───────│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │───────╯
+╭ Reposi│ │ payments  24           │  │ aa00010  feat: payments work item 10            ║│ │───────╮
+│    Rep│ │ web-app  5             │  │ aa00011  feat: payments work item 11            ║│ │       │
+│▌   leg│ │                        │  │ aa00012  feat: payments work item 12            ║│ │(permi…│
+│  ○ pay│ │                        │  │ aa00013  feat: payments work item 13            █│ │       │
+│       │ │                        │  │ aa00014  feat: payments work item 14            █│ │       │
+╰───────│ │                        │  │ aa00015  feat: payments work item 15            █│ │───────╯
+────────│ │                        │  │ aa00016  feat: payments work item 16            █│ │────────
+╭───────│ │                        │  │ aa00017  feat: payments work item 17            ║│ │───────╮
 │       │ │                        │  │ aa00018  feat: payments work item 18            ║│ │       │
-│       │ │                        │  │ aa00019  feat: payments work item 19            ║│ │       │
-╰───────│ │                        │  │ aa00020  feat: payments work item 20            ║│ │───────╯
-╭───────│ ╰────────────────────────╯  ╰──────────────────────────────────────────────────╯ │───────╮
-│ ↑/↓ sc╰──────────────────────────────────────────────────────────── 29 commits · 2 repos ╯       │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+│ ──────│ │                        │  │ aa00019  feat: payments work item 19            ║│ │────── │
+│     ␣ │ │                        │  │ aa00020  feat: payments work item 20            ║│ │       │
+│     a │ ╰────────────────────────╯  ╰──────────────────────────────────────────────────╯ │       │
+│       ╰─────── ↑/↓ scroll commits · ← back to repos · w window · y copy · q close ───────╯       │
+╰─────────────────────────────────┴──────────────────────────────┴─────────────────────────────────╯

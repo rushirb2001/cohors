@@ -182,20 +182,7 @@ fn footer_bar_fits(app: &App, width: u16) -> bool {
 /// bar or the stacked fallback; in the overlay modes it's a single box of
 /// wrapped hint rows.
 pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
-    if app.mode == Mode::Normal {
-        // The hint bar is collapsed to just its toggle divider.
-        if app.hints_hidden {
-            return 1;
-        }
-        // The one-box bar when it fits, else the stacked layout. Plus box
-        // borders + the toggle divider row.
-        let content = if footer_bar_fits(app, width) {
-            footer_bar_geometry(app).1
-        } else {
-            footer_stacked_rows(app, width.saturating_sub(2))
-        };
-        content + 2 + 1
-    } else {
+    if app.mode == Mode::Filter {
         let lines = footer_lines(app, theme);
         let inner = width.saturating_sub(4).max(1);
         let rows: u16 = lines
@@ -203,31 +190,42 @@ pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
             .map(|l| (l.width() as u16).max(1).div_ceil(inner))
             .sum::<u16>()
             .clamp(1, 6);
-        rows + 2
+        return rows + 2;
     }
+    // The root hint footer (Normal + behind every modal). Collapsed to just the
+    // toggle divider when hidden.
+    if app.hints_hidden {
+        return 1;
+    }
+    let content = if footer_bar_fits(app, width) {
+        footer_bar_geometry(app).1
+    } else {
+        footer_stacked_rows(app, width.saturating_sub(2))
+    };
+    content + 2 + 1
 }
 
-/// The footer: context-sensitive key hints. In Normal mode it's three titled
-/// group boxes (`select`/`act`/`view`) side by side — no outer box — that adapt
-/// to the width; in the overlay modes it's a single box of hint rows.
+/// The footer: the root view's key hints. Filter mode swaps in the filter's own
+/// hints (it has no modal); every other mode — Normal *and* the modal overlays —
+/// keeps the root `select`/`act`/`view` hints here, because each modal now shows
+/// its own keys on its bottom edge. Behind an open modal the footer dims into the
+/// background with the rest of the root.
 pub(crate) fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    if app.mode == Mode::Normal {
-        // A divider that doubles as the show/hide affordance, then the boxes
-        // (unless the user has collapsed them with `h`).
-        // A divider that doubles as the show/hide affordance, then the one-box
-        // bar (or the stacked group boxes on narrow terminals).
-        let [divider, boxes] =
-            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
-        render_hint_divider(frame, divider, app.hints_hidden, theme);
-        if !app.hints_hidden {
-            if footer_bar_fits(app, area.width) {
-                render_footer_bar(frame, boxes, app, theme);
-            } else {
-                render_footer_stacked(frame, boxes, app, theme);
-            }
-        }
-    } else {
+    if app.mode == Mode::Filter {
         render_footer_simple(frame, area, footer_lines(app, theme), theme);
+        return;
+    }
+    // A divider that doubles as the show/hide affordance, then the one-box bar
+    // (or the stacked layout on narrow terminals), unless collapsed with `h`.
+    let [divider, boxes] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    render_hint_divider(frame, divider, app.hints_hidden, theme);
+    if !app.hints_hidden {
+        if footer_bar_fits(app, area.width) {
+            render_footer_bar(frame, boxes, app, theme);
+        } else {
+            render_footer_stacked(frame, boxes, app, theme);
+        }
     }
 }
 
@@ -271,13 +269,12 @@ pub(crate) fn render_footer_simple(
     );
 }
 
-/// The abbreviated hint groups for the compact (stacked / essentials) footers:
-/// short descriptions and symbol keys (`␣` Space, `⇥` Tab) so more fits per row.
-/// The wide one-box bar keeps the full labels from [`footer_groups`].
-fn footer_groups_short(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
-    if app.mode != Mode::Normal {
-        return footer_groups(app); // overlays are already terse
-    }
+/// The root view's key hints (select / act / view), short-labelled with symbol
+/// keys (`␣` Space, `⇥` Tab) so they pack tight. This is what the footer always
+/// shows — even behind an open modal, where it dims into the background — since
+/// each modal now carries its *own* keys on its bottom edge (see
+/// [`modal_hint_line`]).
+fn footer_groups_short(_app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
     vec![
         (
             "select",
@@ -975,6 +972,26 @@ pub(crate) fn footer_lines(app: &App, theme: &Theme) -> Vec<Line<'static>> {
         .collect()
 }
 
+/// The current mode's key hints as one styled line — flushed onto a modal's
+/// bottom border so the overlay is self-contained (the root footer keeps the
+/// root keys). Keys accent-bold, descriptions dim, `·`-separated, with a space
+/// of border breathing room each end.
+pub(crate) fn modal_hint_line(app: &App, theme: &Theme) -> Line<'static> {
+    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
+    let mut spans: Vec<Span> = vec![Span::raw(" ")];
+    for (_, items) in footer_groups(app) {
+        for (key, desc) in items {
+            if spans.len() > 1 {
+                spans.push(Span::styled(" · ", theme.dim()));
+            }
+            spans.push(Span::styled(key.to_string(), key_style));
+            spans.push(Span::styled(format!(" {desc}"), theme.dim()));
+        }
+    }
+    spans.push(Span::raw(" "));
+    Line::from(spans)
+}
+
 /// The "what will an action affect" hint for the footer: the count of marked
 /// repos, or the current repo's name when nothing is marked. Returns the dim
 /// lead-in and the highlighted target separately. `None` when there's nothing.
@@ -1083,6 +1100,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
         .border_type(BorderType::Rounded)
         .border_style(if shell { accent } else { Style::new() })
         .title(Line::from(title).bold())
+        .title_bottom(modal_hint_line(app, theme).centered())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);

@@ -5,24 +5,24 @@ expression: "render_to_string(&app, 50, 24)"
 ╭────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                      │
 │ ▟██▌█▐██▙  ~/projects (+1)                     │
-│ ▀▐╭ Standup · this week ───────────────────╮   │
+│ ▀▐╭ Standup · this we 11 commits · 2 repos ╮   │
 ╰───│                                        │───╯
 ╭ At│ You authored 11 commits this week      │───╮
-│ ██│ across 2 repos, shipping 8 features    │██ │
-│ 1 │ and fixing 3 bugs.                     │   │
-╰───│                                        │───╯
-╭ Re│ ╭ Repos ─────────────────────────────╮ │───╮
-│   │ │ payments  8                        │ │Sta│
-│▌  │ │ web-app  3                         │ │co…│
-│  ○│ │                                    │ │↑2…│
-│  ○│ │                                    │ │↓5…│
-│  ○│ │                                    │ │4 …│
-│  ○│ │                                    │ │up…│
+│ 1 │ across 2 repos, shipping 8 features    │   │
+╰───│ and fixing 3 bugs.                     │───╯
+╭ Re│                                        │───╮
+│   │ ╭ Repos ─────────────────────────────╮ │Sta│
+│▌  │ │ payments  8                        │ │co…│
+│   │ │ web-app  3                         │ │   │
+╰───│ │                                    │ │───╯
+────│ │                                    │ │────
+╭───│ │                                    │ │───╮
+│ se│ │                                    │ │   │
 │   │ ╰────────────────────────────────────╯ │   │
 │   │                                        │   │
-│   │ ╭ payments  ·  8 commits ────────────╮ │   │
-╰───╰────────────────── 11 commits · 2 repos ╯───╯
-╭────────────────────────────────────────────────╮
-│ ↑/↓ repo · →/⏎ view commits · w window · y     │
-│ copy · q close                                 │
+│ ac│ ╭ payments  ·  8 commits ────────────╮ │   │
+│   ╰ · w window · y copy · q close ─────────╯sh │
+│   ! run cmd                                    │
+│ view                                           │
+│   ↑/↓ move · s sort · d attn · ⇥ standup       │
 ╰────────────────────────────────────────────────╯
