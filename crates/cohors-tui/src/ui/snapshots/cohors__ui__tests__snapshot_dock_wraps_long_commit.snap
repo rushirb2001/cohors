@@ -20,14 +20,14 @@ expression: "render_to_string(&app, 100, 34)"
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│ load-tester  ·  main ──────────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                  │
-│ Changes      clean                                                                               │
-│ Stash        none                                                                                │
-│ Upstream     1 ahead  (origin/main)                                                              │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────── │
+│ load-tester  ·  main                                                          Enter: full detail │
+│                                                                                                  │
+│ Changes      clean                     Last commit  1w ago — chore: add load-test harnesses      │
+│ Stash        none                                   (mock origin, HTTP load driver, quota-RPC    │
+│ Upstream     1 ahead  (origin/main)                 pgbench) + ignore results and refresh the C… │
 │ Remote       no GitHub remote                                                                    │
-│ Last commit  1w ago — chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC   │
-│              pgbench) + ignore results and refresh the CI perf matrix                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────┬──────────────────────────┬────────────────────────────────────────╮
 │            select            │     act → load-tester    │                  view                  │

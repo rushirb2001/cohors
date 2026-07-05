@@ -43,8 +43,8 @@ pub(crate) fn render_repos_panel(
     // also drives the table's expanded-column layout.
     let dock = build_dock(app, now, theme, inner.width.saturating_sub(2) as usize);
     let dock_reserve = match &dock {
-        // divider(1) + pad(1) + content, only if the table keeps ≥6 rows.
-        Some(d) if inner.height >= d.lines.len() as u16 + 2 + 6 => d.lines.len() as u16 + 2,
+        // rule(1) + the card rows, only if the table keeps ≥6 rows.
+        Some(d) if inner.height >= d.rows() + 1 + 6 => d.rows() + 1,
         _ => 0,
     };
     let dock_visible = dock_reserve > 0;
@@ -255,14 +255,24 @@ pub(crate) fn render_repos_panel(
 /// A pre-built docked context pane, laid out before the pane is sized so the box
 /// can collapse to its content (no trailing blank rows).
 pub(crate) struct DockBox {
-    /// Left title, e.g. ` payments  ·  main ` or ` Working — 2 repo(s) `.
-    title: String,
-    /// Right-aligned title hint (the idle pane's `Enter: full detail`).
+    /// The card's heading spans, e.g. `payments  ·  main` — rendered INSIDE the
+    /// card, never on the divider rule.
+    title: Vec<Span<'static>>,
+    /// Right-aligned heading hint (the idle pane's `Enter: full detail`).
     right: Option<&'static str>,
-    /// Border colour — dim when idle, accent while an action runs.
+    /// The floating rule's colour — dim when idle, accent while an action runs.
     border: Style,
-    /// Content rows, already laid out for the given inner width.
-    lines: Vec<Line<'static>>,
+    /// Left fact column: Changes / Stash / Upstream / Remote (and Operation).
+    left: Vec<Line<'static>>,
+    /// Right fact column: Release and the wrapped Last commit.
+    right_col: Vec<Line<'static>>,
+}
+
+impl DockBox {
+    /// Content rows: the heading, a pad row, then the taller fact column.
+    pub(crate) fn rows(&self) -> u16 {
+        2 + self.left.len().max(self.right_col.len()) as u16
+    }
 }
 
 /// The most message lines the dock shows before truncating with `…`, so one huge
@@ -293,10 +303,14 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
             })
             .collect();
         return Some(DockBox {
-            title: format!(" Working — {} repo(s) ", app.busy.len()),
+            title: vec![Span::styled(
+                format!("Working — {} repo(s)", app.busy.len()),
+                theme.ahead().add_modifier(Modifier::BOLD),
+            )],
             right: None,
             border: theme.ahead(),
-            lines,
+            left: lines,
+            right_col: Vec::new(),
         });
     }
 
@@ -306,24 +320,29 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
         Branch::Detached(id) => format!("@{}", id.chars().take(7).collect::<String>()),
         Branch::Unborn => "unborn".to_string(),
     };
-    let title = format!(" {}  ·  {branch} ", snap.name);
+    let title = vec![
+        Span::styled(snap.name.clone(), Style::new().add_modifier(Modifier::BOLD)),
+        Span::styled(format!("  ·  {branch}"), theme.dim()),
+    ];
 
     // A broken repo: just the error, in red — none of the facts below apply.
     if let Some(reason) = &snap.error {
         return Some(DockBox {
             title,
-            right: Some(" Enter: full detail "),
+            right: Some("Enter: full detail"),
             border: theme.dim(),
-            lines: vec![Line::from(Span::styled(
+            left: vec![Line::from(Span::styled(
                 format!("⚠ {reason}"),
                 theme.error(),
             ))],
+            right_col: Vec::new(),
         });
     }
 
-    // Labelled facts — each on its own row with a purple, fixed-width label so the
-    // pane reads as a small form, not a cryptic glyph soup. Everything is spelled
-    // out (no `s1`/`●`); colour carries urgency.
+    // Labelled facts — each on its own row with a purple, fixed-width label so
+    // the pane reads as a small form, not a cryptic glyph soup. Everything is
+    // spelled out (no `s1`/`●`); colour carries urgency. Two columns: the
+    // local/remote state on the left, release + last commit on the right.
     let mut lines: Vec<Line> = Vec::new();
 
     // A paused merge/rebase/… gets its own leading row — it's the most urgent
@@ -466,6 +485,12 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
     };
     dock_field(&mut lines, "Remote", remote_val, theme);
 
+    // The left column is complete; the right column (Release + Last commit)
+    // wraps to whatever width remains beside it.
+    let left_w = lines.iter().map(|l| l.width()).max().unwrap_or(0);
+    let right_w = inner_w.saturating_sub(left_w + DOCK_COL_GAP).max(20);
+    let mut right_col: Vec<Line> = Vec::new();
+
     // Release — the newest reachable tag and how far the repo has moved since.
     if let Some(tag) = &snap.latest_tag {
         let val = if tag.commits_since == 0 {
@@ -483,14 +508,14 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
                 ),
             ]
         };
-        dock_field(&mut lines, "Release", val, theme);
+        dock_field(&mut right_col, "Release", val, theme);
     }
 
     // Last commit — age + the full message (the row no longer shows it),
-    // word-wrapped across the lines left in the pane rather than truncated.
+    // word-wrapped within the right column rather than truncated.
     match &snap.last_commit {
         None => dock_field(
-            &mut lines,
+            &mut right_col,
             "Last commit",
             vec![Span::styled("no commits", theme.dim())],
             theme,
@@ -499,10 +524,10 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
             let head = format!("{} ago — ", time::relative(c.timestamp, now));
             // First message line shares its row with the label + age; wrapped
             // continuation lines sit under the value column.
-            let first_w = inner_w
+            let first_w = right_w
                 .saturating_sub(DOCK_LABEL_W + head.chars().count())
                 .max(1);
-            let rest_w = inner_w.saturating_sub(DOCK_LABEL_W).max(1);
+            let rest_w = right_w.saturating_sub(DOCK_LABEL_W).max(1);
             let mut wrapped = word_wrap(&c.summary, first_w, rest_w);
 
             // Cap to a few lines; mark the cut with an ellipsis.
@@ -517,7 +542,7 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
             }
 
             dock_field(
-                &mut lines,
+                &mut right_col,
                 "Last commit",
                 vec![
                     Span::styled(head, theme.dim()),
@@ -527,7 +552,7 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
             );
             let indent = " ".repeat(DOCK_LABEL_W);
             for chunk in wrapped.iter().skip(1) {
-                lines.push(Line::from(vec![
+                right_col.push(Line::from(vec![
                     Span::raw(indent.clone()),
                     Span::raw(chunk.clone()),
                 ]));
@@ -537,9 +562,10 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
 
     Some(DockBox {
         title,
-        right: Some(" Enter: full detail "),
+        right: Some("Enter: full detail"),
         border: theme.dim(),
-        lines,
+        left: lines,
+        right_col,
     })
 }
 
@@ -571,6 +597,9 @@ pub(crate) fn word_wrap(text: &str, first: usize, rest: usize) -> Vec<String> {
 /// Width of the dim label column in the dock's labelled facts.
 pub(crate) const DOCK_LABEL_W: usize = 13;
 
+/// The gap between the dock card's two fact columns.
+pub(crate) const DOCK_COL_GAP: usize = 4;
+
 /// Push one labelled fact row into the dock: a dim, fixed-width label then the
 /// value spans.
 pub(crate) fn dock_field(
@@ -588,34 +617,63 @@ pub(crate) fn dock_field(
 }
 
 /// Render a pre-built [`DockBox`] inside the Repositories box, in the reserved
-/// bottom rows: a titled divider rule (the repo name·branch on the left, the
-/// `Enter` hint on the right), a blank pad row, then the laid-out facts.
+/// bottom rows: a clean floating rule (no text riding it), then a grey card —
+/// the repo heading (name · branch, `Enter` hint right-aligned) over the two
+/// fact columns.
 pub(crate) fn render_inbox_dock(frame: &mut Frame, area: Rect, dock: &DockBox, theme: &Theme) {
-    let [divider, _pad, content] = Layout::vertical([
+    let [rule_row, card] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+
+    // The floating rule: inset one column from each side, nothing on it.
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "─".repeat(rule_row.width.saturating_sub(2) as usize),
+            dock.border,
+        ))),
+        Rect {
+            x: rule_row.x + 1,
+            width: rule_row.width.saturating_sub(2),
+            ..rule_row
+        },
+    );
+
+    // The grey card wash under everything below the rule.
+    frame.render_widget(Block::new().style(theme.dock_card()), card);
+    let padded = Rect {
+        x: card.x + 1,
+        width: card.width.saturating_sub(2),
+        ..card
+    };
+    let [head_row, _pad, facts] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Min(0),
     ])
-    .areas(area);
+    .areas(padded);
 
-    // A horizontal rule, drawn as a top border so it spans the box width and
-    // butts against the side borders; the titles ride on it.
-    let mut rule = Block::new()
-        .borders(Borders::TOP)
-        .border_style(dock.border)
-        .title(Line::from(dock.title.clone()).bold());
+    // The heading, inside the card: title spans left, the hint pushed to the
+    // right edge with a computed spacer (one Paragraph, so nothing overdraws).
+    let mut head = dock.title.clone();
     if let Some(right) = dock.right {
-        rule = rule.title(Line::from(Span::styled(right, theme.dim())).right_aligned());
+        let used: usize = head.iter().map(|s| s.content.chars().count()).sum();
+        let spacer = (head_row.width as usize).saturating_sub(used + right.chars().count());
+        head.push(Span::raw(" ".repeat(spacer)));
+        head.push(Span::styled(right, theme.dim()));
     }
-    frame.render_widget(rule, divider);
+    frame.render_widget(Paragraph::new(Line::from(head)), head_row);
 
-    // The facts, indented one column off the border.
-    let body = Rect {
-        x: content.x + 1,
-        width: content.width.saturating_sub(1),
-        ..content
-    };
-    frame.render_widget(Paragraph::new(dock.lines.clone()), body);
+    // The two fact columns, each sized to its content.
+    let left_w = dock
+        .left
+        .iter()
+        .map(|l| l.width() as u16)
+        .max()
+        .unwrap_or(0);
+    let [lcol, rcol] = Layout::horizontal([Constraint::Length(left_w), Constraint::Min(0)])
+        .spacing(DOCK_COL_GAP as u16)
+        .areas(facts);
+    frame.render_widget(Paragraph::new(Text::from(dock.left.clone())), lcol);
+    frame.render_widget(Paragraph::new(Text::from(dock.right_col.clone())), rcol);
 }
 
 /// Map an attention [`Severity`] to its accent style for the dock's reason chips.

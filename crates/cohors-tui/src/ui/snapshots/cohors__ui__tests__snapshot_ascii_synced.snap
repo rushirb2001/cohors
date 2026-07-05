@@ -21,13 +21,13 @@ expression: "render_to_string(&app, 100, 34)"
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│ in-sync  ·  main ──────────────────────────────────────────────────────────── Enter: full detail │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────── │
+│ in-sync  ·  main                                                              Enter: full detail │
 │                                                                                                  │
-│ Changes      clean                                                                               │
+│ Changes      clean                    Last commit  1h ago — chore: nothing to do                 │
 │ Stash        none                                                                                │
 │ Upstream     even with origin/main                                                               │
 │ Remote       no GitHub remote                                                                    │
-│ Last commit  1h ago — chore: nothing to do                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────┬──────────────────────────┬────────────────────────────────────────╮
 │            select            │     act → 1 selected     │                  view                  │

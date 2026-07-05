@@ -12,8 +12,8 @@ pub(crate) use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 pub(crate) use ratatui::style::{Color, Modifier, Style, Stylize};
 pub(crate) use ratatui::text::{Line, Span, Text};
 pub(crate) use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row,
-    Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
+    Block, BorderType, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row, Scrollbar,
+    ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
 };
 
 pub(crate) use crate::app::{App, ConfirmAction, Mode, Opener, RunState};
@@ -84,6 +84,17 @@ impl Theme {
     }
     fn ok(&self) -> Style {
         self.fg(Color::Green)
+    }
+    /// The docked context pane's card wash: a light grey background with a
+    /// dark base foreground. Setting BOTH keeps the card readable on any
+    /// terminal theme (spans that pick their own fg still patch over it).
+    /// Dropped entirely under NO_COLOR.
+    fn dock_card(&self) -> Style {
+        if self.color {
+            Style::new().bg(Color::Indexed(255)).fg(Color::Indexed(235))
+        } else {
+            Style::new()
+        }
     }
 }
 
