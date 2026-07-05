@@ -75,7 +75,8 @@ No Rust needed — just `git` on your `PATH`. Every channel installs the same pr
 **Homebrew** (macOS / Linux):
 
 ```sh
-brew install rushirb2001/tap/cohors
+brew tap rushirb2001/tap
+brew install cohors
 ```
 
 **pip** (macOS Apple Silicon / Intel, Linux x86_64 — installs a prebuilt binary, no Rust):
