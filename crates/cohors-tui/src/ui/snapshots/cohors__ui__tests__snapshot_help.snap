@@ -3,7 +3,7 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 64)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
@@ -57,7 +57,7 @@ expression: "render_to_string(&app, 100, 64)"
 │              │    ?               toggle this help                                │              │
 │              │    q / Ctrl-C      quit                                            │              │
 │              │                                                                    │              │
-│              │  cohors vX.Y.Z                                                    │              │
+│              │  cohors vX.Y.Z                                                     │              │
 ├──────────────│                                                                    │──────────────┤
 │ legacy-billin╰────────────────────────────────────────────────────────────────────╯: full detail │
 │                                                                                                  │
