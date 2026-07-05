@@ -597,8 +597,9 @@ pub(crate) fn word_wrap(text: &str, first: usize, rest: usize) -> Vec<String> {
 /// Width of the dim label column in the dock's labelled facts.
 pub(crate) const DOCK_LABEL_W: usize = 13;
 
-/// The gap between the dock card's two fact columns.
-pub(crate) const DOCK_COL_GAP: usize = 4;
+/// The gap between the dock card's two fact columns: a space, the floating
+/// `│` divider, a space.
+pub(crate) const DOCK_COL_GAP: usize = 3;
 
 /// Push one labelled fact row into the dock: a dim, fixed-width label then the
 /// value spans.
@@ -617,25 +618,34 @@ pub(crate) fn dock_field(
 }
 
 /// Render a pre-built [`DockBox`] inside the Repositories box, in the reserved
-/// bottom rows: a clean floating rule (no text riding it), then a grey card —
-/// the repo heading (name · branch, `Enter` hint right-aligned) over the two
-/// fact columns.
+/// bottom rows: a solid rule joined into the box borders (`├`/`┤`), then a
+/// grey card — the repo heading (name · branch, `Enter` hint right-aligned)
+/// over the two fact columns, split by a floating `│` divider.
 pub(crate) fn render_inbox_dock(frame: &mut Frame, area: Rect, dock: &DockBox, theme: &Theme) {
     let [rule_row, card] =
         Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
 
-    // The floating rule: inset one column from each side, nothing on it.
+    // The solid separator: edge to edge, joined into the box's side borders.
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            "─".repeat(rule_row.width.saturating_sub(2) as usize),
+            "─".repeat(rule_row.width as usize),
             dock.border,
         ))),
-        Rect {
-            x: rule_row.x + 1,
-            width: rule_row.width.saturating_sub(2),
-            ..rule_row
-        },
+        rule_row,
     );
+    if rule_row.x > 0 {
+        for (x, ch) in [(rule_row.x - 1, "├"), (rule_row.x + rule_row.width, "┤")] {
+            frame.render_widget(
+                Paragraph::new(Span::styled(ch, dock.border)),
+                Rect {
+                    x,
+                    y: rule_row.y,
+                    width: 1,
+                    height: 1,
+                },
+            );
+        }
+    }
 
     // The grey card wash under everything below the rule.
     frame.render_widget(Block::new().style(theme.dock_card()), card);
@@ -662,17 +672,32 @@ pub(crate) fn render_inbox_dock(frame: &mut Frame, area: Rect, dock: &DockBox, t
     }
     frame.render_widget(Paragraph::new(Line::from(head)), head_row);
 
-    // The two fact columns, each sized to its content.
+    // The two fact columns, each sized to its content, split by a floating
+    // `│` divider that spans only the fact rows (never touching the rule).
     let left_w = dock
         .left
         .iter()
         .map(|l| l.width() as u16)
         .max()
         .unwrap_or(0);
-    let [lcol, rcol] = Layout::horizontal([Constraint::Length(left_w), Constraint::Min(0)])
-        .spacing(DOCK_COL_GAP as u16)
-        .areas(facts);
+    let [lcol, div, rcol] = Layout::horizontal([
+        Constraint::Length(left_w),
+        Constraint::Length(DOCK_COL_GAP as u16),
+        Constraint::Min(0),
+    ])
+    .areas(facts);
     frame.render_widget(Paragraph::new(Text::from(dock.left.clone())), lcol);
+    if !dock.right_col.is_empty() {
+        let rows = dock
+            .left
+            .len()
+            .max(dock.right_col.len())
+            .min(div.height as usize);
+        let bar: Vec<Line> = (0..rows)
+            .map(|_| Line::from(Span::styled(" │ ", theme.dim())))
+            .collect();
+        frame.render_widget(Paragraph::new(Text::from(bar)), div);
+    }
     frame.render_widget(Paragraph::new(Text::from(dock.right_col.clone())), rcol);
 }
 
