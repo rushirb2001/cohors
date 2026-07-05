@@ -2109,7 +2109,7 @@ const TOUR: &[TourStep] = &[
         target: None,
         title: "Welcome to cohors web",
         lead: "Every git repo you have, on one screen.",
-        body: "New here, or coming over from the terminal app? Either way, this is cohors in your browser. Here's a quick tour; it only looks around and stages previews, and never runs git.",
+        body: "New here, or in from the terminal app? Either way, this quick tour only previews; it never runs git.",
         chips: TourChips::None,
         act: TourAct::Clear,
     },
