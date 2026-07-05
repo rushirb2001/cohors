@@ -19,6 +19,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.5.7] — 2026-07-05
+
+### Changed
+
+- **`cohors web` gates on setup instead of launching into an empty demo fleet.**
+  When no repos are found under the configured/`--root` roots, it now prints the
+  same two-step rescue the TUI offers — run `cohors` first (which detects and
+  saves your roots), then `cohors web` again — and names the auto-detected roots
+  when there are any. The check runs *before* the Trunk install + WASM build, so
+  a first-time run isn't spent waiting only to be told to start over.
+
 ## [0.5.6] — 2026-07-05
 
 ### Changed

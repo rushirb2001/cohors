@@ -280,6 +280,27 @@ pub fn run_web(
         "couldn't find `crates/cohors-web` — `cohors web` builds the dashboard from source, so \
          run it inside the cohors repository (a hosted version arrives with the deploy milestone)",
     )?;
+    // The web app is just another front-end over the SAME local scan the TUI,
+    // CLI, and MCP run: discover the repos under `--root`/config, snapshot their
+    // local state, and (with a token) enrich with remote CI/PRs. The server does
+    // the scan and serves the `cohors-core` snapshots as JSON; the browser
+    // renders them through the same `assess`/sort logic. The token is the SAME
+    // one the TUI uses (`gh auth token` / `$GITHUB_TOKEN`) and never leaves here.
+    let scanner = std::sync::Arc::new(crate::scan::from_cli(cli)?);
+
+    // Fresh-user gate. The dashboard is only useful once cohors knows where the
+    // repos live; launching into an empty (demo) fleet just confuses a first-time
+    // user. So mirror the TUI's empty-state rescue: if nothing is found, point
+    // them at `cohors` (which detects the roots and saves them to the config),
+    // then back to `cohors web`. Checked *before* the Trunk install + WASM build,
+    // so a first run isn't spent waiting only to be told to start over.
+    if scanner.scan().is_empty() {
+        let home = cohors_config::paths::home_dir().ok();
+        let detected = cohors_fleet::detect_roots(home.as_deref());
+        eprint!("{}", web_setup_hint(&scanner.roots(), &detected));
+        return Ok(());
+    }
+
     ensure_trunk(install)?;
 
     // If the requested port is busy (e.g. another `cohors web`), step to the next
@@ -290,13 +311,6 @@ pub fn run_web(
     }
     let port = chosen;
 
-    // The web app is just another front-end over the SAME local scan the TUI,
-    // CLI, and MCP run: discover the repos under `--root`/config, snapshot their
-    // local state, and (with a token) enrich with remote CI/PRs. The server does
-    // the scan and serves the `cohors-core` snapshots as JSON; the browser
-    // renders them through the same `assess`/sort logic. The token is the SAME
-    // one the TUI uses (`gh auth token` / `$GITHUB_TOKEN`) and never leaves here.
-    let scanner = std::sync::Arc::new(crate::scan::from_cli(cli)?);
     let token = scanner.github_token();
 
     // Build the WASM assets to dist/ and keep watching for rebuilds while we
@@ -361,6 +375,31 @@ pub fn run_web(
     );
     let _ = watcher.kill();
     result
+}
+
+/// The guidance `cohors web` prints when it's run before any repos are set up.
+/// Mirrors the TUI's empty-state rescue: the dashboard needs to know where the
+/// repos are, so route the user through `cohors` (which detects and *saves* the
+/// roots) and back. When roots were auto-detected elsewhere, name them so the
+/// two-step is obvious; otherwise fall back to the same `init` / `--root` nudge
+/// the `scan` command gives. Pure (takes the roots + detections) so it's unit-
+/// testable without a filesystem.
+fn web_setup_hint(roots: &[String], detected: &[String]) -> String {
+    let mut out = format!(
+        "cohors web: no git repositories found under {}.\n\n",
+        roots.join(", ")
+    );
+    if detected.is_empty() {
+        out.push_str(
+            "  Run `cohors init` (or `cohors web --root <dir>`) to point cohors at your\n",
+        );
+        out.push_str("  code, then run `cohors web` again to launch the dashboard.\n");
+    } else {
+        out.push_str(&format!("  Found repos under: {}\n\n", detected.join(", ")));
+        out.push_str("  Run `cohors` first to adopt these roots (it saves them to your config),\n");
+        out.push_str("  then run `cohors web` again to launch the dashboard.\n");
+    }
+    out
 }
 
 /// Make sure Trunk (the WASM bundler) is available, installing it via Cargo when
@@ -530,5 +569,25 @@ mod tests {
     fn unknown_token_errors() {
         assert!(parse_selector("frobnicate").is_err());
         assert!(parse_selector("ci:sideways").is_err());
+    }
+
+    #[test]
+    fn web_setup_hint_offers_detected_roots() {
+        let hint = web_setup_hint(
+            &["/home/me/projects".to_string()],
+            &["~/code".to_string(), "~/work".to_string()],
+        );
+        assert!(hint.contains("no git repositories found under /home/me/projects"));
+        assert!(hint.contains("Found repos under: ~/code, ~/work"));
+        assert!(hint.contains("Run `cohors` first"));
+        assert!(hint.contains("run `cohors web` again"));
+    }
+
+    #[test]
+    fn web_setup_hint_falls_back_to_init_when_nothing_detected() {
+        let hint = web_setup_hint(&["/home/me/projects".to_string()], &[]);
+        assert!(!hint.contains("Found repos under"));
+        assert!(hint.contains("cohors init"));
+        assert!(hint.contains("--root"));
     }
 }
