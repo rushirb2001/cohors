@@ -1,6 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3591
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,19 +7,19 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                           │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositorie╭ Shell command ─────────────────────────────────────────────────────────╮────────────╮
-│    Repo    │ : !git checkout main▏                                                  │            │
-│▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │d .git (per…│
-│    payments│ ▌ :!<cmd>                  │ run any shell command across the targets  │            │
-│    web-app ╰────────────────────────────────────────────────────────────────────────╯ull         │
-│    infra @a1b2c3d          local  4        0      local  local      1w  4 uncommitted changes    │
-│    auth-service @main      local  0        0      1      pending    3d  up to date               │
-│ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail │
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████ │
+│ 0 commits · 12 weeks           │ │ 1 at risk · 2 warning · 1 minor · 1 calm                      │
+╰────────────╭ Shell command ─────────────────────────────────────────────────────────╮────────────╯
+╭ Repositorie│ : !git checkout main▏                                                  │────────────╮
+│    Repo    │ ────────────────────────────────────────────────────────────────────── │            │
+│▌   legacy-b│ ▌ :!<cmd>                  │ run any shell command across the targets  │ied)        │
+│    payments╰────────────────────────────────────────────────────────────────────────╯            │
+│    web-app @feat/checkout  ↓5 ●      0       20m  ↓5 behind — pull                               │
+│    infra @a1b2c3d          local     0        1w  4 uncommitted changes                          │
+│    auth-service @main      ● 1pr     0        3d  up to date                                     │
 │                                                                                                  │
-│ ⚠ could not read .git (permission denied)                                                        │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ⏎ run · Esc cancel                                                                               │

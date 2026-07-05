@@ -7,17 +7,17 @@ expression: "render_to_string(&app, 100, 20)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                           │
-╰───────────────────────╭ Open legacy-billing with… ───────────────────────╮───────────────────────╯
-╭ Repositories (5) · sor│ ▌ VS Code  · default                             │───────────────────────╮
-│    Repo               │   Neovim                                         │                       │
-│▌   legacy-billing     │   Reveal in file manager                         │ermission denied)      │
-│    payments @main     │   Open in lazygit                                │                       │
-│    web-app @feat/check╰──────────────────────────────────────────────────╯                       │
-│    infra @a1b2c3d          local     4          1w  4 uncommitted changes                        │
-│    auth-service @main      ● 1pr     0          3d  up to date                                   │
-│                                                                                                  │
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████ │
+│ 0 commits · 12 weeks  ╭ Open legacy-billing with… ───────────────────────╮m                      │
+╰───────────────────────│ ▌ VS Code  · default                             │───────────────────────╯
+╭ Repositories (5) · sor│   Neovim                                         │───────────────────────╮
+│    Repo               │   Reveal in file manager                         │                       │
+│▌   legacy-billing     │   Open in lazygit                                │mission denied)        │
+│    payments @main     ╰──────────────────────────────────────────────────╯                       │
+│    web-app @feat/checkout  ↓5 ●      0       20m  ↓5 behind — pull                               │
+│    infra @a1b2c3d          local     0        1w  4 uncommitted changes                          │
+│    auth-service @main      ● 1pr     0        3d  up to date                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ↑/↓ choose · ⏎ open · d set default · Esc cancel                                                 │

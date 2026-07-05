@@ -136,35 +136,37 @@ pub(crate) fn render_repos_panel(
     // Repo and Branch are fused into one `name @branch` column, sized to its
     // widest content (gutter + name + branch) within a cap so a long branch can't
     // run away. This mirrors the web and reclaims a whole column for Status.
+    // There is no Changes column on either surface any more: the dirty count is
+    // Status's job ("4 uncommitted changes"), exactly as on the web.
     let repo_w = col_w(repo_spans, 12, 30);
     let (widths, reason_max): (Vec<Constraint>, usize) = if dock_visible {
         let sync_w = col_w(ahead_behind_spans, 4, 9);
-        let chg_w = col_w(changed_count_spans, 7, 9);
         let stash_w = col_w(stash_spans, 5, 6);
         let prs_w = col_w(prs_spans, 3, 5);
         let ci_w = col_w(ci_spans, 2, 8);
-        let fixed = 2 + repo_w + sync_w + chg_w + stash_w + prs_w + ci_w + age_w;
+        let act_w: u16 = ACTIVITY_WEEKS as u16; // one cell per week
+        let fixed = 2 + repo_w + sync_w + stash_w + prs_w + ci_w + age_w + act_w;
         let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 7); // 8 cols ⇒ 7 gaps
         let widths = vec![
             Constraint::Length(repo_w), // Repo @branch (incl. 2-col gutter)
             Constraint::Length(sync_w),
-            Constraint::Length(chg_w),
             Constraint::Length(stash_w),
             Constraint::Length(prs_w),
             Constraint::Length(ci_w),
             Constraint::Length(age_w),
+            Constraint::Length(act_w),
             Constraint::Fill(1), // Status (primary attention reason)
         ];
         (widths, status_w)
     } else {
         let sync_w = col_w(sync_spans, 4, 12);
-        let changes_w = col_w(changes_spans, 7, 12);
-        let fixed = 2 + repo_w + sync_w + changes_w + age_w;
+        let stash_w = col_w(stash_spans, 5, 6);
+        let fixed = 2 + repo_w + sync_w + stash_w + age_w;
         let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 4); // 5 cols ⇒ 4 gaps
         let widths = vec![
             Constraint::Length(repo_w),
             Constraint::Length(sync_w),
-            Constraint::Length(changes_w),
+            Constraint::Length(stash_w),
             Constraint::Length(age_w),
             Constraint::Fill(1), // Status (primary attention reason)
         ];
@@ -195,10 +197,10 @@ pub(crate) fn render_repos_panel(
     // the names' selection gutter.
     let labels: &[&str] = if dock_visible {
         &[
-            "  Repo", "Sync", "Changes", "Stash", "PRs", "CI", "Last", "Status",
+            "  Repo", "Sync", "Stash", "PRs", "CI", "Last", "Activity", "Status",
         ]
     } else {
-        &["  Repo", "Sync", "Changes", "Last", "Status"]
+        &["  Repo", "Sync", "Stash", "Last", "Status"]
     };
     let header_style = Style::new().add_modifier(Modifier::BOLD);
     let [_sym, header_cols] =
@@ -670,18 +672,18 @@ pub(crate) fn repo_row<'a>(
             Row::new(vec![
                 name,
                 blank(), // Sync
-                blank(), // Changes
                 blank(), // Stash
                 blank(), // PRs
                 blank(), // CI
                 blank(), // Last
+                blank(), // Activity
                 status,
             ])
         } else {
             Row::new(vec![
                 name,
                 blank(), // Sync
-                blank(), // Changes
+                blank(), // Stash
                 blank(), // Last
                 status,
             ])
@@ -716,11 +718,11 @@ pub(crate) fn repo_row<'a>(
         Row::new(vec![
             name,
             sync,
-            Cell::from(Line::from(changed_count_spans(snap, theme))),
             Cell::from(Line::from(stash_spans(snap, theme))),
             Cell::from(Line::from(prs_spans(snap, theme))),
             Cell::from(Line::from(ci_spans(snap, theme))),
             age_cell(snap, now, fmt.age_w as usize, theme),
+            activity_cell(snap, theme),
             reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
         ])
     } else {
@@ -734,11 +736,35 @@ pub(crate) fn repo_row<'a>(
         Row::new(vec![
             name,
             sync,
-            changes_cell(snap, theme),
+            Cell::from(Line::from(stash_spans(snap, theme))),
             age_cell(snap, now, fmt.age_w as usize, theme),
             reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
         ])
     }
+}
+
+/// How many weeks of history the Activity sparkline shows (the width of the
+/// column, one cell per week) — matches the web's 12-week window.
+pub(crate) const ACTIVITY_WEEKS: usize = 12;
+
+/// The "Activity" column: the repo's weekly commit counts as a 12-cell
+/// sparkline (oldest first), the same cadence signal the web row shows. Quiet
+/// (dim) on purpose — it's context, not a call to action. Snapshots without
+/// activity data render as a flat baseline.
+pub(crate) fn activity_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+    let ramp = theme.glyphs.spark_ramp();
+    let max = snap.activity.iter().copied().max().unwrap_or(0);
+    let mut spark = String::with_capacity(ACTIVITY_WEEKS * 3);
+    for w in 0..ACTIVITY_WEEKS {
+        let n = snap.activity.get(w).copied().unwrap_or(0) as usize;
+        let idx = if max == 0 {
+            0
+        } else {
+            (n * 7).div_ceil(max as usize)
+        };
+        spark.push(ramp[idx.min(7)]);
+    }
+    Cell::from(Span::styled(spark, theme.dim()))
 }
 
 /// The "Last" column: the commit age alone, right-aligned (the message lives in
@@ -796,37 +822,7 @@ pub(crate) fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span
     }
 }
 
-/// The "Changes" column (dock layout): the changed-file count, colored (green
-/// when fully staged, yellow when there's unstaged work); a dim "0" when clean.
-/// The stash moved to its own column.
-pub(crate) fn changed_count_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
-    let w = &snap.worktree;
-    let total = w.staged + w.modified + w.untracked;
-    let mut spans: Vec<Span> = Vec::new();
-    // Conflicts lead in red, exactly as in the wide Changes cell.
-    if w.conflicted > 0 {
-        spans.push(Span::styled(format!("!{}", w.conflicted), theme.risk()));
-        if total > 0 {
-            spans.push(Span::raw(" "));
-        }
-    }
-    if total == 0 {
-        if w.conflicted == 0 {
-            spans.push(Span::styled("0", theme.dim()));
-        }
-    } else {
-        let style = if w.modified > 0 || w.untracked > 0 {
-            theme.modified()
-        } else {
-            theme.staged()
-        };
-        spans.push(Span::styled(total.to_string(), style));
-    }
-    spans
-}
-
-/// The "Stash" column (dock layout): the stash count, or a dim "0" when there are
-/// none.
+/// The "Stash" column: the stash count, or a dim "0" when there are none.
 pub(crate) fn stash_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     if snap.stash_count > 0 {
         vec![Span::styled(snap.stash_count.to_string(), theme.warn())]
@@ -1018,45 +1014,6 @@ pub(crate) fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static
     spans.extend(remote);
     if spans.is_empty() {
         spans.push(Span::styled("local", theme.dim()));
-    }
-    spans
-}
-
-/// The Changes column: changed-file count (green when all staged, yellow when
-/// there's unstaged work), plus the stash folded in as a dim `s{n}` when there
-/// are stashes. A dim "0" when the tree is clean and nothing is stashed.
-pub(crate) fn changes_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
-    Cell::from(Line::from(changes_spans(snap, theme)))
-}
-
-/// The styled segments of the Changes cell. Exposed (rather than built inline)
-/// so the column can be sized to its widest content — see [`line_width`].
-pub(crate) fn changes_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
-    let w = &snap.worktree;
-    let total = w.staged + w.modified + w.untracked;
-    let mut spans: Vec<Span> = Vec::new();
-    // Conflicts lead the cell in red — they block everything else in the repo,
-    // so they must not hide inside (or worse, be missing from) the plain count.
-    if w.conflicted > 0 {
-        spans.push(Span::styled(format!("!{}", w.conflicted), theme.risk()));
-        if total > 0 {
-            spans.push(Span::raw(" "));
-        }
-    }
-    if total == 0 {
-        if w.conflicted == 0 {
-            spans.push(Span::styled("0", theme.dim()));
-        }
-    } else {
-        let style = if w.modified > 0 || w.untracked > 0 {
-            theme.modified()
-        } else {
-            theme.staged()
-        };
-        spans.push(Span::styled(total.to_string(), style));
-    }
-    if snap.stash_count > 0 {
-        spans.push(Span::styled(format!(" s{}", snap.stash_count), theme.dim()));
     }
     spans
 }

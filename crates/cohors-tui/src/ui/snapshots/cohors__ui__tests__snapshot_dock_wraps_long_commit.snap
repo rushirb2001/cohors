@@ -7,24 +7,24 @@ expression: "render_to_string(&app, 100, 34)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 1w                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (1 of 1 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1 unpushed (1 aging)                                                                 │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Fleet activity ────────────────╮ ╭ Attention (1 of 1 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████ │
+│ 0 commits · 12 weeks           │ │ 1 at risk · 0 calm                                            │
+╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
 ╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo               Sync  Changes  Stash  PRs    CI     Last  Status                           │
-│▌   load-tester @main  ↑1    0        0      local  local    1w  ↑1 unpushed · aging              │
+│    Repo               Sync  Stash  Last  Status                                                  │
+│▌   load-tester @main  ↑1    0        1w  ↑1 unpushed · aging                                     │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│ load-tester  ·  main ──────────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                  │
-│ Changes      clean                                                                               │
-│ Stash        none                                                                                │
-│ Upstream     1 ahead  (origin/main)                                                              │
-│ Remote       no GitHub remote                                                                    │
-│ Last commit  1w ago — chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC   │
-│              pgbench) + ignore results and refresh the CI perf matrix                            │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭───────────────────────────────╮ ╭──────────────────────────────╮ ╭───────────────────────────────╮

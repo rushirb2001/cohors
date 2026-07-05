@@ -3,7 +3,7 @@
 //! No state is mutated here.
 
 pub(crate) use cohors_core::{
-    AttentionReason, Branch, CiStatus, RepoSnapshot, Severity, StandupCommit, assess,
+    AttentionReason, Branch, CiStatus, FleetSummary, RepoSnapshot, Severity, StandupCommit, assess,
     fleet_summary, time,
 };
 pub(crate) use ratatui::Frame;
@@ -116,7 +116,15 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         // A strip on top — the fuzzy input while filtering, otherwise the
         // Attention panel — then the Repositories panel, which hosts the context
         // pane inside its own box (bottom rows) when the terminal is tall enough.
-        let strip_height = if app.mode == Mode::Filter { 1 } else { 3 };
+        // Wide terminals give the strip an extra row: the attention panel splits
+        // into the fleet-activity + attention cards, whose bodies are two rows.
+        let strip_height = if app.mode == Mode::Filter {
+            1
+        } else if body_area.width >= 76 {
+            4
+        } else {
+            3
+        };
         let [strip, rest] =
             Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
                 .areas(body_area);

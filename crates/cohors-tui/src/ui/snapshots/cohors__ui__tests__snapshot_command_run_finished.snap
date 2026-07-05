@@ -1,6 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3755
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,19 +7,19 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▟██▌╭ Run · cargo test ────────────────────────────────────────────────────────────────────╮     │
 │ ▀▐▖▀│ ╭ Repos ─────────────────╮  ╭ web-app ──────────────────────────────────────────────╮│     │
 ╰─────│ │ ✓ payments             │  │ exit 1                                                ││─────╯
-╭ Atte│ │ ✗ web-app 1            │  │                                                       ││─────╮
-│ 1 at│ │                        │  │ running 3 tests                                       ││     │
-╰─────│ │                        │  │ ── stderr ──                                          ││─────╯
-╭ Repo│ │                        │  │ test cart::total failed                               ││─────╮
-│    R│ │                        │  │ error: 1 test failed                                  ││     │
-│▌   l│ │                        │  │                                                       ││(per…│
+╭ Flee│ │ ✗ web-app 1            │  │                                                       ││─────╮
+│ ▁▁▁▁│ │                        │  │ running 3 tests                                       ││████ │
+│ 0 co│ │                        │  │ ── stderr ──                                          ││     │
+╰─────│ │                        │  │ test cart::total failed                               ││─────╯
+╭ Repo│ │                        │  │ error: 1 test failed                                  ││─────╮
+│    R│ │                        │  │                                                       ││     │
+│▌   l│ │                        │  │                                                       ││     │
 │    p│ │                        │  │                                                       ││     │
 │    w│ │                        │  │                                                       ││     │
-│    i│ │                        │  │                                                       ││s    │
+│    i│ │                        │  │                                                       ││     │
 │    a│ │                        │  │                                                       ││     │
-│ lega│ │                        │  │                                                       ││tail │
 │     │ │                        │  │                                                       ││     │
-│ ⚠ co│ │                        │  │                                                       ││     │
+│     │ │                        │  │                                                       ││     │
 ╰─────│ ╰────────────────────────╯  ╰───────────────────────────────────────────────────────╯│─────╯
 ╭─────╰─────────────────────────────────────────────────────────────────────────── 1 ✓ · 1 ✗ ╯─────╮
 │ ↑/↓ repo · PgUp/PgDn scroll output · y copy · Esc close                                          │

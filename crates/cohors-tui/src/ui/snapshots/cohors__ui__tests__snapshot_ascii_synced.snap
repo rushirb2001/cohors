@@ -7,13 +7,13 @@ expression: "render_to_string(&app, 100, 34)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 1h                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention ───────────────────────────────────────────────────────────────────────────────────────╮
-│ All 1 repositories are up to date.                                                               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Fleet activity ────────────────╮ ╭ Attention (0 of 1 repositories) ──────────────────────────────╮
+│ ........................       │ │ ............................................................. │
+│ 0 commits · 12 weeks           │ │ 1 calm                                                        │
+╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
 ╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo           Sync  Changes  Stash  PRs    CI     Last  Status                               │
-│▌ * in-sync @main  ok    0        0      local  local    1h  up to date                           │
-│                                                                                                  │
+│    Repo           Sync  Stash  PRs    CI     Last  Activity      Status                          │
+│▌ * in-sync @main  ok    0      local  local    1h  ............  up to date                      │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

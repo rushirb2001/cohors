@@ -7,16 +7,16 @@ expression: "render_to_string(&app, 100, 18)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
-│ 2 at risk · 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                 │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Fleet activity ────────────────╮ ╭ Attention (10 of 12 repositories) ────────────────────────────╮
+│ ▆▆██▇▇██▇▇▆▆▆▆▄▄▇▇▅▅██▇▇       │ │ █████████████████████████████████████████████████████████████ │
+│ 535 commits · 12 weeks         │ │ 2 at risk · 4 warning · 4 minor · 2 calm                      │
+╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│    Repo                     Sync         Changes  Last  Status                                   │
-│▌   legacy-billing                                       could not read .git (permission denied)  │
-│    mobile-app @release/2.0  ↑4 ↓1 ● 3pr  4          9h  ↑4↓1 diverged                            │
-│    payments @main           ↑2 ● 2pr     3          2h  ↑2 unpushed                              │
-│    analytics @main          ↑1 ●         0 s2       4d  ↑1 unpushed · aging                      │
-│    design-system @main      ↑1 ● 1pr     0 s1       6h  ↑1 unpushed                              │
-│                                             ↓ 7 more                                             │
+│    Repo                     Sync         Stash  Last  Status                                     │
+│▌   legacy-billing                                     could not read .git (permission denied)    │
+│    mobile-app @release/2.0  ↑4 ↓1 ● 3pr  0        9h  ↑4↓1 diverged                              │
+│    payments @main           ↑2 ● 2pr     0        2h  ↑2 unpushed                                │
+│    analytics @main          ↑1 ●         2        4d  ↑1 unpushed · aging                        │
+│                                             ↓ 8 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

@@ -449,8 +449,23 @@ pub(crate) fn render_attention_panel(
 ) {
     let s = fleet_summary(&app.repos, now);
 
-    // The "N of M repositories" count lives in the box title; the body is just
-    // the category pills (or an all-clear message).
+    // Wide terminals get the web's overview strip: a fleet-activity card (the
+    // heartbeat sparkline) beside the attention card (a severity bar + the four
+    // bucket counts). Narrow ones keep a single-line chip summary — two cards
+    // would crush each other.
+    if area.height >= 4 && area.width >= 76 {
+        let [act_area, attn_area] =
+            Layout::horizontal([Constraint::Length(34), Constraint::Min(0)])
+                .spacing(1)
+                .areas(area);
+        render_activity_card(frame, act_area, app, theme);
+        render_attention_card(frame, attn_area, &s, theme);
+        return;
+    }
+
+    // The "N of M repositories" count lives in the box title; the body is the
+    // severity buckets (or an all-clear message) — the same four numbers the
+    // wide layout and the web show.
     let mut title = vec![Span::styled(
         " Attention ",
         Style::new().add_modifier(Modifier::BOLD),
@@ -474,63 +489,150 @@ pub(crate) fn render_attention_panel(
             theme.ok(),
         ))
     } else {
-        let mut spans: Vec<Span> = Vec::new();
-
-        // Readable, word-labeled chips; skip any category with a zero count.
-        // The risk bucket leads: it's the "drop everything" number. Each chip is
-        // coloured by its reason's CORE severity (via severity_style), so the
-        // summary's colour language matches the Status column and the web —
-        // unpushed (Warn) reads louder than behind/dirty (Notice), never the
-        // reverse.
-        let mut items: Vec<(String, Style)> = Vec::new();
-        if s.risk > 0 {
-            items.push((format!("{} at risk", s.risk), theme.risk()));
-        }
-        if s.unpushed > 0 {
-            if s.unpushed_aging > 0 {
-                items.push((
-                    format!("{} unpushed ({} aging)", s.unpushed, s.unpushed_aging),
-                    theme.risk(),
-                ));
-            } else {
-                items.push((
-                    format!("{} unpushed", s.unpushed),
-                    severity_style(Severity::Warn, theme),
-                ));
-            }
-        }
-        if s.conflicted > 0 {
-            items.push((format!("{} conflicted", s.conflicted), theme.risk()));
-        }
-        if s.behind > 0 {
-            items.push((
-                format!("{} behind", s.behind),
-                severity_style(Severity::Notice, theme),
-            ));
-        }
-        if s.dirty > 0 {
-            items.push((
-                format!("{} dirty", s.dirty),
-                severity_style(Severity::Notice, theme),
-            ));
-        }
-        if s.stash > 0 {
-            items.push((format!("{} stashed", s.stash), theme.dim()));
-        }
-        if s.errors > 0 {
-            items.push((format!("{} unreadable", s.errors), theme.risk()));
-        }
-
-        for (i, (text, style)) in items.into_iter().enumerate() {
-            if i > 0 {
-                spans.push(Span::styled(" · ", theme.dim()));
-            }
-            spans.push(Span::styled(text, style));
-        }
-        Line::from(spans)
+        Line::from(severity_bucket_spans(&s, theme))
     };
 
     frame.render_widget(Paragraph::new(line), inner);
+}
+
+/// The four severity-bucket chips — `N at risk · N warning · N minor · N calm`
+/// — each coloured by its severity, zero buckets skipped (calm always shows).
+/// The same numbers, wording, and colour order as the web's attention legend.
+pub(crate) fn severity_bucket_spans(s: &FleetSummary, theme: &Theme) -> Vec<Span<'static>> {
+    let mut items: Vec<(String, Style)> = Vec::new();
+    if s.risk > 0 {
+        items.push((format!("{} at risk", s.risk), theme.risk()));
+    }
+    if s.warn > 0 {
+        items.push((
+            format!("{} warning", s.warn),
+            severity_style(Severity::Warn, theme),
+        ));
+    }
+    if s.notice > 0 {
+        items.push((
+            format!("{} minor", s.notice),
+            severity_style(Severity::Notice, theme),
+        ));
+    }
+    items.push((format!("{} calm", s.calm), theme.ok()));
+
+    let mut spans: Vec<Span> = Vec::new();
+    for (i, (text, style)) in items.into_iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" · ", theme.dim()));
+        }
+        spans.push(Span::styled(text, style));
+    }
+    spans
+}
+
+/// The fleet-activity card: every repo's weekly commit counts summed into one
+/// 12-week sparkline (each week two cells wide, so the shape reads), captioned
+/// with the totals — the TUI's version of the web's "fleet activity" block.
+fn render_activity_card(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(Span::styled(
+            " Fleet activity ",
+            Style::new().add_modifier(Modifier::BOLD),
+        )))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Element-wise sum of each repo's 12-week activity (oldest first). Repos
+    // scanned before the activity field existed contribute nothing.
+    let mut weeks = [0u64; 12];
+    for repo in &app.repos {
+        for (w, n) in repo.activity.iter().take(12).enumerate() {
+            weeks[w] += u64::from(*n);
+        }
+    }
+    let total: u64 = weeks.iter().sum();
+
+    let ramp = theme.glyphs.spark_ramp();
+    let max = weeks.iter().copied().max().unwrap_or(0);
+    let mut spark = String::new();
+    for &n in &weeks {
+        let idx = if max == 0 {
+            0
+        } else {
+            ((n * 7).div_ceil(max)) as usize
+        };
+        let ch = ramp[idx.min(7)];
+        spark.push(ch);
+        spark.push(ch); // two cells per week: wide enough to read as a bar
+    }
+
+    let lines = vec![
+        Line::from(Span::styled(spark, theme.fg(SPIDER_PURPLE))),
+        Line::from(Span::styled(
+            format!("{total} commits · 12 weeks"),
+            theme.dim(),
+        )),
+    ];
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// The attention card: a full-width severity bar (segments proportional to the
+/// four buckets) over the bucket counts — the web's attention breakdown. Under
+/// Ascii the segments use distinct characters, so the split reads without
+/// colour.
+fn render_attention_card(frame: &mut Frame, area: Rect, s: &FleetSummary, theme: &Theme) {
+    let mut title = vec![Span::styled(
+        " Attention ",
+        Style::new().add_modifier(Modifier::BOLD),
+    )];
+    title.push(Span::styled(
+        format!("({} of {} repositories) ", s.needs_attention, s.total),
+        theme.dim(),
+    ));
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(title))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // The bar: one coloured run per non-empty bucket, at least one cell each,
+    // rounding drift absorbed by the widest bucket so the bar always fills.
+    let buckets: [(usize, Style); 4] = [
+        (s.risk, theme.risk()),
+        (s.warn, severity_style(Severity::Warn, theme)),
+        (s.notice, severity_style(Severity::Notice, theme)),
+        (s.calm, theme.ok()),
+    ];
+    let width = inner.width as usize;
+    let mut cells: Vec<usize> = buckets
+        .iter()
+        .map(|(n, _)| {
+            if *n == 0 {
+                0
+            } else {
+                ((n * width) / s.total.max(1)).max(1)
+            }
+        })
+        .collect();
+    // Trim/pad the widest run until the total matches the width exactly.
+    let assigned: usize = cells.iter().sum();
+    if let Some(widest) = (0..4).max_by_key(|&i| cells[i])
+        && cells[widest] > 0
+    {
+        cells[widest] = (cells[widest] + width).saturating_sub(assigned).max(1);
+    }
+    let mut bar: Vec<Span> = Vec::new();
+    for (i, ((_, style), n)) in buckets.iter().zip(&cells).enumerate() {
+        if *n > 0 {
+            bar.push(Span::styled(
+                theme.glyphs.bar(i).to_string().repeat(*n),
+                *style,
+            ));
+        }
+    }
+
+    let lines = vec![Line::from(bar), Line::from(severity_bucket_spans(s, theme))];
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// The self-dismissing toast line — scan progress or the latest action result

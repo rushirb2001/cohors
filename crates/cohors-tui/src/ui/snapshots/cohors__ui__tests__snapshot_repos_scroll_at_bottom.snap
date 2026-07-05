@@ -7,16 +7,16 @@ expression: "render_to_string(&app, 100, 18)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
-│ 2 at risk · 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                 │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Fleet activity ────────────────╮ ╭ Attention (10 of 12 repositories) ────────────────────────────╮
+│ ▆▆██▇▇██▇▇▆▆▆▆▄▄▇▇▅▅██▇▇       │ │ █████████████████████████████████████████████████████████████ │
+│ 535 commits · 12 weeks         │ │ 2 at risk · 4 warning · 4 minor · 2 calm                      │
+╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│    Repo                     Sync         Changes  Last  Status                                   │
-│                                             ↑ 7 more                                             │
-│    experiments @9f8e7d6     local        7          1y  7 uncommitted changes                    │
-│    infra @a1b2c3d           local        4          1w  4 uncommitted changes                    │
-│    cli-tools @main          ●            1         12h  1 uncommitted change                     │
-│    auth-service @main       ●            0          3d  up to date                               │
-│▌   marketing-site @main     ●            0         1mo  up to date                               │
+│    Repo                     Sync         Stash  Last  Status                                     │
+│                                             ↑ 8 more                                             │
+│    infra @a1b2c3d           local        0        1w  4 uncommitted changes                      │
+│    cli-tools @main          ●            0       12h  1 uncommitted change                       │
+│    auth-service @main       ●            0        3d  up to date                                 │
+│▌   marketing-site @main     ●            0       1mo  up to date                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

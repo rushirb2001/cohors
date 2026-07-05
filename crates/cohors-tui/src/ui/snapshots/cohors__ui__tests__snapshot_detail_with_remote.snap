@@ -1,6 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3655
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,17 +7,17 @@ expression: "render_to_string(&app, 100, 28)"
 │ ▟██▌█▐╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
 │ ▀▐▖▀█▀│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│       │
 ╰───────│ │ Attention                          █ │ │ a1b2c3d    2h  fix: retry charge on  ││───────╯
-╭ Attent│ │ ↑2 unpushed                        █ │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
-│ 1 at r│ │ 4 uncommitted changes              █ │ │ c3d4e5f    1d  refactor: extract pro ││       │
-╰───────│ │ 1 stash                            █ │ │ d4e5f60    3d  feat: idempotency key ││───────╯
-╭ Reposi│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││───────╮
-│    Rep│ │ Changes (3)                        █ │ │                                      ││       │
-│▌   leg│ │  M src/charge.rs                   █ │ │                                      ││t (per…│
-│    pay│ │  M src/refund.rs                   █ │ │                                      ││       │
-│    web│ │ ?? notes.md                        ║ │ │                                      ││       │
-│    inf│ │                                    ║ │ │                                      ││ges    │
-│    aut│ │ Branches (3)                       ║ │ │                                      ││       │
-│       │ │ ● main  ↑2                         ║ │ │                                      ││       │
+╭ Fleet │ │ ↑2 unpushed                        █ │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
+│ ▁▁▁▁▁▁│ │ 4 uncommitted changes              █ │ │ c3d4e5f    1d  refactor: extract pro ││██████ │
+│ 0 comm│ │ 1 stash                            █ │ │ d4e5f60    3d  feat: idempotency key ││       │
+╰───────│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││───────╯
+╭ Reposi│ │ Changes (3)                        █ │ │                                      ││───────╮
+│    Rep│ │  M src/charge.rs                   █ │ │                                      ││       │
+│▌   leg│ │  M src/refund.rs                   █ │ │                                      ││d .git…│
+│    pay│ │ ?? notes.md                        ║ │ │                                      ││       │
+│    web│ │                                    ║ │ │                                      ││ull    │
+│    inf│ │ Branches (3)                       ║ │ │                                      ││ chang…│
+│    aut│ │ ● main  ↑2                         ║ │ │                                      ││       │
 │       │ │   feat/idempotency  ↑3 ↓1          ║ │ │                                      ││       │
 │       │ │   spike/webhooks  · no upstream    ║ │ │                                      ││       │
 │       │ │                                    ║ │ │                                      ││       │

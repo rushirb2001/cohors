@@ -1,5 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 50, 24)"
 ---
 ╭────────────────────────────────────────────────╮
@@ -8,15 +8,15 @@ expression: "render_to_string(&app, 50, 24)"
 │ ▀▐╭ Standup · this week ───────────────────╮   │
 ╰───│                                        │───╯
 ╭ At│ You authored 11 commits this week      │───╮
-│ 1 │ across 2 repos, shipping 8 features    │·  │
+│ 1 │ across 2 repos, shipping 8 features    │   │
 ╰───│ and fixing 3 bugs.                     │───╯
 ╭ Re│                                        │───╮
-│   │ ╭ Repos ─────────────────────────────╮ │t  │
+│   │ ╭ Repos ─────────────────────────────╮ │i  │
 │▌  │ │ payments  8                        │ │   │
-│   │ │ web-app  3                         │ │h  │
-│   │ │                                    │ │m  │
-│   │ │                                    │ │w  │
-│   │ │                                    │ │d  │
+│   │ │ web-app  3                         │ │▁  │
+│   │ │                                    │ │▁  │
+│   │ │                                    │ │▁  │
+│   │ │                                    │ │▁  │
 │   │ │                                    │ │   │
 │ le│ ╰────────────────────────────────────╯ │il │
 │   │                                        │   │

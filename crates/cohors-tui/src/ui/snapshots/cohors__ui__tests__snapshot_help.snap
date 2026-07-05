@@ -7,17 +7,17 @@ expression: "render_to_string(&app, 100, 64)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1╭ Help ──────────────────────────────────────────────────────────────╮              │
-╰──────────────│                                                                    │──────────────╯
-╭ Repositories │  Legend — what each column shows                                   │──────────────╮
-│    Repo      │    ↑2              commits ahead of upstream                       │              │
-│▌   legacy-bil│    ↓5              commits behind upstream                         │ead .git (per…│
-│    payments @│    ●               in sync with upstream                           │              │
-│    web-app @f│    local           no upstream (local only)                        │ pull         │
-│    infra @a1b│    ● ● ●           CI: pass / fail / pending                       │ed changes    │
-│    auth-servi│    2pr             open pull requests                              │              │
-│              │    3               changed files, all staged                       │              │
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁╭ Help ──────────────────────────────────────────────────────────────╮█████████████ │
+│ 0 commits · 1│                                                                    │              │
+╰──────────────│  Legend — what each column shows                                   │──────────────╯
+╭ Repositories │    ↑2              commits ahead of upstream                       │──────────────╮
+│    Repo      │    ↓5              commits behind upstream                         │              │
+│▌   legacy-bil│    ●               in sync with upstream                           │not read .git…│
+│    payments @│    local           no upstream (local only)                        │ushed         │
+│    web-app @f│    ● ● ●           CI: pass / fail / pending                       │ind — pull    │
+│    infra @a1b│    2pr             open pull requests                              │mmitted chang…│
+│    auth-servi│    3               changed files, all staged                       │date          │
 │              │    3               changed files, some unstaged                    │              │
 │              │    s1              stash entries                                   │              │
 │              │    name            row: clean                                      │              │

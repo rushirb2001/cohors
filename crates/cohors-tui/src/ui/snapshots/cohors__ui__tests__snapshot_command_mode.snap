@@ -7,19 +7,19 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk ·╭ Command ───────────────────────────────────────────────────────────────╮            │
-╰────────────│ : sort name▏                                                           │────────────╯
-╭ Repositorie│ ────────────────────────────────────────────────────────────────────── │────────────╮
-│    Repo    │ :fetch :pull :push         │ sync the targets with their remotes       │            │
-│▌   legacy-b│ :!<cmd>                    │ run any shell command across the targets  │d .git (per…│
-│    payments│ :sort <name·dirty·recent>  │ change the sort order                     │            │
-│    web-app │ :dirty   /<text>           │ needs-attention · fuzzy filter            │ull         │
-│    infra @a│ :jump <repo>               │ move the cursor to a repo                 │ changes    │
-│    auth-ser│ :standup :refresh :quit    │ standup · rescan · exit                   │            │
-│ legacy-bill╰────────────────────────────────────────────────────────────────────────╯full detail │
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁╭ Command ───────────────────────────────────────────────────────────────╮███████████ │
+│ 0 commits ·│ : sort name▏                                                           │            │
+╰────────────│ ────────────────────────────────────────────────────────────────────── │────────────╯
+╭ Repositorie│ :fetch :pull :push         │ sync the targets with their remotes       │────────────╮
+│    Repo    │ :!<cmd>                    │ run any shell command across the targets  │            │
+│▌   legacy-b│ :sort <name·dirty·recent>  │ change the sort order                     │ied)        │
+│    payments│ :dirty   /<text>           │ needs-attention · fuzzy filter            │            │
+│    web-app │ :jump <repo>               │ move the cursor to a repo                 │            │
+│    infra @a│ :standup :refresh :quit    │ standup · rescan · exit                   │            │
+│    auth-ser╰────────────────────────────────────────────────────────────────────────╯            │
 │                                                                                                  │
-│ ⚠ could not read .git (permission denied)                                                        │
+│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ⏎ run · Esc cancel                                                                               │
