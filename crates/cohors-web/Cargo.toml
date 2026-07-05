@@ -56,3 +56,8 @@ cohors-actions = { workspace = true }
 anyhow = { workspace = true }
 camino = { workspace = true }
 tiny_http = { workspace = true }
+
+# Not shipped as a standalone release binary: the web front-end is launched
+# via `cohors web` (the tui binary), which builds the WASM half from source.
+[package.metadata.dist]
+dist = false

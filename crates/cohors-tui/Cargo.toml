@@ -6,6 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
 publish = false
 # We want the binary to be named `cohors`, not `cohors-tui`. Declaring the bin
 # explicitly and disabling auto-discovery avoids a duplicate target from the
@@ -42,3 +44,10 @@ assert_cmd = { workspace = true }
 tempfile = { workspace = true }
 serde_json = { workspace = true }
 insta = { workspace = true }
+
+# Ship this crate's `cohors` binary as the prebuilt release artifact. The
+# Homebrew formula is named `cohors` (not the crate name `cohors-tui`), so the
+# install command reads `brew install rushirb2001/tap/cohors`.
+[package.metadata.dist]
+dist = true
+formula = "cohors"

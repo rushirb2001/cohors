@@ -70,7 +70,7 @@ cohors demo
 
 ## Install
 
-No Rust needed — just `git` on your `PATH`.
+No Rust needed — just `git` on your `PATH`. Every channel installs the same prebuilt binary from the [latest release](https://github.com/rushirb2001/cohors/releases/latest).
 
 **Homebrew** (macOS / Linux):
 
@@ -78,10 +78,10 @@ No Rust needed — just `git` on your `PATH`.
 brew install rushirb2001/tap/cohors
 ```
 
-**Shell one-liner** (macOS Apple Silicon / Intel, Linux x86_64 — picks the right prebuilt binary):
+**Shell one-liner** (macOS Apple Silicon / Intel, Linux x86_64 — checksum-verified):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/rushirb2001/cohors/main/install.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh
 ```
 
 **From source** (requires [Rust](https://rustup.rs)):
@@ -97,7 +97,7 @@ cohors init     # auto-detects where your repos live and writes a config
 cohors          # launch the dashboard
 ```
 
-Prebuilt tarballs for each release are on the [releases page](https://github.com/rushirb2001/cohors/releases). crates.io distribution is planned.
+crates.io distribution is planned.
 
 ## Usage
 
