@@ -14,6 +14,12 @@
   --red: #b42318;
   --amber: #92610a;
   --blue: #1f5fcf;
+  /* Distinct severity hues for the attention breakdown — four clearly-separated
+     colours (red → orange → indigo → green), not the muddy red/brown/blue mix. */
+  --sev-risk: #e5484d;
+  --sev-warn: #f2870a;
+  --sev-notice: #4f6bed;
+  --sev-calm: #17a34a;
   /* Fonts are fetched from the Google Fonts CDN in index.html; the stacks fall
      back to system fonts if it's unavailable (offline). Data/code uses the
      monospace pair, UI prose the sans pair. */
@@ -25,14 +31,24 @@
 
 html, body { height: 100%; margin: 0; }
 
+/* Bumping the root scales every rem-based size (table, chips, controls, detail)
+   at once for an overall-larger, more readable page. */
+html { font-size: 17.5px; }
+
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
-  font-size: 13.5px;
+  font-size: 15px;
   line-height: 1.5;
   overflow: hidden;
 }
+
+/* Form controls don't inherit the page font by default — without this, buttons
+   and inputs fall back to the browser's default face and look out of place next
+   to the UI (most visibly the tour card's Skip/Back/Next). Class rules that set
+   their own family (the mono controls) still win on specificity. */
+button, input, select, textarea { font-family: inherit; }
 
 /* Full-height shell: fixed header/controls, the grid fills the rest. */
 .app {
@@ -54,14 +70,14 @@ body {
   display: flex;
   flex-direction: column;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.05;
   color: var(--accent);
   letter-spacing: 1px;
   opacity: 0.9;
 }
 .title { display: flex; align-items: baseline; gap: 0.5rem; }
-.brand { font-size: 1.3rem; font-weight: 700; color: var(--accent); letter-spacing: -0.3px; }
+.brand { font-size: 1.5rem; font-weight: 700; color: var(--accent); letter-spacing: -0.3px; }
 .pill {
   font-family: var(--mono);
   font-size: 0.65rem;
@@ -129,6 +145,12 @@ body {
 .ghost:hover { color: var(--text); }
 .src { font-family: var(--mono); font-size: 0.8rem; color: var(--green); }
 .src.demo { color: var(--dim); }
+/* "live" — a gently pulsing dot signalling the fleet auto-polls (no rescan). */
+.src.live::before {
+  content: "●"; margin-right: 0.35rem; color: var(--green);
+  animation: live-pulse 2s ease-in-out infinite;
+}
+@keyframes live-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
 /* A quiet inline notice (e.g. "no GitHub login — showing demo"). */
 .banner {
@@ -151,6 +173,83 @@ body {
 .link a { color: var(--blue); text-decoration: none; word-break: break-all; }
 .link a:hover { text-decoration: underline; }
 .empty { padding: 1.2rem 0.95rem; color: var(--faint); font-size: 0.82rem; }
+
+/* The activity sparkline + attention breakdown fill the rest of the Overview
+   card (below the fleet name / live row) — no wasted whitespace. */
+.ov-stats { display: flex; padding: 12px 16px; gap: 1.4rem; align-items: stretch; }
+.stat-block { display: flex; flex-direction: column; justify-content: center; }
+.stat-block:first-child { flex: 0 0 14rem; }
+.attn-block {
+  flex: 1; min-width: 0; padding-left: 1.4rem; border-left: 1px solid var(--line);
+}
+.stat-h {
+  font-family: var(--mono); font-size: 0.66rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint);
+  margin-bottom: 0.55rem;
+}
+.stat-cap {
+  margin-top: 0.5rem; color: var(--faint); font-size: 0.74rem; font-family: var(--mono);
+}
+.pulse-spark { display: flex; align-items: flex-end; gap: 3px; height: 40px; }
+.pulse-bar {
+  flex: 1; min-height: 3px; background: var(--accent); border-radius: 2px 2px 0 0;
+  transform-origin: bottom; animation: pulse-grow 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+@keyframes pulse-grow {
+  from { transform: scaleY(0); opacity: 0.2; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+.pulse-stack {
+  display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line);
+}
+.pulse-stack .seg { animation: seg-in 0.5s ease backwards; }
+@keyframes seg-in { from { width: 0 !important; } }
+.pulse-stack .seg.risk { background: var(--sev-risk); }
+.pulse-stack .seg.warn { background: var(--sev-warn); }
+.pulse-stack .seg.notice { background: var(--sev-notice); }
+.pulse-stack .seg.calm { background: var(--sev-calm); }
+
+.stat-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 0.55rem;
+}
+.stat-head .stat-h { margin-bottom: 0; }
+.stat-total { font-family: var(--mono); font-size: 0.72rem; color: var(--faint); }
+.attn-legend {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; margin-top: 0.6rem;
+  font-family: var(--mono); font-size: 0.72rem;
+}
+.leg { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--dim); }
+.leg .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.leg.risk .dot { background: var(--sev-risk); }
+.leg.warn .dot { background: var(--sev-warn); }
+.leg.notice .dot { background: var(--sev-notice); }
+.leg.calm .dot { background: var(--sev-calm); }
+
+/* Empty detail aside: a skeleton of the drill-in — the same section headers a
+   selected repo shows, each with a faint placeholder body. */
+.hint-lead {
+  margin: 0; padding: 0.8rem 0.95rem; color: var(--dim); font-size: 0.86rem;
+  border-bottom: 1px solid var(--line);
+}
+.sec.skel { opacity: 0.6; }
+.sec.skel .sec-h { cursor: default; }
+.skel-body {
+  height: 2.4rem; margin-top: 0.5rem; border-radius: 6px;
+  background: linear-gradient(90deg, var(--line) 25%, #eef0f3 50%, var(--line) 75%);
+  background-size: 200% 100%; animation: skel-shimmer 1.6s ease-in-out infinite;
+}
+/* Inline shimmer bar standing in for a fact's value in the empty-state skeleton. */
+.skel-line {
+  display: inline-block; width: 5.5rem; height: 0.8rem;
+  border-radius: 4px; vertical-align: middle;
+  background: linear-gradient(90deg, var(--line) 25%, #eef0f3 50%, var(--line) 75%);
+  background-size: 200% 100%; animation: skel-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skel-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
 
 /* ── Attention chips (quiet: muted text, no coloured fills) ─────────────── */
 .attention { display: flex; flex-wrap: wrap; gap: 0.45rem; }
@@ -210,7 +309,10 @@ body {
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 0.85rem;
 }
-@media (max-width: 940px) { .grid { grid-template-columns: 1fr; } }
+/* Below this the detail aside would starve the fleet table (10 columns need
+   room, and headers would truncate); stack it under the table so the table keeps
+   the full width. */
+@media (max-width: 1400px) { .grid { grid-template-columns: 1fr; } }
 
 .card {
   background: var(--panel);
@@ -254,24 +356,43 @@ body {
 .scroll { flex: 1; min-height: 0; overflow: auto; }
 
 /* ── Fleet table ────────────────────────────────────────────────────────── */
-.fleet { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
-.fleet th, .fleet td { text-align: left; padding: 0.3rem 0.7rem; white-space: nowrap; }
-/* Narrow, centered data columns (icon-forward); each hugs its content. */
-.fleet th:nth-child(2), .fleet td:nth-child(2),  /* Sync */
-.fleet th:nth-child(3), .fleet td:nth-child(3),  /* Changes */
+/* The fleet card is a named query container so the Status column can compact to
+   numbers based on the card's own width (see the `@container fleet` rule below). */
+.fleet-wrap { container-type: inline-size; container-name: fleet; }
+/* Fixed layout with proportional column widths: the table always spans the card
+   edge-to-edge (no dead gap) and never overflows. The two text columns (Repo,
+   Status) take the bulk; the icon/number columns stay compact and ellipsize
+   anything too long. */
+.fleet { width: 100%; table-layout: fixed; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
+.fleet th:nth-child(1) { width: 5.5%; }  /* Mark */
+.fleet th:nth-child(2) { width: 27.5%; } /* Repo */
+.fleet th:nth-child(3) { width: 6%; }    /* Sync */
+.fleet th:nth-child(4) { width: 6%; }    /* Stash */
+.fleet th:nth-child(5) { width: 5%; }    /* PRs */
+.fleet th:nth-child(6) { width: 8%; }    /* CI */
+.fleet th:nth-child(7) { width: 6%; }    /* Last */
+.fleet th:nth-child(8) { width: 8%; }    /* Activity */
+.fleet th:nth-child(9) { width: 20%; }   /* Status */
+.fleet th:nth-child(10) { width: 8%; }   /* Git */
+/* Tight horizontal padding so the columns pack into the card without overflow. */
+.fleet th, .fleet td { text-align: left; padding: 0.3rem 0.4rem; white-space: nowrap; }
+/* Column layout is: 1 Mark · 2 Repo · 3 Sync · 4 Stash · 5 PRs · 6 CI · 7 Last ·
+   8 Activity · 9 Status · 10 Git · 11 spacer. The icon/number columns centre;
+   Last right-aligns. Repo, Status, Mark, and Git are targeted by class instead of
+   position, so inserting a column can't shift their alignment. */
+.fleet th:nth-child(3), .fleet td:nth-child(3),  /* Sync */
 .fleet th:nth-child(4), .fleet td:nth-child(4),  /* Stash */
 .fleet th:nth-child(5), .fleet td:nth-child(5),  /* PRs */
-.fleet th:nth-child(6), .fleet td:nth-child(6) { /* CI */
+.fleet th:nth-child(6), .fleet td:nth-child(6),  /* CI */
+.fleet th:nth-child(8), .fleet td:nth-child(8) { /* Activity */
   text-align: center;
 }
 .fleet th:nth-child(7), .fleet td:nth-child(7) { text-align: right; } /* Last */
-.fleet th:nth-child(8), .fleet td:nth-child(8) { text-align: center; } /* Activity */
-/* Repo (fused name @branch): cap and ellipsize, full text on hover. */
-.fleet td:nth-child(1) { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; }
-/* A trailing spacer column soaks up the leftover width, so every real column
-   hugs its content (no pooled whitespace in Status) and the table still fills
-   the card. */
-.fleet th.spacer, .fleet td.spacer { width: 100%; padding: 0; }
+/* The text columns clip and ellipsize anything wider than their share (full text
+   in the tooltip). Fixed layout does the width allocation above. */
+.fleet td.repo { text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.fleet td.status { overflow: hidden; text-overflow: ellipsis; }
+.fleet td, .fleet th { overflow: hidden; text-overflow: ellipsis; }
 
 /* Inline SVG state icons — text-sized, colored by the cell (currentColor). */
 .ic { width: 14px; height: 14px; vertical-align: -0.2em; flex: none; }
@@ -293,6 +414,23 @@ body {
 }
 .fleet tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; }
 .fleet tbody tr:last-child { border-bottom: none; }
+/* Leave room for the sticky header when a row *or a cell* is scrolled into view
+   (the guided tour spotlights whole rows and individual cells) so the target
+   lands clearly below the sticky thead, not tucked under it. Cells need this too
+   — scroll-into-view aligns whatever element it's given, and td has no margin of
+   its own. 4rem comfortably clears the ~31px header plus the spotlight ring. */
+.fleet tbody tr,
+.fleet tbody td { scroll-margin-top: 4rem; }
+/* A 10% severity wash on the row — hover and selection override it. */
+.fleet tbody tr.sev-risk:not(:hover):not(.selected) {
+  background: color-mix(in srgb, var(--sev-risk) 10%, transparent);
+}
+.fleet tbody tr.sev-warn:not(:hover):not(.selected) {
+  background: color-mix(in srgb, var(--sev-warn) 10%, transparent);
+}
+.fleet tbody tr.sev-notice:not(:hover):not(.selected) {
+  background: color-mix(in srgb, var(--sev-notice) 10%, transparent);
+}
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 
@@ -473,10 +611,16 @@ td.act { width: 2.4em; text-align: center; }
 .dd { position: relative; display: inline-block; }
 .dd-btn { font-family: var(--mono); }
 .dd-menu {
-  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 9em;
+  position: fixed; z-index: 45; min-width: 9em;
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.14);
   padding: 4px; display: flex; flex-direction: column;
+  transform-origin: top left;
+  animation: dd-in 0.12s ease;
+}
+@keyframes dd-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .dd-item {
   background: none; border: none; text-align: left; padding: 6px 12px;
@@ -533,19 +677,27 @@ td.act { width: 2.4em; text-align: center; }
   text-transform: uppercase; color: var(--faint);
 }
 
-/* Overview is the page header now: brand on the left (divider), the fleet name +
-   path, at-a-glance stats, and scan status filling the right. */
-.overview { flex-shrink: 0; flex-direction: row; align-items: stretch; }
-.ov-brand {
-  display: flex; align-items: center; gap: 0.7rem;
-  padding: 12px 18px; border-right: 1px solid var(--border); flex: none;
+/* The header row: the brand mark in its own isolated, rounded card, then the
+   overview card beside it, separated by the row's gap. */
+.top-row { flex-shrink: 0; display: flex; align-items: stretch; gap: 0.85rem; }
+
+/* Brand card: the pixel mark stacked above the "cohors web" wordmark, centered
+   in its own bordered box. */
+.brand-card {
+  flex: none;
+  align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 14px 26px;
 }
-.ov-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+/* The icon stacks above the wordmark, but "cohors" and the WEB pill stay inline. */
+.brand-card .title { flex-direction: row; align-items: baseline; gap: 0.45rem; }
+
+/* Overview: fleet name + path on top, stats beneath. Fills the rest of the row. */
+.overview { flex: 1; min-width: 0; }
 .ov-top {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 10px 16px; border-bottom: 1px solid var(--line);
+  padding: 12px 18px; border-bottom: 1px solid var(--line);
 }
-.ov-body .attention { padding: 10px 16px; }
+.overview .attention { padding: 12px 18px; }
 .ov-top .fleet-name { margin-left: 0; }
 
 /* The act controls in the Repositories subhead row. */
@@ -562,15 +714,24 @@ td.act { width: 2.4em; text-align: center; }
 .act-controls > .dd:last-child .dd-btn:hover { background: #ece9f9; }
 
 th.mk, td.mk { width: 3em; }
-th.act, td.act { width: 3.2em; }
-/* Row-level act trigger: a quiet chip that only lifts on hover, so the column
-   of triggers doesn't shout down the data. */
-td.act .dd-btn {
-  border: 1px solid transparent; border-radius: 6px; padding: 2px 7px;
-  background: transparent; color: var(--faint); font-size: 12px;
+th.act, td.act { width: 4em; }
+
+/* Status text: the full sentence when the fleet card is wide, the compact
+   icon+count when it's narrow — keyed to the card's own width (a container
+   query), not the viewport, since the detail aside shares the row. This keeps
+   the table fitting its card with no horizontal scroll at any width. */
+.st-compact { display: none; }
+@container fleet (max-width: 940px) {
+  .st-full { display: none; }
+  .st-compact { display: inline-flex; align-items: center; gap: 0.25rem; }
 }
-td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); background: var(--panel); }
-.fleet tbody tr:hover td.act .dd-btn { color: var(--dim); }
+/* Row-level git-action trigger: an outlined box so it reads as a clickable
+   control, accenting on hover. */
+td.act .dd-btn {
+  border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px;
+  background: var(--panel); color: var(--dim); font-size: 0.72rem;
+}
+td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Repositories subhead: label, then the filter takes the slack, then the
    needs-attention toggle and the act controls pinned right. */
@@ -587,7 +748,7 @@ td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); backgr
 .fleet th.sorted { color: var(--accent); }
 /* The ⇅ affordance is faint on idle columns; the active column's ↓ takes the
    accent. Hovering an idle column lifts its arrow so it reads as clickable. */
-.fleet th .caret { color: var(--faint); font-size: 0.9em; }
+.fleet th .caret { color: var(--faint); font-size: 0.7em; margin-left: 1px; }
 .fleet th.sortable:hover .caret { color: var(--dim); }
 .fleet th.sorted .caret { color: var(--accent); }
 
@@ -644,3 +805,107 @@ td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); backgr
 .run-stream.err { color: var(--amber); }
 .run-stderr-h { color: var(--dim); margin: 8px 0 2px; }
 .run-empty { color: var(--faint); margin: 0; }
+
+/* ── Guided tour ─────────────────────────────────────────────────────────── */
+/* A full-screen layer that blocks page clicks; the spotlight is a lit hole in
+   the surrounding dim (via a huge box-shadow) that glides between targets, and
+   the card floats and slides to each one. */
+.tour { position: fixed; inset: 0; z-index: 60; }
+.tour-spot {
+  position: fixed; border-radius: 8px; pointer-events: none;
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(20, 22, 28, 0.5);
+  transition: left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tour-card {
+  position: fixed; z-index: 61; width: min(400px, 92vw);
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(31, 35, 40, 0.28);
+  padding: 15px 18px;
+  transition: left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+/* Head: the step counter as a pill on the left, the title on the right. */
+.tour-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+}
+.tour-step {
+  flex: none;
+  font-family: var(--mono); font-size: 0.66rem; font-weight: 600;
+  color: var(--accent); background: var(--accent-soft);
+  border-radius: 999px; padding: 3px 10px; letter-spacing: 0.04em;
+}
+.tour-title {
+  margin: 0; font-size: 1rem; line-height: 1.25; color: var(--text);
+  text-align: right;
+}
+/* The copy sits in a tinted callout so it reads as one distinct block. */
+.tour-copy {
+  background: var(--accent-soft); border-radius: 10px;
+  border-left: 3px solid var(--accent);
+  padding: 11px 13px; margin-bottom: 13px;
+}
+/* Two-tier copy: a bold lead the eye lands on, then dimmer supporting detail. */
+.tour-copy .tour-lead {
+  margin: 0 0 6px; color: var(--text); font-size: 0.95rem;
+  font-weight: 600; line-height: 1.4;
+}
+.tour-copy .tour-body { margin: 0; color: var(--dim); font-size: 0.85rem; line-height: 1.5; }
+/* Visual accents: the app's own severity swatches / verb pills, so the words in
+   the copy map straight onto what's on screen. */
+.tour-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.tour-chips .tchip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.74rem; color: var(--dim);
+  border: 1px solid var(--border); border-radius: 999px;
+  padding: 3px 9px; background: var(--panel);
+}
+.tour-chips .tchip.mono { font-family: var(--mono); font-size: 0.72rem; color: var(--text); }
+.tour-chips .tdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tour-actions { display: flex; align-items: center; justify-content: space-between; }
+.tour-nav { display: inline-flex; gap: 8px; }
+.tour-card .confirm {
+  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  padding: 6px 16px; cursor: pointer; font-size: 0.85rem;
+}
+.tour-card .confirm:hover { filter: brightness(1.08); }
+
+
+/* ── Micro-animations: small moments across the page ─────────────────────── */
+/* Action modals fade + rise in. */
+.overlay { animation: overlay-in 0.16s ease; }
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+.modal { animation: modal-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+/* The detail drawer fades in when a repo is opened (and back to the pulse). */
+.side .card { animation: fade-in 0.2s ease; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+/* Notice banner drops in. */
+.banner { animation: banner-in 0.2s ease; }
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+/* Rows, buttons, chips, and headers ease on hover / selection. */
+.fleet tbody tr { transition: background 0.12s ease, box-shadow 0.12s ease; }
+.ghost, .chip, .dd-btn, .toggle, .sort, .fleet th.sortable, .act-controls .dd-btn,
+.tour-card .confirm, .modal .confirm {
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease,
+              filter 0.14s ease;
+}
+/* Sort caret settles when the active column changes. */
+.fleet th .caret { transition: color 0.14s ease; }
+
+/* Honour the user's reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
