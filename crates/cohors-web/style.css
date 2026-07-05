@@ -401,6 +401,9 @@ body {
 }
 .fleet tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; }
 .fleet tbody tr:last-child { border-bottom: none; }
+/* Leave room for the sticky header when a row is scrolled into view (the guided
+   tour does this) so it lands below the header, not tucked under it. */
+.fleet tbody tr { scroll-margin-top: 3rem; }
 /* A 10% severity wash on the row — hover and selection override it. */
 .fleet tbody tr.sev-risk:not(:hover):not(.selected) {
   background: color-mix(in srgb, var(--sev-risk) 10%, transparent);
