@@ -258,8 +258,12 @@ body {
 .scroll { flex: 1; min-height: 0; overflow: auto; }
 
 /* ── Fleet table ────────────────────────────────────────────────────────── */
+/* The fleet card is a named query container so the Status column can compact to
+   numbers based on the card's own width (see the `@container fleet` rule below). */
+.fleet-wrap { container-type: inline-size; container-name: fleet; }
 .fleet { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
-.fleet th, .fleet td { text-align: left; padding: 0.3rem 0.7rem; white-space: nowrap; }
+/* Tight horizontal padding so the columns pack into the card without overflow. */
+.fleet th, .fleet td { text-align: left; padding: 0.3rem 0.4rem; white-space: nowrap; }
 /* Column layout is: 1 Mark · 2 Repo · 3 Sync · 4 Stash · 5 PRs · 6 CI · 7 Last ·
    8 Activity · 9 Status · 10 Git · 11 spacer. The icon/number columns centre;
    Last right-aligns. Repo, Status, Mark, and Git are targeted by class instead of
@@ -272,8 +276,11 @@ body {
   text-align: center;
 }
 .fleet th:nth-child(7), .fleet td:nth-child(7) { text-align: right; } /* Last */
-/* Repo (fused name @branch): left-aligned, capped with ellipsis, full on hover. */
-.fleet td.repo { text-align: left; max-width: 24rem; overflow: hidden; text-overflow: ellipsis; }
+/* The two variable-width columns are capped and ellipsized so the table always
+   fits its card — no horizontal scroll. The full text stays in each cell's
+   tooltip (Repo) / the compact form + tooltip (Status). */
+.fleet td.repo { text-align: left; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
+.fleet td.status { max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
 /* A trailing spacer column soaks up the leftover width, so every real column
    hugs its content (no pooled whitespace in Status) and the table still fills
    the card. */
@@ -578,10 +585,12 @@ td.act { width: 2.4em; text-align: center; }
 th.mk, td.mk { width: 3em; }
 th.act, td.act { width: 4em; }
 
-/* Status text: the full sentence on wide screens, the compact icon+count when
-   the window is narrow (so the table stays readable without horizontal scroll). */
+/* Status text: the full sentence when the fleet card is wide, the compact
+   icon+count when it's narrow — keyed to the card's own width (a container
+   query), not the viewport, since the detail aside shares the row. This keeps
+   the table fitting its card with no horizontal scroll at any width. */
 .st-compact { display: none; }
-@media (max-width: 1200px) {
+@container fleet (max-width: 940px) {
   .st-full { display: none; }
   .st-compact { display: inline-flex; align-items: center; gap: 0.25rem; }
 }
