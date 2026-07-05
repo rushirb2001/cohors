@@ -510,8 +510,13 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
-    // Alternate section / divider constraints; the last section takes the
-    // leftover width so the box always spans edge to edge.
+    // Alternate section / divider constraints. The leftover width is spread
+    // evenly across the sections (not dumped into the last one), so the
+    // dividers space out and no section ends in a void; the last section
+    // absorbs only the rounding remainder.
+    let leftover = (inner.width as usize)
+        .saturating_sub(widths.iter().sum::<u16>() as usize + widths.len().saturating_sub(1));
+    let share = (leftover / widths.len().max(1)) as u16;
     let mut cons: Vec<Constraint> = Vec::new();
     for (i, w) in widths.iter().enumerate() {
         if i > 0 {
@@ -520,7 +525,7 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
         if i == widths.len() - 1 {
             cons.push(Constraint::Fill(1));
         } else {
-            cons.push(Constraint::Length(*w));
+            cons.push(Constraint::Length(*w + share));
         }
     }
     let rects = Layout::horizontal(cons).split(inner);
