@@ -13,11 +13,11 @@ expression: "render_to_string(&app, 100, 20)"
 ╰───────────────────────│ No editor CLI found on your PATH.                │───────────────────────╯
 ╭ Repositories (5) · sor│ Install its shell command to list it here.       │───────────────────────╮
 │    Repo               │ ▌ Reveal in file manager                         │                       │
-│▌   legacy-billing     │   Open in lazygit                                │mission denied)        │
+│▌   legacy-billing     │   Open in lazygit                                │ denied)               │
 │    payments @main     ╰──────────────────────────────────────────────────╯                       │
-│    web-app @feat/checkout  ↓5 ●      0       20m  ↓5 behind — pull                               │
-│    infra @a1b2c3d          local     0        1w  4 uncommitted changes                          │
-│    auth-service @main      ● 1pr     0        3d  up to date                                     │
+│    web-app @feat/checkout  ↓5 ●       20m  ↓5 behind — pull                                      │
+│    infra @a1b2c3d          local       1w  4 uncommitted changes                                 │
+│    auth-service @main      ● 1pr       3d  up to date                                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ↑/↓ choose · ⏎ open · d set default · Esc cancel                                                 │

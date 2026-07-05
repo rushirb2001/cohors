@@ -13,11 +13,11 @@ expression: "render_to_string(&app, 100, 64)"
 ╰──────────────│  Legend — what each column shows                                   │──────────────╯
 ╭ Repositories │    ↑2              commits ahead of upstream                       │──────────────╮
 │    Repo      │    ↓5              commits behind upstream                         │              │
-│▌   legacy-bil│    ●               in sync with upstream                           │not read .git…│
-│    payments @│    local           no upstream (local only)                        │ushed         │
-│    web-app @f│    ● ● ●           CI: pass / fail / pending                       │ind — pull    │
-│    infra @a1b│    2pr             open pull requests                              │mmitted chang…│
-│    auth-servi│    3               changed files, all staged                       │date          │
+│▌   legacy-bil│    ●               in sync with upstream                           │d .git (permi…│
+│    payments @│    local           no upstream (local only)                        │              │
+│    web-app @f│    ● ● ●           CI: pass / fail / pending                       │ull           │
+│    infra @a1b│    2pr             open pull requests                              │ changes      │
+│    auth-servi│    3               changed files, all staged                       │              │
 │              │    3               changed files, some unstaged                    │              │
 │              │    s1              stash entries                                   │              │
 │              │    name            row: clean                                      │              │

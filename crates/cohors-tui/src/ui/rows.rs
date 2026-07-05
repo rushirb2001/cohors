@@ -139,18 +139,18 @@ pub(crate) fn render_repos_panel(
     // There is no Changes column on either surface any more: the dirty count is
     // Status's job ("4 uncommitted changes"), exactly as on the web.
     let repo_w = col_w(repo_spans, 12, 30);
+    // No Stash column either: like Changes, the stash count is Status's job
+    // ("1 stash · stale"), and the dock card spells it out for the selection.
     let (widths, reason_max): (Vec<Constraint>, usize) = if dock_visible {
         let sync_w = col_w(ahead_behind_spans, 4, 9);
-        let stash_w = col_w(stash_spans, 5, 6);
         let prs_w = col_w(prs_spans, 3, 5);
         let ci_w = col_w(ci_spans, 2, 8);
         let act_w: u16 = ACTIVITY_WEEKS as u16; // one cell per week
-        let fixed = 2 + repo_w + sync_w + stash_w + prs_w + ci_w + age_w + act_w;
-        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 7); // 8 cols ⇒ 7 gaps
+        let fixed = 2 + repo_w + sync_w + prs_w + ci_w + age_w + act_w;
+        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 6); // 7 cols ⇒ 6 gaps
         let widths = vec![
             Constraint::Length(repo_w), // Repo @branch (incl. 2-col gutter)
             Constraint::Length(sync_w),
-            Constraint::Length(stash_w),
             Constraint::Length(prs_w),
             Constraint::Length(ci_w),
             Constraint::Length(age_w),
@@ -160,13 +160,11 @@ pub(crate) fn render_repos_panel(
         (widths, status_w)
     } else {
         let sync_w = col_w(sync_spans, 4, 12);
-        let stash_w = col_w(stash_spans, 5, 6);
-        let fixed = 2 + repo_w + sync_w + stash_w + age_w;
-        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 4); // 5 cols ⇒ 4 gaps
+        let fixed = 2 + repo_w + sync_w + age_w;
+        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 3); // 4 cols ⇒ 3 gaps
         let widths = vec![
             Constraint::Length(repo_w),
             Constraint::Length(sync_w),
-            Constraint::Length(stash_w),
             Constraint::Length(age_w),
             Constraint::Fill(1), // Status (primary attention reason)
         ];
@@ -196,11 +194,9 @@ pub(crate) fn render_repos_panel(
     // then the same column widths/spacing. "Repo" is padded by 2 to line up with
     // the names' selection gutter.
     let labels: &[&str] = if dock_visible {
-        &[
-            "  Repo", "Sync", "Stash", "PRs", "CI", "Last", "Activity", "Status",
-        ]
+        &["  Repo", "Sync", "PRs", "CI", "Last", "Activity", "Status"]
     } else {
-        &["  Repo", "Sync", "Stash", "Last", "Status"]
+        &["  Repo", "Sync", "Last", "Status"]
     };
     let header_style = Style::new().add_modifier(Modifier::BOLD);
     let [_sym, header_cols] =
@@ -758,7 +754,6 @@ pub(crate) fn repo_row<'a>(
             Row::new(vec![
                 name,
                 blank(), // Sync
-                blank(), // Stash
                 blank(), // PRs
                 blank(), // CI
                 blank(), // Last
@@ -769,7 +764,6 @@ pub(crate) fn repo_row<'a>(
             Row::new(vec![
                 name,
                 blank(), // Sync
-                blank(), // Stash
                 blank(), // Last
                 status,
             ])
@@ -804,7 +798,6 @@ pub(crate) fn repo_row<'a>(
         Row::new(vec![
             name,
             sync,
-            Cell::from(Line::from(stash_spans(snap, theme))),
             Cell::from(Line::from(prs_spans(snap, theme))),
             Cell::from(Line::from(ci_spans(snap, theme))),
             age_cell(snap, now, fmt.age_w as usize, theme),
@@ -822,7 +815,6 @@ pub(crate) fn repo_row<'a>(
         Row::new(vec![
             name,
             sync,
-            Cell::from(Line::from(stash_spans(snap, theme))),
             age_cell(snap, now, fmt.age_w as usize, theme),
             reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
         ])
@@ -841,7 +833,10 @@ pub(crate) const ACTIVITY_WEEKS: usize = 12;
 pub(crate) fn activity_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
     let max = snap.activity.iter().copied().max().unwrap_or(0);
     if max == 0 {
-        return Cell::from(Span::styled("quiet", theme.dim()));
+        return Cell::from(Span::styled(
+            format!("{:^ACTIVITY_WEEKS$}", "quiet"),
+            theme.dim(),
+        ));
     }
     let ramp = theme.glyphs.spark_ramp();
     let mut spark = String::with_capacity(ACTIVITY_WEEKS * 3);
@@ -904,15 +899,6 @@ pub(crate) fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span
             }
             spans
         }
-    }
-}
-
-/// The "Stash" column: the stash count, or a dim "0" when there are none.
-pub(crate) fn stash_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
-    if snap.stash_count > 0 {
-        vec![Span::styled(snap.stash_count.to_string(), theme.warn())]
-    } else {
-        vec![Span::styled("0", theme.dim())]
     }
 }
 

@@ -12,8 +12,8 @@ expression: "render_to_string(&app, 100, 34)"
 │ quiet · 12 weeks               │ │ 1 at risk · 0 calm                                            │
 ╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
 ╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo               Sync  Stash  PRs    CI     Last  Activity      Status                      │
-│▌   load-tester @main  ↑1    0      local  local    1w  quiet         ↑1 unpushed · aging         │
+│    Repo               Sync  PRs    CI     Last  Activity      Status                             │
+│▌   load-tester @main  ↑1    local  local    1w     quiet      ↑1 unpushed · aging                │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

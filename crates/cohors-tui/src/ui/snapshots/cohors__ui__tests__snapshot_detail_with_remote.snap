@@ -13,10 +13,10 @@ expression: "render_to_string(&app, 100, 28)"
 ╰───────│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││───────╯
 ╭ Reposi│ │ Changes (3)                        █ │ │                                      ││───────╮
 │    Rep│ │  M src/charge.rs                   █ │ │                                      ││       │
-│▌   leg│ │  M src/refund.rs                   █ │ │                                      ││d .git…│
+│▌   leg│ │  M src/refund.rs                   █ │ │                                      ││(permi…│
 │    pay│ │ ?? notes.md                        ║ │ │                                      ││       │
-│    web│ │                                    ║ │ │                                      ││ull    │
-│    inf│ │ Branches (3)                       ║ │ │                                      ││ chang…│
+│    web│ │                                    ║ │ │                                      ││       │
+│    inf│ │ Branches (3)                       ║ │ │                                      ││s      │
 │    aut│ │ ● main  ↑2                         ║ │ │                                      ││       │
 │       │ │   feat/idempotency  ↑3 ↓1          ║ │ │                                      ││       │
 │       │ │   spike/webhooks  · no upstream    ║ │ │                                      ││       │
