@@ -1113,7 +1113,7 @@ fn repo_row(
             <td class="status">{status_cell(&a)}</td>
             <td class="act" on:click=|ev| ev.stop_propagation()>
                 {act_dropdown(
-                    "⋯".to_string(),
+                    "act".to_string(),
                     id_act.clone(),
                     serde_json::json!({ "ids": [id_act.clone()] }),
                     menu,
@@ -1488,17 +1488,31 @@ fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
     }
 }
 
-/// The Status cell: the primary attention reason as a compact icon + count,
-/// severity-coloured, on a single line — the full sentence is in the tooltip. A
-/// faint check when nothing needs you.
+/// The Status cell: the primary attention reason. Wide layouts show the full
+/// sentence (the same text the TUI shows — "12 uncommitted changes", "branch
+/// never pushed"); narrow layouts collapse to the compact icon + count. Both
+/// forms are rendered and CSS picks one by viewport width.
 fn status_cell(a: &cohors_core::Assessment) -> impl IntoView + use<> {
     match &a.primary {
         Some(r) => {
             let cls = format!("st {}", severity_class(r.severity()));
             let tip = r.label();
-            view! { <span class=cls title=tip>{reason_body(r)}</span> }.into_any()
+            let full = tip.clone();
+            view! {
+                <span class=cls title=tip>
+                    <span class="st-full">{full}</span>
+                    <span class="st-compact">{reason_body(r)}</span>
+                </span>
+            }
+            .into_any()
         }
-        None => ok_glyph("up to date — nothing needs attention"),
+        None => view! {
+            <span class="st ok" title="up to date — nothing needs attention">
+                <span class="st-full muted">"up to date"</span>
+                <span class="st-compact">{check_icon()}</span>
+            </span>
+        }
+        .into_any(),
     }
 }
 
