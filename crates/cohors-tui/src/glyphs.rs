@@ -89,6 +89,22 @@ impl Glyphs {
         }
     }
 
+    /// The compact CI indicator for the narrow table: a filled square whose
+    /// *colour* carries the state (green pass / red fail / amber pending / grey
+    /// none), the stand-in for the "passing"/"failing" word when the column
+    /// can't fit it. Ascii can't colour, so it falls back to a short letter.
+    pub fn ci_square(&self, ci: CiStatus) -> &'static str {
+        match self.kind {
+            IconKind::Unicode | IconKind::Nerd => "■",
+            IconKind::Ascii => match ci {
+                CiStatus::Passing => "ok",
+                CiStatus::Failing => "x",
+                CiStatus::Pending => "~",
+                CiStatus::None => "-",
+            },
+        }
+    }
+
     /// One cell of the attention severity bar. In the glyph tiers every segment
     /// is a solid block and *colour* separates the buckets; under Ascii each
     /// bucket gets its own character (risk `#`, warn `+`, notice `-`, calm `.`)

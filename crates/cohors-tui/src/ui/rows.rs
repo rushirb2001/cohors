@@ -142,18 +142,19 @@ pub(crate) fn render_repos_panel(
     // No Stash column either: like Changes, the stash count is Status's job
     // ("1 stash · stale"), and the dock card spells it out for the selection.
     //
-    // The column set degrades gracefully with WIDTH, so a normal-width terminal
-    // keeps the modern split columns instead of cliffing to the fused legacy
-    // set. Three tiers, richest-that-fits (each keeps a legible Status):
-    //   Wide   Repo · Sync · PRs · CI · Last · Activity · Status
-    //   Medium Repo · Sync · PRs · CI · Last · Status         (drops the sparkline)
-    //   Narrow Repo · Sync · Last · Status                    (Sync fuses ↑2 ● 2pr)
+    // The column set degrades gracefully with WIDTH, richest-that-fits, and CI
+    // never simply vanishes — the narrow tier keeps a colour-coded CI square in
+    // place of the "passing"/"failing" word:
+    //   Wide   Repo · Sync · PRs · CI(word) · Last · Activity · Status
+    //   Medium Repo · Sync · PRs · CI(word) · Last · Status   (drops the sparkline)
+    //   Narrow Repo · Sync · CI(■) · Last · Status            (square CI, no PRs)
     // While scanning, the refreshed columns' floors grow by 2 so the header
     // spinner (` ⠋`) has room beside the label.
     let hpad: u16 = if app.scanning { 2 } else { 0 };
     let sync_x_w = col_w(ahead_behind_spans, 4 + hpad, 9);
     let prs_w = col_w(prs_spans, 3 + hpad, 5);
     let ci_w = col_w(ci_spans, 2 + hpad, 8);
+    let ci_sq_w = 2 + hpad; // the square, floored to the "CI" header width
     let act_w: u16 = ACTIVITY_WEEKS as u16; // one cell per week
     let w = inner.width as usize;
     let wide_fixed = (2 + repo_w + sync_x_w + prs_w + ci_w + age_w + act_w) as usize;
@@ -196,13 +197,13 @@ pub(crate) fn render_repos_panel(
             )
         }
         Tier::Narrow => {
-            let sync_w = col_w(sync_spans, 4 + hpad, 12);
-            let fixed = (2 + repo_w + sync_w + age_w) as usize;
-            let status_w = w.saturating_sub(fixed + 2 * 3); // 4 cols ⇒ 3 gaps
+            let fixed = (2 + repo_w + sync_x_w + ci_sq_w + age_w) as usize;
+            let status_w = w.saturating_sub(fixed + 2 * 4); // 5 cols ⇒ 4 gaps
             (
                 vec![
                     Constraint::Length(repo_w),
-                    Constraint::Length(sync_w),
+                    Constraint::Length(sync_x_w),
+                    Constraint::Length(ci_sq_w),
                     Constraint::Length(age_w),
                     Constraint::Fill(1),
                 ],
@@ -239,7 +240,7 @@ pub(crate) fn render_repos_panel(
     let labels: &[&str] = match layout {
         Tier::Wide => &["  Repo", "Sync", "PRs", "CI", "Last", "Activity", "Status"],
         Tier::Medium => &["  Repo", "Sync", "PRs", "CI", "Last", "Status"],
-        Tier::Narrow => &["  Repo", "Sync", "Last", "Status"],
+        Tier::Narrow => &["  Repo", "Sync", "CI", "Last", "Status"],
     };
     let header_style = Style::new().add_modifier(Modifier::BOLD);
     let [_sym, header_cols] =
@@ -830,6 +831,7 @@ pub(crate) fn repo_row<'a>(
             Tier::Narrow => Row::new(vec![
                 name,
                 blank(), // Sync
+                blank(), // CI
                 blank(), // Last
                 status,
             ]),
@@ -890,15 +892,18 @@ pub(crate) fn repo_row<'a>(
             }
         }
         Tier::Narrow => {
-            // Fused Sync (`↑2 ● 2pr`), no separate PRs/CI columns.
+            // Sync as plain arrows, with CI kept as a colour-coded square in its
+            // own column (never fused away).
             let sync = match busy {
                 Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
-                None if synced && snap.remote.is_none() && blink_synced && !fmt.blink_on => {
-                    Cell::from(Span::raw(" "))
-                }
-                None => sync_cell(snap, theme),
+                None if synced && blink_synced && !fmt.blink_on => Cell::from(Span::raw(" ")),
+                None => Cell::from(Line::from(ahead_behind_spans(snap, theme))),
             };
-            Row::new(vec![name, sync, age, status])
+            let ci = match busy {
+                Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),
+                None => Cell::from(Line::from(ci_square_spans(snap, theme))),
+            };
+            Row::new(vec![name, sync, ci, age, status])
         }
     }
 }
@@ -1011,43 +1016,30 @@ pub(crate) fn ci_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>>
     }
 }
 
-/// The remote sub-part of the Sync column: a status dot colored by CI health —
-/// green passing, red failing, yellow pending, dim when there's no CI signal —
-/// plus the open-PR count. Empty when the repo isn't on a remote.
-///
-/// In the glyph tiers it's `●` (a basic geometric glyph present in every monospace
-/// font, colored via ANSI) rather than a cloud emoji — emoji are double-width,
-/// can't be themed/`NO_COLOR`'d, and may render invisibly. Under Ascii the colour
-/// can't carry pass/fail, so the dot becomes a short letter (`ok`/`x`/`~`) via
-/// [`Glyphs::ci_dot`].
-pub(crate) fn remote_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
-    match &snap.remote {
-        None => Vec::new(),
-        Some(r) => {
-            let style = match r.ci {
+/// The compact CI cell (narrow layout): a colour-coded square standing in for
+/// the word — green passing, red failing, amber pending, grey for no CI or no
+/// remote. So CI never simply vanishes when the terminal is too narrow for
+/// "passing"; it shrinks to a square the colour still reads on.
+pub(crate) fn ci_square_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
+    let (ci, style) = match &snap.remote {
+        None => (CiStatus::None, theme.dim()),
+        Some(r) => (
+            r.ci,
+            match r.ci {
                 CiStatus::Passing => theme.ok(),
                 CiStatus::Failing => theme.risk(),
                 CiStatus::Pending => theme.warn(),
                 CiStatus::None => theme.dim(),
-            };
-            let dot = theme.glyphs.ci_dot(r.ci);
-            let mut spans = Vec::new();
-            if !dot.is_empty() {
-                spans.push(Span::styled(dot, style));
-            }
-            if r.open_prs > 0 {
-                let sep = if spans.is_empty() { "" } else { " " };
-                spans.push(Span::styled(format!("{sep}{}pr", r.open_prs), theme.dim()));
-            }
-            spans
-        }
-    }
+            },
+        ),
+    };
+    vec![Span::styled(theme.glyphs.ci_square(ci), style)]
 }
 
 /// The repo name, preceded by a selection gutter: a cyan `●` when the repo is
 /// marked for a bulk action, two spaces otherwise (so names stay aligned). The
-/// name is dimmed when clean, red in a risk state, default otherwise;
-/// fuzzy-matched characters are bold-highlighted.
+/// name is dimmed when clean, bold in a warn/risk state; fuzzy-matched
+/// characters are bold-highlighted.
 pub(crate) fn name_cell<'a>(
     name: &str,
     highlights: &[u32],
@@ -1058,8 +1050,7 @@ pub(crate) fn name_cell<'a>(
 ) -> Cell<'a> {
     // Red is reserved for genuinely broken repos (the `snap.error` row); a repo
     // that merely wants attention (aging unpushed, behind, dirty) is conveyed by
-    // weight here and by the coloured Sync/Changes cells — never an alarming red
-    // name (which, on the reversed selected row, became a red block).
+    // weight here and by the coloured Status cell — never an alarming red name.
     let base = match severity {
         Severity::Ok | Severity::Info => theme.dim(),
         Severity::Warn | Severity::Risk => Style::new().add_modifier(Modifier::BOLD),
@@ -1115,60 +1106,6 @@ pub(crate) fn repo_spans(snap: &RepoSnapshot, _theme: &Theme) -> Vec<Span<'stati
         Span::raw(snap.name.clone()),
         Span::raw(branch_suffix(&snap.branch)),
     ]
-}
-
-/// The Sync column: the local-vs-upstream state *and* the remote health, fused.
-/// First the upstream delta (`↑2`, `↓5`, `↑2 ↓5`, or `·` when even), then the
-/// remote dot + open-PR count (`●`, `● 2pr`). Examples: `↑2 ● 2pr`, `↓5 ●`,
-/// `· ●`. "—" when the repo has neither an upstream nor a remote (purely local).
-pub(crate) fn sync_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
-    Cell::from(Line::from(sync_spans(snap, theme)))
-}
-
-/// The styled segments of the Sync cell. Exposed (rather than built inline) so
-/// the column can be sized to its widest content — see [`line_width`].
-pub(crate) fn sync_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
-    let remote = remote_spans(snap, theme);
-
-    // The upstream sub-part: ahead/behind arrows when the branch has diverged.
-    // When it's even with upstream we'd normally show "·", but that's redundant
-    // next to the remote dot (which already says "this is tracked") — so we only
-    // emit the "·" when there's no remote dot to stand in for it.
-    let upstream: Vec<Span> = match &snap.upstream {
-        None => Vec::new(),
-        Some(up) if up.ahead == 0 && up.behind == 0 => {
-            if remote.is_empty() {
-                vec![Span::styled(theme.glyphs.synced(), theme.ok())]
-            } else {
-                Vec::new()
-            }
-        }
-        Some(up) => {
-            let mut spans = Vec::new();
-            if up.ahead > 0 {
-                spans.push(Span::styled(format!("↑{}", up.ahead), theme.ahead()));
-            }
-            if up.ahead > 0 && up.behind > 0 {
-                spans.push(Span::raw(" "));
-            }
-            if up.behind > 0 {
-                spans.push(Span::styled(format!("↓{}", up.behind), theme.behind()));
-            }
-            spans
-        }
-    };
-
-    // Join the two sub-parts with a space; fall back to "local" (no upstream and
-    // no remote, i.e. a purely local repo) when both are empty.
-    let mut spans = upstream;
-    if !spans.is_empty() && !remote.is_empty() {
-        spans.push(Span::raw(" "));
-    }
-    spans.extend(remote);
-    if spans.is_empty() {
-        spans.push(Span::styled("local", theme.dim()));
-    }
-    spans
 }
 
 /// The display width (in terminal columns) of a run of spans — all of cohors's

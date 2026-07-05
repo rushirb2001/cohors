@@ -66,28 +66,36 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Th
         Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
     ]);
 
-    // Brand block: the lede, the tagline, and the scanned root path — so the
-    // header keeps orientation (where am I looking?) on the left, and the
-    // otherwise-empty right fills with the fleet-activity sparkline.
-    let brand = Text::from(vec![
-        lede.clone(),
-        Line::from(Span::styled(
-            "All your git repositories at a glance",
-            theme.dim(),
-        )),
-        Line::from(Span::styled(
-            truncate_tail(&header_dir(app), 40),
-            theme.dim(),
-        )),
-    ]);
+    // The right side is the fleet-activity sparkline; the left is the brand,
+    // which sheds its tagline before the header gives up the activity entirely.
+    // Three tiers by width:
+    //   Wide     spider · lede + tagline + dir · │ · activity
+    //   Medium   spider · lede + dir            · │ · activity   (drop the tagline)
+    //   Compact  spider · lede + dir                             (no activity)
+    let dir_line = Line::from(Span::styled(
+        truncate_tail(&header_dir(app), 40),
+        theme.dim(),
+    ));
+    let tagline = Line::from(Span::styled(
+        "All your git repositories at a glance",
+        theme.dim(),
+    ));
     let activity = fleet_activity_lines(app, theme);
-    let text_w = brand.width() as u16;
     let act_w = activity.iter().map(|l| l.width() as u16).max().unwrap_or(0);
-    let full_need = ICON_W + 2 + text_w + 2 + 1 + 2 + act_w;
+    let need = |brand_w: u16| ICON_W + 2 + brand_w + 2 + 1 + 2 + act_w;
 
-    // Compact fallback for narrow terminals: spider + lede, then just the
-    // directory — no tagline, divider, or activity widget.
-    if inner.width < full_need {
+    let brand_full = Text::from(vec![lede.clone(), tagline, dir_line.clone()]);
+    let brand_min = Text::from(vec![lede.clone(), dir_line.clone()]);
+    let brand = if inner.width >= need(brand_full.width() as u16) {
+        Some(brand_full)
+    } else if inner.width >= need(brand_min.width() as u16) {
+        Some(brand_min)
+    } else {
+        None
+    };
+
+    let Some(brand) = brand else {
+        // Compact fallback for narrow terminals: spider + lede + directory only.
         let [icon_area, text_area] =
             Layout::horizontal([Constraint::Length(ICON_W), Constraint::Min(0)])
                 .spacing(2)
@@ -102,9 +110,10 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Th
             text_area,
         );
         return;
-    }
+    };
 
-    // Full layout, packed left: spider · brand · divider · fleet activity.
+    // Packed left: spider · brand · divider · fleet activity.
+    let text_w = brand.width() as u16;
     let [icon_area, text_area, div_area, act_area, _rest] = Layout::horizontal([
         Constraint::Length(ICON_W),
         Constraint::Length(text_w),

@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 60, 16)"
 ---
 ╭──────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                │
-│ ▟██▌█▐██▙  ~/projects (+1)                               │
-│ ▀▐▖▀█▀▗▌▀                                                │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z  │  Fleet activity             │
+│ ▟██▌█▐██▙  ~/projects (+1  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁   │
+│ ▀▐▖▀█▀▗▌▀                  │  quiet · 12 weeks           │
 ╰──────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────╮
 ────────────────── press h to hide hints ───────────────────

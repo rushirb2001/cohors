@@ -167,6 +167,14 @@ fn snapshot_list_medium() {
     insta::assert_snapshot!(render_to_string(&app, 88, 32));
 }
 
+/// The narrow tier: no room for PRs or the CI word, but CI survives as a
+/// colour-coded square in its own column (never fused away).
+#[test]
+fn snapshot_list_narrow() {
+    let app = demo_app();
+    insta::assert_snapshot!(render_to_string(&app, 72, 32));
+}
+
 /// On a narrow terminal the header collapses to the spider + lede + the
 /// directory only — no taglines, divider, or info column.
 #[test]
