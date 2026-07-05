@@ -19,7 +19,23 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-## [0.5.10] — 2026-07-05
+## [0.5.11] — 2026-07-05
+
+### Changed
+
+- **First-run onboarding happens in the terminal, not inside the dashboard.** When
+  bare `cohors` starts with no config and an empty default root, it now prints the
+  branded welcome in the plain terminal (shared renderer with `cohors web`) and
+  waits for a key: `u` adopts the detected roots (writes the config) and opens the
+  dashboard; `q` quits. No more spinning up the full-screen TUI just to show an
+  empty state. Non-interactive/piped invocations print the welcome as guidance and
+  exit. The in-TUI empty screen remains only as a mid-session fallback.
+
+### Fixed
+
+- **Snapshot layouts no longer shift when the version string changes length**
+  (e.g. `0.5.9` → `0.5.10`): the TUI renders a fixed version under `#[cfg(test)]`
+  so header/help snapshots assert layout, not the build number.
 
 ### Changed
 

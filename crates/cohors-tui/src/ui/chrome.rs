@@ -64,7 +64,7 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Th
             "cohors",
             theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD),
         ),
-        Span::styled(format!("  v{}", env!("CARGO_PKG_VERSION")), theme.dim()),
+        Span::styled(format!("  v{}", version_str()), theme.dim()),
     ]);
 
     // The right side is the fleet-activity sparkline; the left is the brand,
@@ -1270,18 +1270,24 @@ pub(crate) fn render_empty(frame: &mut Frame, area: Rect, app: &App, theme: &The
     ]);
     let mut lines: Vec<Line> = vec![welcome, Line::from("")];
 
-    // The two ways in, always shown together as an "or". When we detected repos,
-    // the first option is the one-key adopt; otherwise it's a nudge to look.
+    // The two ways in, presented as one clear "or". When we detected repos, the
+    // first is the one-key adopt and the second the scoped `--root` relaunch;
+    // otherwise it's a single nudge to point cohors at a folder.
     if app.empty_picker_active() {
         lines.push(Line::from(format!(
-            "Found repos under: {}",
+            "We found repos under: {}",
             app.suggested_roots.join(", ")
         )));
         lines.push(Line::from(""));
         lines.push(Line::from(vec![
             Span::styled("[u]", bold),
-            Span::raw(" use these"),
-            Span::styled("   or   ", dim),
+            Span::raw(" launch the fleet dashboard using these"),
+        ]));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("OR", bold)));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::raw("you could run:  "),
             Span::styled("cohors --root <dir>", bold),
         ]));
     } else {
@@ -1296,13 +1302,13 @@ pub(crate) fn render_empty(frame: &mut Frame, area: Rect, app: &App, theme: &The
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         format!(
-            "{} is the default root. Pass --root <dir> to scope to a",
+            "{} is the default root — pass --root <dir> to scope to one",
             roots_label(app)
         ),
         dim,
     )));
     lines.push(Line::from(Span::styled(
-        "single folder, or use the default for the full super fleet.",
+        "folder, or use the default: every folder auto-scanned into one super fleet.",
         dim,
     )));
     lines.push(Line::from(""));

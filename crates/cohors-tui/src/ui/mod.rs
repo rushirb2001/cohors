@@ -214,6 +214,20 @@ pub(crate) const SPIDER_PURPLE: Color = Color::Rgb(0xA8, 0x55, 0xF7);
 /// under `NO_COLOR`.
 pub(crate) const SPIDER_MARK: [&str; 3] = ["▜▒▟███▙▒▛", "▟██▌█▐██▙", "▀▐▖▀█▀▗▌▀"];
 
+/// The version string shown in the UI. Fixed under `#[cfg(test)]` so snapshot
+/// layouts don't shift when the *length* of the real version changes (e.g.
+/// `0.5.9` → `0.5.10` is one column wider); real builds show the crate version.
+pub(crate) fn version_str() -> &'static str {
+    #[cfg(test)]
+    {
+        "X.Y.Z"
+    }
+    #[cfg(not(test))]
+    {
+        env!("CARGO_PKG_VERSION")
+    }
+}
+
 /// The brand purple as an RGB triple, for surfaces that emit their own ANSI
 /// (the CLI) rather than going through ratatui's [`Theme`]. Kept in lockstep
 /// with [`SPIDER_PURPLE`] by construction.

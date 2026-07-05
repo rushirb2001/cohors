@@ -1,6 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui/tests.rs
-expression: "render_to_string(&app, 100, 26)"
+expression: "render_to_string(&app, 100, 30)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
@@ -11,12 +11,16 @@ expression: "render_to_string(&app, 100, 26)"
                                                                                                     
                                           Welcome to cohors                                         
                                                                                                     
-                                  Found repos under: ~/code, ~/work                                 
+                                We found repos under: ~/code, ~/work                                
                                                                                                     
-                              [u] use these   or   cohors --root <dir>                              
+                             [u] launch the fleet dashboard using these                             
                                                                                                     
-                   ~/projects is the default root. Pass --root <dir> to scope to a                  
-                     single folder, or use the default for the full super fleet.                    
+                                                 OR                                                 
+                                                                                                    
+                                 you could run:  cohors --root <dir>                                
+                                                                                                    
+                 ~/projects is the default root — pass --root <dir> to scope to one                 
+             folder, or use the default: every folder auto-scanned into one super fleet.            
                                                                                                     
                                               [q] quit                                              
                                                                                                     

@@ -1,6 +1,7 @@
 //! Implementations of the CLI subcommands.
 
 use std::collections::HashMap;
+use std::io::{IsTerminal, Write};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -380,103 +381,236 @@ pub fn run_web(
     result
 }
 
-/// Whether the setup hint (which goes to stderr) should emit ANSI styling: only
-/// for a real terminal with colour allowed, so pipes, redirects, and `NO_COLOR`
-/// get clean plain text.
-fn stderr_wants_color() -> bool {
-    use std::io::IsTerminal;
-    std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none()
+// ── First-run welcome (shared by `cohors` and `cohors web`) ─────────────────
+// These build the branded greeting the CLI prints before any dashboard appears.
+// The CLI doesn't route through ratatui, so we emit our own ANSI — all of it
+// gated on `color`, set only for a real terminal with colour allowed, so pipes,
+// redirects, and `NO_COLOR` degrade to clean plain text.
+
+/// True when `is_tty` and `NO_COLOR` is unset — the rule for emitting ANSI.
+fn wants_color(is_tty: bool) -> bool {
+    is_tty && std::env::var_os("NO_COLOR").is_none()
 }
 
-/// The guidance `cohors web` prints when it's run before any repos are set up.
-/// Mirrors the TUI's empty-state welcome — the brand mark, a greeting, the two
-/// ways in (adopt the detected roots, or scope with `--root`), and the default-
-/// root / super-fleet note — so the CLI and the dashboard read as one product.
-/// `color` gates the ANSI so the output degrades to plain text; the string is
-/// otherwise pure (roots + detections in) so it stays unit-testable.
-fn web_setup_hint(roots: &[String], detected: &[String], color: bool) -> String {
+/// Whether the `cohors web` hint (which goes to stderr) should be styled.
+fn stderr_wants_color() -> bool {
+    wants_color(std::io::stderr().is_terminal())
+}
+
+/// Wrap `s` in an ANSI SGR sequence when `color`, else return it unchanged.
+fn sgr(color: bool, code: &str, s: &str) -> String {
+    if color {
+        format!("\x1b[{code}m{s}\x1b[0m")
+    } else {
+        s.to_string()
+    }
+}
+
+/// Brand purple, bold — kept in lockstep with the TUI via `SPIDER_PURPLE_RGB`.
+fn brand(color: bool, s: &str) -> String {
     let (r, g, b) = crate::ui::SPIDER_PURPLE_RGB;
-    let brand = |s: &str| {
-        if color {
-            format!("\x1b[1;38;2;{r};{g};{b}m{s}\x1b[0m")
-        } else {
-            s.to_string()
-        }
-    };
-    let bold = |s: &str| {
-        if color {
-            format!("\x1b[1m{s}\x1b[0m")
-        } else {
-            s.to_string()
-        }
-    };
-    let dim = |s: &str| {
-        if color {
-            format!("\x1b[2m{s}\x1b[0m")
-        } else {
-            s.to_string()
-        }
-    };
+    sgr(color, &format!("1;38;2;{r};{g};{b}"), s)
+}
+fn bold(color: bool, s: &str) -> String {
+    sgr(color, "1", s)
+}
+fn dim(color: bool, s: &str) -> String {
+    sgr(color, "2", s)
+}
 
+/// The shared brand header: the spider mark beside a greeting + tagline (the same
+/// mark the TUI header draws). The block-glyph mark appears only with colour on;
+/// plain/piped output keeps a clean text greeting.
+fn welcome_header(color: bool) -> String {
     let mut out = String::from("\n");
-
-    // Brand header: the mark beside a greeting + tagline (mirrors the TUI header).
-    // The block-glyph mark only appears with colour on — piped/plain output skips
-    // it and stays clean ASCII-ish text.
     if color {
         let m = &crate::ui::SPIDER_MARK;
         out.push_str(&format!(
             "  {}   Welcome to {}\n",
-            brand(m[0]),
-            brand("cohors")
+            brand(color, m[0]),
+            brand(color, "cohors")
         ));
         out.push_str(&format!(
             "  {}   {}\n",
-            brand(m[1]),
-            dim("All your git repositories at a glance")
+            brand(color, m[1]),
+            dim(color, "All your git repositories at a glance")
         ));
-        out.push_str(&format!("  {}\n\n", brand(m[2])));
+        out.push_str(&format!("  {}\n\n", brand(color, m[2])));
     } else {
         out.push_str("  Welcome to cohors\n");
         out.push_str("  All your git repositories at a glance\n\n");
     }
+    out
+}
 
-    // The two ways in. When we detected repos elsewhere, offer the immediate
-    // `--root` launch plus the save-to-config path; otherwise nudge them to point
-    // cohors at their code.
+/// The shared default-root note: `--root` scopes to one folder; the default
+/// gathers every detected folder into the "super fleet".
+fn super_fleet_note(roots: &[String], color: bool) -> String {
+    let mut out = String::new();
+    out.push_str(&dim(
+        color,
+        &format!(
+            "  {} is the default root — pass --root <dir> to scope to one folder,",
+            roots.join(", ")
+        ),
+    ));
+    out.push('\n');
+    out.push_str(&dim(
+        color,
+        "  or use the default: every folder auto-scanned into one super fleet.",
+    ));
+    out.push('\n');
+    out
+}
+
+/// The guidance `cohors web` prints when it's run before any repos are set up:
+/// the shared welcome header, the two ways in (launch now with `--root`, or save
+/// a config via `cohors` then `cohors web`), and the super-fleet note. `color`
+/// gates the ANSI; otherwise pure (roots + detections in) so it's unit-testable.
+fn web_setup_hint(roots: &[String], detected: &[String], color: bool) -> String {
+    let mut out = welcome_header(color);
     if detected.is_empty() {
         out.push_str(&format!(
             "  No git repos under {} yet — that's the default root.\n\n",
-            bold(&roots.join(", "))
+            bold(color, &roots.join(", "))
         ));
         out.push_str(&format!(
             "  Point cohors at your projects   {}\n\n",
-            bold("cohors web --root ~/code")
+            bold(color, "cohors web --root ~/code")
         ));
     } else {
         out.push_str(&format!(
             "  No repos under {}, but found some under:\n",
-            bold(&roots.join(", "))
+            bold(color, &roots.join(", "))
         ));
-        out.push_str(&format!("    {}\n\n", bold(&detected.join(", "))));
+        out.push_str(&format!("    {}\n\n", bold(color, &detected.join(", "))));
         out.push_str(&format!(
             "  Launch now   {}\n",
-            bold(&format!("cohors web --root {}", detected[0]))
+            bold(color, &format!("cohors web --root {}", detected[0]))
         ));
         out.push_str(&format!(
             "  Or save it   run {} first {}, then {}\n\n",
-            bold("cohors"),
-            dim("(writes your config)"),
-            bold("cohors web")
+            bold(color, "cohors"),
+            dim(color, "(writes your config)"),
+            bold(color, "cohors web")
         ));
     }
-
-    // Shared model note: the default is the whole super fleet; --root scopes it.
-    out.push_str(&dim(
-        "  Tip: with no --root, cohors scans every folder it detects — your super fleet.",
-    ));
-    out.push('\n');
+    out.push_str(&super_fleet_note(roots, color));
     out
+}
+
+/// The first-run welcome `cohors` prints in the plain terminal (before the TUI)
+/// when the fleet is empty. With detected roots it lays out the `[u]` / `--root`
+/// choice and the `[q] quit` key (the live prompt reads `u`/`q`); with none it
+/// nudges the user to point cohors at their code. `color` gates the ANSI.
+fn tui_welcome(roots: &[String], detected: &[String], color: bool) -> String {
+    let mut out = welcome_header(color);
+    if detected.is_empty() {
+        out.push_str(&format!(
+            "  No git repos under {} yet — that's the default root.\n\n",
+            bold(color, &roots.join(", "))
+        ));
+        out.push_str(&format!(
+            "  Point cohors at your projects   {}\n\n",
+            bold(color, "cohors --root ~/code")
+        ));
+        out.push_str(&super_fleet_note(roots, color));
+    } else {
+        out.push_str(&format!(
+            "  We found repos under: {}\n\n",
+            bold(color, &detected.join(", "))
+        ));
+        out.push_str(&format!(
+            "  {} launch the fleet dashboard using these\n\n",
+            bold(color, "[u]")
+        ));
+        out.push_str(&format!("  {}\n\n", bold(color, "OR")));
+        out.push_str(&format!(
+            "  you could run:  {}\n\n",
+            bold(color, "cohors --root <dir>")
+        ));
+        out.push_str(&super_fleet_note(roots, color));
+        out.push('\n');
+        out.push_str(&format!("  {} quit\n", bold(color, "[q]")));
+    }
+    out
+}
+
+/// Read a single key for the first-run prompt: `u` adopts the detected roots,
+/// `q`/`Esc`/`Ctrl-C` quits, and any other key is ignored (keep waiting). Uses
+/// raw mode briefly so a lone keypress is enough — no Enter required.
+fn prompt_adopt() -> Result<bool> {
+    use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
+    use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+
+    enable_raw_mode().context("entering raw mode for the setup prompt")?;
+    let adopt = loop {
+        match event::read() {
+            Ok(Event::Key(k)) => match k.code {
+                KeyCode::Char('u') | KeyCode::Char('U') => break true,
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break false,
+                KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => break false,
+                _ => continue, // ignore stray keys; wait for a real choice
+            },
+            Ok(_) => continue,
+            Err(_) => break false,
+        }
+    };
+    // Best-effort: leaving raw mode must not mask the user's actual choice.
+    let _ = disable_raw_mode();
+    println!(); // land the cursor on a fresh line before the TUI / shell prompt
+    Ok(adopt)
+}
+
+/// Outcome of the first-run onboarding step.
+enum Onboard {
+    /// Roots were adopted — launch the dashboard with this (rebuilt) scanner.
+    Adopted(Arc<crate::scan::Scanner>),
+    /// The fleet is already non-empty — just launch with the original scanner.
+    Proceed,
+    /// The user declined, or there was nothing to adopt — don't launch the TUI.
+    Quit,
+}
+
+/// The config path: the `--config` override, else the default location.
+fn config_path(cli: &Cli) -> Result<Utf8PathBuf> {
+    match &cli.config {
+        Some(p) => Ok(Utf8PathBuf::from(p)),
+        None => cohors_config::paths::config_file().context("resolving the config path"),
+    }
+}
+
+/// First-run onboarding, in the plain terminal *before* the alt-screen. If the
+/// (default) root already has repos, returns `Proceed`. Otherwise it prints the
+/// branded welcome: with detected roots it prompts (`u` adopts + writes the
+/// config, `q` quits); with none — or no terminal to read from — it prints
+/// guidance and quits.
+fn onboard(cli: &Cli, scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
+    if !scanner.scan().is_empty() {
+        return Ok(Onboard::Proceed);
+    }
+
+    let color = wants_color(std::io::stdout().is_terminal());
+    let home = cohors_config::paths::home_dir().ok();
+    let detected = cohors_fleet::detect_roots(home.as_deref());
+
+    print!("{}", tui_welcome(&scanner.roots(), &detected, color));
+    let _ = std::io::stdout().flush();
+
+    // Only prompt when there's something to adopt *and* a real terminal to read
+    // from; otherwise the welcome doubles as printed guidance and we stop.
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    if detected.is_empty() || !interactive || !prompt_adopt()? {
+        return Ok(Onboard::Quit);
+    }
+
+    // Adopt: persist the detected roots (merges, never clobbers), then rebuild
+    // the scanner from the freshly-written config so the dashboard is populated.
+    let path = config_path(cli)?;
+    cohors_config::edit::add_roots(&path, &detected)
+        .with_context(|| format!("writing config to {path}"))?;
+    println!("{}\n", dim(color, &format!("  Saved to {path}")));
+    Ok(Onboard::Adopted(Arc::new(crate::scan::from_cli(cli)?)))
 }
 
 /// Make sure Trunk (the WASM bundler) is available, installing it via Cargo when
@@ -596,6 +730,22 @@ fn open_url(url: &str) -> std::io::Result<()> {
 /// Bare `cohors` — launch the interactive dashboard.
 pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = Arc::new(crate::scan::from_cli(cli)?);
+
+    // First-run onboarding lives in the plain terminal, not the alt-screen: only
+    // when cohors isn't set up yet (no `--root`, no config file) do we greet the
+    // user and let them adopt the detected roots — or bail — before we launch.
+    // A configured user goes straight to the dashboard (no pre-scan cost).
+    let configured = !cli.root.is_empty() || config_path(cli).map(|p| p.exists()).unwrap_or(false);
+    let scanner = if configured {
+        scanner
+    } else {
+        match onboard(cli, &scanner)? {
+            Onboard::Proceed => scanner,
+            Onboard::Adopted(rebuilt) => rebuilt,
+            Onboard::Quit => return Ok(()),
+        }
+    };
+
     crate::tui::run(scanner, cli, !cli.no_cache, cli.watch)
 }
 
@@ -680,5 +830,30 @@ mod tests {
         assert!(colored.contains('\x1b')); // styled…
         let plain = web_setup_hint(&["p".to_string()], &["~/code".to_string()], false);
         assert!(!plain.contains('\x1b')); // …only when asked
+    }
+
+    #[test]
+    fn tui_welcome_offers_the_u_or_root_choice() {
+        let w = tui_welcome(
+            &["~/projects".to_string()],
+            &["~/Main/code".to_string()],
+            false,
+        );
+        assert!(w.contains("We found repos under: ~/Main/code"));
+        assert!(w.contains("[u]")); // adopt key
+        assert!(w.contains("OR"));
+        assert!(w.contains("cohors --root <dir>")); // the scoped alternative
+        assert!(w.contains("super fleet"));
+        assert!(w.contains("[q]")); // quit key
+        assert!(!w.contains('\x1b'));
+    }
+
+    #[test]
+    fn tui_welcome_nudges_when_nothing_detected() {
+        let w = tui_welcome(&["~/projects".to_string()], &[], false);
+        assert!(!w.contains("We found repos under"));
+        assert!(!w.contains("[u]")); // nothing to adopt, so no adopt key
+        assert!(w.contains("cohors --root ~/code")); // the sample command
+        assert!(w.contains("super fleet"));
     }
 }

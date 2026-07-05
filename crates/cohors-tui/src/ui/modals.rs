@@ -92,7 +92,7 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
         row(key("q / Ctrl-C"), "quit"),
         Line::from(""),
         Line::from(Span::styled(
-            format!("cohors v{}", env!("CARGO_PKG_VERSION")),
+            format!("cohors v{}", version_str()),
             theme.dim(),
         )),
         Line::from(Span::styled(
