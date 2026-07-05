@@ -40,8 +40,10 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  max-width: 1320px;
-  margin: 0 auto;
+  /* Full-width: the action dropdowns, mark column, and detail aside need the
+     room — the fleet is a working surface, not an article. */
+  max-width: none;
+  margin: 0;
   padding: 1.1rem 1.3rem;
 }
 .topbar, .attention, .controls { flex-shrink: 0; }
@@ -460,3 +462,185 @@ body {
 .scroll::-webkit-scrollbar { width: 10px; }
 .scroll::-webkit-scrollbar-thumb { background: #e2e4e8; border-radius: 6px; border: 3px solid var(--panel); }
 .scroll::-webkit-scrollbar-thumb:hover { background: #d2d5db; }
+
+/* ── select + act: row marks, action dropdowns, confirm modal ──────────── */
+/* Same language as the rest of the page: white panels, --border hairlines,
+   the violet accent only where attention belongs. */
+td.mk, th.mk { width: 1.8em; text-align: center; }
+td.mk input { cursor: pointer; accent-color: var(--accent); }
+td.act { width: 2.4em; text-align: center; }
+
+.dd { position: relative; display: inline-block; }
+.dd-btn { font-family: var(--mono); }
+.dd-menu {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 9em;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  padding: 4px; display: flex; flex-direction: column;
+}
+.dd-item {
+  background: none; border: none; text-align: left; padding: 6px 12px;
+  color: var(--text); cursor: pointer; border-radius: 6px;
+  font-family: var(--mono); font-size: 12.5px;
+}
+.dd-item:hover { background: var(--accent-soft); color: var(--accent); }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 40; background: rgba(31, 35, 40, 0.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(31, 35, 40, 0.18);
+  padding: 20px 22px; min-width: 360px; max-width: 520px;
+}
+.modal h3 {
+  margin: 0 0 12px; font-family: var(--mono); font-size: 14px; color: var(--text);
+}
+.modal .targets {
+  max-height: 40vh; overflow-y: auto; margin: 0 0 14px; padding: 8px 12px;
+  list-style: none; border: 1px solid var(--line); border-radius: 8px;
+  font-family: var(--mono); font-size: 12.5px; color: var(--dim);
+}
+.modal .targets li { padding: 2px 0; }
+.modal .action-arg {
+  width: 100%; margin-bottom: 14px; padding: 7px 10px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  font-family: var(--mono); font-size: 12.5px; color: var(--text);
+}
+.modal .action-arg:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal .confirm {
+  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  padding: 7px 16px; cursor: pointer; font-family: var(--mono); font-size: 12.5px;
+}
+.modal .confirm:hover { filter: brightness(1.08); }
+
+/* ── 3-container layout: Overview / Repositories / Detail ──────────────── */
+/* Every card opens with a `panel-head`: an uppercase mono label on the left and
+   that panel's controls pinned right (scan status, or the act dropdowns). One
+   consistent bar, so the three containers read as siblings. */
+.panel-head {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--faint);
+}
+
+/* Overview is the page header now: brand on the left (divider), the fleet name +
+   path, at-a-glance stats, and scan status filling the right. */
+.overview { flex-shrink: 0; flex-direction: row; align-items: stretch; }
+.ov-brand {
+  display: flex; align-items: center; gap: 0.7rem;
+  padding: 12px 18px; border-right: 1px solid var(--border); flex: none;
+}
+.ov-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ov-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line);
+}
+.ov-body .attention { padding: 10px 16px; }
+.ov-top .fleet-name { margin-left: 0; }
+
+/* The act controls in the Repositories subhead row. */
+.act-controls { display: flex; align-items: center; gap: 8px; }
+.act-controls .dd-btn {
+  border: 1px solid var(--border); border-radius: 7px; padding: 4px 12px;
+  background: var(--panel); color: var(--text); font-size: 12.5px;
+}
+.act-controls .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
+/* The "act on all" is the primary action — give it the accent so it leads. */
+.act-controls > .dd:last-child .dd-btn {
+  border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
+}
+.act-controls > .dd:last-child .dd-btn:hover { background: #ece9f9; }
+
+th.mk, td.mk { width: 3em; }
+th.act, td.act { width: 3.2em; }
+/* Row-level act trigger: a quiet chip that only lifts on hover, so the column
+   of triggers doesn't shout down the data. */
+td.act .dd-btn {
+  border: 1px solid transparent; border-radius: 6px; padding: 2px 7px;
+  background: transparent; color: var(--faint); font-size: 12px;
+}
+td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); background: var(--panel); }
+.fleet tbody tr:hover td.act .dd-btn { color: var(--dim); }
+
+/* Repositories subhead: label, then the filter takes the slack, then the
+   needs-attention toggle and the act controls pinned right. */
+.repos-head { gap: 10px; }
+.repos-head .panel-label { flex: none; }
+.repos-head .filter { flex: 1; min-width: 180px; }
+.repos-head .toggle { flex: none; }
+
+/* Column headers are the sort control: clickable, the active one accented with
+   a caret. Non-sortable columns (Changes/Stash/PRs/CI/Activity/Mark/Act) stay
+   plain, so it's clear which headers do something. */
+.fleet th.sortable { cursor: pointer; user-select: none; }
+.fleet th.sortable:hover { color: var(--text); }
+.fleet th.sorted { color: var(--accent); }
+/* The ⇅ affordance is faint on idle columns; the active column's ↓ takes the
+   accent. Hovering an idle column lifts its arrow so it reads as clickable. */
+.fleet th .caret { color: var(--faint); font-size: 0.9em; }
+.fleet th.sortable:hover .caret { color: var(--dim); }
+.fleet th.sorted .caret { color: var(--accent); }
+
+/* Results modal — git verbs: a per-repo outcome list (marker · name · message). */
+.modal.results { min-width: 460px; max-width: 640px; }
+.res-list { list-style: none; margin: 0 0 14px; padding: 0; max-height: 52vh; overflow-y: auto; }
+.res-row {
+  display: grid; grid-template-columns: 1.3em minmax(0, 14em) 1fr; gap: 0.5rem;
+  align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: 12.5px;
+}
+.res-row:last-child { border-bottom: none; }
+.res-msg { color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.res-row.fail .res-msg { color: var(--red); }
+.res-row.skip .res-msg { color: var(--amber); }
+
+/* Shared marker + repo cell (both the flat list and the run list). */
+.res-mark { text-align: center; font-weight: 700; }
+.res-repo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ok .res-mark { color: var(--green); }
+.skip .res-mark { color: var(--amber); }
+.fail .res-mark { color: var(--red); }
+
+/* Results modal — `run`: the TUI's master-detail. A wide modal split into a
+   repo list (left) and the focused repo's captured output (right). */
+.modal.results.run { min-width: 780px; max-width: 900px; }
+.run-panes {
+  display: grid; grid-template-columns: 240px 1fr; margin-bottom: 14px;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  min-height: 240px;
+}
+.run-list {
+  list-style: none; margin: 0; padding: 0; max-height: 56vh; overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+.run-item {
+  display: grid; grid-template-columns: 1.3em 1fr auto; gap: 0.4rem;
+  align-items: baseline; padding: 5px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px;
+}
+.run-item:last-child { border-bottom: none; }
+.run-item:hover { background: #fafafb; }
+.run-item.focused { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.run-item .run-exit { color: var(--faint); font-size: 11px; }
+.run-item.fail .run-exit { color: var(--red); }
+.run-out-pane {
+  max-height: 56vh; overflow: auto; padding: 10px 14px;
+  font-family: var(--mono); font-size: 11.5px;
+}
+.run-head { font-weight: 700; margin-bottom: 6px; }
+.run-head.ok { color: var(--green); }
+.run-head.risk { color: var(--red); }
+.run-stream { margin: 0; white-space: pre-wrap; line-height: 1.45; color: var(--text); }
+.run-stream.err { color: var(--amber); }
+.run-stderr-h { color: var(--dim); margin: 8px 0 2px; }
+.run-empty { color: var(--faint); margin: 0; }

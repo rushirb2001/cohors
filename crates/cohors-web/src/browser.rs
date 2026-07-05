@@ -16,6 +16,7 @@ use cohors_core::{
     compute_view, demo, fleet_summary, time,
 };
 use leptos::prelude::*;
+use std::collections::HashSet;
 use wasm_bindgen_futures::spawn_local;
 
 /// Fixed clock for the *demo* fleet, so its relative ages stay sensible.
@@ -56,6 +57,15 @@ fn App() -> impl IntoView {
     let dirty_only = RwSignal::new(false);
     let sort = RwSignal::new(SortMode::DirtyFirst);
     let selected = RwSignal::new(None::<String>);
+    let marked = RwSignal::new(HashSet::<String>::new());
+    // An action staged for the confirm modal (verb + resolved targets).
+    let pending = RwSignal::new(None::<PendingAction>);
+    // The completed action's per-repo outcomes, shown in the results modal.
+    let result = RwSignal::new(None::<ActionResult>);
+    // Which action dropdown is open: "all", "selected", or a repo id.
+    let menu = RwSignal::new(None::<String>);
+    // The modal's free-text argument: commit message / run command.
+    let action_arg = RwSignal::new(String::new());
     let roots = RwSignal::new(Vec::<String>::new());
     // True while the remote-enrichment pass is in flight, so rows that *could* be
     // GitHub (have a remote URL, no `remote` yet) show a spinner instead of "—".
@@ -183,65 +193,6 @@ fn App() -> impl IntoView {
 
     view! {
         <div class="app">
-            <header class="topbar">
-                <div class="mark">
-                    <span>"▜▒▟███▙▒▛"</span>
-                    <span>"▟██▌█▐██▙"</span>
-                    <span>"▀▐▖▀█▀▗▌▀"</span>
-                </div>
-                <div class="title">
-                    <span class="brand">"cohors"</span>
-                    <span class="pill">"web"</span>
-                </div>
-                <div class="fleet-name">
-                    <span class="fleet-label">"Your Fleet"</span>
-                    {move || {
-                        let r = roots.get();
-                        (!r.is_empty()).then(|| {
-                            let path =
-                                r.iter().map(|p| shorten_home(p)).collect::<Vec<_>>().join("  ·  ");
-                            view! {
-                                <span class="fleet-path" title=r.join(", ")>
-                                    {folder_icon()}
-                                    {path}
-                                </span>
-                            }
-                        })
-                    }}
-                </div>
-                // The first browser-driven *action*: fetch the whole fleet
-                // server-side via POST /api/action. The server enforces the gate,
-                // so on a read-only server this just surfaces "start with
-                // --allow-writes" in the banner — proof the write seam reaches the
-                // web surface (it no longer lives only in the binary).
-                <button
-                    class="ghost fetch-all"
-                    on:click=move |_| {
-                        spawn_local(async move {
-                            let body = serde_json::json!({
-                                "verb": "fetch", "selector": { "all": true }, "confirm": true
-                            });
-                            let msg = match api::post_action(body).await {
-                                Ok(v) => v
-                                    .get("error")
-                                    .and_then(|e| e.as_str())
-                                    .map(str::to_string)
-                                    .unwrap_or_else(|| {
-                                        format!(
-                                            "fetched {} repo(s)",
-                                            v.get("targets").and_then(|t| t.as_u64()).unwrap_or(0)
-                                        )
-                                    }),
-                                Err(e) => e,
-                            };
-                            notice.set(Some(msg));
-                        });
-                    }
-                >
-                    "fetch all"
-                </button>
-            </header>
-
             {move || notice.get().map(|n| view! { <div class="banner">{n}</div> })}
 
             {move || match mode.get() {
@@ -249,44 +200,100 @@ fn App() -> impl IntoView {
                     view! { <div class="state">"Scanning your repositories…"</div> }.into_any()
                 }
                 Mode::Demo => dashboard(
-                    repos, DEMO_NOW, filter, dirty_only, sort, selected, detail, enriching, mode,
+                    DashCtx {
+                        repos,
+                        now: DEMO_NOW,
+                        filter,
+                        dirty_only,
+                        sort,
+                        selected,
+                        marked,
+                        menu,
+                        pending,
+                        action_arg,
+                        notice,
+                        detail,
+                        enriching,
+                        mode,
+                        roots,
+                    },
                     reload,
                 )
                 .into_any(),
                 Mode::Live => dashboard(
-                    repos,
-                    real_now(),
-                    filter,
-                    dirty_only,
-                    sort,
-                    selected,
-                    detail,
-                    enriching,
-                    mode,
+                    DashCtx {
+                        repos,
+                        now: real_now(),
+                        filter,
+                        dirty_only,
+                        sort,
+                        selected,
+                        marked,
+                        menu,
+                        pending,
+                        action_arg,
+                        notice,
+                        detail,
+                        enriching,
+                        mode,
+                        roots,
+                    },
                     reload,
                 )
                 .into_any(),
             }}
+            {confirm_modal(pending, action_arg, notice, result)}
+            {result_modal(result)}
         </div>
     }
 }
 
-/// The dashboard body: the attention summary, filter/sort controls, the fleet
-/// table (the TUI's columns), and the per-repo detail aside. Reads `repos`
-/// reactively so the remote-enrichment pass updates the rows live.
-#[allow(clippy::too_many_arguments)]
-fn dashboard(
+/// The signals the dashboard reads/writes — bundled so the call site isn't a
+/// wall of positional arguments.
+#[derive(Clone, Copy)]
+struct DashCtx {
     repos: RwSignal<Vec<RepoSnapshot>>,
     now: i64,
     filter: RwSignal<String>,
     dirty_only: RwSignal<bool>,
     sort: RwSignal<SortMode>,
     selected: RwSignal<Option<String>>,
+    marked: RwSignal<HashSet<String>>,
+    menu: RwSignal<Option<String>>,
+    pending: RwSignal<Option<PendingAction>>,
+    action_arg: RwSignal<String>,
+    notice: RwSignal<Option<String>>,
     detail: RwSignal<DetailState>,
     enriching: RwSignal<bool>,
     mode: RwSignal<Mode>,
+    roots: RwSignal<Vec<String>>,
+}
+
+/// The dashboard body: a header-band Overview (brand + fleet + at-a-glance
+/// stats), the fleet table whose column headers *are* the sort control, and the
+/// per-repo detail aside. Reads `repos` reactively so the enrichment pass
+/// updates the rows live.
+fn dashboard(
+    cx: DashCtx,
     reload: impl Fn(leptos::ev::MouseEvent) + Copy + Send + 'static,
 ) -> impl IntoView {
+    let DashCtx {
+        repos,
+        now,
+        filter,
+        dirty_only,
+        sort,
+        selected,
+        marked,
+        menu,
+        pending,
+        action_arg,
+        notice,
+        detail,
+        enriching,
+        mode,
+        roots,
+    } = cx;
     let summary = move || summary_chips(&repos.get(), now);
     let visible = move || {
         let r = repos.get();
@@ -306,7 +313,11 @@ fn dashboard(
         let busy = enriching.get();
         visible()
             .into_iter()
-            .map(|i| repo_row(&r[i], selected, now, busy))
+            .map(|i| {
+                repo_row(
+                    &r[i], selected, marked, menu, pending, action_arg, notice, now, busy,
+                )
+            })
             .collect::<Vec<_>>()
     };
     let aside = move || {
@@ -319,13 +330,42 @@ fn dashboard(
 
     view! {
         <>
-            <div class="grid">
-                <section class="card fleet-wrap">
-                    // The fleet card header: the attention summary chips on the
-                    // left, the scan status + rescan on the right (the count of
-                    // matches is the first chip; "demo" only appears as a fallback).
-                    <div class="card-title fleet-head">
-                        <section class="attention">{summary}</section>
+            // 1 · Overview — the page header: brand on the left, the fleet name +
+            // path, at-a-glance stats, and scan status on the right.
+            <section class="card overview">
+                <div class="ov-brand">
+                    <div class="mark">
+                        <span>"▜▒▟███▙▒▛"</span>
+                        <span>"▟██▌█▐██▙"</span>
+                        <span>"▀▐▖▀█▀▗▌▀"</span>
+                    </div>
+                    <div class="title">
+                        <span class="brand">"cohors"</span>
+                        <span class="pill">"web"</span>
+                    </div>
+                </div>
+                <div class="ov-body">
+                    <div class="ov-top">
+                        <div class="fleet-name">
+                            <span class="fleet-label">"Your Fleet"</span>
+                            {move || {
+                                let r = roots.get();
+                                (!r.is_empty())
+                                    .then(|| {
+                                        let path = r
+                                            .iter()
+                                            .map(|p| shorten_home(p))
+                                            .collect::<Vec<_>>()
+                                            .join("  ·  ");
+                                        view! {
+                                            <span class="fleet-path" title=r.join(", ")>
+                                                {folder_icon()}
+                                                {path}
+                                            </span>
+                                        }
+                                    })
+                            }}
+                        </div>
                         <div class="conn">
                             {move || {
                                 let demo = mode.get() == Mode::Demo;
@@ -333,12 +373,22 @@ fn dashboard(
                                     <span class=if demo { "src demo" } else { "src" }>
                                         {if demo { "demo fleet" } else { "● local scan" }}
                                     </span>
-                                    <button class="ghost" on:click=reload>"rescan"</button>
+                                    <button class="ghost" on:click=reload>
+                                        "rescan"
+                                    </button>
                                 }
                             }}
                         </div>
                     </div>
-                    <section class="controls">
+                    <section class="attention">{summary}</section>
+                </div>
+            </section>
+            <div class="grid">
+                // 2 · Repositories: filter + act controls in the subhead row; the
+                // column headers double as the sort control (no separate buttons).
+                <section class="card fleet-wrap">
+                    <header class="panel-head repos-head">
+                        <span class="panel-label">"Repositories"</span>
                         <input
                             class="filter"
                             placeholder="filter repos — name…"
@@ -346,32 +396,56 @@ fn dashboard(
                             on:input=move |ev| filter.set(event_target_value(&ev))
                         />
                         <button
-                            class="sort"
-                            class:active=move || dirty_only.get()
+                            class="toggle"
+                            class:on=move || dirty_only.get()
                             on:click=move |_| dirty_only.update(|d| *d = !*d)
+                            title="Show only repos that need attention"
                         >
                             "needs attention"
                         </button>
-                        <div class="sorts">
-                            {sort_button(sort, SortMode::DirtyFirst, "attention")}
-                            {sort_button(sort, SortMode::Recent, "recent")}
-                            {sort_button(sort, SortMode::Name, "name")}
-                            {sort_button(sort, SortMode::AheadBehind, "sync")}
+                        <div class="act-controls">
+                            {move || {
+                                let m = marked.get();
+                                (!m.is_empty())
+                                    .then(|| {
+                                        let ids: Vec<String> = m.iter().cloned().collect();
+                                        act_dropdown(
+                                            format!("selected · {}", ids.len()),
+                                            "selected".to_string(),
+                                            serde_json::json!({ "ids": ids }),
+                                            menu,
+                                            pending,
+                                            action_arg,
+                                            notice,
+                                        )
+                                    })
+                            }}
+                            {act_dropdown(
+                                "act on all".to_string(),
+                                "all".to_string(),
+                                serde_json::json!({ "all": true }),
+                                menu,
+                                pending,
+                                action_arg,
+                                notice,
+                            )}
                         </div>
-                    </section>
+                    </header>
                     <div class="scroll">
                         <table class="fleet">
                             <thead>
                                 <tr>
-                                    <th>"Repo"</th>
-                                    <th>"Sync"</th>
+                                    <th class="mk">"Mark"</th>
+                                    {sort_th("Repo", SortMode::Name, sort)}
+                                    {sort_th("Sync", SortMode::AheadBehind, sort)}
                                     <th>"Changes"</th>
                                     <th>"Stash"</th>
                                     <th>"PRs"</th>
                                     <th>"CI"</th>
-                                    <th>"Last"</th>
+                                    {sort_th("Last", SortMode::Recent, sort)}
                                     <th>"Activity"</th>
-                                    <th>"Status"</th>
+                                    {sort_th("Status", SortMode::DirtyFirst, sort)}
+                                    <th class="act">"Act"</th>
                                     <th class="spacer"></th>
                                 </tr>
                             </thead>
@@ -382,6 +456,26 @@ fn dashboard(
                 <aside class="side">{aside}</aside>
             </div>
         </>
+    }
+}
+
+/// A sortable column header: clicking it sets that sort mode; the active column
+/// shows a caret. This *is* the sort control now — there are no separate sort
+/// buttons. `Sync`→ahead/behind, `Last`→recency, `Repo`→name, `Status`→attention.
+fn sort_th(label: &'static str, mode: SortMode, sort: RwSignal<SortMode>) -> impl IntoView {
+    let active = move || sort.get() == mode;
+    view! {
+        <th
+            class="sortable"
+            class:sorted=active
+            on:click=move |_| sort.set(mode)
+            title="Sort by this column"
+        >
+            {label}
+            // A faint ⇅ marks every sortable column; the active one shows a solid
+            // ↓ in the accent colour, so the affordance is always visible.
+            <span class="caret">{move || if active() { " ↓" } else { " ⇅" }}</span>
+        </th>
     }
 }
 
@@ -451,17 +545,528 @@ fn summary_chips(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
         .collect::<Vec<_>>()
 }
 
+/// One action staged for the confirm modal: the verb, its resolved target
+/// selector, and the repo names it will hit (from a server-side dry run).
+#[derive(Clone)]
+struct PendingAction {
+    verb: String,
+    selector: serde_json::Value,
+    targets: Vec<String>,
+}
+
+/// Kick off an action: dry-run it server-side to resolve the exact target set,
+/// then stage the confirm modal. Every action — one repo, the selection, or the
+/// fleet — passes through here, so the user always sees the list of
+/// repositories in focus before anything runs.
+fn start_action(
+    verb: String,
+    selector: serde_json::Value,
+    pending: RwSignal<Option<PendingAction>>,
+    arg: RwSignal<String>,
+    notice: RwSignal<Option<String>>,
+) {
+    let mut preview =
+        serde_json::json!({ "verb": verb, "selector": selector.clone(), "dry_run": true });
+    // commit/run demand their argument even for a dry run; the real value is
+    // typed into the modal afterwards.
+    if verb == "commit" {
+        preview["message"] = serde_json::json!("(pending)");
+    }
+    if verb == "run" {
+        preview["command"] = serde_json::json!("(pending)");
+    }
+    spawn_local(async move {
+        match api::post_action(preview).await {
+            Ok(v) => {
+                if let Some(e) = v.get("error").and_then(|e| e.as_str()) {
+                    notice.set(Some(e.to_string()));
+                    return;
+                }
+                let targets: Vec<String> = v
+                    .get("repos")
+                    .and_then(|r| r.as_array())
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|r| r.get("name").and_then(|n| n.as_str()))
+                            .map(str::to_string)
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if targets.is_empty() {
+                    notice.set(Some(format!("{verb}: no matching repos")));
+                    return;
+                }
+                arg.set(String::new());
+                pending.set(Some(PendingAction {
+                    verb,
+                    selector,
+                    targets,
+                }));
+            }
+            Err(e) => notice.set(Some(e)),
+        }
+    });
+}
+
+/// A dropdown of every registry verb (write parity with the TUI keymap and MCP
+/// catalog — enforced by the server-side parity test). `key` says which menu
+/// this is in the shared `menu` signal: "all", "selected", or a repo id.
+#[allow(clippy::too_many_arguments)]
+fn act_dropdown(
+    label: String,
+    key: String,
+    selector: serde_json::Value,
+    menu: RwSignal<Option<String>>,
+    pending: RwSignal<Option<PendingAction>>,
+    arg: RwSignal<String>,
+    notice: RwSignal<Option<String>>,
+) -> impl IntoView {
+    let key_open = key.clone();
+    let key_toggle = key;
+    view! {
+        <span class="dd">
+            <button
+                class="ghost dd-btn"
+                on:click=move |ev| {
+                    ev.stop_propagation();
+                    menu.update(|m| {
+                        *m = if m.as_deref() == Some(key_toggle.as_str()) {
+                            None
+                        } else {
+                            Some(key_toggle.clone())
+                        };
+                    });
+                }
+            >
+                {label}
+                " ▾"
+            </button>
+            {move || {
+                (menu.get().as_deref() == Some(key_open.as_str()))
+                    .then(|| {
+                        let sel = selector.clone();
+                        view! {
+                            <div class="dd-menu">
+                                {cohors_web::ACTION_VERBS
+                                    .iter()
+                                    .map(|v| {
+                                        let verb = *v;
+                                        let sel = sel.clone();
+                                        view! {
+                                            <button
+                                                class="dd-item"
+                                                on:click=move |_| {
+                                                    menu.set(None);
+                                                    start_action(
+                                                        verb.to_string(),
+                                                        sel.clone(),
+                                                        pending,
+                                                        arg,
+                                                        notice,
+                                                    );
+                                                }
+                                            >
+                                                {verb}
+                                            </button>
+                                        }
+                                    })
+                                    .collect::<Vec<_>>()}
+                            </div>
+                        }
+                    })
+            }}
+        </span>
+    }
+}
+
+/// The confirm modal: names the verb, lists every repository in focus, takes
+/// the commit message / run command when the verb needs one, and only acts on
+/// Confirm. Clicking the backdrop (or Cancel) discards the staged action.
+fn confirm_modal(
+    pending: RwSignal<Option<PendingAction>>,
+    arg: RwSignal<String>,
+    notice: RwSignal<Option<String>>,
+    result: RwSignal<Option<ActionResult>>,
+) -> impl IntoView {
+    move || {
+        pending.get().map(|p| {
+            let needs_text = p.verb == "commit" || p.verb == "run";
+            let placeholder = if p.verb == "run" {
+                "shell command"
+            } else {
+                "commit message"
+            };
+            let title = format!(
+                "{} — {} repositor{}",
+                p.verb,
+                p.targets.len(),
+                if p.targets.len() == 1 { "y" } else { "ies" },
+            );
+            let go = move |_| {
+                let Some(p) = pending.get_untracked() else {
+                    return;
+                };
+                let text = arg.get_untracked().trim().to_string();
+                let needs_text = p.verb == "commit" || p.verb == "run";
+                if needs_text && text.is_empty() {
+                    notice.set(Some(format!(
+                        "{} needs a {}",
+                        p.verb,
+                        if p.verb == "run" {
+                            "command"
+                        } else {
+                            "message"
+                        },
+                    )));
+                    return;
+                }
+                pending.set(None);
+                let mut body = serde_json::json!({
+                    "verb": p.verb, "selector": p.selector, "confirm": true
+                });
+                if p.verb == "commit" {
+                    body["message"] = serde_json::json!(text);
+                }
+                if p.verb == "run" {
+                    body["command"] = serde_json::json!(text);
+                }
+                let verb = p.verb.clone();
+                // While it runs, a quiet banner; the outcome opens the results modal.
+                notice.set(Some(format!("running {verb}…")));
+                spawn_local(async move {
+                    let resp = api::post_action(body).await;
+                    match parse_result(&verb, resp) {
+                        Ok(r) => {
+                            notice.set(None);
+                            result.set(Some(r));
+                        }
+                        // A gate/transport error has no per-repo rows — surface it
+                        // as the banner, exactly as before.
+                        Err(msg) => notice.set(Some(msg)),
+                    }
+                });
+            };
+            view! {
+                <div class="overlay" on:click=move |_| pending.set(None)>
+                    <div class="modal" on:click=|ev| ev.stop_propagation()>
+                        <h3>{title}</h3>
+                        <ul class="targets">
+                            {p
+                                .targets
+                                .iter()
+                                .map(|t| view! { <li>{t.clone()}</li> })
+                                .collect::<Vec<_>>()}
+                        </ul>
+                        {needs_text
+                            .then(|| {
+                                view! {
+                                    <input
+                                        class="action-arg"
+                                        type="text"
+                                        placeholder=placeholder
+                                        prop:value=move || arg.get()
+                                        on:input=move |ev| arg.set(event_target_value(&ev))
+                                    />
+                                }
+                            })}
+                        <div class="modal-actions">
+                            <button class="confirm" on:click=go>
+                                "Confirm"
+                            </button>
+                            <button class="ghost" on:click=move |_| pending.set(None)>
+                                "Cancel"
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        })
+    }
+}
+
+/// A completed action's outcome, for the results modal. `summary` is the
+/// headline (ok / skipped / failed counts); `rows` are the per-repo lines.
+#[derive(Clone)]
+struct ActionResult {
+    verb: String,
+    summary: String,
+    rows: Vec<ResultRow>,
+}
+
+/// One repo's outcome in the results modal.
+#[derive(Clone)]
+struct ResultRow {
+    /// Short repo name (the directory name, not the full path id).
+    repo: String,
+    /// "ok" | "skip" | "fail" — drives the colour and the marker.
+    state: &'static str,
+    /// The one-line outcome: a git status message, or `run`'s "exit N".
+    message: String,
+    /// `run` command output (empty for git verbs).
+    stdout: String,
+    stderr: String,
+}
+
+/// The marker glyph for a result state (matches the TUI's ✓/⊘/✗).
+fn mark_glyph(state: &str) -> &'static str {
+    match state {
+        "ok" => "✓",
+        "skip" => "⊘",
+        _ => "✗",
+    }
+}
+
+/// Parse an action response into an [`ActionResult`]. Handles both the git-verb
+/// shape (`results:[{repo,ok,message,skipped}]`) and the `run` shape
+/// (`results:[{repo,ok,exit_code,stdout,stderr,timed_out}]`). Returns `Err` with
+/// the server's message for a gate/transport error (no per-repo rows to show).
+fn parse_result(
+    verb: &str,
+    resp: Result<serde_json::Value, String>,
+) -> Result<ActionResult, String> {
+    let v = resp?;
+    if let Some(e) = v.get("error").and_then(|e| e.as_str()) {
+        return Err(e.to_string());
+    }
+    let raw = v
+        .get("results")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let is_run = verb == "run";
+    let rows: Vec<ResultRow> = raw
+        .iter()
+        .map(|r| {
+            // The `repo` field is the id — for scanned repos that's the full
+            // path, so show just the final component (the repo's own name).
+            let id = r.get("repo").and_then(|x| x.as_str()).unwrap_or("?");
+            let repo = id.rsplit(['/', '\\']).next().unwrap_or(id).to_string();
+            let ok = r.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
+            let skipped = r.get("skipped").and_then(|x| x.as_bool()).unwrap_or(false);
+            let state = if skipped {
+                "skip"
+            } else if ok {
+                "ok"
+            } else {
+                "fail"
+            };
+            if is_run {
+                let code = r.get("exit_code").and_then(|x| x.as_i64()).unwrap_or(-1);
+                let timed_out = r
+                    .get("timed_out")
+                    .and_then(|x| x.as_bool())
+                    .unwrap_or(false);
+                let message = if timed_out {
+                    "timed out".to_string()
+                } else {
+                    format!("exit {code}")
+                };
+                ResultRow {
+                    repo,
+                    state,
+                    message,
+                    stdout: r
+                        .get("stdout")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    stderr: r
+                        .get("stderr")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                }
+            } else {
+                ResultRow {
+                    repo,
+                    state,
+                    message: r
+                        .get("message")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    stdout: String::new(),
+                    stderr: String::new(),
+                }
+            }
+        })
+        .collect();
+
+    let ok = rows.iter().filter(|r| r.state == "ok").count();
+    let skipped = rows.iter().filter(|r| r.state == "skip").count();
+    let failed = rows.iter().filter(|r| r.state == "fail").count();
+    let mut summary = format!("{ok} ok");
+    if skipped > 0 {
+        summary.push_str(&format!(" · {skipped} skipped"));
+    }
+    if failed > 0 {
+        summary.push_str(&format!(" · {failed} failed"));
+    }
+    Ok(ActionResult {
+        verb: verb.to_string(),
+        summary,
+        rows,
+    })
+}
+
+/// The results modal. Git verbs get a simple per-repo outcome list. `run`
+/// mirrors the TUI: a master-detail — a compact repo list on the left (marker +
+/// name + exit) and the focused repo's captured output on the right.
+fn result_modal(result: RwSignal<Option<ActionResult>>) -> impl IntoView {
+    // Which repo's output the run pane shows; reset whenever a new result opens.
+    let focus = RwSignal::new(0usize);
+    Effect::new(move |_| {
+        let _ = result.get();
+        focus.set(0);
+    });
+    move || {
+        result.get().map(|r| {
+            let title = format!("{} — {}", r.verb, r.summary);
+            let is_run = r.verb == "run";
+            let modal_class = if is_run {
+                "modal results run"
+            } else {
+                "modal results"
+            };
+            let body = if is_run {
+                run_result_body(r.rows.clone(), focus).into_any()
+            } else {
+                list_result_body(&r.rows).into_any()
+            };
+            view! {
+                <div class="overlay" on:click=move |_| result.set(None)>
+                    <div class=modal_class on:click=|ev| ev.stop_propagation()>
+                        <h3>{title}</h3>
+                        {body}
+                        <div class="modal-actions">
+                            <button class="confirm" on:click=move |_| result.set(None)>
+                                "Done"
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            }
+        })
+    }
+}
+
+/// Git-verb results: a flat list of `marker name — message` rows.
+fn list_result_body(rows: &[ResultRow]) -> impl IntoView {
+    let items = rows
+        .iter()
+        .map(|row| {
+            view! {
+                <li class=format!("res-row {}", row.state)>
+                    <span class="res-mark">{mark_glyph(row.state)}</span>
+                    <span class="res-repo">{row.repo.clone()}</span>
+                    <span class="res-msg">{row.message.clone()}</span>
+                </li>
+            }
+        })
+        .collect::<Vec<_>>();
+    view! { <ul class="res-list">{items}</ul> }
+}
+
+/// `run` results: the TUI's master-detail. The left list selects a repo; the
+/// right pane shows that repo's exit line, stdout, and a stderr section.
+fn run_result_body(rows: Vec<ResultRow>, focus: RwSignal<usize>) -> impl IntoView {
+    let rows_out = rows.clone();
+    let list = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let state = row.state;
+            let repo = row.repo.clone();
+            let message = row.message.clone();
+            view! {
+                <li
+                    class=format!("run-item {state}")
+                    class:focused=move || focus.get() == i
+                    on:click=move |_| focus.set(i)
+                >
+                    <span class="res-mark">{mark_glyph(state)}</span>
+                    <span class="res-repo">{repo}</span>
+                    <span class="run-exit">{message}</span>
+                </li>
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let output = move || {
+        let n = rows_out.len();
+        if n == 0 {
+            return ().into_any();
+        }
+        let row = rows_out[focus.get().min(n - 1)].clone();
+        let exit_class = if row.state == "ok" { "ok" } else { "risk" };
+        let stdout = (!row.stdout.is_empty())
+            .then(|| view! { <pre class="run-stream">{row.stdout.clone()}</pre> });
+        let stderr = (!row.stderr.is_empty()).then(|| {
+            view! {
+                <div class="run-stderr-h">"── stderr ──"</div>
+                <pre class="run-stream err">{row.stderr.clone()}</pre>
+            }
+        });
+        let empty = (row.stdout.is_empty() && row.stderr.is_empty())
+            .then(|| view! { <p class="run-empty">"(no output)"</p> });
+        view! {
+            <div class=format!("run-head {exit_class}")>{row.message.clone()}</div>
+            {stdout}
+            {stderr}
+            {empty}
+        }
+        .into_any()
+    };
+
+    view! {
+        <div class="run-panes">
+            <ul class="run-list">{list}</ul>
+            <div class="run-out-pane">{output}</div>
+        </div>
+    }
+}
+
 /// One fleet row, mirroring the TUI's dock columns. Clicking it selects the repo.
 /// `busy` is true while remote enrichment is in flight (drives the PRs/CI spinner).
+#[allow(clippy::too_many_arguments)]
 fn repo_row(
     s: &RepoSnapshot,
     selected: RwSignal<Option<String>>,
+    marked: RwSignal<HashSet<String>>,
+    menu: RwSignal<Option<String>>,
+    pending: RwSignal<Option<PendingAction>>,
+    action_arg: RwSignal<String>,
+    notice: RwSignal<Option<String>>,
     now: i64,
     busy: bool,
 ) -> impl IntoView + use<> {
     let id = s.id.0.clone();
     let id_click = id.clone();
+    // The mark checkbox: toggles this repo in the action bar's target set
+    // without moving the drill-in selection (the click doesn't bubble).
+    let id_mark = id.clone();
+    let id_tog = id.clone();
+    let id_act = id.clone();
     let is_sel = move || selected.get().as_deref() == Some(id.as_str());
+    let mark_td = view! {
+        <td
+            class="mk"
+            on:click=move |ev| {
+                ev.stop_propagation();
+                marked
+                    .update(|m| {
+                        if !m.remove(id_tog.as_str()) {
+                            m.insert(id_tog.clone());
+                        }
+                    });
+            }
+        >
+            <input
+                type="checkbox"
+                prop:checked=move || marked.get().contains(id_mark.as_str())
+            />
+        </td>
+    };
 
     // A broken repo: red name, the reason in the Status column. The data cells are
     // genuinely unknowable, so they're left blank rather than filled with noise.
@@ -470,6 +1075,7 @@ fn repo_row(
         let reason = reason.clone();
         return view! {
             <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
+                {mark_td}
                 <td class="repo error">{name}</td>
                 <td></td>
                 <td></td>
@@ -479,6 +1085,7 @@ fn repo_row(
                 <td class="last"></td>
                 <td class="spark-cell"></td>
                 <td class="status risk">{reason}</td>
+                <td class="act"></td>
                 <td class="spacer"></td>
             </tr>
         }
@@ -494,6 +1101,7 @@ fn repo_row(
 
     view! {
         <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
+            {mark_td}
             <td class=name_class>{repo_cell(s)}</td>
             <td>{sync_cell(s)}</td>
             <td>{changes_cell(s)}</td>
@@ -503,6 +1111,17 @@ fn repo_row(
             <td class="last">{last_cell(s, now)}</td>
             <td class="spark-cell">{activity_cell(s)}</td>
             <td class="status">{status_cell(&a)}</td>
+            <td class="act" on:click=|ev| ev.stop_propagation()>
+                {act_dropdown(
+                    "⋯".to_string(),
+                    id_act.clone(),
+                    serde_json::json!({ "ids": [id_act.clone()] }),
+                    menu,
+                    pending,
+                    action_arg,
+                    notice,
+                )}
+            </td>
             <td class="spacer"></td>
         </tr>
     }
@@ -1207,15 +1826,6 @@ fn hint_panel() -> impl IntoView {
             <div class="card-title">"Detail"</div>
             <div class="scroll"><p class="empty">"Select a repository to inspect it."</p></div>
         </div>
-    }
-}
-
-/// One sort button, highlighted when active.
-fn sort_button(sort: RwSignal<SortMode>, key: SortMode, label: &'static str) -> impl IntoView {
-    view! {
-        <button class="sort" class:active=move || sort.get() == key on:click=move |_| sort.set(key)>
-            {label}
-        </button>
     }
 }
 
