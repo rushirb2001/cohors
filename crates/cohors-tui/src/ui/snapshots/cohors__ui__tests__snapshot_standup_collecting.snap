@@ -13,7 +13,7 @@ expression: "render_to_string(&app, 100, 18)"
 ╰───────│                                                                                  │───────╯
 ╭ Reposi│                                                                                  │───────╮
 │    Rep│                                                                                  │       │
-│▌   leg│                                                                                  │       │
+│▌   leg│                                                                                  │(permi…│
 │    pay│                                                                                  │       │
 │       │                                                                                  │       │
 ╰───────│                                                                                  │───────╯

@@ -141,16 +141,23 @@ pub(crate) fn render_repos_panel(
     let repo_w = col_w(repo_spans, 12, 30);
     // No Stash column either: like Changes, the stash count is Status's job
     // ("1 stash · stale"), and the dock card spells it out for the selection.
-    let (widths, reason_max): (Vec<Constraint>, usize) = if dock_visible {
-        let sync_w = col_w(ahead_behind_spans, 4, 9);
-        let prs_w = col_w(prs_spans, 3, 5);
-        let ci_w = col_w(ci_spans, 2, 8);
-        let act_w: u16 = ACTIVITY_WEEKS as u16; // one cell per week
-        let fixed = 2 + repo_w + sync_w + prs_w + ci_w + age_w + act_w;
-        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 6); // 7 cols ⇒ 6 gaps
+    //
+    // Which column set renders depends on WIDTH alone — a wide terminal keeps
+    // the full PRs / CI / Activity columns even when it's too short for the
+    // dock. Only genuinely narrow terminals fall back to the fused Sync
+    // (`↑2 ● 2pr`) set.
+    let sync_x_w = col_w(ahead_behind_spans, 4, 9);
+    let prs_w = col_w(prs_spans, 3, 5);
+    let ci_w = col_w(ci_spans, 2, 8);
+    let act_w: u16 = ACTIVITY_WEEKS as u16; // one cell per week
+    let fixed_x = 2 + repo_w + sync_x_w + prs_w + ci_w + age_w + act_w;
+    // Expanded whenever a legible Status column (≥18 cols) still fits.
+    let expanded = (inner.width as usize) >= fixed_x as usize + 2 * 6 + 18;
+    let (widths, reason_max): (Vec<Constraint>, usize) = if expanded {
+        let status_w = (inner.width as usize).saturating_sub(fixed_x as usize + 2 * 6); // 7 cols ⇒ 6 gaps
         let widths = vec![
             Constraint::Length(repo_w), // Repo @branch (incl. 2-col gutter)
-            Constraint::Length(sync_w),
+            Constraint::Length(sync_x_w),
             Constraint::Length(prs_w),
             Constraint::Length(ci_w),
             Constraint::Length(age_w),
@@ -172,7 +179,7 @@ pub(crate) fn render_repos_panel(
     };
 
     let fmt = RowFmt {
-        dock: dock_visible,
+        expanded,
         reason_max,
         age_w,
         // ~400ms on / ~400ms off at the 100ms tick cadence.
@@ -193,7 +200,7 @@ pub(crate) fn render_repos_panel(
     // but aligned to the data table: a 2-col reserve for the highlight symbol,
     // then the same column widths/spacing. "Repo" is padded by 2 to line up with
     // the names' selection gutter.
-    let labels: &[&str] = if dock_visible {
+    let labels: &[&str] = if expanded {
         &["  Repo", "Sync", "PRs", "CI", "Last", "Activity", "Status"]
     } else {
         &["  Repo", "Sync", "Last", "Status"]
@@ -714,9 +721,9 @@ pub(crate) fn severity_style(sev: Severity, theme: &Theme) -> Style {
 /// How to render a row's columns, which depend on whether the dock is up (and so
 /// carrying the commit message, freeing the table to expand its stat columns).
 pub(crate) struct RowFmt {
-    /// Dock up ⇒ expanded columns (Sync / Changes / Stash / PRs / CI / Last /
-    /// Status); else the compact, fused columns (Sync / Changes / Last / Status).
-    dock: bool,
+    /// Wide terminal ⇒ expanded columns (Sync / PRs / CI / Last / Activity /
+    /// Status); else the narrow, fused columns (Sync / Last / Status).
+    expanded: bool,
     /// Max chars for the reason label (the trailing "Status" column).
     reason_max: usize,
     /// Width of the age column, for right-aligning the age (the dock layout).
@@ -750,7 +757,7 @@ pub(crate) fn repo_row<'a>(
             ellipsize(reason, fmt.reason_max),
             theme.risk(),
         ));
-        return if fmt.dock {
+        return if fmt.expanded {
             Row::new(vec![
                 name,
                 blank(), // Sync
@@ -788,7 +795,7 @@ pub(crate) fn repo_row<'a>(
     let synced = matches!(&snap.upstream, Some(u) if u.ahead == 0 && u.behind == 0);
     let blink_synced = theme.glyphs.blink_synced();
 
-    if fmt.dock {
+    if fmt.expanded {
         // While an action runs, the Sync cell shows a spinner instead.
         let sync = match busy {
             Some(spin) => Cell::from(Span::styled(spin.to_string(), theme.ahead())),

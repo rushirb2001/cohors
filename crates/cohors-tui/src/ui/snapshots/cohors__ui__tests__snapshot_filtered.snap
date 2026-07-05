@@ -9,9 +9,9 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 / pay▏                                                                                              
 ╭ Repositories (2) · sort: dirty-first · /pay ─────────────────────────────────────────────────────╮
-│    Repo                   Sync      Last  Status                                                 │
-│▌   payments @main         ↑2 ● 2pr    2h  ↑2 unpushed                                            │
-│    legacy-billing                         could not read .git (permission denied)                │
+│    Repo                   Sync   PRs    CI       Last  Activity      Status                      │
+│▌   payments @main         ↑2     2      passing    2h     quiet      ↑2 unpushed                 │
+│    legacy-billing                                                    could not read .git (permis…│
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

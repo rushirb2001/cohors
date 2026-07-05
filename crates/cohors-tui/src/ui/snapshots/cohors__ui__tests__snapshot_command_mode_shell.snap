@@ -13,11 +13,11 @@ expression: "render_to_string(&app, 100, 22)"
 ╰────────────╭ Shell command ─────────────────────────────────────────────────────────╮────────────╯
 ╭ Repositorie│ : !git checkout main▏                                                  │────────────╮
 │    Repo    │ ────────────────────────────────────────────────────────────────────── │            │
-│▌   legacy-b│ ▌ :!<cmd>                  │ run any shell command across the targets  │            │
+│▌   legacy-b│ ▌ :!<cmd>                  │ run any shell command across the targets  │.git (permi…│
 │    payments╰────────────────────────────────────────────────────────────────────────╯            │
-│    web-app @feat/checkout  ↓5 ●       20m  ↓5 behind — pull                                      │
-│    infra @a1b2c3d          local       1w  4 uncommitted changes                                 │
-│    auth-service @main      ● 1pr       3d  up to date                                            │
+│    web-app @feat/checkout  ↓5     0      failing   20m     quiet      ↓5 behind — pull           │
+│    infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes      │
+│    auth-service @main      local  1      pending    3d     quiet      up to date                 │
 │                                                                                                  │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

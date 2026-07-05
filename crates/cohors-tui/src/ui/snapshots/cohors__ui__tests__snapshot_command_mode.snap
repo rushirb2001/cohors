@@ -13,10 +13,10 @@ expression: "render_to_string(&app, 100, 22)"
 ╰────────────│ ────────────────────────────────────────────────────────────────────── │────────────╯
 ╭ Repositorie│ :fetch :pull :push         │ sync the targets with their remotes       │────────────╮
 │    Repo    │ :!<cmd>                    │ run any shell command across the targets  │            │
-│▌   legacy-b│ :sort <name·dirty·recent>  │ change the sort order                     │            │
+│▌   legacy-b│ :sort <name·dirty·recent>  │ change the sort order                     │.git (permi…│
 │    payments│ :dirty   /<text>           │ needs-attention · fuzzy filter            │            │
-│    web-app │ :jump <repo>               │ move the cursor to a repo                 │            │
-│    infra @a│ :standup :refresh :quit    │ standup · rescan · exit                   │            │
+│    web-app │ :jump <repo>               │ move the cursor to a repo                 │l           │
+│    infra @a│ :standup :refresh :quit    │ standup · rescan · exit                   │hanges      │
 │    auth-ser╰────────────────────────────────────────────────────────────────────────╯            │
 │                                                                                                  │
 │                                                                                                  │
