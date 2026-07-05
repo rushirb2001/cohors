@@ -66,10 +66,12 @@ fn App() -> impl IntoView {
     let menu = RwSignal::new(None::<String>);
     // The modal's free-text argument: commit message / run command.
     let action_arg = RwSignal::new(String::new());
-    // Guided tour: the current step (None = not touring) and the on-screen rect
-    // of the step's highlighted element (for the spotlight).
+    // Guided tour: the current step (None = not touring), the on-screen rect of
+    // the highlighted element (spotlight), and where the floating card sits (so
+    // it slides between steps).
     let tour = RwSignal::new(None::<usize>);
     let tour_rect = RwSignal::new(None::<(f64, f64, f64, f64)>);
+    let tour_card_pos = RwSignal::new(None::<(f64, f64)>);
     let roots = RwSignal::new(Vec::<String>::new());
     // True while the remote-enrichment pass is in flight, so rows that *could* be
     // GitHub (have a remote URL, no `remote` yet) show a spinner instead of "—".
@@ -197,10 +199,11 @@ fn App() -> impl IntoView {
 
     // Guided tour: when the step changes, apply its demo side-effect (select /
     // mark the first visible repo, or clear) and — after a tick, so the DOM has
-    // settled — measure the highlighted element's rect for the spotlight.
+    // settled — measure the highlighted element and place the floating card.
     Effect::new(move |_| {
         let Some(i) = tour.get() else {
             tour_rect.set(None);
+            tour_card_pos.set(None);
             return;
         };
         let step = &TOUR[i];
@@ -225,16 +228,15 @@ fn App() -> impl IntoView {
             }
             TourAct::None => {}
         }
-        match step.target {
-            None => tour_rect.set(None),
-            Some(sel) => {
-                let sel = sel.to_string();
-                spawn_local(async move {
-                    gloo_timers::future::TimeoutFuture::new(90).await;
-                    tour_rect.set(element_rect(&sel));
-                });
-            }
-        }
+        let target = step.target;
+        spawn_local(async move {
+            // Let the DOM settle (a demo action may have changed the layout),
+            // then measure the target and compute where the card should float.
+            gloo_timers::future::TimeoutFuture::new(90).await;
+            let rect = target.and_then(element_rect);
+            tour_rect.set(rect);
+            tour_card_pos.set(Some(card_position(rect)));
+        });
     });
 
     view! {
@@ -292,7 +294,7 @@ fn App() -> impl IntoView {
             }}
             {confirm_modal(pending, action_arg, notice, result)}
             {result_modal(result)}
-            {tour_overlay(tour, tour_rect, selected, marked)}
+            {tour_overlay(tour, tour_rect, tour_card_pos, selected, marked)}
         </div>
     }
 }
@@ -1974,49 +1976,67 @@ const TOUR: &[TourStep] = &[
     TourStep {
         target: None,
         title: "Welcome to cohors",
-        body: "This is a demo fleet of sample repositories. Take the quick tour to see how it works — nothing here touches real git.",
+        body: "cohors shows every git repository you have in one place — their status, and what needs you. This is a demo fleet; take the quick tour to learn the ropes. Nothing here touches real git.",
+        act: TourAct::Clear,
+    },
+    TourStep {
+        target: Some("tbody tr:nth-child(1)"),
+        title: "One row per repo",
+        body: "Each repo is a row: its branch, how it stands against the remote, stashes, CI, recent activity — and, at the end, why it needs you.",
         act: TourAct::Clear,
     },
     TourStep {
         target: Some(".overview .attention"),
-        title: "Your fleet at a glance",
-        body: "The Overview counts everything up: how many repos you have, and how many need attention, are dirty, or hold stashes.",
+        title: "The whole fleet at a glance",
+        body: "Start here: how many repositories you have, and how many need attention, are dirty, or hold stashes. It updates as you act.",
         act: TourAct::None,
     },
     TourStep {
-        target: Some(".repos-head .filter"),
-        title: "Find a repo fast",
-        body: "Filter the fleet by name as you type — handy once you have dozens or hundreds of repos.",
+        target: Some("tbody tr:nth-child(1) td.status"),
+        title: "Why a repo needs you",
+        body: "The Status column is the headline — uncommitted changes, unpushed work, a branch never pushed, a stale remote. It's the same judgment across the TUI, CLI, and this page.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some(".repos-head"),
+        title: "Filter and focus",
+        body: "Filter the fleet by name as you type, or flip \"needs attention\" to hide the calm repos and see only what wants you.",
         act: TourAct::None,
     },
     TourStep {
         target: Some(".fleet thead th.sorted"),
-        title: "Sort by any column",
-        body: "Click a column header to sort by it; the active one shows an arrow. The \"needs attention\" toggle narrows the list to repos that want you.",
+        title: "Sort any column",
+        body: "Click a column header to sort by it — attention, recency, name, or how far out of sync. The active column shows an arrow.",
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1) td.mk"),
         title: "Pick a subset",
-        body: "Check rows to build a selection, then act on just those repos instead of the whole fleet.",
+        body: "Check rows to build a selection — we've ticked the first repo for you. Then you can act on just those, instead of the whole fleet.",
         act: TourAct::Mark,
     },
     TourStep {
         target: Some(".act-controls"),
         title: "Run git across the fleet",
-        body: "Fetch, pull, push, commit, stash, or a shell command — on every repo or your selection. Each action previews its exact targets before anything runs.",
+        body: "\"act on all\" targets every repo; \"act on selected\" targets your ticked ones. Fetch, pull, push, commit, stash, or a shell command — each one previews its exact targets and asks you to confirm before anything runs.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some("tbody tr:nth-child(1) td.act"),
+        title: "Or act on one repo",
+        body: "Every row has its own Git menu — the same actions, scoped to that single repository.",
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1) td.repo"),
         title: "Drill into a repo",
-        body: "Click any repo to inspect its commits, branches, working-tree changes, and pull requests in the Detail panel.",
+        body: "Click any repo to open it. The Detail panel on the right now shows this one's recent commits, branches, working-tree changes, and pull requests.",
         act: TourAct::Select,
     },
     TourStep {
         target: None,
         title: "You're ready",
-        body: "Point cohors at your own code: `cohors web --root ~/code`. Reads are always on; add `--allow-writes` to enable actions.",
+        body: "Point cohors at your own code: cohors web --root ~/code. Reads are always on; add --allow-writes to enable actions. That's the tour — happy shipping.",
         act: TourAct::Clear,
     },
 ];
@@ -2039,103 +2059,148 @@ fn first_visible_repo() -> Option<String> {
     tr.get_attribute("data-repo")
 }
 
-/// The guided-tour overlay: a spotlight over the current step's element plus a
-/// card with the copy and Back / Next / Skip. Runs entirely on the demo fleet
-/// and only ever selects or marks (never a real git action), so it's safe
-/// anywhere. `None` when not touring.
+/// The viewport size (width, height), with sane fallbacks.
+fn viewport() -> (f64, f64) {
+    let win = web_sys::window();
+    let w = win
+        .as_ref()
+        .and_then(|w| w.inner_width().ok())
+        .and_then(|j| j.as_f64())
+        .unwrap_or(1200.0);
+    let h = win
+        .as_ref()
+        .and_then(|w| w.inner_height().ok())
+        .and_then(|j| j.as_f64())
+        .unwrap_or(800.0);
+    (w, h)
+}
+
+/// The tour card's on-screen size (falling back to an estimate before it exists).
+fn card_size() -> (f64, f64) {
+    web_sys::window()
+        .and_then(|w| w.document())
+        .and_then(|d| d.query_selector(".tour-card").ok().flatten())
+        .map(|el| {
+            let r = el.get_bounding_client_rect();
+            (r.width(), r.height())
+        })
+        .filter(|&(w, h)| w > 0.0 && h > 0.0)
+        .unwrap_or((360.0, 200.0))
+}
+
+/// Where the floating card should sit for the current spotlight rect: near the
+/// target (below, or above / bottom when there's no room), or dead-centre when
+/// the step has no target. Returned as `(left, top)` pixels so it can be
+/// animated between steps.
+fn card_position(rect: Option<(f64, f64, f64, f64)>) -> (f64, f64) {
+    let (vw, vh) = viewport();
+    let (cw, ch) = card_size();
+    match rect {
+        None => ((vw - cw) / 2.0, (vh - ch) / 2.0),
+        Some((x, y, _w, h)) => {
+            let gap = 16.0;
+            let left = x.min(vw - cw - 16.0).max(16.0);
+            let top = if h > vh * 0.6 {
+                // A tall target (e.g. the detail panel): pin the card near the bottom.
+                vh - ch - 24.0
+            } else if y + h + gap + ch < vh - 8.0 {
+                y + h + gap // below the target
+            } else {
+                (y - ch - gap).max(16.0) // above it
+            };
+            (left, top)
+        }
+    }
+}
+
+/// The guided-tour overlay: a spotlight over the current step's element and a
+/// floating card that slides to each highlight. The card element persists across
+/// steps (so its position animates); only its content and coordinates change.
+/// Runs on the demo/live fleet and only ever selects or marks — never a real git
+/// action — so it's safe anywhere.
 fn tour_overlay(
     tour: RwSignal<Option<usize>>,
     tour_rect: RwSignal<Option<(f64, f64, f64, f64)>>,
+    tour_card_pos: RwSignal<Option<(f64, f64)>>,
     selected: RwSignal<Option<String>>,
     marked: RwSignal<HashSet<String>>,
 ) -> impl IntoView {
+    // Only flips on start/end, so the tour DOM persists across steps.
+    let touring = Memo::new(move |_| tour.get().is_some());
     let end = move || {
         selected.set(None);
         marked.update(|m| m.clear());
         tour.set(None);
     };
-    move || {
-        tour.get().map(|i| {
-            let step = &TOUR[i];
-            let last = i + 1 >= TOUR.len();
-            let counter = format!("{} / {}", i + 1, TOUR.len());
-            let rect = tour_rect.get();
-            // Spotlight box over the target (a little padding); a step with no
-            // target dims the whole screen instead (`.tour-dim`).
-            let spot = rect.map(|(x, y, w, h)| {
-                let p = 6.0;
-                format!(
-                    "left:{}px;top:{}px;width:{}px;height:{}px;",
-                    x - p,
-                    y - p,
-                    w + 2.0 * p,
-                    h + 2.0 * p
-                )
-            });
-            // Card below the target if it's in the upper half, else above it.
-            let card_pos = match rect {
-                Some((_, y, _, h)) => {
-                    let vh = web_sys::window()
-                        .and_then(|w| w.inner_height().ok())
-                        .and_then(|v| v.as_f64())
-                        .unwrap_or(800.0);
-                    if y + h < vh * 0.55 {
-                        format!("top:{}px;", y + h + 16.0)
-                    } else {
-                        format!("bottom:{}px;", vh - y + 16.0)
-                    }
-                }
-                None => String::new(),
-            };
-            let card_class = if rect.is_some() {
-                "tour-card"
-            } else {
-                "tour-card center"
-            };
-            view! {
-                <div class="tour">
-                    {match spot {
-                        Some(s) => view! { <div class="tour-spot" style=s></div> }.into_any(),
-                        None => view! { <div class="tour-dim"></div> }.into_any(),
-                    }}
-                    <div class=card_class style=card_pos>
-                        <div class="tour-step">{counter}</div>
-                        <h3>{step.title}</h3>
-                        <p>{step.body}</p>
-                        <div class="tour-actions">
-                            <button class="ghost" on:click=move |_| end()>
-                                "Skip"
-                            </button>
-                            <span class="tour-nav">
-                                {(i > 0)
-                                    .then(|| {
-                                        view! {
-                                            <button
-                                                class="ghost"
-                                                on:click=move |_| tour.set(Some(i - 1))
-                                            >
-                                                "Back"
-                                            </button>
-                                        }
-                                    })}
+    let idx = move || tour.get().unwrap_or(0);
+    let last = move || idx() + 1 >= TOUR.len();
+
+    // The spotlight box; a no-target step shrinks it to a point (full dim).
+    let spot_style = move || match tour_rect.get() {
+        Some((x, y, w, h)) => format!(
+            "left:{}px;top:{}px;width:{}px;height:{}px",
+            x - 6.0,
+            y - 6.0,
+            w + 12.0,
+            h + 12.0
+        ),
+        None => "left:50%;top:45%;width:0px;height:0px".to_string(),
+    };
+    let card_style = move || {
+        let (l, t) = tour_card_pos.get().unwrap_or_else(|| card_position(None));
+        format!("left:{l}px;top:{t}px")
+    };
+
+    view! {
+        <Show when=move || touring.get() fallback=|| ()>
+            <div class="tour">
+                <div class="tour-spot" style=spot_style></div>
+                <div class="tour-card" style=card_style>
+                    <div class="tour-step">{move || format!("{} / {}", idx() + 1, TOUR.len())}</div>
+                    <h3>{move || TOUR[idx()].title}</h3>
+                    <p>{move || TOUR[idx()].body}</p>
+                    <div class="tour-actions">
+                        <button class="ghost" on:click=move |_| end()>
+                            "Skip"
+                        </button>
+                        <span class="tour-nav">
+                            <Show when=move || { idx() > 0 } fallback=|| ()>
                                 <button
-                                    class="confirm"
+                                    class="ghost"
                                     on:click=move |_| {
-                                        if last {
-                                            end()
-                                        } else {
-                                            tour.set(Some(i + 1))
-                                        }
+                                        tour.update(|t| {
+                                            if let Some(i) = t
+                                                && *i > 0
+                                            {
+                                                *i -= 1;
+                                            }
+                                        })
                                     }
                                 >
-                                    {if last { "Done" } else { "Next" }}
+                                    "Back"
                                 </button>
-                            </span>
-                        </div>
+                            </Show>
+                            <button
+                                class="confirm"
+                                on:click=move |_| {
+                                    if last() {
+                                        end()
+                                    } else {
+                                        tour.update(|t| {
+                                            if let Some(i) = t {
+                                                *i += 1;
+                                            }
+                                        })
+                                    }
+                                }
+                            >
+                                {move || if last() { "Done" } else { "Next" }}
+                            </button>
+                        </span>
                     </div>
                 </div>
-            }
-        })
+            </div>
+        </Show>
     }
 }
 

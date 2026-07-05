@@ -716,23 +716,26 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 .run-empty { color: var(--faint); margin: 0; }
 
 /* ── Guided tour ─────────────────────────────────────────────────────────── */
-/* A full-screen layer that blocks page clicks; the spotlight cuts a lit hole in
-   the dim, and the card carries the copy + Back / Next / Skip. */
+/* A full-screen layer that blocks page clicks; the spotlight is a lit hole in
+   the surrounding dim (via a huge box-shadow) that glides between targets, and
+   the card floats and slides to each one. */
 .tour { position: fixed; inset: 0; z-index: 60; }
-.tour-dim { position: absolute; inset: 0; background: rgba(20, 22, 28, 0.55); }
 .tour-spot {
   position: fixed; border-radius: 8px; pointer-events: none;
-  box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(20, 22, 28, 0.55);
-  transition: left 0.22s ease, top 0.22s ease, width 0.22s ease, height 0.22s ease;
+  box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(20, 22, 28, 0.5);
+  transition: left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              width 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              height 0.38s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .tour-card {
-  position: fixed; left: 50%; transform: translateX(-50%); z-index: 61;
-  width: min(400px, 92vw);
+  position: fixed; z-index: 61; width: min(400px, 92vw);
   background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
   box-shadow: 0 16px 48px rgba(31, 35, 40, 0.28);
   padding: 15px 18px;
+  transition: left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
+              top 0.38s cubic-bezier(0.4, 0, 0.2, 1);
 }
-.tour-card.center { top: 50%; transform: translate(-50%, -50%); }
 .tour-step {
   font-family: var(--mono); font-size: 0.7rem; color: var(--faint);
   letter-spacing: 0.06em;
