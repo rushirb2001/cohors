@@ -1,24 +1,23 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3688
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                           │
-╰──────────────────────╭ Confirm ───────────────────────────────────────────╮──────────────────────╯
-╭ Repositories (5) · so│ Stash changes in 2 repos?                          │──────────────────────╮
-│    Repo              │                                                    │                      │
-│▌   legacy-billing    │ payments, web-app                                  │                      │
-│  ● payments @main    │                                                    │                      │
-│  ● web-app @feat/chec╰────────────────────────────────────────────────────╯                      │
-│    infra @a1b2c3d          local     4         1w  build: pin ci image                           │
-│    auth-service @main      ● 1pr     0         3d  chore: bump deps                              │
-│                                                                                                  │
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████ │
+│ quiet · 12 weeks     ╭ Confirm ───────────────────────────────────────────╮                      │
+╰──────────────────────│ Stash changes in 2 repos?                          │──────────────────────╯
+╭ Repositories (5) · so│                                                    │──────────────────────╮
+│    Repo              │ payments, web-app                                  │s                     │
+│▌   legacy-billing    │                                                    │ not read .git (permi…│
+│  ● payments @main    ╰────────────────────────────────────────────────────╯pushed                │
+│  ● web-app @feat/checkout  ↓5     0      failing   20m     quiet      ↓5 behind — pull           │
+│    infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes      │
+│    auth-service @main      local  1      pending    3d     quiet      up to date                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ y confirm · N / Esc cancel                                                                       │

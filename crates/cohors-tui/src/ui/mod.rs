@@ -3,7 +3,7 @@
 //! No state is mutated here.
 
 pub(crate) use cohors_core::{
-    AttentionReason, Branch, CiStatus, RepoSnapshot, Severity, StandupCommit, assess,
+    AttentionReason, Branch, CiStatus, FleetSummary, RepoSnapshot, Severity, StandupCommit, assess,
     fleet_summary, time,
 };
 pub(crate) use ratatui::Frame;
@@ -12,8 +12,8 @@ pub(crate) use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 pub(crate) use ratatui::style::{Color, Modifier, Style, Stylize};
 pub(crate) use ratatui::text::{Line, Span, Text};
 pub(crate) use ratatui::widgets::{
-    Block, BorderType, Borders, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row,
-    Scrollbar, ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
+    Block, BorderType, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row, Scrollbar,
+    ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
 };
 
 pub(crate) use crate::app::{App, ConfirmAction, Mode, Opener, RunState};
@@ -85,6 +85,17 @@ impl Theme {
     fn ok(&self) -> Style {
         self.fg(Color::Green)
     }
+    /// The docked context pane's card wash: a light grey background with a
+    /// dark base foreground. Setting BOTH keeps the card readable on any
+    /// terminal theme (spans that pick their own fg still patch over it).
+    /// Dropped entirely under NO_COLOR.
+    fn dock_card(&self) -> Style {
+        if self.color {
+            Style::new().bg(Color::Indexed(255)).fg(Color::Indexed(235))
+        } else {
+            Style::new()
+        }
+    }
 }
 
 /// Render the whole dashboard for one frame. `now` (Unix seconds) is injected
@@ -116,7 +127,15 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         // A strip on top — the fuzzy input while filtering, otherwise the
         // Attention panel — then the Repositories panel, which hosts the context
         // pane inside its own box (bottom rows) when the terminal is tall enough.
-        let strip_height = if app.mode == Mode::Filter { 1 } else { 3 };
+        // Wide terminals give the strip an extra row: the attention panel splits
+        // into the fleet-activity + attention cards, whose bodies are two rows.
+        let strip_height = if app.mode == Mode::Filter {
+            1
+        } else if body_area.width >= 76 {
+            4
+        } else {
+            3
+        };
         let [strip, rest] =
             Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
                 .areas(body_area);

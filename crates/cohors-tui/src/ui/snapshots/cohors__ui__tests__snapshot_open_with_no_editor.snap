@@ -1,24 +1,23 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3471
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                           │
-╰───────────────────────╭ Open legacy-billing with… ───────────────────────╮───────────────────────╯
-╭ Repositories (5) · sor│ No editor CLI found on your PATH.                │───────────────────────╮
-│    Repo               │ Install its shell command to list it here.       │                       │
-│▌   legacy-billing     │ ▌ Reveal in file manager                         │                       │
-│    payments @main     │   Open in lazygit                                │                       │
-│    web-app @feat/check╰──────────────────────────────────────────────────╯                       │
-│    infra @a1b2c3d          local     4         1w  build: pin ci image                           │
-│    auth-service @main      ● 1pr     0         3d  chore: bump deps                              │
-│                                                                                                  │
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████ │
+│ quiet · 12 weeks      ╭ Open legacy-billing with… ───────────────────────╮m                      │
+╰───────────────────────│ No editor CLI found on your PATH.                │───────────────────────╯
+╭ Repositories (5) · sor│ Install its shell command to list it here.       │───────────────────────╮
+│    Repo               │ ▌ Reveal in file manager                         │us                     │
+│▌   legacy-billing     │   Open in lazygit                                │d not read .git (permi…│
+│    payments @main     ╰──────────────────────────────────────────────────╯npushed                │
+│    web-app @feat/checkout  ↓5     0      failing   20m     quiet      ↓5 behind — pull           │
+│    infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes      │
+│    auth-service @main      local  1      pending    3d     quiet      up to date                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ↑/↓ choose · ⏎ open · d set default · Esc cancel                                                 │

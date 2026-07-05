@@ -229,6 +229,12 @@ pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
         if app.hints_hidden {
             return 1;
         }
+        // The consolidated one-box bar when it fits; the three stacked group
+        // boxes otherwise (narrow terminals).
+        let (_, bar_rows, bar_total) = footer_bar_geometry(app);
+        if bar_total <= width {
+            return bar_rows + 2 + 1; // borders + the toggle divider row
+        }
         let rows = footer_groups(app)
             .iter()
             .map(|(_, items)| footer_group_rows(items))
@@ -254,11 +260,18 @@ pub(crate) fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Th
     if app.mode == Mode::Normal {
         // A divider that doubles as the show/hide affordance, then the boxes
         // (unless the user has collapsed them with `h`).
+        // A divider that doubles as the show/hide affordance, then the one-box
+        // bar (or the stacked group boxes on narrow terminals).
         let [divider, boxes] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
         render_hint_divider(frame, divider, app.hints_hidden, theme);
         if !app.hints_hidden {
-            render_footer_boxed(frame, boxes, app, theme);
+            let (_, _, bar_total) = footer_bar_geometry(app);
+            if bar_total <= area.width {
+                render_footer_bar(frame, boxes, app, theme);
+            } else {
+                render_footer_boxed(frame, boxes, app, theme);
+            }
         }
     } else {
         render_footer_simple(frame, area, footer_lines(app, theme), theme);
@@ -438,6 +451,208 @@ pub(crate) fn render_group_box(
     }
 }
 
+/// Each hint-bar section packs its items column-major into at most this many
+/// grid rows, growing columns as needed — so a 7-item group becomes 3 columns
+/// of ≤3 rather than a tall 2-column stack.
+pub(crate) const FOOTER_BAR_ROWS: usize = 3;
+
+/// A section's items chunked into its column-major columns.
+fn footer_bar_columns<'a>(
+    items: &'a [(&'static str, &'static str)],
+) -> impl Iterator<Item = &'a [(&'static str, &'static str)]> {
+    let cols = items.len().div_ceil(FOOTER_BAR_ROWS).max(1);
+    items.chunks(items.len().div_ceil(cols).max(1))
+}
+
+/// The consolidated hint bar's geometry: each section's fitted width (every
+/// hint column sized to its own content, so nothing wraps or overflows), the
+/// content row count (the label row + the tallest grid), and the total width
+/// the bar needs. Used to decide whether the one-box layout fits.
+pub(crate) fn footer_bar_geometry(app: &App) -> (Vec<u16>, u16, u16) {
+    let groups = footer_groups(app);
+    let mut widths: Vec<u16> = Vec::new();
+    let mut grid_rows: usize = 1;
+    for (label, items) in &groups {
+        let mut grid: u16 = 0;
+        for (i, chunk) in footer_bar_columns(items).enumerate() {
+            grid_rows = grid_rows.max(chunk.len());
+            let col = chunk
+                .iter()
+                .map(|(k, d)| footer_item_w(k, d))
+                .max()
+                .unwrap_or(0) as u16;
+            // Columns are joined by ` │ ` (a light divider with a space each
+            // side), so each junction costs 3 cells.
+            grid += col + if i > 0 { 3 } else { 0 };
+        }
+        let label_w = label.chars().count() as u16; // the label row must fit too
+        widths.push(grid.max(label_w) + 2); // 1-col padding each side
+    }
+    let dividers = widths.len().saturating_sub(1) as u16;
+    let total = widths.iter().sum::<u16>() + dividers + 2; // + the outer borders
+    // label row + its rule + the grid.
+    (widths, 2 + grid_rows as u16, total)
+}
+
+/// The consolidated hint bar: ONE bordered box, split into the `select` /
+/// `act` / `view` sections by thin `│` dividers (with `┬`/`┴` junctions — box
+/// drawing only; no text ever sits on a border). Each section starts with its
+/// label row (the `act` one carries the live target) and packs its hints below
+/// in content-fitted, column-major columns, so every hint fits without
+/// wrapping.
+pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let groups = footer_groups(app);
+    let (widths, _rows, _total) = footer_bar_geometry(app);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim());
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Alternate section / divider constraints. The leftover width is spread
+    // evenly across the sections (not dumped into the last one), so the
+    // dividers space out and no section ends in a void; the last section
+    // absorbs only the rounding remainder.
+    let leftover = (inner.width as usize)
+        .saturating_sub(widths.iter().sum::<u16>() as usize + widths.len().saturating_sub(1));
+    let share = (leftover / widths.len().max(1)) as u16;
+    let mut cons: Vec<Constraint> = Vec::new();
+    for (i, w) in widths.iter().enumerate() {
+        if i > 0 {
+            cons.push(Constraint::Length(1));
+        }
+        if i == widths.len() - 1 {
+            cons.push(Constraint::Fill(1));
+        } else {
+            cons.push(Constraint::Length(*w + share));
+        }
+    }
+    let rects = Layout::horizontal(cons).split(inner);
+
+    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
+    let mut section = 0usize;
+    for (ri, rect) in rects.iter().enumerate() {
+        // Odd chunks are the 1-col dividers: a `│` per row, junctions on the
+        // borders above and below.
+        if ri % 2 == 1 {
+            let bar: Vec<Line> = (0..rect.height)
+                .map(|_| Line::from(Span::styled("│", theme.dim())))
+                .collect();
+            frame.render_widget(Paragraph::new(Text::from(bar)), *rect);
+            for (y, ch) in [(area.y, "┬"), (area.y + area.height - 1, "┴")] {
+                frame.render_widget(
+                    Paragraph::new(Span::styled(ch, theme.dim())),
+                    Rect {
+                        x: rect.x,
+                        y,
+                        width: 1,
+                        height: 1,
+                    },
+                );
+            }
+            continue;
+        }
+
+        let (label, items) = &groups[section];
+        section += 1;
+
+        let content = Rect {
+            x: rect.x + 1,
+            width: rect.width.saturating_sub(2),
+            ..*rect
+        };
+        let [label_area, rule_area, grid_area] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(content);
+
+        // The centered header row, inside the box — never on the border; `act`
+        // carries the live target beside it.
+        let mut label_spans = vec![Span::styled(
+            label.to_string(),
+            theme.dim().add_modifier(Modifier::BOLD),
+        )];
+        if *label == "act"
+            && let Some((_, target)) = action_target_hint(app)
+        {
+            let room = content
+                .width
+                .saturating_sub(label.chars().count() as u16 + 3) as usize;
+            label_spans.push(Span::raw(" "));
+            label_spans.push(Span::styled(
+                format!("→ {}", ellipsize(&target, room)),
+                theme.highlight(),
+            ));
+        }
+        frame.render_widget(
+            Paragraph::new(Line::from(label_spans)).alignment(Alignment::Center),
+            label_area,
+        );
+
+        // A dim rule under the header, spanning the section's content width.
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "─".repeat(rule_area.width as usize),
+                theme.dim(),
+            ))),
+            rule_area,
+        );
+
+        // The fitted hint columns (order preserved down-then-across), centered
+        // as a group and separated by light `│` dividers.
+        let hint = |(k, d): &(&str, &str)| {
+            Line::from(vec![
+                Span::styled((*k).to_string(), key_style),
+                Span::styled(format!(" {d}"), theme.dim()),
+            ])
+        };
+        let chunks: Vec<_> = footer_bar_columns(items).collect();
+        let col_ws: Vec<u16> = chunks
+            .iter()
+            .map(|chunk| {
+                chunk
+                    .iter()
+                    .map(|(k, d)| footer_item_w(k, d))
+                    .max()
+                    .unwrap_or(0) as u16
+            })
+            .collect();
+        let grid_w: u16 = col_ws.iter().sum::<u16>() + 3 * chunks.len().saturating_sub(1) as u16;
+        let grid = Rect {
+            x: grid_area.x + grid_area.width.saturating_sub(grid_w) / 2,
+            width: grid_w.min(grid_area.width),
+            ..grid_area
+        };
+        let mut col_cons: Vec<Constraint> = Vec::new();
+        for (i, w) in col_ws.iter().enumerate() {
+            if i > 0 {
+                col_cons.push(Constraint::Length(1)); // the light divider column
+            }
+            col_cons.push(Constraint::Length(*w));
+        }
+        let col_rects = Layout::horizontal(col_cons).spacing(1).split(grid);
+        let sec_rows = chunks.iter().map(|c| c.len()).max().unwrap_or(0) as u16;
+        let mut chunk_iter = chunks.iter();
+        for (ci, col_rect) in col_rects.iter().enumerate() {
+            if ci % 2 == 1 {
+                // The light divider between hint columns, only as tall as the
+                // section's hint rows.
+                let bar: Vec<Line> = (0..sec_rows.min(col_rect.height))
+                    .map(|_| Line::from(Span::styled("│", theme.dim())))
+                    .collect();
+                frame.render_widget(Paragraph::new(Text::from(bar)), *col_rect);
+                continue;
+            }
+            if let Some(chunk) = chunk_iter.next() {
+                let text = Text::from(chunk.iter().map(hint).collect::<Vec<_>>());
+                frame.render_widget(Paragraph::new(text), *col_rect);
+            }
+        }
+    }
+}
+
 /// The "Attention" panel: a titled box summarizing what needs the user, in
 /// plain words ("3 dirty · 1 behind") rather than terse glyphs.
 pub(crate) fn render_attention_panel(
@@ -449,8 +664,23 @@ pub(crate) fn render_attention_panel(
 ) {
     let s = fleet_summary(&app.repos, now);
 
-    // The "N of M repositories" count lives in the box title; the body is just
-    // the category pills (or an all-clear message).
+    // Wide terminals get the web's overview strip: a fleet-activity card (the
+    // heartbeat sparkline) beside the attention card (a severity bar + the four
+    // bucket counts). Narrow ones keep a single-line chip summary — two cards
+    // would crush each other.
+    if area.height >= 4 && area.width >= 76 {
+        let [act_area, attn_area] =
+            Layout::horizontal([Constraint::Length(34), Constraint::Min(0)])
+                .spacing(1)
+                .areas(area);
+        render_activity_card(frame, act_area, app, theme);
+        render_attention_card(frame, attn_area, &s, theme);
+        return;
+    }
+
+    // The "N of M repositories" count lives in the box title; the body is the
+    // severity buckets (or an all-clear message) — the same four numbers the
+    // wide layout and the web show.
     let mut title = vec![Span::styled(
         " Attention ",
         Style::new().add_modifier(Modifier::BOLD),
@@ -474,50 +704,152 @@ pub(crate) fn render_attention_panel(
             theme.ok(),
         ))
     } else {
-        let mut spans: Vec<Span> = Vec::new();
-
-        // Readable, word-labeled chips; skip any category with a zero count.
-        // The risk bucket leads: it's the "drop everything" number.
-        let mut items: Vec<(String, Style)> = Vec::new();
-        if s.risk > 0 {
-            items.push((format!("{} at risk", s.risk), theme.risk()));
-        }
-        if s.unpushed > 0 {
-            if s.unpushed_aging > 0 {
-                items.push((
-                    format!("{} unpushed ({} aging)", s.unpushed, s.unpushed_aging),
-                    theme.risk(),
-                ));
-            } else {
-                items.push((format!("{} unpushed", s.unpushed), theme.ahead()));
-            }
-        }
-        if s.conflicted > 0 {
-            items.push((format!("{} conflicted", s.conflicted), theme.risk()));
-        }
-        if s.behind > 0 {
-            items.push((format!("{} behind", s.behind), theme.behind()));
-        }
-        if s.dirty > 0 {
-            items.push((format!("{} dirty", s.dirty), theme.modified()));
-        }
-        if s.stash > 0 {
-            items.push((format!("{} stashed", s.stash), Style::new()));
-        }
-        if s.errors > 0 {
-            items.push((format!("{} unreadable", s.errors), theme.risk()));
-        }
-
-        for (i, (text, style)) in items.into_iter().enumerate() {
-            if i > 0 {
-                spans.push(Span::styled(" · ", theme.dim()));
-            }
-            spans.push(Span::styled(text, style));
-        }
-        Line::from(spans)
+        Line::from(severity_bucket_spans(&s, theme))
     };
 
     frame.render_widget(Paragraph::new(line), inner);
+}
+
+/// The four severity-bucket chips — `N at risk · N warning · N minor · N calm`
+/// — each coloured by its severity, zero buckets skipped (calm always shows).
+/// The same numbers, wording, and colour order as the web's attention legend.
+pub(crate) fn severity_bucket_spans(s: &FleetSummary, theme: &Theme) -> Vec<Span<'static>> {
+    let mut items: Vec<(String, Style)> = Vec::new();
+    if s.risk > 0 {
+        items.push((format!("{} at risk", s.risk), theme.risk()));
+    }
+    if s.warn > 0 {
+        items.push((
+            format!("{} warning", s.warn),
+            severity_style(Severity::Warn, theme),
+        ));
+    }
+    if s.notice > 0 {
+        items.push((
+            format!("{} minor", s.notice),
+            severity_style(Severity::Notice, theme),
+        ));
+    }
+    items.push((format!("{} calm", s.calm), theme.ok()));
+
+    let mut spans: Vec<Span> = Vec::new();
+    for (i, (text, style)) in items.into_iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::styled(" · ", theme.dim()));
+        }
+        spans.push(Span::styled(text, style));
+    }
+    spans
+}
+
+/// The fleet-activity card: every repo's weekly commit counts summed into one
+/// 12-week sparkline (each week two cells wide, so the shape reads), captioned
+/// with the totals — the TUI's version of the web's "fleet activity" block.
+fn render_activity_card(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(Span::styled(
+            " Fleet activity ",
+            Style::new().add_modifier(Modifier::BOLD),
+        )))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // Element-wise sum of each repo's 12-week activity (oldest first). Repos
+    // scanned before the activity field existed contribute nothing.
+    let mut weeks = [0u64; 12];
+    for repo in &app.repos {
+        for (w, n) in repo.activity.iter().take(12).enumerate() {
+            weeks[w] += u64::from(*n);
+        }
+    }
+    let total: u64 = weeks.iter().sum();
+
+    let ramp = theme.glyphs.spark_ramp();
+    let max = weeks.iter().copied().max().unwrap_or(0);
+    let mut spark = String::new();
+    for &n in &weeks {
+        let idx = if max == 0 {
+            0
+        } else {
+            ((n * 7).div_ceil(max)) as usize
+        };
+        let ch = ramp[idx.min(7)];
+        spark.push(ch);
+        spark.push(ch); // two cells per week: wide enough to read as a bar
+    }
+
+    let caption = if total == 0 {
+        "quiet · 12 weeks".to_string()
+    } else {
+        format!("{total} commits · 12 weeks")
+    };
+    let lines = vec![
+        Line::from(Span::styled(spark, theme.fg(SPIDER_PURPLE))),
+        Line::from(Span::styled(caption, theme.dim())),
+    ];
+    frame.render_widget(Paragraph::new(lines), inner);
+}
+
+/// The attention card: a full-width severity bar (segments proportional to the
+/// four buckets) over the bucket counts — the web's attention breakdown. Under
+/// Ascii the segments use distinct characters, so the split reads without
+/// colour.
+fn render_attention_card(frame: &mut Frame, area: Rect, s: &FleetSummary, theme: &Theme) {
+    let mut title = vec![Span::styled(
+        " Attention ",
+        Style::new().add_modifier(Modifier::BOLD),
+    )];
+    title.push(Span::styled(
+        format!("({} of {} repositories) ", s.needs_attention, s.total),
+        theme.dim(),
+    ));
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .title(Line::from(title))
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    // The bar: one coloured run per non-empty bucket, at least one cell each,
+    // rounding drift absorbed by the widest bucket so the bar always fills.
+    let buckets: [(usize, Style); 4] = [
+        (s.risk, theme.risk()),
+        (s.warn, severity_style(Severity::Warn, theme)),
+        (s.notice, severity_style(Severity::Notice, theme)),
+        (s.calm, theme.ok()),
+    ];
+    let width = inner.width as usize;
+    let mut cells: Vec<usize> = buckets
+        .iter()
+        .map(|(n, _)| {
+            if *n == 0 {
+                0
+            } else {
+                ((n * width) / s.total.max(1)).max(1)
+            }
+        })
+        .collect();
+    // Trim/pad the widest run until the total matches the width exactly.
+    let assigned: usize = cells.iter().sum();
+    if let Some(widest) = (0..4).max_by_key(|&i| cells[i])
+        && cells[widest] > 0
+    {
+        cells[widest] = (cells[widest] + width).saturating_sub(assigned).max(1);
+    }
+    let mut bar: Vec<Span> = Vec::new();
+    for (i, ((_, style), n)) in buckets.iter().zip(&cells).enumerate() {
+        if *n > 0 {
+            bar.push(Span::styled(
+                theme.glyphs.bar(i).to_string().repeat(*n),
+                *style,
+            ));
+        }
+    }
+
+    let lines = vec![Line::from(bar), Line::from(severity_bucket_spans(s, theme))];
+    frame.render_widget(Paragraph::new(lines), inner);
 }
 
 /// The self-dismissing toast line — scan progress or the latest action result
@@ -526,15 +858,10 @@ pub(crate) fn render_attention_panel(
 /// In-progress messages stay until the work finishes; results clear after a few
 /// seconds (the event loop owns the timer).
 pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
+    // Scanning shows no toast at all — the refresh announces itself via the
+    // braille spinners animating inside the table's Sync/PRs/CI cells.
     if app.scanning {
-        let msg = app
-            .status
-            .clone()
-            .unwrap_or_else(|| "scanning…".to_string());
-        return Some(Line::from(Span::styled(
-            format!(" {} {msg} ", spinner_frame(app.spinner)),
-            theme.dim(),
-        )));
+        return None;
     }
     let msg = app.status.as_ref()?;
     // A failure reads red; everything else is a confirmation (green + ✓).
@@ -636,7 +963,7 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
                 vec![
                     ("↑/↓", "move"),
                     ("s", "sort"),
-                    ("d", "dirty-only"),
+                    ("d", "attention"),
                     ("Tab", "standup"),
                     ("?", "help"),
                     ("q", "quit"),
@@ -755,7 +1082,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
             ),
             (
                 vec![cmd(":dirty"), dim("   "), cmd("/<text>")],
-                "dirty-only · fuzzy filter",
+                "needs-attention · fuzzy filter",
             ),
             (
                 vec![cmd(":jump"), dim(" <repo>")],

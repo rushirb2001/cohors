@@ -1,18 +1,17 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3479
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 56, 22)"
 ---
 ╭──────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                           │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                            │
 │ ▟██▌█▐██▙  ~/projects (+1)                           │
 │ ▀▐▖▀█▀▗▌▀                                            │
 ╰──────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────╮
-│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stas │
+│ 1 at risk · 2 warning · 1 minor · 1 calm             │
 ╰──────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────╮
-│    Repo                    Sync      Changes  Last co│
+│    Repo                    Sync      Last  Status    │
 │                       ↓ 4 more                       │
 ╰──────────────────────────────────────────────────────╯
 ──────────────── press h to hide hints ─────────────────
@@ -22,6 +21,6 @@ expression: "render_to_string(&app, 56, 22)"
 │ a mark │ Esc c │ │ ⏎ open │ P pus │ │ ↑/↓ mo │ ? hel │
 │ / filt │       │ │ f fetc │ S sta │ │ s sort │ q qui │
 │ ────────────── │ │ p pull │       │ │ ────────────── │
-│ Space mark rep │ │ ────────────── │ │ d dirty-only   │
+│ Space mark rep │ │ ────────────── │ │ d attention    │
 │                │ │ ! run command  │ │ Tab standup    │
 ╰────────────────╯ ╰────────────────╯ ╰────────────────╯

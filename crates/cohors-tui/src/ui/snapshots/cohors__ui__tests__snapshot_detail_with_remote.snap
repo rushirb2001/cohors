@@ -1,29 +1,28 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3655
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 28)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐╭ payments  ·  main ───────────────────────────────────────────────────────────────╮       │
 │ ▀▐▖▀█▀│ ╭ Changes · branches · PRs ────────────╮ ╭ Commits (5) ─────────────────────────╮│       │
 ╰───────│ │ Attention                          █ │ │ a1b2c3d    2h  fix: retry charge on  ││───────╯
-╭ Attent│ │ ↑2 unpushed                        █ │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
-│ 1 at r│ │ 4 uncommitted changes              █ │ │ c3d4e5f    1d  refactor: extract pro ││       │
-╰───────│ │ 1 stash                            █ │ │ d4e5f60    3d  feat: idempotency key ││───────╯
-╭ Reposi│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││───────╮
-│    Rep│ │ Changes (3)                        █ │ │                                      ││       │
-│▌   leg│ │  M src/charge.rs                   █ │ │                                      ││t (per…│
-│    pay│ │  M src/refund.rs                   █ │ │                                      ││       │
-│    web│ │ ?? notes.md                        ║ │ │                                      ││       │
-│    inf│ │                                    ║ │ │                                      ││ges    │
-│    aut│ │ Branches (3)                       ║ │ │                                      ││       │
-│       │ │ ● main  ↑2                         ║ │ │                                      ││       │
+╭ Fleet │ │ ↑2 unpushed                        █ │ │ b2c3d4e    5h  test: cover partial-r ││───────╮
+│ ▁▁▁▁▁▁│ │ 4 uncommitted changes              █ │ │ c3d4e5f    1d  refactor: extract pro ││██████ │
+│ quiet │ │ 1 stash                            █ │ │ d4e5f60    3d  feat: idempotency key ││       │
+╰───────│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││───────╯
+╭ Reposi│ │ Changes (3)                        █ │ │                                      ││───────╮
+│    Rep│ │  M src/charge.rs                   █ │ │                                      ││       │
+│▌   leg│ │  M src/refund.rs                   █ │ │                                      ││(permi…│
+│    pay│ │ ?? notes.md                        ║ │ │                                      ││       │
+│    web│ │                                    ║ │ │                                      ││       │
+│    inf│ │ Branches (3)                       ║ │ │                                      ││s      │
+│    aut│ │ ● main  ↑2                         ║ │ │                                      ││       │
 │       │ │   feat/idempotency  ↑3 ↓1          ║ │ │                                      ││       │
 │       │ │   spike/webhooks  · no upstream    ║ │ │                                      ││       │
 │       │ │                                    ║ │ │                                      ││       │
 │       │ │ Stashes (1)                        ║ │ │                                      ││       │
-│       │ │ WIP on main: dashboard tweaks      ║ │ │                                      ││       │
+├───────│ │ WIP on main: dashboard tweaks      ║ │ │                                      ││───────┤
 │ legacy│ │                                    ║ │ │                                      ││detail │
 │       │ │ GitHub                             ║ │ │                                      ││       │
 │ ⚠ coul│ ╰──────────────────────────────────────╯ ╰──────────────────────────────────────╯│       │

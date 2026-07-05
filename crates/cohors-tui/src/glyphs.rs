@@ -78,6 +78,28 @@ impl Glyphs {
         }
     }
 
+    /// The 8-level ramp for activity sparklines (fleet heartbeat + per-repo
+    /// cadence), lowest to highest. Block elements in the glyph tiers; a plain
+    /// ASCII density ramp otherwise — the *shape* carries the reading either
+    /// way, so no colour is required.
+    pub fn spark_ramp(&self) -> &'static [char; 8] {
+        match self.kind {
+            IconKind::Unicode | IconKind::Nerd => &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
+            IconKind::Ascii => &['.', ':', '-', '=', '+', '*', '#', '@'],
+        }
+    }
+
+    /// One cell of the attention severity bar. In the glyph tiers every segment
+    /// is a solid block and *colour* separates the buckets; under Ascii each
+    /// bucket gets its own character (risk `#`, warn `+`, notice `-`, calm `.`)
+    /// so the split reads without colour.
+    pub fn bar(&self, bucket: usize) -> char {
+        match self.kind {
+            IconKind::Unicode | IconKind::Nerd => '█',
+            IconKind::Ascii => ['#', '+', '-', '.'][bucket.min(3)],
+        }
+    }
+
     /// The remote CI dot (used in the compact, fused Sync cell). In the glyph
     /// tiers it's a single `●` whose *colour* says pass/fail/pending — so under
     /// Ascii (no colour) it becomes a short self-describing letter instead, and an

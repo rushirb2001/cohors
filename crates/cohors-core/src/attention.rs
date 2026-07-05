@@ -297,6 +297,14 @@ pub struct FleetSummary {
     /// Repos whose overall assessment reaches [`Severity::Risk`] — the "drop
     /// everything" bucket.
     pub risk: usize,
+    /// Repos whose overall assessment is exactly [`Severity::Warn`].
+    pub warn: usize,
+    /// Repos whose overall assessment is exactly [`Severity::Notice`].
+    pub notice: usize,
+    /// Repos whose overall assessment is calm ([`Severity::Ok`] or `Info`).
+    /// With `risk`/`warn`/`notice` these partition the fleet by overall
+    /// severity — the same four buckets the web's attention bar shows.
+    pub calm: usize,
     pub unpushed: usize,
     pub unpushed_aging: usize,
     pub behind: usize,
@@ -321,8 +329,11 @@ pub fn fleet_summary(repos: &[RepoSnapshot], now: i64) -> FleetSummary {
         if a.needs_attention() {
             s.needs_attention += 1;
         }
-        if a.severity >= Severity::Risk {
-            s.risk += 1;
+        match a.severity {
+            Severity::Risk => s.risk += 1,
+            Severity::Warn => s.warn += 1,
+            Severity::Notice => s.notice += 1,
+            Severity::Ok | Severity::Info => s.calm += 1,
         }
         for reason in &a.reasons {
             match reason {

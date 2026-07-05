@@ -1,24 +1,23 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3779
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 64)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                     │
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1╭ Help ──────────────────────────────────────────────────────────────╮              │
-╰──────────────│                                                                    │──────────────╯
-╭ Repositories │  Legend — what each column shows                                   │──────────────╮
-│    Repo      │    ↑2              commits ahead of upstream                       │              │
-│▌   legacy-bil│    ↓5              commits behind upstream                         │ead .git (per…│
-│    payments @│    ●               in sync with upstream                           │              │
-│    web-app @f│    local           no upstream (local only)                        │ pull         │
-│    infra @a1b│    ● ● ●           CI: pass / fail / pending                       │ed changes    │
-│    auth-servi│    2pr             open pull requests                              │              │
-│              │    3               changed files, all staged                       │              │
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁╭ Help ──────────────────────────────────────────────────────────────╮█████████████ │
+│ quiet · 12 we│                                                                    │              │
+╰──────────────│  Legend — what each column shows                                   │──────────────╯
+╭ Repositories │    ↑2              commits ahead of upstream                       │──────────────╮
+│    Repo      │    ↓5              commits behind upstream                         │              │
+│▌   legacy-bil│    ●               in sync with upstream                           │d .git (permi…│
+│    payments @│    local           no upstream (local only)                        │              │
+│    web-app @f│    ● ● ●           CI: pass / fail / pending                       │ull           │
+│    infra @a1b│    2pr             open pull requests                              │ changes      │
+│    auth-servi│    3               changed files, all staged                       │              │
 │              │    3               changed files, some unstaged                    │              │
 │              │    s1              stash entries                                   │              │
 │              │    name            row: clean                                      │              │
@@ -37,7 +36,7 @@ expression: "render_to_string(&app, 100, 64)"
 │              │    /               fuzzy filter (Esc clears)                       │              │
 │              │    :               command mode (:fetch, :!cmd shell, :sort,       │              │
 │              │  :jump …)                                                          │              │
-│              │    d               toggle dirty-only                               │              │
+│              │    d               toggle needs-attention                          │              │
 │              │    s               cycle sort mode                                 │              │
 │              │    Tab             weekly standup                                  │              │
 │              │                                                                    │              │
@@ -58,8 +57,8 @@ expression: "render_to_string(&app, 100, 64)"
 │              │    ?               toggle this help                                │              │
 │              │    q / Ctrl-C      quit                                            │              │
 │              │                                                                    │              │
-│              │  cohors vX.Y.Z                                                    │              │
-│              │                                                                    │              │
+│              │  cohors vX.Y.Z                                                     │              │
+├──────────────│                                                                    │──────────────┤
 │ legacy-billin╰────────────────────────────────────────────────────────────────────╯: full detail │
 │                                                                                                  │
 │ ⚠ could not read .git (permission denied)                                                        │

@@ -70,7 +70,7 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
             key(":"),
             "command mode (:fetch, :!cmd shell, :sort, :jump …)",
         ),
-        row(key("d"), "toggle dirty-only"),
+        row(key("d"), "toggle needs-attention"),
         row(key("s"), "cycle sort mode"),
         row(key("Tab"), "weekly standup"),
         Line::from(""),

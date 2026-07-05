@@ -1,39 +1,38 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3489
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 120, 34)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                                         │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                          │  dir    ~/projects (+1)                                         │
 │ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml                             │
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭ Fleet activity ────────────────╮ ╭ Attention (4 of 5 repositories) ──────────────────────────────────────────────────╮
+│ ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁       │ │ █████████████████████████████████████████████████████████████████████████████████ │
+│ quiet · 12 weeks               │ │ 1 at risk · 2 warning · 1 minor · 1 calm                                          │
+╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────────────────────────╮
-│    Repo                    Sync   Changes  Stash  PRs    CI       Last  Status                                       │
-│    legacy-billing                                                       could not read .git (permission denied)      │
-│▌   payments @main          ↑2     4        1      2      passing    2h  ↑2 unpushed                                  │
-│    web-app @feat/checkout  ↓5     7        0      0      failing   20m  ↓5 behind — pull                             │
-│    infra @a1b2c3d          local  4        0      local  local      1w  4 uncommitted changes                        │
-│    auth-service @main      local  0        0      1      pending    3d  up to date                                   │
+│    Repo                    Sync   PRs    CI       Last  Activity      Status                                         │
+│    legacy-billing                                                     could not read .git (permission denied)        │
+│▌   payments @main          ↑2     2      passing    2h     quiet      ↑2 unpushed                                    │
+│    web-app @feat/checkout  ↓5     0      failing   20m     quiet      ↓5 behind — pull                               │
+│    infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes                          │
+│    auth-service @main      local  1      pending    3d     quiet      up to date                                     │
 │                                                                                                                      │
-│ payments  ·  main ─────────────────────────────────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                                      │
-│ Changes      3 modified · 1 untracked                                                                                │
-│ Stash        1                                                                                                       │
-│ Upstream     2 ahead  (origin/main)                                                                                  │
-│ Remote       CI passing  ·  2 open PRs                                                                               │
-│ Last commit  2h ago — fix: retry on 5xx                                                                              │
+├──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ payments  ·  main                                                                                 Enter: full detail │
+│                                                                                                                      │
+│ Changes      3 modified · 1 untracked  │ Last commit  2h ago — fix: retry on 5xx                                     │
+│ Stash        1                         │                                                                             │
+│ Upstream     2 ahead  (origin/main)    │                                                                             │
+│ Remote       CI passing  ·  2 open PRs │                                                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ──────────────────────────────────────────────── press h to hide hints ─────────────────────────────────────────────────
-╭─────────────────────────────────────╮ ╭──────────────────────────────────────╮ ╭─────────────────────────────────────╮
-│               select                │ │            act  → payments           │ │                view                 │
-│ ─────────────────────────────────── │ │ ──────────────────────────────────── │ │ ─────────────────────────────────── │
-│ a mark all       │ Esc clear        │ │ ⏎ open            │ P push           │ │ ↑/↓ move         │ ? help           │
-│ / filter         │                  │ │ f fetch           │ S stash          │ │ s sort           │ q quit           │
-│ ─────────────────────────────────── │ │ p pull            │                  │ │ ─────────────────────────────────── │
-│ Space mark repo                     │ │ ──────────────────────────────────── │ │ d dirty-only                        │
-│                                     │ │ ! run command                        │ │ Tab standup                         │
-╰─────────────────────────────────────╯ ╰──────────────────────────────────────╯ ╰─────────────────────────────────────╯
+╭────────────────────────────────────────┬────────────────────────────────────┬────────────────────────────────────────╮
+│                 select                 │           act → payments           │                  view                  │
+│ ────────────────────────────────────── │ ────────────────────────────────── │ ────────────────────────────────────── │
+│      Space mark repo │ / filter        │      ⏎ open  │ P push              │       ↑/↓ move    │ Tab standup        │
+│      a mark all      │ Esc clear       │      f fetch │ ! run command       │       s sort      │ ? help             │
+│                                        │      p pull  │ S stash             │       d attention │ q quit             │
+╰────────────────────────────────────────┴────────────────────────────────────┴────────────────────────────────────────╯
