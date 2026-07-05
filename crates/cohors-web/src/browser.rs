@@ -321,11 +321,14 @@ fn dashboard(
             .collect::<Vec<_>>()
     };
     let aside = move || {
-        selected
+        let list = repos.get();
+        match selected
             .get()
-            .and_then(|id| repos.get().into_iter().find(|s| s.id.0 == id))
-            .map(|s| detail_panel(&s, now, detail).into_any())
-            .unwrap_or_else(|| hint_panel().into_any())
+            .and_then(|id| list.iter().find(|s| s.id.0 == id).cloned())
+        {
+            Some(s) => detail_panel(&s, now, detail).into_any(),
+            None => hint_panel(&list, now, selected).into_any(),
+        }
     };
 
     view! {
@@ -1801,11 +1804,68 @@ fn working_tree_block(state: DetailState) -> AnyView {
 }
 
 /// The aside's default panel (nothing selected).
-fn hint_panel() -> impl IntoView {
+/// The detail aside when nothing is selected: instead of dead space, it surfaces
+/// the repos that need attention (most urgent first, clickable to jump straight
+/// in) plus a few usage tips. Fills the panel and spans its full width.
+fn hint_panel(
+    repos: &[RepoSnapshot],
+    now: i64,
+    selected: RwSignal<Option<String>>,
+) -> impl IntoView {
+    // Repos that want attention, most urgent first.
+    let mut attn: Vec<(&RepoSnapshot, cohors_core::Assessment)> = repos
+        .iter()
+        .map(|s| (s, assess(s, now)))
+        .filter(|(_, a)| a.needs_attention())
+        .collect();
+    attn.sort_by(|a, b| b.1.severity.cmp(&a.1.severity));
+    let count = attn.len();
+
+    let rows = attn
+        .into_iter()
+        .take(12)
+        .map(|(s, a)| {
+            let id = s.id.0.clone();
+            let name = s.name.clone();
+            let (label, cls) = a
+                .primary
+                .as_ref()
+                .map(|r| (r.label(), severity_class(r.severity())))
+                .unwrap_or_default();
+            view! {
+                <li class="attn-row" on:click=move |_| selected.set(Some(id.clone()))>
+                    <span class="attn-name">{name}</span>
+                    <span class=format!("attn-reason {cls}")>{label}</span>
+                </li>
+            }
+        })
+        .collect::<Vec<_>>();
+
     view! {
         <div class="card">
             <div class="card-title">"Detail"</div>
-            <div class="scroll"><p class="empty">"Select a repository to inspect it."</p></div>
+            <div class="scroll hint">
+                <p class="hint-lead">
+                    "Select a repository to inspect its commits, branches, changes, and pull requests."
+                </p>
+                {(count > 0)
+                    .then(|| {
+                        view! {
+                            <section class="hint-sec">
+                                <div class="sec-h">{format!("Needs attention · {count}")}</div>
+                                <ul class="attn-list">{rows}</ul>
+                            </section>
+                        }
+                    })}
+                <section class="hint-sec">
+                    <div class="sec-h">"Tips"</div>
+                    <ul class="tips">
+                        <li>"Click any repo row to inspect it here."</li>
+                        <li>"Check rows, then " <b>"act on selected"</b> " to run git on a subset."</li>
+                        <li>"Click a column header to sort; " <b>"needs attention"</b> " filters."</li>
+                    </ul>
+                </section>
+            </div>
         </div>
     }
 }

@@ -156,6 +156,28 @@ body {
 .link a:hover { text-decoration: underline; }
 .empty { padding: 1.2rem 0.95rem; color: var(--faint); font-size: 0.82rem; }
 
+/* Filled empty-state for the detail aside: lead line, a clickable needs-attention
+   list, and tips — each section spans the full panel width, tightly packed. */
+.scroll.hint { padding: 0; }
+.hint-lead {
+  margin: 0; padding: 0.8rem 0.95rem; color: var(--dim); font-size: 0.86rem;
+  border-bottom: 1px solid var(--line);
+}
+.hint-sec { padding: 0.7rem 0.95rem; border-bottom: 1px solid var(--line); }
+.hint-sec:last-child { border-bottom: none; }
+.attn-list { list-style: none; margin: 0.4rem 0 0; padding: 0; }
+.attn-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem;
+  padding: 0.28rem 0.4rem; margin: 0 -0.4rem; cursor: pointer; border-radius: 6px;
+  font-family: var(--mono); font-size: 0.78rem;
+}
+.attn-row:hover { background: var(--accent-soft); }
+.attn-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attn-reason { flex: none; font-size: 0.94em; }
+.tips { list-style: none; margin: 0.4rem 0 0; padding: 0; color: var(--dim); font-size: 0.82rem; }
+.tips li { padding: 0.18rem 0; }
+.tips b { color: var(--text); font-weight: 600; }
+
 /* ── Attention chips (quiet: muted text, no coloured fills) ─────────────── */
 .attention { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 .chip {
