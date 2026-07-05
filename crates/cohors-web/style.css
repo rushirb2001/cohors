@@ -585,9 +585,13 @@ td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); backgr
 .fleet th.sortable { cursor: pointer; user-select: none; }
 .fleet th.sortable:hover { color: var(--text); }
 .fleet th.sorted { color: var(--accent); }
-.fleet th .caret { color: var(--accent); }
+/* The ⇅ affordance is faint on idle columns; the active column's ↓ takes the
+   accent. Hovering an idle column lifts its arrow so it reads as clickable. */
+.fleet th .caret { color: var(--faint); font-size: 0.9em; }
+.fleet th.sortable:hover .caret { color: var(--dim); }
+.fleet th.sorted .caret { color: var(--accent); }
 
-/* Results modal: a wider modal with a per-repo outcome list. */
+/* Results modal — git verbs: a per-repo outcome list (marker · name · message). */
 .modal.results { min-width: 460px; max-width: 640px; }
 .res-list { list-style: none; margin: 0 0 14px; padding: 0; max-height: 52vh; overflow-y: auto; }
 .res-row {
@@ -596,19 +600,47 @@ td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); backgr
   font-family: var(--mono); font-size: 12.5px;
 }
 .res-row:last-child { border-bottom: none; }
-.res-mark { text-align: center; font-weight: 700; }
-.res-row.ok .res-mark { color: var(--green); }
-.res-row.skip .res-mark { color: var(--amber); }
-.res-row.fail .res-mark { color: var(--red); }
-.res-repo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .res-msg { color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
 .res-row.fail .res-msg { color: var(--red); }
 .res-row.skip .res-msg { color: var(--amber); }
-/* `run` output, collapsed by default; spans the full row width when open. */
-.run-out { grid-column: 1 / -1; margin-top: 4px; }
-.run-out > summary { cursor: pointer; color: var(--faint); font-size: 11.5px; }
-.run-out pre {
-  margin: 4px 0 0; padding: 8px 10px; max-height: 16rem; overflow: auto;
-  background: #fbfbfc; border: 1px solid var(--border); border-radius: 6px;
-  font-size: 11.5px; line-height: 1.45; white-space: pre-wrap; color: var(--text);
+
+/* Shared marker + repo cell (both the flat list and the run list). */
+.res-mark { text-align: center; font-weight: 700; }
+.res-repo { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.ok .res-mark { color: var(--green); }
+.skip .res-mark { color: var(--amber); }
+.fail .res-mark { color: var(--red); }
+
+/* Results modal — `run`: the TUI's master-detail. A wide modal split into a
+   repo list (left) and the focused repo's captured output (right). */
+.modal.results.run { min-width: 780px; max-width: 900px; }
+.run-panes {
+  display: grid; grid-template-columns: 240px 1fr; margin-bottom: 14px;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  min-height: 240px;
 }
+.run-list {
+  list-style: none; margin: 0; padding: 0; max-height: 56vh; overflow-y: auto;
+  border-right: 1px solid var(--border);
+}
+.run-item {
+  display: grid; grid-template-columns: 1.3em 1fr auto; gap: 0.4rem;
+  align-items: baseline; padding: 5px 10px; cursor: pointer;
+  border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px;
+}
+.run-item:last-child { border-bottom: none; }
+.run-item:hover { background: #fafafb; }
+.run-item.focused { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
+.run-item .run-exit { color: var(--faint); font-size: 11px; }
+.run-item.fail .run-exit { color: var(--red); }
+.run-out-pane {
+  max-height: 56vh; overflow: auto; padding: 10px 14px;
+  font-family: var(--mono); font-size: 11.5px;
+}
+.run-head { font-weight: 700; margin-bottom: 6px; }
+.run-head.ok { color: var(--green); }
+.run-head.risk { color: var(--red); }
+.run-stream { margin: 0; white-space: pre-wrap; line-height: 1.45; color: var(--text); }
+.run-stream.err { color: var(--amber); }
+.run-stderr-h { color: var(--dim); margin: 8px 0 2px; }
+.run-empty { color: var(--faint); margin: 0; }

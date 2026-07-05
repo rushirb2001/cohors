@@ -472,7 +472,9 @@ fn sort_th(label: &'static str, mode: SortMode, sort: RwSignal<SortMode>) -> imp
             title="Sort by this column"
         >
             {label}
-            <span class="caret">{move || if active() { " ↓" } else { "" }}</span>
+            // A faint ⇅ marks every sortable column; the active one shows a solid
+            // ↓ in the accent colour, so the affordance is always visible.
+            <span class="caret">{move || if active() { " ↓" } else { " ⇅" }}</span>
         </th>
     }
 }
@@ -791,15 +793,27 @@ struct ActionResult {
     rows: Vec<ResultRow>,
 }
 
-/// One repo's line in the results modal.
+/// One repo's outcome in the results modal.
 #[derive(Clone)]
 struct ResultRow {
+    /// Short repo name (the directory name, not the full path id).
     repo: String,
     /// "ok" | "skip" | "fail" — drives the colour and the marker.
     state: &'static str,
+    /// The one-line outcome: a git status message, or `run`'s "exit N".
     message: String,
-    /// Command output (`run` only), shown in a collapsible block.
-    output: Option<String>,
+    /// `run` command output (empty for git verbs).
+    stdout: String,
+    stderr: String,
+}
+
+/// The marker glyph for a result state (matches the TUI's ✓/⊘/✗).
+fn mark_glyph(state: &str) -> &'static str {
+    match state {
+        "ok" => "✓",
+        "skip" => "⊘",
+        _ => "✗",
+    }
 }
 
 /// Parse an action response into an [`ActionResult`]. Handles both the git-verb
@@ -823,11 +837,10 @@ fn parse_result(
     let rows: Vec<ResultRow> = raw
         .iter()
         .map(|r| {
-            let repo = r
-                .get("repo")
-                .and_then(|x| x.as_str())
-                .unwrap_or("?")
-                .to_string();
+            // The `repo` field is the id — for scanned repos that's the full
+            // path, so show just the final component (the repo's own name).
+            let id = r.get("repo").and_then(|x| x.as_str()).unwrap_or("?");
+            let repo = id.rsplit(['/', '\\']).next().unwrap_or(id).to_string();
             let ok = r.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
             let skipped = r.get("skipped").and_then(|x| x.as_bool()).unwrap_or(false);
             let state = if skipped {
@@ -843,40 +856,37 @@ fn parse_result(
                     .get("timed_out")
                     .and_then(|x| x.as_bool())
                     .unwrap_or(false);
-                let stdout = r.get("stdout").and_then(|x| x.as_str()).unwrap_or("");
-                let stderr = r.get("stderr").and_then(|x| x.as_str()).unwrap_or("");
                 let message = if timed_out {
                     "timed out".to_string()
                 } else {
                     format!("exit {code}")
                 };
-                let mut output = String::new();
-                if !stdout.is_empty() {
-                    output.push_str(stdout);
-                }
-                if !stderr.is_empty() {
-                    if !output.is_empty() {
-                        output.push('\n');
-                    }
-                    output.push_str(stderr);
-                }
                 ResultRow {
                     repo,
                     state,
                     message,
-                    output: (!output.is_empty()).then_some(output),
+                    stdout: r
+                        .get("stdout")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    stderr: r
+                        .get("stderr")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                 }
             } else {
-                let message = r
-                    .get("message")
-                    .and_then(|x| x.as_str())
-                    .unwrap_or("")
-                    .to_string();
                 ResultRow {
                     repo,
                     state,
-                    message,
-                    output: None,
+                    message: r
+                        .get("message")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    stdout: String::new(),
+                    stderr: String::new(),
                 }
             }
         })
@@ -899,45 +909,35 @@ fn parse_result(
     })
 }
 
-/// The results modal: a per-repo outcome list after an action runs — ok/skip/
-/// fail markers, the message (git verbs) or exit + collapsible output (`run`).
-/// The web equivalent of the TUI's action-result rows.
+/// The results modal. Git verbs get a simple per-repo outcome list. `run`
+/// mirrors the TUI: a master-detail — a compact repo list on the left (marker +
+/// name + exit) and the focused repo's captured output on the right.
 fn result_modal(result: RwSignal<Option<ActionResult>>) -> impl IntoView {
+    // Which repo's output the run pane shows; reset whenever a new result opens.
+    let focus = RwSignal::new(0usize);
+    Effect::new(move |_| {
+        let _ = result.get();
+        focus.set(0);
+    });
     move || {
         result.get().map(|r| {
             let title = format!("{} — {}", r.verb, r.summary);
-            let rows = r
-                .rows
-                .iter()
-                .map(|row| {
-                    let marker = match row.state {
-                        "ok" => "✓",
-                        "skip" => "⊘",
-                        _ => "✗",
-                    };
-                    let output = row.output.clone().map(|o| {
-                        view! {
-                            <details class="run-out">
-                                <summary>"output"</summary>
-                                <pre>{o}</pre>
-                            </details>
-                        }
-                    });
-                    view! {
-                        <li class=format!("res-row {}", row.state)>
-                            <span class="res-mark">{marker}</span>
-                            <span class="res-repo">{row.repo.clone()}</span>
-                            <span class="res-msg">{row.message.clone()}</span>
-                            {output}
-                        </li>
-                    }
-                })
-                .collect::<Vec<_>>();
+            let is_run = r.verb == "run";
+            let modal_class = if is_run {
+                "modal results run"
+            } else {
+                "modal results"
+            };
+            let body = if is_run {
+                run_result_body(r.rows.clone(), focus).into_any()
+            } else {
+                list_result_body(&r.rows).into_any()
+            };
             view! {
                 <div class="overlay" on:click=move |_| result.set(None)>
-                    <div class="modal results" on:click=|ev| ev.stop_propagation()>
+                    <div class=modal_class on:click=|ev| ev.stop_propagation()>
                         <h3>{title}</h3>
-                        <ul class="res-list">{rows}</ul>
+                        {body}
                         <div class="modal-actions">
                             <button class="confirm" on:click=move |_| result.set(None)>
                                 "Done"
@@ -947,6 +947,82 @@ fn result_modal(result: RwSignal<Option<ActionResult>>) -> impl IntoView {
                 </div>
             }
         })
+    }
+}
+
+/// Git-verb results: a flat list of `marker name — message` rows.
+fn list_result_body(rows: &[ResultRow]) -> impl IntoView {
+    let items = rows
+        .iter()
+        .map(|row| {
+            view! {
+                <li class=format!("res-row {}", row.state)>
+                    <span class="res-mark">{mark_glyph(row.state)}</span>
+                    <span class="res-repo">{row.repo.clone()}</span>
+                    <span class="res-msg">{row.message.clone()}</span>
+                </li>
+            }
+        })
+        .collect::<Vec<_>>();
+    view! { <ul class="res-list">{items}</ul> }
+}
+
+/// `run` results: the TUI's master-detail. The left list selects a repo; the
+/// right pane shows that repo's exit line, stdout, and a stderr section.
+fn run_result_body(rows: Vec<ResultRow>, focus: RwSignal<usize>) -> impl IntoView {
+    let rows_out = rows.clone();
+    let list = rows
+        .iter()
+        .enumerate()
+        .map(|(i, row)| {
+            let state = row.state;
+            let repo = row.repo.clone();
+            let message = row.message.clone();
+            view! {
+                <li
+                    class=format!("run-item {state}")
+                    class:focused=move || focus.get() == i
+                    on:click=move |_| focus.set(i)
+                >
+                    <span class="res-mark">{mark_glyph(state)}</span>
+                    <span class="res-repo">{repo}</span>
+                    <span class="run-exit">{message}</span>
+                </li>
+            }
+        })
+        .collect::<Vec<_>>();
+
+    let output = move || {
+        let n = rows_out.len();
+        if n == 0 {
+            return ().into_any();
+        }
+        let row = rows_out[focus.get().min(n - 1)].clone();
+        let exit_class = if row.state == "ok" { "ok" } else { "risk" };
+        let stdout = (!row.stdout.is_empty())
+            .then(|| view! { <pre class="run-stream">{row.stdout.clone()}</pre> });
+        let stderr = (!row.stderr.is_empty()).then(|| {
+            view! {
+                <div class="run-stderr-h">"── stderr ──"</div>
+                <pre class="run-stream err">{row.stderr.clone()}</pre>
+            }
+        });
+        let empty = (row.stdout.is_empty() && row.stderr.is_empty())
+            .then(|| view! { <p class="run-empty">"(no output)"</p> });
+        view! {
+            <div class=format!("run-head {exit_class}")>{row.message.clone()}</div>
+            {stdout}
+            {stderr}
+            {empty}
+        }
+        .into_any()
+    };
+
+    view! {
+        <div class="run-panes">
+            <ul class="run-list">{list}</ul>
+            <div class="run-out-pane">{output}</div>
+        </div>
     }
 }
 
