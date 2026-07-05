@@ -1,6 +1,7 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 20)"
+assertion_line: 3591
+expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
@@ -8,17 +9,19 @@ expression: "render_to_string(&app, 100, 20)"
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
+│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo                    Sync   Changes  Stash  PRs    CI       Last  Status                   │
-│▌   legacy-billing                                                       could not read .git (per…│
-│    payments @main          ↑2     4        1      2      passing    2h  ↑2 unpushed              │
-│    web-app @feat/checkout  ↓5     7        0      0      failing   20m  ↓5 behind — pull         │
+╭ Repositorie╭ Shell command ─────────────────────────────────────────────────────────╮────────────╮
+│    Repo    │ : !git checkout main▏                                                  │            │
+│▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │d .git (per…│
+│    payments│ ▌ :!<cmd>                  │ run any shell command across the targets  │            │
+│    web-app ╰────────────────────────────────────────────────────────────────────────╯ull         │
 │    infra @a1b2c3d          local  4        0      local  local      1w  4 uncommitted changes    │
 │    auth-service @main      local  0        0      1      pending    3d  up to date               │
 │ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                  │
 │ ⚠ could not read .git (permission denied)                                                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-───────────────────────────────────── press h to unhide hints ──────────────────────────────────────
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ⏎ run · Esc cancel                                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -1,5 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
+assertion_line: 3814
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,7 +9,7 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▀▐▖▀█▀│ You authored 29 commits this week across 2 repos, shipping 24 features and       │       │
 ╰───────│ fixing 5 bugs.                                                                   │───────╯
 ╭ Attent│                                                                                  │───────╮
-│ 1 unpu│                                                                                  │       │
+│ 1 at r│                                                                                  │       │
 ╰───────│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │───────╯
 ╭ Reposi│ │ payments  24           │  │ aa00010  feat: payments work item 10            ║│ │───────╮
 │    Rep│ │ web-app  5             │  │ aa00011  feat: payments work item 11            ║│ │       │

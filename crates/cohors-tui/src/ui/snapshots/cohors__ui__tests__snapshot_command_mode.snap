@@ -1,5 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui.rs
+assertion_line: 3582
 expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -8,16 +9,16 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                                       │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositorie╭ Shell command ─────────────────────────────────────────────────────────╮────────────╮
-│    Repo    │ : !git checkout main▏                                                  │            │
-│▌   legacy-b│ ────────────────────────────────────────────────────────────────────── │d .git (per…│
-│    payments│ ▌ :!<cmd>                  │ run any shell command across the targets  │            │
-│    web-app ╰────────────────────────────────────────────────────────────────────────╯ull         │
-│    infra @a1b2c3d          local  4        0      local  local      1w  4 uncommitted changes    │
-│    auth-service @main      local  0        0      1      pending    3d  up to date               │
-│ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail │
+│ 1 at risk ·╭ Command ───────────────────────────────────────────────────────────────╮            │
+╰────────────│ : sort name▏                                                           │────────────╯
+╭ Repositorie│ ────────────────────────────────────────────────────────────────────── │────────────╮
+│    Repo    │ :fetch :pull :push         │ sync the targets with their remotes       │            │
+│▌   legacy-b│ :!<cmd>                    │ run any shell command across the targets  │d .git (per…│
+│    payments│ :sort <name·dirty·recent>  │ change the sort order                     │            │
+│    web-app │ :dirty   /<text>           │ dirty-only · fuzzy filter                 │ull         │
+│    infra @a│ :jump <repo>               │ move the cursor to a repo                 │ changes    │
+│    auth-ser│ :standup :refresh :quit    │ standup · rescan · exit                   │            │
+│ legacy-bill╰────────────────────────────────────────────────────────────────────────╯full detail │
 │                                                                                                  │
 │ ⚠ could not read .git (permission denied)                                                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -1,6 +1,7 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 18)"
+assertion_line: 3663
+expression: "render_to_string(&app, 100, 26)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    (demo)                              │
@@ -8,7 +9,7 @@ expression: "render_to_string(&app, 100, 18)"
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
-│ 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                             │
+│ 2 at risk · 4 unpushed (1 aging) · 3 behind · 6 dirty · 2 stashed · 1 unreadable                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
 │    Repo                     Sync         Changes  Last commit                                    │
@@ -16,7 +17,15 @@ expression: "render_to_string(&app, 100, 18)"
 │    mobile-app @release/2.0  ↑4 ↓1 ● 3pr  4         9h  feat: biometric unlock                    │
 │    payments @main           ↑2 ● 2pr     3         2h  fix: retry charge on 5xx from processor   │
 │    analytics @main          ↑1 ●         0 s2      4d  perf: precompute funnel rollups           │
-│    design-system @main      ↑1 ● 1pr     0 s1      6h  feat: dark-mode tokens                    │
-│                                             ↓ 7 more                                             │
+│                                             ↓ 8 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-───────────────────────────────────── press h to unhide hints ──────────────────────────────────────
+────────────────────────────────────── press h to hide hints ───────────────────────────────────────
+╭───────────────────────────────╮ ╭──────────────────────────────╮ ╭───────────────────────────────╮
+│            select             │ │     act  → legacy-billing    │ │             view              │
+│ ───────────────────────────── │ │ ──────────────────────────── │ │ ───────────────────────────── │
+│ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
+│ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │
+│ ───────────────────────────── │ │ p pull        │              │ │ ───────────────────────────── │
+│ Space mark repo               │ │ ──────────────────────────── │ │ d dirty-only                  │
+│                               │ │ ! run command                │ │ Tab standup                   │
+╰───────────────────────────────╯ ╰──────────────────────────────╯ ╰───────────────────────────────╯

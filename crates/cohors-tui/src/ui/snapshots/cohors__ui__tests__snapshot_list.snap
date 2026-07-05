@@ -1,34 +1,21 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 34)"
+assertion_line: 3411
+expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    (demo)                              │
-│ ▟██▌█▐██▙  All your git repositories at a glance   │  config (demo)                              │
-│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 1w                                  │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
+│ ▟██▌█▐██▙  All your git repositories at a glance   │  config ….config/cohors/config.toml         │
+│ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (1 of 1 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 unpushed (1 aging)                                                                             │
+╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
+│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                           │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (1) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo               Sync  Changes  Stash  PRs    CI     Last  Status                           │
-│▌   load-tester @main  ↑1    0        0      local  local    1w  ↑1 unpushed · aging              │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
-│ load-tester  ·  main ──────────────────────────────────────────────────────── Enter: full detail │
-│                                                                                                  │
-│ Changes      clean                                                                               │
-│ Stash        none                                                                                │
-│ Upstream     1 ahead  (origin/main)                                                              │
-│ Remote       no GitHub remote                                                                    │
-│ Last commit  1w ago — chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC   │
-│              pgbench) + ignore results and refresh the CI perf matrix                            │
+╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭───────────────────────────────╮ ╭──────────────────────────────╮ ╭───────────────────────────────╮
-│            select             │ │      act  → load-tester      │ │             view              │
+│            select             │ │     act  → legacy-billing    │ │             view              │
 │ ───────────────────────────── │ │ ──────────────────────────── │ │ ───────────────────────────── │
 │ a mark all    │ Esc clear     │ │ ⏎ open        │ P push       │ │ ↑/↓ move      │ ? help        │
 │ / filter      │               │ │ f fetch       │ S stash      │ │ s sort        │ q quit        │

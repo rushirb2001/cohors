@@ -1,6 +1,7 @@
 ---
 source: crates/cohors-tui/src/ui.rs
-expression: "render_to_string(&app, 100, 22)"
+assertion_line: 3459
+expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  dir    ~/projects (+1)                     │
@@ -8,19 +9,17 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 unpushed ╭ Command ───────────────────────────────────────────────────────────────╮            │
-╰────────────│ : sort name▏                                                           │────────────╯
-╭ Repositorie│ ────────────────────────────────────────────────────────────────────── │────────────╮
-│    Repo    │ :fetch :pull :push         │ sync the targets with their remotes       │            │
-│▌   legacy-b│ :!<cmd>                    │ run any shell command across the targets  │d .git (per…│
-│    payments│ :sort <name·dirty·recent>  │ change the sort order                     │            │
-│    web-app │ :dirty   /<text>           │ dirty-only · fuzzy filter                 │ull         │
-│    infra @a│ :jump <repo>               │ move the cursor to a repo                 │ changes    │
-│    auth-ser│ :standup :refresh :quit    │ standup · rescan · exit                   │            │
-│ legacy-bill╰────────────────────────────────────────────────────────────────────────╯full detail │
+│ 1 at risk · 1 unpushed · 1 behind · 3 dirty · 1 stashed · 1 unreadable                           │
+╰───────────────────────╭ Open legacy-billing with… ───────────────────────╮───────────────────────╯
+╭ Repositories (5) · sor│ ▌ VS Code  · default                             │───────────────────────╮
+│    Repo               │   Neovim                                         │                       │
+│▌   legacy-billing     │   Reveal in file manager                         │                       │
+│    payments @main     │   Open in lazygit                                │                       │
+│    web-app @feat/check╰──────────────────────────────────────────────────╯                       │
+│    infra @a1b2c3d          local     4         1w  build: pin ci image                           │
+│    auth-service @main      ● 1pr     0         3d  chore: bump deps                              │
 │                                                                                                  │
-│ ⚠ could not read .git (permission denied)                                                        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ⏎ run · Esc cancel                                                                               │
+│ ↑/↓ choose · ⏎ open · d set default · Esc cancel                                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
