@@ -586,14 +586,13 @@ th.act, td.act { width: 4em; }
   .st-full { display: none; }
   .st-compact { display: inline-flex; align-items: center; gap: 0.25rem; }
 }
-/* Row-level act trigger: a quiet chip that only lifts on hover, so the column
-   of triggers doesn't shout down the data. */
+/* Row-level git-action trigger: an outlined box so it reads as a clickable
+   control, accenting on hover. */
 td.act .dd-btn {
-  border: 1px solid transparent; border-radius: 6px; padding: 2px 7px;
-  background: transparent; color: var(--faint); font-size: 12px;
+  border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px;
+  background: var(--panel); color: var(--dim); font-size: 0.72rem;
 }
-td.act .dd-btn:hover { border-color: var(--border); color: var(--accent); background: var(--panel); }
-.fleet tbody tr:hover td.act .dd-btn { color: var(--dim); }
+td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 
 /* Repositories subhead: label, then the filter takes the slack, then the
    needs-attention toggle and the act controls pinned right. */

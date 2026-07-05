@@ -445,7 +445,7 @@ fn dashboard(
                                     {sort_th("Last", SortMode::Recent, sort)}
                                     <th>"Activity"</th>
                                     {sort_th("Status", SortMode::DirtyFirst, sort)}
-                                    <th class="act">"Act"</th>
+                                    <th class="act">"Git"</th>
                                     <th class="spacer"></th>
                                 </tr>
                             </thead>
