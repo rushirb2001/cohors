@@ -327,7 +327,7 @@ fn dashboard(
             .and_then(|id| list.iter().find(|s| s.id.0 == id).cloned())
         {
             Some(s) => detail_panel(&s, now, detail).into_any(),
-            None => hint_panel(&list, now, selected).into_any(),
+            None => hint_panel().into_any(),
         }
     };
 
@@ -1289,6 +1289,39 @@ fn activity_icon() -> impl IntoView {
     icon! { <path d="M3 12h4l3 8 4-16 3 8h4" /> }
 }
 
+/// Mouse pointer — the "click a row to inspect" tip.
+fn cursor_icon() -> impl IntoView {
+    icon! {
+        <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" />
+    }
+}
+
+/// Checkbox — the "check rows to select" tip.
+fn check_square_icon() -> impl IntoView {
+    icon! {
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="m9 12 2 2 4-4" />
+    }
+}
+
+/// Up/down arrows — the "sort / filter" tip.
+fn sort_icon() -> impl IntoView {
+    icon! {
+        <path d="m21 16-4 4-4-4" />
+        <path d="M17 20V4" />
+        <path d="m3 8 4-4 4 4" />
+        <path d="M7 4v16" />
+    }
+}
+
+/// Magnifier — the "filter by name" tip.
+fn search_icon() -> impl IntoView {
+    icon! {
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+    }
+}
+
 /// Folder — the scanned fleet root in the header.
 fn folder_icon() -> impl IntoView {
     icon! {
@@ -1802,43 +1835,11 @@ fn working_tree_block(state: DetailState) -> AnyView {
 }
 
 /// The aside's default panel (nothing selected).
-/// The detail aside when nothing is selected: instead of dead space, it surfaces
-/// the repos that need attention (most urgent first, clickable to jump straight
-/// in) plus a few usage tips. Fills the panel and spans its full width.
-fn hint_panel(
-    repos: &[RepoSnapshot],
-    now: i64,
-    selected: RwSignal<Option<String>>,
-) -> impl IntoView {
-    // Repos that want attention, most urgent first.
-    let mut attn: Vec<(&RepoSnapshot, cohors_core::Assessment)> = repos
-        .iter()
-        .map(|s| (s, assess(s, now)))
-        .filter(|(_, a)| a.needs_attention())
-        .collect();
-    attn.sort_by_key(|(_, a)| std::cmp::Reverse(a.severity));
-    let count = attn.len();
-
-    let rows = attn
-        .into_iter()
-        .take(12)
-        .map(|(s, a)| {
-            let id = s.id.0.clone();
-            let name = s.name.clone();
-            let (label, cls) = a
-                .primary
-                .as_ref()
-                .map(|r| (r.label(), severity_class(r.severity())))
-                .unwrap_or_default();
-            view! {
-                <li class="attn-row" on:click=move |_| selected.set(Some(id.clone()))>
-                    <span class="attn-name">{name}</span>
-                    <span class=format!("attn-reason {cls}")>{label}</span>
-                </li>
-            }
-        })
-        .collect::<Vec<_>>();
-
+/// The detail aside when nothing is selected: a short lead line plus a tinted,
+/// icon-led "getting started" card — the tips a first-time user needs. The
+/// fleet's state already lives in the table and the Overview chips, so this
+/// panel deliberately stays a guide, not a second status view.
+fn hint_panel() -> impl IntoView {
     view! {
         <div class="card">
             <div class="card-title">"Detail"</div>
@@ -1846,23 +1847,42 @@ fn hint_panel(
                 <p class="hint-lead">
                     "Select a repository to inspect its commits, branches, changes, and pull requests."
                 </p>
-                {(count > 0)
-                    .then(|| {
-                        view! {
-                            <section class="hint-sec">
-                                <div class="sec-h">{format!("Needs attention · {count}")}</div>
-                                <ul class="attn-list">{rows}</ul>
-                            </section>
-                        }
-                    })}
-                <section class="hint-sec">
-                    <div class="sec-h">"Tips"</div>
+                <div class="tips-card">
+                    <div class="tips-h">"Getting started"</div>
                     <ul class="tips">
-                        <li>"Click any repo row to inspect it here."</li>
-                        <li>"Check rows, then " <b>"act on selected"</b> " to run git on a subset."</li>
-                        <li>"Click a column header to sort; " <b>"needs attention"</b> " filters."</li>
+                        <li>
+                            <span class="tip-ic">{cursor_icon()}</span>
+                            <span>
+                                "Click any repo row to inspect its commits, branches, changes, and PRs."
+                            </span>
+                        </li>
+                        <li>
+                            <span class="tip-ic">{check_square_icon()}</span>
+                            <span>
+                                "Check rows, then " <b>"act on selected"</b>
+                                " to run git on just those repos."
+                            </span>
+                        </li>
+                        <li>
+                            <span class="tip-ic">{branch_icon()}</span>
+                            <span>
+                                <b>"act on all"</b>
+                                " fetches, pulls, or commits across the whole fleet — with a preview first."
+                            </span>
+                        </li>
+                        <li>
+                            <span class="tip-ic">{sort_icon()}</span>
+                            <span>
+                                "Click a column header to sort; " <b>"needs attention"</b>
+                                " filters to what wants you."
+                            </span>
+                        </li>
+                        <li>
+                            <span class="tip-ic">{search_icon()}</span>
+                            <span>"Filter the fleet by name with the search box up top."</span>
+                        </li>
                     </ul>
-                </section>
+                </div>
             </div>
         </div>
     }
