@@ -12,19 +12,19 @@ expression: "render_to_string(&app, 100, 26)"
 │ 535 commits · 12 weeks         │ │ 2 at risk · 4 warning · 4 minor · 2 calm                      │
 ╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
 ╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│    Repo                     Sync   Stash  PRs    CI       Last  Activity      Status             │
-│▌   legacy-billing                                                             could not read .gi…│
-│    mobile-app @release/2.0  ↑4 ↓1  0      3      pending    9h  ▃█▄█▅▁▆▂▇▃█▄  ↑4↓1 diverged      │
-│    payments @main           ↑2     0      2      passing    2h  ▅▁▅▁▆▂▇▃█▄█▅  ↑2 unpushed        │
-│    analytics @main          ↑1     2      0      passing    4d  ▃█▄█▅▁▆▂▇▃█▄  ↑1 unpushed · aging│
-│                                             ↓ 8 more                                             │
-│ legacy-billing  ·  unborn ─────────────────────────────────────────────────── Enter: full detail │
-│                                                                                                  │
-│ ⚠ could not read .git (permission denied)                                                        │
+│    Repo                     Sync         Stash  Last  Status                                     │
+│▌   legacy-billing                                     could not read .git (permission denied)    │
+│    mobile-app @release/2.0  ↑4 ↓1 ● 3pr  0        9h  ↑4↓1 diverged                              │
+│    payments @main           ↑2 ● 2pr     0        2h  ↑2 unpushed                                │
+│    analytics @main          ↑1 ●         2        4d  ↑1 unpushed · aging                        │
+│    design-system @main      ↑1 ● 1pr     1        6h  ↑1 unpushed                                │
+│    web-app @feat/checkout   ↓5 ● 1pr     0       20m  ↓5 behind — pull                           │
+│                                             ↓ 6 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭───────────────────────────────┬───────────────────────────┬──────────────────────────────────────╮
-│ select                        │ act → legacy-billing      │ view                                 │
-│ Space mark repo  / filter     │ ⏎ open   P push           │ ↑/↓ move     Tab standup   q quit    │
-│ a mark all       Esc clear    │ f fetch  ! run command    │ s sort       h hide hints            │
-│                               │ p pull   S stash          │ d attention  ? help                  │
-╰───────────────────────────────┴───────────────────────────┴──────────────────────────────────────╯
+╭──────────────────────────────┬──────────────────────────┬────────────────────────────────────────╮
+│            select            │   act → legacy-billing   │                  view                  │
+│ ──────────────────────────── │ ──────────────────────── │ ────────────────────────────────────── │
+│ Space mark repo │ / filter   │ ⏎ open  │ P push         │  ↑/↓ move    │ Tab standup  │ q quit   │
+│ a mark all      │ Esc clear  │ f fetch │ ! run command  │  s sort      │ h hide hints │          │
+│                              │ p pull  │ S stash        │  d attention │ ? help       │          │
+╰──────────────────────────────┴──────────────────────────┴────────────────────────────────────────╯

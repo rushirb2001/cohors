@@ -13,12 +13,12 @@ expression: "render_to_string(&app, 100, 20)"
 ╰────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
 │    Repo                    Sync      Stash  Last  Status                                         │
-│▌   legacy-billing                                 could not read .git (permission denied)        │
 │                                             ↓ 4 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭───────────────────────────────┬───────────────────────────┬──────────────────────────────────────╮
-│ select                        │ act → legacy-billing      │ view                                 │
-│ Space mark repo  / filter     │ ⏎ open   P push           │ ↑/↓ move     Tab standup   q quit    │
-│ a mark all       Esc clear    │ f fetch  ! run command    │ s sort       h hide hints            │
-│                               │ p pull   S stash          │ d attention  ? help                  │
-╰───────────────────────────────┴───────────────────────────┴──────────────────────────────────────╯
+╭──────────────────────────────┬──────────────────────────┬────────────────────────────────────────╮
+│            select            │   act → legacy-billing   │                  view                  │
+│ ──────────────────────────── │ ──────────────────────── │ ────────────────────────────────────── │
+│ Space mark repo │ / filter   │ ⏎ open  │ P push         │  ↑/↓ move    │ Tab standup  │ q quit   │
+│ a mark all      │ Esc clear  │ f fetch │ ! run command  │  s sort      │ h hide hints │          │
+│                              │ p pull  │ S stash        │  d attention │ ? help       │          │
+╰──────────────────────────────┴──────────────────────────┴────────────────────────────────────────╯

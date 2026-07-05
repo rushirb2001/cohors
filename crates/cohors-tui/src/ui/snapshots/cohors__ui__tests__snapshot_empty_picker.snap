@@ -9,10 +9,10 @@ expression: "render_to_string(&app, 100, 14)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
                                    No git repos under: ~/projects                                   
                                                                                                     
-                                  Found repos under: ~/code, ~/work                                 
-╭───────────────────────────────┬───────────────────────────┬──────────────────────────────────────╮
-│ select                        │ act                       │ view                                 │
-│ Space mark repo  / filter     │ ⏎ open   P push           │ ↑/↓ move     Tab standup   q quit    │
-│ a mark all       Esc clear    │ f fetch  ! run command    │ s sort       h hide hints            │
-│                               │ p pull   S stash          │ d attention  ? help                  │
-╰───────────────────────────────┴───────────────────────────┴──────────────────────────────────────╯
+╭──────────────────────────────┬──────────────────────────┬────────────────────────────────────────╮
+│            select            │            act           │                  view                  │
+│ ──────────────────────────── │ ──────────────────────── │ ────────────────────────────────────── │
+│ Space mark repo │ / filter   │ ⏎ open  │ P push         │  ↑/↓ move    │ Tab standup  │ q quit   │
+│ a mark all      │ Esc clear  │ f fetch │ ! run command  │  s sort      │ h hide hints │          │
+│                              │ p pull  │ S stash        │  d attention │ ? help       │          │
+╰──────────────────────────────┴──────────────────────────┴────────────────────────────────────────╯

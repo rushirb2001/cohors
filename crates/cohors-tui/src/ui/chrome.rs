@@ -485,14 +485,17 @@ pub(crate) fn footer_bar_geometry(app: &App) -> (Vec<u16>, u16, u16) {
                 .map(|(k, d)| footer_item_w(k, d))
                 .max()
                 .unwrap_or(0) as u16;
-            grid += col + if i > 0 { 2 } else { 0 };
+            // Columns are joined by ` │ ` (a light divider with a space each
+            // side), so each junction costs 3 cells.
+            grid += col + if i > 0 { 3 } else { 0 };
         }
         let label_w = label.chars().count() as u16; // the label row must fit too
         widths.push(grid.max(label_w) + 2); // 1-col padding each side
     }
     let dividers = widths.len().saturating_sub(1) as u16;
     let total = widths.iter().sum::<u16>() + dividers + 2; // + the outer borders
-    (widths, 1 + grid_rows as u16, total)
+    // label row + its rule + the grid.
+    (widths, 2 + grid_rows as u16, total)
 }
 
 /// The consolidated hint bar: ONE bordered box, split into the `select` /
@@ -562,11 +565,15 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
             width: rect.width.saturating_sub(2),
             ..*rect
         };
-        let [label_area, grid_area] =
-            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(content);
+        let [label_area, rule_area, grid_area] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(content);
 
-        // The label row, inside the box — never on the border; `act` carries
-        // the live target beside it.
+        // The centered header row, inside the box — never on the border; `act`
+        // carries the live target beside it.
         let mut label_spans = vec![Span::styled(
             label.to_string(),
             theme.dim().add_modifier(Modifier::BOLD),
@@ -583,9 +590,22 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
                 theme.highlight(),
             ));
         }
-        frame.render_widget(Paragraph::new(Line::from(label_spans)), label_area);
+        frame.render_widget(
+            Paragraph::new(Line::from(label_spans)).alignment(Alignment::Center),
+            label_area,
+        );
 
-        // The fitted hint columns, order preserved down-then-across.
+        // A dim rule under the header, spanning the section's content width.
+        frame.render_widget(
+            Paragraph::new(Line::from(Span::styled(
+                "─".repeat(rule_area.width as usize),
+                theme.dim(),
+            ))),
+            rule_area,
+        );
+
+        // The fitted hint columns (order preserved down-then-across), centered
+        // as a group and separated by light `│` dividers.
         let hint = |(k, d): &(&str, &str)| {
             Line::from(vec![
                 Span::styled((*k).to_string(), key_style),
@@ -593,27 +613,46 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
             ])
         };
         let chunks: Vec<_> = footer_bar_columns(items).collect();
-        let col_cons: Vec<Constraint> = chunks
+        let col_ws: Vec<u16> = chunks
             .iter()
-            .enumerate()
-            .map(|(i, chunk)| {
-                if i == chunks.len() - 1 {
-                    Constraint::Min(0)
-                } else {
-                    Constraint::Length(
-                        chunk
-                            .iter()
-                            .map(|(k, d)| footer_item_w(k, d))
-                            .max()
-                            .unwrap_or(0) as u16,
-                    )
-                }
+            .map(|chunk| {
+                chunk
+                    .iter()
+                    .map(|(k, d)| footer_item_w(k, d))
+                    .max()
+                    .unwrap_or(0) as u16
             })
             .collect();
-        let col_rects = Layout::horizontal(col_cons).spacing(2).split(grid_area);
-        for (chunk, col_rect) in chunks.iter().zip(col_rects.iter()) {
-            let text = Text::from(chunk.iter().map(hint).collect::<Vec<_>>());
-            frame.render_widget(Paragraph::new(text), *col_rect);
+        let grid_w: u16 = col_ws.iter().sum::<u16>() + 3 * chunks.len().saturating_sub(1) as u16;
+        let grid = Rect {
+            x: grid_area.x + grid_area.width.saturating_sub(grid_w) / 2,
+            width: grid_w.min(grid_area.width),
+            ..grid_area
+        };
+        let mut col_cons: Vec<Constraint> = Vec::new();
+        for (i, w) in col_ws.iter().enumerate() {
+            if i > 0 {
+                col_cons.push(Constraint::Length(1)); // the light divider column
+            }
+            col_cons.push(Constraint::Length(*w));
+        }
+        let col_rects = Layout::horizontal(col_cons).spacing(1).split(grid);
+        let sec_rows = chunks.iter().map(|c| c.len()).max().unwrap_or(0) as u16;
+        let mut chunk_iter = chunks.iter();
+        for (ci, col_rect) in col_rects.iter().enumerate() {
+            if ci % 2 == 1 {
+                // The light divider between hint columns, only as tall as the
+                // section's hint rows.
+                let bar: Vec<Line> = (0..sec_rows.min(col_rect.height))
+                    .map(|_| Line::from(Span::styled("│", theme.dim())))
+                    .collect();
+                frame.render_widget(Paragraph::new(Text::from(bar)), *col_rect);
+                continue;
+            }
+            if let Some(chunk) = chunk_iter.next() {
+                let text = Text::from(chunk.iter().map(hint).collect::<Vec<_>>());
+                frame.render_widget(Paragraph::new(text), *col_rect);
+            }
         }
     }
 }

@@ -21,7 +21,6 @@ expression: "render_to_string(&app, 120, 34)"
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
-│                                                                                                                      │
 │ payments  ·  main ─────────────────────────────────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                                      │
 │ Changes      3 modified · 1 untracked                                                                                │
@@ -31,8 +30,9 @@ expression: "render_to_string(&app, 120, 34)"
 │ Last commit  2h ago — fix: retry on 5xx                                                                              │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─────────────────────────────────────┬─────────────────────────────────┬──────────────────────────────────────────────╮
-│ select                              │ act → payments                  │ view                                         │
-│ Space mark repo  / filter           │ ⏎ open   P push                 │ ↑/↓ move     Tab standup   q quit            │
-│ a mark all       Esc clear          │ f fetch  ! run command          │ s sort       h hide hints                    │
-│                                     │ p pull   S stash                │ d attention  ? help                          │
+│               select                │         act → payments          │                     view                     │
+│ ─────────────────────────────────── │ ─────────────────────────────── │ ──────────────────────────────────────────── │
+│     Space mark repo │ / filter      │     ⏎ open  │ P push            │     ↑/↓ move    │ Tab standup  │ q quit      │
+│     a mark all      │ Esc clear     │     f fetch │ ! run command     │     s sort      │ h hide hints │             │
+│                                     │     p pull  │ S stash           │     d attention │ ? help       │             │
 ╰─────────────────────────────────────┴─────────────────────────────────┴──────────────────────────────────────────────╯

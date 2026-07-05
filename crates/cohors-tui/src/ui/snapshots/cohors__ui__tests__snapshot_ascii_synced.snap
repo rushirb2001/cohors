@@ -21,7 +21,6 @@ expression: "render_to_string(&app, 100, 34)"
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│                                                                                                  │
 │ in-sync  ·  main ──────────────────────────────────────────────────────────── Enter: full detail │
 │                                                                                                  │
 │ Changes      clean                                                                               │
@@ -30,9 +29,10 @@ expression: "render_to_string(&app, 100, 34)"
 │ Remote       no GitHub remote                                                                    │
 │ Last commit  1h ago — chore: nothing to do                                                       │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭───────────────────────────────┬───────────────────────────┬──────────────────────────────────────╮
-│ select                        │ act → 1 selected          │ view                                 │
-│ Space mark repo  / filter     │ ⏎ open   P push           │ ↑/↓ move     Tab standup   q quit    │
-│ a mark all       Esc clear    │ f fetch  ! run command    │ s sort       h hide hints            │
-│                               │ p pull   S stash          │ d attention  ? help                  │
-╰───────────────────────────────┴───────────────────────────┴──────────────────────────────────────╯
+╭──────────────────────────────┬──────────────────────────┬────────────────────────────────────────╮
+│            select            │     act → 1 selected     │                  view                  │
+│ ──────────────────────────── │ ──────────────────────── │ ────────────────────────────────────── │
+│ Space mark repo │ / filter   │ ⏎ open  │ P push         │  ↑/↓ move    │ Tab standup  │ q quit   │
+│ a mark all      │ Esc clear  │ f fetch │ ! run command  │  s sort      │ h hide hints │          │
+│                              │ p pull  │ S stash        │  d attention │ ? help       │          │
+╰──────────────────────────────┴──────────────────────────┴────────────────────────────────────────╯
