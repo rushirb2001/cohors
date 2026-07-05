@@ -1,5 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -9,9 +9,9 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 / pay▏                                                                                              
 ╭ Repositories (2) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo                   Sync      Changes  Last commit                                         │
-│▌   payments @main         ↑2 ● 2pr  4 s1      2h  fix: retry on 5xx                              │
-│    legacy-billing                                                                                │
+│    Repo                   Sync      Changes  Last  Status                                        │
+│▌   payments @main         ↑2 ● 2pr  4 s1       2h  ↑2 unpushed                                   │
+│    legacy-billing                                  could not read .git (permission denied)       │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │

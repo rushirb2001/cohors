@@ -1,6 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3688
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -13,11 +12,11 @@ expression: "render_to_string(&app, 100, 20)"
 ╰──────────────────────╭ Confirm ───────────────────────────────────────────╮──────────────────────╯
 ╭ Repositories (5) · so│ Stash changes in 2 repos?                          │──────────────────────╮
 │    Repo              │                                                    │                      │
-│▌   legacy-billing    │ payments, web-app                                  │                      │
+│▌   legacy-billing    │ payments, web-app                                  │rmission denied)      │
 │  ● payments @main    │                                                    │                      │
 │  ● web-app @feat/chec╰────────────────────────────────────────────────────╯                      │
-│    infra @a1b2c3d          local     4         1w  build: pin ci image                           │
-│    auth-service @main      ● 1pr     0         3d  chore: bump deps                              │
+│    infra @a1b2c3d          local     4          1w  4 uncommitted changes                        │
+│    auth-service @main      ● 1pr     0          3d  up to date                                   │
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮

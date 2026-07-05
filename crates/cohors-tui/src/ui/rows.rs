@@ -106,36 +106,33 @@ pub(crate) fn render_repos_panel(
             .clamp(floor, ceil)
     };
 
-    // The commit age column, present only in the dock layout.
-    let age_w: u16 = if dock_visible {
-        view.iter()
-            .map(|vr| match &app.repos[vr.index].last_commit {
-                Some(c) => time::relative(c.timestamp, now).chars().count() as u16,
-                None => 1,
-            })
-            .max()
-            .unwrap_or(0)
-            .clamp(4, 6)
-    } else {
-        0
-    };
+    // The commit age column (both layouts show it).
+    let age_w: u16 = view
+        .iter()
+        .map(|vr| match &app.repos[vr.index].last_commit {
+            Some(c) => time::relative(c.timestamp, now).chars().count() as u16,
+            None => 1,
+        })
+        .max()
+        .unwrap_or(0)
+        .clamp(4, 6);
 
-    // Two layouts. With the dock up it carries the selected repo's commit
-    // message, so the table drops the message and spends that width on legible,
-    // expanded columns: the old fused Sync (`↑2 ● 2pr`) and Changes (`4 s1`)
-    // split into Sync / PRs / CI and Changes / Stash, plus Last (age) and a
-    // Status column (the primary attention reason, which makes the dirty-first
-    // ordering self-explaining per row). With the dock hidden (short terminal)
-    // the table keeps the compact, fused columns and the full "Last commit", so
-    // nothing is lost. The trailing column is Fill so the table spans edge to
-    // edge; its text is ellipsized to that width (computed by mirroring the
-    // table's own arithmetic: inner width − the 2-col highlight reserve − the
-    // fixed columns − the 2-col gaps between them).
+    // Two layouts, one shape: both end in Last (age) + Status (the attention
+    // reason that makes the dirty-first ordering self-explaining per row, same
+    // as the web). With the dock up the table spends its width on expanded
+    // columns: the fused Sync (`↑2 ● 2pr`) and Changes (`4 s1`) split into
+    // Sync / PRs / CI and Changes / Stash. With the dock hidden (short
+    // terminal) the fused columns stay, but Status remains — the headline
+    // signal never disappears with the terminal height (the commit message
+    // lives in the dock or the Enter detail instead). The trailing column is
+    // Fill so the table spans edge to edge; its text is ellipsized to that
+    // width (computed by mirroring the table's own arithmetic: inner width −
+    // the 2-col highlight reserve − the fixed columns − the 2-col gaps).
     // Repo and Branch are fused into one `name @branch` column, sized to its
     // widest content (gutter + name + branch) within a cap so a long branch can't
     // run away. This mirrors the web and reclaims a whole column for Status.
     let repo_w = col_w(repo_spans, 12, 30);
-    let (widths, reason_max, summary_max): (Vec<Constraint>, usize, usize) = if dock_visible {
+    let (widths, reason_max): (Vec<Constraint>, usize) = if dock_visible {
         let sync_w = col_w(ahead_behind_spans, 4, 9);
         let chg_w = col_w(changed_count_spans, 7, 9);
         let stash_w = col_w(stash_spans, 5, 6);
@@ -153,24 +150,24 @@ pub(crate) fn render_repos_panel(
             Constraint::Length(age_w),
             Constraint::Fill(1), // Status (primary attention reason)
         ];
-        (widths, status_w, 0)
+        (widths, status_w)
     } else {
         let sync_w = col_w(sync_spans, 4, 12);
         let changes_w = col_w(changes_spans, 7, 12);
-        let fixed = 2 + repo_w as usize + sync_w as usize + changes_w as usize;
-        let last_w = (inner.width as usize).saturating_sub(fixed + 2 * 3); // 4 cols ⇒ 3 gaps
+        let fixed = 2 + repo_w + sync_w + changes_w + age_w;
+        let status_w = (inner.width as usize).saturating_sub(fixed as usize + 2 * 4); // 5 cols ⇒ 4 gaps
         let widths = vec![
             Constraint::Length(repo_w),
             Constraint::Length(sync_w),
             Constraint::Length(changes_w),
-            Constraint::Fill(1), // Last commit (age + message)
+            Constraint::Length(age_w),
+            Constraint::Fill(1), // Status (primary attention reason)
         ];
-        (widths, 0, last_w.saturating_sub(5)) // age prefix `{:>3}  ` = 5 cols
+        (widths, status_w)
     };
 
     let fmt = RowFmt {
         dock: dock_visible,
-        summary_max,
         reason_max,
         age_w,
         // ~400ms on / ~400ms off at the 100ms tick cadence.
@@ -196,7 +193,7 @@ pub(crate) fn render_repos_panel(
             "  Repo", "Sync", "Changes", "Stash", "PRs", "CI", "Last", "Status",
         ]
     } else {
-        &["  Repo", "Sync", "Changes", "Last commit"]
+        &["  Repo", "Sync", "Changes", "Last", "Status"]
     };
     let header_style = Style::new().add_modifier(Modifier::BOLD);
     let [_sym, header_cols] =
@@ -629,11 +626,9 @@ pub(crate) fn severity_style(sev: Severity, theme: &Theme) -> Style {
 /// carrying the commit message, freeing the table to expand its stat columns).
 pub(crate) struct RowFmt {
     /// Dock up ⇒ expanded columns (Sync / Changes / Stash / PRs / CI / Last /
-    /// Status); else the compact, fused columns and one "Last commit".
+    /// Status); else the compact, fused columns (Sync / Changes / Last / Status).
     dock: bool,
-    /// Max chars for the commit summary (the non-dock "Last commit" column).
-    summary_max: usize,
-    /// Max chars for the reason label (the dock "Status" column).
+    /// Max chars for the reason label (the trailing "Status" column).
     reason_max: usize,
     /// Width of the age column, for right-aligning the age (the dock layout).
     age_w: u16,
@@ -678,7 +673,13 @@ pub(crate) fn repo_row<'a>(
                 status,
             ])
         } else {
-            Row::new(vec![name, blank(), blank(), status])
+            Row::new(vec![
+                name,
+                blank(), // Sync
+                blank(), // Changes
+                blank(), // Last
+                status,
+            ])
         };
     }
 
@@ -729,7 +730,8 @@ pub(crate) fn repo_row<'a>(
             name,
             sync,
             changes_cell(snap, theme),
-            last_commit_cell(snap, now, fmt.summary_max, theme),
+            age_cell(snap, now, fmt.age_w as usize, theme),
+            reason_cell(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
         ])
     }
 }
@@ -1059,26 +1061,6 @@ pub(crate) fn changes_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'sta
 /// columns to their actual content rather than a fixed guess.
 pub(crate) fn line_width(spans: &[Span]) -> u16 {
     spans.iter().map(|s| s.content.chars().count() as u16).sum()
-}
-
-/// The Last commit column: the commit's age and subject. Why a repo needs the
-/// user is carried by the row's colors, not repeated here as text.
-pub(crate) fn last_commit_cell<'a>(
-    snap: &'a RepoSnapshot,
-    now: i64,
-    summary_max: usize,
-    theme: &Theme,
-) -> Cell<'a> {
-    match &snap.last_commit {
-        Some(commit) => Cell::from(Line::from(vec![
-            Span::styled(
-                format!("{:>3}  ", time::relative(commit.timestamp, now)),
-                theme.dim(),
-            ),
-            Span::raw(ellipsize(&commit.summary, summary_max)),
-        ])),
-        None => Cell::from(Span::styled("—", theme.dim())),
-    }
 }
 
 /// Truncate `s` to at most `max` characters, adding an ellipsis when cut.

@@ -1,6 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3852
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -13,7 +12,7 @@ expression: "render_to_string(&app, 100, 18)"
 ╰───────│                                                                                  │───────╯
 ╭ Reposi│                                                                                  │───────╮
 │    Rep│                                                                                  │       │
-│▌   leg│                                                                                  │       │
+│▌   leg│                                                                                  │)      │
 │    pay│                                                                                  │       │
 │    web│                                                                                  │       │
 │       │                                                                                  │       │
