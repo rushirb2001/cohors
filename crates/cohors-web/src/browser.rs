@@ -60,6 +60,8 @@ fn App() -> impl IntoView {
     let marked = RwSignal::new(HashSet::<String>::new());
     // An action staged for the confirm modal (verb + resolved targets).
     let pending = RwSignal::new(None::<PendingAction>);
+    // The completed action's per-repo outcomes, shown in the results modal.
+    let result = RwSignal::new(None::<ActionResult>);
     // Which action dropdown is open: "all", "selected", or a repo id.
     let menu = RwSignal::new(None::<String>);
     // The modal's free-text argument: commit message / run command.
@@ -191,34 +193,6 @@ fn App() -> impl IntoView {
 
     view! {
         <div class="app">
-            <header class="topbar">
-                <div class="mark">
-                    <span>"▜▒▟███▙▒▛"</span>
-                    <span>"▟██▌█▐██▙"</span>
-                    <span>"▀▐▖▀█▀▗▌▀"</span>
-                </div>
-                <div class="title">
-                    <span class="brand">"cohors"</span>
-                    <span class="pill">"web"</span>
-                </div>
-                <div class="fleet-name">
-                    <span class="fleet-label">"Your Fleet"</span>
-                    {move || {
-                        let r = roots.get();
-                        (!r.is_empty()).then(|| {
-                            let path =
-                                r.iter().map(|p| shorten_home(p)).collect::<Vec<_>>().join("  ·  ");
-                            view! {
-                                <span class="fleet-path" title=r.join(", ")>
-                                    {folder_icon()}
-                                    {path}
-                                </span>
-                            }
-                        })
-                    }}
-                </div>
-            </header>
-
             {move || notice.get().map(|n| view! { <div class="banner">{n}</div> })}
 
             {move || match mode.get() {
@@ -226,40 +200,58 @@ fn App() -> impl IntoView {
                     view! { <div class="state">"Scanning your repositories…"</div> }.into_any()
                 }
                 Mode::Demo => dashboard(
-                    repos, DEMO_NOW, filter, dirty_only, sort, selected, marked, menu, pending,
-                    action_arg, notice, detail, enriching, mode,
+                    DashCtx {
+                        repos,
+                        now: DEMO_NOW,
+                        filter,
+                        dirty_only,
+                        sort,
+                        selected,
+                        marked,
+                        menu,
+                        pending,
+                        action_arg,
+                        notice,
+                        detail,
+                        enriching,
+                        mode,
+                        roots,
+                    },
                     reload,
                 )
                 .into_any(),
                 Mode::Live => dashboard(
-                    repos,
-                    real_now(),
-                    filter,
-                    dirty_only,
-                    sort,
-                    selected,
-                    marked,
-                    menu,
-                    pending,
-                    action_arg,
-                    notice,
-                    detail,
-                    enriching,
-                    mode,
+                    DashCtx {
+                        repos,
+                        now: real_now(),
+                        filter,
+                        dirty_only,
+                        sort,
+                        selected,
+                        marked,
+                        menu,
+                        pending,
+                        action_arg,
+                        notice,
+                        detail,
+                        enriching,
+                        mode,
+                        roots,
+                    },
                     reload,
                 )
                 .into_any(),
             }}
-            {confirm_modal(pending, action_arg, notice)}
+            {confirm_modal(pending, action_arg, notice, result)}
+            {result_modal(result)}
         </div>
     }
 }
 
-/// The dashboard body: the attention summary, filter/sort controls, the fleet
-/// table (the TUI's columns), and the per-repo detail aside. Reads `repos`
-/// reactively so the remote-enrichment pass updates the rows live.
-#[allow(clippy::too_many_arguments)]
-fn dashboard(
+/// The signals the dashboard reads/writes — bundled so the call site isn't a
+/// wall of positional arguments.
+#[derive(Clone, Copy)]
+struct DashCtx {
     repos: RwSignal<Vec<RepoSnapshot>>,
     now: i64,
     filter: RwSignal<String>,
@@ -274,8 +266,34 @@ fn dashboard(
     detail: RwSignal<DetailState>,
     enriching: RwSignal<bool>,
     mode: RwSignal<Mode>,
+    roots: RwSignal<Vec<String>>,
+}
+
+/// The dashboard body: a header-band Overview (brand + fleet + at-a-glance
+/// stats), the fleet table whose column headers *are* the sort control, and the
+/// per-repo detail aside. Reads `repos` reactively so the enrichment pass
+/// updates the rows live.
+fn dashboard(
+    cx: DashCtx,
     reload: impl Fn(leptos::ev::MouseEvent) + Copy + Send + 'static,
 ) -> impl IntoView {
+    let DashCtx {
+        repos,
+        now,
+        filter,
+        dirty_only,
+        sort,
+        selected,
+        marked,
+        menu,
+        pending,
+        action_arg,
+        notice,
+        detail,
+        enriching,
+        mode,
+        roots,
+    } = cx;
     let summary = move || summary_chips(&repos.get(), now);
     let visible = move || {
         let r = repos.get();
@@ -312,32 +330,79 @@ fn dashboard(
 
     view! {
         <>
-            // 1 · Overview: the fleet-wide judgment at a glance.
-            // 1 · Overview: fleet-wide judgment at a glance. The subhead row
-            // carries the scan status on the right; the chips sit beneath it.
+            // 1 · Overview — the page header: brand on the left, the fleet name +
+            // path, at-a-glance stats, and scan status on the right.
             <section class="card overview">
-                <header class="panel-head">
-                    <span class="panel-label">"Overview"</span>
-                    <div class="conn">
-                        {move || {
-                            let demo = mode.get() == Mode::Demo;
-                            view! {
-                                <span class=if demo { "src demo" } else { "src" }>
-                                    {if demo { "demo fleet" } else { "● local scan" }}
-                                </span>
-                                <button class="ghost" on:click=reload>"rescan"</button>
-                            }
-                        }}
+                <div class="ov-brand">
+                    <div class="mark">
+                        <span>"▜▒▟███▙▒▛"</span>
+                        <span>"▟██▌█▐██▙"</span>
+                        <span>"▀▐▖▀█▀▗▌▀"</span>
                     </div>
-                </header>
-                <section class="attention">{summary}</section>
+                    <div class="title">
+                        <span class="brand">"cohors"</span>
+                        <span class="pill">"web"</span>
+                    </div>
+                </div>
+                <div class="ov-body">
+                    <div class="ov-top">
+                        <div class="fleet-name">
+                            <span class="fleet-label">"Your Fleet"</span>
+                            {move || {
+                                let r = roots.get();
+                                (!r.is_empty())
+                                    .then(|| {
+                                        let path = r
+                                            .iter()
+                                            .map(|p| shorten_home(p))
+                                            .collect::<Vec<_>>()
+                                            .join("  ·  ");
+                                        view! {
+                                            <span class="fleet-path" title=r.join(", ")>
+                                                {folder_icon()}
+                                                {path}
+                                            </span>
+                                        }
+                                    })
+                            }}
+                        </div>
+                        <div class="conn">
+                            {move || {
+                                let demo = mode.get() == Mode::Demo;
+                                view! {
+                                    <span class=if demo { "src demo" } else { "src" }>
+                                        {if demo { "demo fleet" } else { "● local scan" }}
+                                    </span>
+                                    <button class="ghost" on:click=reload>
+                                        "rescan"
+                                    </button>
+                                }
+                            }}
+                        </div>
+                    </div>
+                    <section class="attention">{summary}</section>
+                </div>
             </section>
             <div class="grid">
-                // 2 · Repositories: the act controls live in the subhead row,
-                // then filter/sort, then the fleet table.
+                // 2 · Repositories: filter + act controls in the subhead row; the
+                // column headers double as the sort control (no separate buttons).
                 <section class="card fleet-wrap">
-                    <header class="panel-head">
+                    <header class="panel-head repos-head">
                         <span class="panel-label">"Repositories"</span>
+                        <input
+                            class="filter"
+                            placeholder="filter repos — name…"
+                            prop:value=move || filter.get()
+                            on:input=move |ev| filter.set(event_target_value(&ev))
+                        />
+                        <button
+                            class="toggle"
+                            class:on=move || dirty_only.get()
+                            on:click=move |_| dirty_only.update(|d| *d = !*d)
+                            title="Show only repos that need attention"
+                        >
+                            "needs attention"
+                        </button>
                         <div class="act-controls">
                             {move || {
                                 let m = marked.get();
@@ -366,41 +431,20 @@ fn dashboard(
                             )}
                         </div>
                     </header>
-                    <section class="controls">
-                        <input
-                            class="filter"
-                            placeholder="filter repos — name…"
-                            prop:value=move || filter.get()
-                            on:input=move |ev| filter.set(event_target_value(&ev))
-                        />
-                        <button
-                            class="sort"
-                            class:active=move || dirty_only.get()
-                            on:click=move |_| dirty_only.update(|d| *d = !*d)
-                        >
-                            "needs attention"
-                        </button>
-                        <div class="sorts">
-                            {sort_button(sort, SortMode::DirtyFirst, "attention")}
-                            {sort_button(sort, SortMode::Recent, "recent")}
-                            {sort_button(sort, SortMode::Name, "name")}
-                            {sort_button(sort, SortMode::AheadBehind, "sync")}
-                        </div>
-                    </section>
                     <div class="scroll">
                         <table class="fleet">
                             <thead>
                                 <tr>
                                     <th class="mk">"Mark"</th>
-                                    <th>"Repo"</th>
-                                    <th>"Sync"</th>
+                                    {sort_th("Repo", SortMode::Name, sort)}
+                                    {sort_th("Sync", SortMode::AheadBehind, sort)}
                                     <th>"Changes"</th>
                                     <th>"Stash"</th>
                                     <th>"PRs"</th>
                                     <th>"CI"</th>
-                                    <th>"Last"</th>
+                                    {sort_th("Last", SortMode::Recent, sort)}
                                     <th>"Activity"</th>
-                                    <th>"Status"</th>
+                                    {sort_th("Status", SortMode::DirtyFirst, sort)}
                                     <th class="act">"Act"</th>
                                     <th class="spacer"></th>
                                 </tr>
@@ -412,6 +456,24 @@ fn dashboard(
                 <aside class="side">{aside}</aside>
             </div>
         </>
+    }
+}
+
+/// A sortable column header: clicking it sets that sort mode; the active column
+/// shows a caret. This *is* the sort control now — there are no separate sort
+/// buttons. `Sync`→ahead/behind, `Last`→recency, `Repo`→name, `Status`→attention.
+fn sort_th(label: &'static str, mode: SortMode, sort: RwSignal<SortMode>) -> impl IntoView {
+    let active = move || sort.get() == mode;
+    view! {
+        <th
+            class="sortable"
+            class:sorted=active
+            on:click=move |_| sort.set(mode)
+            title="Sort by this column"
+        >
+            {label}
+            <span class="caret">{move || if active() { " ↓" } else { "" }}</span>
+        </th>
     }
 }
 
@@ -622,6 +684,7 @@ fn confirm_modal(
     pending: RwSignal<Option<PendingAction>>,
     arg: RwSignal<String>,
     notice: RwSignal<Option<String>>,
+    result: RwSignal<Option<ActionResult>>,
 ) -> impl IntoView {
     move || {
         pending.get().map(|p| {
@@ -666,8 +729,19 @@ fn confirm_modal(
                     body["command"] = serde_json::json!(text);
                 }
                 let verb = p.verb.clone();
+                // While it runs, a quiet banner; the outcome opens the results modal.
+                notice.set(Some(format!("running {verb}…")));
                 spawn_local(async move {
-                    notice.set(Some(summarize(&verb, api::post_action(body).await)));
+                    let resp = api::post_action(body).await;
+                    match parse_result(&verb, resp) {
+                        Ok(r) => {
+                            notice.set(None);
+                            result.set(Some(r));
+                        }
+                        // A gate/transport error has no per-repo rows — surface it
+                        // as the banner, exactly as before.
+                        Err(msg) => notice.set(Some(msg)),
+                    }
                 });
             };
             view! {
@@ -708,38 +782,171 @@ fn confirm_modal(
     }
 }
 
-/// Fold an action response into a one-line banner: ok / skipped / failed counts
-/// (with the first failure's message), or the server's error — e.g. the
-/// read-only gate explaining how to enable writes.
-fn summarize(verb: &str, resp: Result<serde_json::Value, String>) -> String {
-    match resp {
-        Ok(v) => {
-            if let Some(e) = v.get("error").and_then(|e| e.as_str()) {
-                return e.to_string();
+/// A completed action's outcome, for the results modal. `summary` is the
+/// headline (ok / skipped / failed counts); `rows` are the per-repo lines.
+#[derive(Clone)]
+struct ActionResult {
+    verb: String,
+    summary: String,
+    rows: Vec<ResultRow>,
+}
+
+/// One repo's line in the results modal.
+#[derive(Clone)]
+struct ResultRow {
+    repo: String,
+    /// "ok" | "skip" | "fail" — drives the colour and the marker.
+    state: &'static str,
+    message: String,
+    /// Command output (`run` only), shown in a collapsible block.
+    output: Option<String>,
+}
+
+/// Parse an action response into an [`ActionResult`]. Handles both the git-verb
+/// shape (`results:[{repo,ok,message,skipped}]`) and the `run` shape
+/// (`results:[{repo,ok,exit_code,stdout,stderr,timed_out}]`). Returns `Err` with
+/// the server's message for a gate/transport error (no per-repo rows to show).
+fn parse_result(
+    verb: &str,
+    resp: Result<serde_json::Value, String>,
+) -> Result<ActionResult, String> {
+    let v = resp?;
+    if let Some(e) = v.get("error").and_then(|e| e.as_str()) {
+        return Err(e.to_string());
+    }
+    let raw = v
+        .get("results")
+        .and_then(|r| r.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let is_run = verb == "run";
+    let rows: Vec<ResultRow> = raw
+        .iter()
+        .map(|r| {
+            let repo = r
+                .get("repo")
+                .and_then(|x| x.as_str())
+                .unwrap_or("?")
+                .to_string();
+            let ok = r.get("ok").and_then(|x| x.as_bool()).unwrap_or(false);
+            let skipped = r.get("skipped").and_then(|x| x.as_bool()).unwrap_or(false);
+            let state = if skipped {
+                "skip"
+            } else if ok {
+                "ok"
+            } else {
+                "fail"
+            };
+            if is_run {
+                let code = r.get("exit_code").and_then(|x| x.as_i64()).unwrap_or(-1);
+                let timed_out = r
+                    .get("timed_out")
+                    .and_then(|x| x.as_bool())
+                    .unwrap_or(false);
+                let stdout = r.get("stdout").and_then(|x| x.as_str()).unwrap_or("");
+                let stderr = r.get("stderr").and_then(|x| x.as_str()).unwrap_or("");
+                let message = if timed_out {
+                    "timed out".to_string()
+                } else {
+                    format!("exit {code}")
+                };
+                let mut output = String::new();
+                if !stdout.is_empty() {
+                    output.push_str(stdout);
+                }
+                if !stderr.is_empty() {
+                    if !output.is_empty() {
+                        output.push('\n');
+                    }
+                    output.push_str(stderr);
+                }
+                ResultRow {
+                    repo,
+                    state,
+                    message,
+                    output: (!output.is_empty()).then_some(output),
+                }
+            } else {
+                let message = r
+                    .get("message")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                ResultRow {
+                    repo,
+                    state,
+                    message,
+                    output: None,
+                }
             }
-            let results = v
-                .get("results")
-                .and_then(|r| r.as_array())
-                .cloned()
-                .unwrap_or_default();
-            let ok = results.iter().filter(|r| r["ok"] == true).count();
-            let skipped = results.iter().filter(|r| r["skipped"] == true).count();
-            let failed = results.len() - ok - skipped;
-            let mut msg = format!("{verb}: {ok} ok");
-            if skipped > 0 {
-                msg.push_str(&format!(", {skipped} skipped"));
+        })
+        .collect();
+
+    let ok = rows.iter().filter(|r| r.state == "ok").count();
+    let skipped = rows.iter().filter(|r| r.state == "skip").count();
+    let failed = rows.iter().filter(|r| r.state == "fail").count();
+    let mut summary = format!("{ok} ok");
+    if skipped > 0 {
+        summary.push_str(&format!(" · {skipped} skipped"));
+    }
+    if failed > 0 {
+        summary.push_str(&format!(" · {failed} failed"));
+    }
+    Ok(ActionResult {
+        verb: verb.to_string(),
+        summary,
+        rows,
+    })
+}
+
+/// The results modal: a per-repo outcome list after an action runs — ok/skip/
+/// fail markers, the message (git verbs) or exit + collapsible output (`run`).
+/// The web equivalent of the TUI's action-result rows.
+fn result_modal(result: RwSignal<Option<ActionResult>>) -> impl IntoView {
+    move || {
+        result.get().map(|r| {
+            let title = format!("{} — {}", r.verb, r.summary);
+            let rows = r
+                .rows
+                .iter()
+                .map(|row| {
+                    let marker = match row.state {
+                        "ok" => "✓",
+                        "skip" => "⊘",
+                        _ => "✗",
+                    };
+                    let output = row.output.clone().map(|o| {
+                        view! {
+                            <details class="run-out">
+                                <summary>"output"</summary>
+                                <pre>{o}</pre>
+                            </details>
+                        }
+                    });
+                    view! {
+                        <li class=format!("res-row {}", row.state)>
+                            <span class="res-mark">{marker}</span>
+                            <span class="res-repo">{row.repo.clone()}</span>
+                            <span class="res-msg">{row.message.clone()}</span>
+                            {output}
+                        </li>
+                    }
+                })
+                .collect::<Vec<_>>();
+            view! {
+                <div class="overlay" on:click=move |_| result.set(None)>
+                    <div class="modal results" on:click=|ev| ev.stop_propagation()>
+                        <h3>{title}</h3>
+                        <ul class="res-list">{rows}</ul>
+                        <div class="modal-actions">
+                            <button class="confirm" on:click=move |_| result.set(None)>
+                                "Done"
+                            </button>
+                        </div>
+                    </div>
+                </div>
             }
-            if failed > 0 {
-                msg.push_str(&format!(", {failed} failed"));
-            }
-            if let Some(first) = results.iter().find(|r| r["ok"] != true)
-                && let Some(m) = first["message"].as_str()
-            {
-                msg.push_str(&format!(" — {m}"));
-            }
-            msg
-        }
-        Err(e) => e,
+        })
     }
 }
 
@@ -1543,15 +1750,6 @@ fn hint_panel() -> impl IntoView {
             <div class="card-title">"Detail"</div>
             <div class="scroll"><p class="empty">"Select a repository to inspect it."</p></div>
         </div>
-    }
-}
-
-/// One sort button, highlighted when active.
-fn sort_button(sort: RwSignal<SortMode>, key: SortMode, label: &'static str) -> impl IntoView {
-    view! {
-        <button class="sort" class:active=move || sort.get() == key on:click=move |_| sort.set(key)>
-            {label}
-        </button>
     }
 }
 
