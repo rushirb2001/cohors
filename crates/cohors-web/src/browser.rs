@@ -1546,7 +1546,11 @@ fn last_cell(s: &RepoSnapshot, now: i64) -> impl IntoView + use<> {
 fn status_cell(a: &cohors_core::Assessment) -> impl IntoView + use<> {
     match &a.primary {
         Some(r) => {
-            let cls = format!("st {}", severity_class(r.severity()));
+            // Colour by the repo's *overall* severity (with compound escalation),
+            // not the primary reason's — so it matches the row weight, the sort,
+            // and the fleet's Attention breakdown. A repo escalated to Risk shows
+            // red even if its headline reason is milder on its own.
+            let cls = format!("st {}", severity_class(a.severity));
             let tip = r.label();
             let full = tip.clone();
             view! {
