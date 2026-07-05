@@ -450,7 +450,7 @@ fn footer_bar_columns<'a>(
 /// content row count (the label row + the tallest grid), and the total width
 /// the bar needs. Used to decide whether the one-box layout fits.
 pub(crate) fn footer_bar_geometry(app: &App) -> (Vec<u16>, u16, u16) {
-    let groups = footer_groups(app);
+    let groups = footer_groups_short(app);
     let mut widths: Vec<u16> = Vec::new();
     let mut grid_rows: usize = 1;
     for (label, items) in &groups {
@@ -482,7 +482,7 @@ pub(crate) fn footer_bar_geometry(app: &App) -> (Vec<u16>, u16, u16) {
 /// in content-fitted, column-major columns, so every hint fits without
 /// wrapping.
 pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    let groups = footer_groups(app);
+    let groups = footer_groups_short(app);
     let (widths, _rows, _total) = footer_bar_geometry(app);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)

@@ -20,17 +20,17 @@ expression: "render_to_string(&app, 72, 32)"
 │  ○ auth-service @main      local  ■     3d  up to date               │
 │                                                                      │
 │                                                                      │
+│                                                                      │
 ├──────────────────────────────────────────────────────────────────────┤
 │ legacy-billing  ·  unborn                         Enter: full detail │
 │                                                                      │
 │ ⚠ could not read .git (permission denied)                            │
 ╰──────────────────────────────────────────────────────────────────────╯
 ──────────────────────── press h to hide hints ─────────────────────────
-╭──────────────────────────────────────────────────────────────────────╮
-│ select                                                               │
-│   ␣ mrk repo · a mrk all · / filter · Esc clear                      │
-│ act  → legacy-billing                                                │
-│   ⏎ open · f fetch · p pull · P push · S stash · ! run cmd           │
-│ view                                                                 │
-│   ↑/↓ move · s sort · d attn · ⇥ standup · ? help · q quit           │
-╰──────────────────────────────────────────────────────────────────────╯
+╭────────────────────────┬─────────────────────┬───────────────────────╮
+│         select         │ act → legacy-billi… │         view          │
+│ ────────────────────── │ ─────────────────── │ ───────────────────── │
+│ ␣ mrk repo │ / filter  │ ⏎ open  │ P push    │ ↑/↓ move │ ⇥ standup  │
+│ a mrk all  │ Esc clear │ f fetch │ S stash   │ s sort   │ ? help     │
+│                        │ p pull  │ ! run cmd │ d attn   │ q quit     │
+╰────────────────────────┴─────────────────────┴───────────────────────╯
