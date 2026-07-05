@@ -31,8 +31,8 @@ TUI design polish (no behaviour changes):
 - **The docked context pane is a grey two-column card** (local/remote facts |
   release + last commit) under a solid separator that joins the box borders.
 - **The key hints degrade gracefully** — the consolidated one-box bar when it
-  fits, then a stacked layout, then an essentials line — with short labels and
-  `␣`/`⇥` symbols in the compact tiers, so nothing truncates.
+  fits, otherwise a stacked layout that shows every hint at any width, using
+  short labels and `␣`/`⇥` symbols so nothing truncates.
 - **The repos table degrades across three width tiers** (Wide → Medium → Narrow)
   instead of one cliff, keeping a colour-coded **CI square** (green pass / red
   fail / amber pending / grey none) in its own column when there's no room for

@@ -172,31 +172,14 @@ pub(crate) fn footer_item_w(key: &str, desc: &str) -> usize {
     key.chars().count() + 1 + desc.chars().count()
 }
 
-/// Which Normal-mode footer to draw at a given width.
-#[derive(Clone, Copy, PartialEq)]
-enum FooterStyle {
-    /// The consolidated one-box bar (widest): three sections side by side.
-    Bar,
-    /// Sections stacked, hints packed to full width (never truncates).
-    Stacked,
-    /// A single curated line of the top keys (ultra-narrow).
-    Essentials,
-}
-
-/// Pick the richest footer style that fits `width`.
-fn footer_normal_style(app: &App, width: u16) -> FooterStyle {
-    let (_, _, bar_total) = footer_bar_geometry(app);
-    if bar_total <= width {
-        FooterStyle::Bar
-    } else if width >= 30 {
-        FooterStyle::Stacked
-    } else {
-        FooterStyle::Essentials
-    }
+/// Whether the consolidated one-box hint bar fits `width`; otherwise the footer
+/// falls back to the stacked layout (which shows every hint at any width).
+fn footer_bar_fits(app: &App, width: u16) -> bool {
+    footer_bar_geometry(app).2 <= width
 }
 
 /// The footer's total height (including borders). In Normal mode it's the hint
-/// bar / stacked / essentials layout; in the overlay modes it's a single box of
+/// bar or the stacked fallback; in the overlay modes it's a single box of
 /// wrapped hint rows.
 pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
     if app.mode == Mode::Normal {
@@ -204,15 +187,12 @@ pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
         if app.hints_hidden {
             return 1;
         }
-        // Richest footer that fits: the one-box bar, else the stacked layout,
-        // else the ultra-narrow essentials line. Plus box borders + the toggle
-        // divider row.
-        let content = match footer_normal_style(app, width) {
-            FooterStyle::Bar => footer_bar_geometry(app).1,
-            FooterStyle::Stacked => footer_stacked_rows(app, width.saturating_sub(2)),
-            FooterStyle::Essentials => {
-                pack_count(FOOTER_ESSENTIALS, width.saturating_sub(4).max(1) as usize)
-            }
+        // The one-box bar when it fits, else the stacked layout. Plus box
+        // borders + the toggle divider row.
+        let content = if footer_bar_fits(app, width) {
+            footer_bar_geometry(app).1
+        } else {
+            footer_stacked_rows(app, width.saturating_sub(2))
         };
         content + 2 + 1
     } else {
@@ -240,10 +220,10 @@ pub(crate) fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Th
             Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
         render_hint_divider(frame, divider, app.hints_hidden, theme);
         if !app.hints_hidden {
-            match footer_normal_style(app, area.width) {
-                FooterStyle::Bar => render_footer_bar(frame, boxes, app, theme),
-                FooterStyle::Stacked => render_footer_stacked(frame, boxes, app, theme),
-                FooterStyle::Essentials => render_footer_essentials(frame, boxes, theme),
+            if footer_bar_fits(app, area.width) {
+                render_footer_bar(frame, boxes, app, theme);
+            } else {
+                render_footer_stacked(frame, boxes, app, theme);
             }
         }
     } else {
@@ -332,16 +312,6 @@ fn footer_groups_short(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'sta
         ),
     ]
 }
-
-/// The curated top keys for the ultra-narrow essentials footer (the rest live
-/// behind `?`).
-const FOOTER_ESSENTIALS: &[(&str, &str)] = &[
-    ("↑/↓", "move"),
-    ("⏎", "open"),
-    ("/", "filter"),
-    ("?", "help"),
-    ("q", "quit"),
-];
 
 /// How many rows packing `items` into `avail` columns needs (` · ` between
 /// hints, never splitting one). Mirrors the width maths in [`pack_hints`].
@@ -460,20 +430,6 @@ fn render_footer_stacked(frame: &mut Frame, area: Rect, app: &App, theme: &Theme
             y += 1;
         }
     }
-}
-
-/// The essentials footer for an ultra-narrow terminal: a curated packed line of
-/// the top keys.
-fn render_footer_essentials(frame: &mut Frame, area: Rect, theme: &Theme) {
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim())
-        .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
-    let lines = pack_hints(FOOTER_ESSENTIALS, inner.width as usize, key_style, theme);
-    frame.render_widget(Paragraph::new(Text::from(lines)), inner);
 }
 
 /// Each hint-bar section packs its items column-major into at most this many

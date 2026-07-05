@@ -237,11 +237,12 @@ fn snapshot_open_with_no_editor() {
 
 /// On a compact terminal the footer's group boxes collapse to single columns
 /// (so the keys never clip) instead of falling back to a different layout.
-/// Ultra-narrow: the footer collapses to a single essentials line of top keys.
+/// Even at an ultra-narrow width the stacked footer shows every hint (one per
+/// line if it must) — no lossy essentials fallback.
 #[test]
-fn snapshot_footer_essentials() {
+fn snapshot_footer_ultra_narrow() {
     let app = demo_app();
-    insta::assert_snapshot!(render_to_string(&app, 26, 18));
+    insta::assert_snapshot!(render_to_string(&app, 30, 30));
 }
 
 #[test]
