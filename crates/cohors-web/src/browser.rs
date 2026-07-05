@@ -448,7 +448,6 @@ fn dashboard(
                                     <th>"Activity"</th>
                                     {sort_th("Status", SortMode::DirtyFirst, sort)}
                                     <th class="act">"Git"</th>
-                                    <th class="spacer"></th>
                                 </tr>
                             </thead>
                             <tbody>{body}</tbody>
@@ -1087,7 +1086,6 @@ fn repo_row(
                 <td class="spark-cell"></td>
                 <td class="status risk">{reason}</td>
                 <td class="act"></td>
-                <td class="spacer"></td>
             </tr>
         }
         .into_any();
@@ -1818,7 +1816,7 @@ fn hint_panel(
         .map(|s| (s, assess(s, now)))
         .filter(|(_, a)| a.needs_attention())
         .collect();
-    attn.sort_by(|a, b| b.1.severity.cmp(&a.1.severity));
+    attn.sort_by_key(|(_, a)| std::cmp::Reverse(a.severity));
     let count = attn.len();
 
     let rows = attn

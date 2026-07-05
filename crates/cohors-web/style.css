@@ -236,7 +236,10 @@ body {
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 0.85rem;
 }
-@media (max-width: 940px) { .grid { grid-template-columns: 1fr; } }
+/* Below this the detail aside would starve the fleet table (10 columns need
+   room, and headers would truncate); stack it under the table so the table keeps
+   the full width. */
+@media (max-width: 1400px) { .grid { grid-template-columns: 1fr; } }
 
 .card {
   background: var(--panel);
@@ -283,7 +286,21 @@ body {
 /* The fleet card is a named query container so the Status column can compact to
    numbers based on the card's own width (see the `@container fleet` rule below). */
 .fleet-wrap { container-type: inline-size; container-name: fleet; }
-.fleet { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
+/* Fixed layout with proportional column widths: the table always spans the card
+   edge-to-edge (no dead gap) and never overflows. The two text columns (Repo,
+   Status) take the bulk; the icon/number columns stay compact and ellipsize
+   anything too long. */
+.fleet { width: 100%; table-layout: fixed; border-collapse: collapse; font-family: var(--mono); font-size: 0.78rem; }
+.fleet th:nth-child(1) { width: 5.5%; }  /* Mark */
+.fleet th:nth-child(2) { width: 27.5%; } /* Repo */
+.fleet th:nth-child(3) { width: 6%; }    /* Sync */
+.fleet th:nth-child(4) { width: 6%; }    /* Stash */
+.fleet th:nth-child(5) { width: 5%; }    /* PRs */
+.fleet th:nth-child(6) { width: 8%; }    /* CI */
+.fleet th:nth-child(7) { width: 6%; }    /* Last */
+.fleet th:nth-child(8) { width: 8%; }    /* Activity */
+.fleet th:nth-child(9) { width: 20%; }   /* Status */
+.fleet th:nth-child(10) { width: 8%; }   /* Git */
 /* Tight horizontal padding so the columns pack into the card without overflow. */
 .fleet th, .fleet td { text-align: left; padding: 0.3rem 0.4rem; white-space: nowrap; }
 /* Column layout is: 1 Mark · 2 Repo · 3 Sync · 4 Stash · 5 PRs · 6 CI · 7 Last ·
@@ -298,15 +315,11 @@ body {
   text-align: center;
 }
 .fleet th:nth-child(7), .fleet td:nth-child(7) { text-align: right; } /* Last */
-/* The two variable-width columns are capped and ellipsized so the table always
-   fits its card — no horizontal scroll. The full text stays in each cell's
-   tooltip (Repo) / the compact form + tooltip (Status). */
-.fleet td.repo { text-align: left; max-width: 14rem; overflow: hidden; text-overflow: ellipsis; }
-.fleet td.status { max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
-/* A trailing spacer column soaks up the leftover width, so every real column
-   hugs its content (no pooled whitespace in Status) and the table still fills
-   the card. */
-.fleet th.spacer, .fleet td.spacer { width: 100%; padding: 0; }
+/* The text columns clip and ellipsize anything wider than their share (full text
+   in the tooltip). Fixed layout does the width allocation above. */
+.fleet td.repo { text-align: left; overflow: hidden; text-overflow: ellipsis; }
+.fleet td.status { overflow: hidden; text-overflow: ellipsis; }
+.fleet td, .fleet th { overflow: hidden; text-overflow: ellipsis; }
 
 /* Inline SVG state icons — text-sized, colored by the cell (currentColor). */
 .ic { width: 14px; height: 14px; vertical-align: -0.2em; flex: none; }
@@ -639,7 +652,7 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 .fleet th.sorted { color: var(--accent); }
 /* The ⇅ affordance is faint on idle columns; the active column's ↓ takes the
    accent. Hovering an idle column lifts its arrow so it reads as clickable. */
-.fleet th .caret { color: var(--faint); font-size: 0.9em; }
+.fleet th .caret { color: var(--faint); font-size: 0.7em; margin-left: 1px; }
 .fleet th.sortable:hover .caret { color: var(--dim); }
 .fleet th.sorted .caret { color: var(--accent); }
 
