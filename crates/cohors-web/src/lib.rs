@@ -7,6 +7,15 @@
 
 #![forbid(unsafe_code)]
 
+/// The action verbs the browser's action bar offers — one button per registry
+/// verb, in registry order. Compiled on both targets so the native server test
+/// can enforce write parity with `cohors_actions::registry()`.
+pub const ACTION_VERBS: &[&str] = &["fetch", "pull", "push", "commit", "stash", "run"];
+
+/// The verbs whose registry entry demands a deliberate `confirm` — the browser
+/// runs these through a server-side dry-run preview + a Confirm click.
+pub const CONFIRM_VERBS: &[&str] = &["commit", "stash", "run"];
+
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
 #[cfg(not(target_arch = "wasm32"))]

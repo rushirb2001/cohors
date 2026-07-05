@@ -361,3 +361,29 @@ mod tests {
         assert!(run_action("nuke", &args, &ctx(Caps::default())).is_err());
     }
 }
+
+/// Write parity, web half (mirrors the MCP catalog and TUI keymap tests): the
+/// browser's action bar is driven by `crate::ACTION_VERBS`, so a verb added to
+/// the registry without a button here fails the build.
+#[cfg(test)]
+mod parity_tests {
+    #[test]
+    fn action_bar_matches_the_registry() {
+        let verbs: Vec<&str> = cohors_actions::registry().iter().map(|d| d.verb).collect();
+        assert_eq!(
+            crate::ACTION_VERBS,
+            verbs.as_slice(),
+            "web action bar drifted from the registry"
+        );
+        let confirm: Vec<&str> = cohors_actions::registry()
+            .iter()
+            .filter(|d| d.needs_confirm)
+            .map(|d| d.verb)
+            .collect();
+        assert_eq!(
+            crate::CONFIRM_VERBS,
+            confirm.as_slice(),
+            "web confirm set drifted from the registry"
+        );
+    }
+}
