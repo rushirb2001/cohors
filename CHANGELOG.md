@@ -19,6 +19,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.5.8] — 2026-07-05
+
+### Changed
+
+- **The first-run empty state opens with a welcome, not a negative.** Instead of
+  leading with "No git repos under: …", the dashboard now greets a new user with
+  a brand-purple **"Welcome to cohors"** and then either offers the detected roots
+  (`Found repos under: … · [u] use these`) or shows a copy-pasteable sample
+  command (`cohors --root ~/code`) to point cohors at their projects.
+
 ## [0.5.7] — 2026-07-05
 
 ### Changed

@@ -1,11 +1,19 @@
 ---
 source: crates/cohors-tui/src/ui/tests.rs
-expression: "render_to_string(&app, 100, 12)"
+expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
 │ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
+│ ▀▐▖▀█▀▗▌▀  ~/projects                             │  quiet · 12 weeks                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                          Welcome to cohors                                         
+                                                                                                    
+                          Point cohors at your git projects to get started:                         
+                                                                                                    
+                                        cohors --root ~/code                                        
+                                                                                                    
+                                              [q] quit                                              
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭─────────────────────────────────┬──────────────────────────────┬─────────────────────────────────╮
 │             select              │              act             │              view               │

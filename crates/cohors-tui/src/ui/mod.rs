@@ -121,7 +121,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
         if app.scanning {
             render_loading(frame, body_area, app);
         } else {
-            render_empty(frame, body_area, app);
+            render_empty(frame, body_area, app, &theme);
         }
     } else {
         // A strip on top — the fuzzy input while filtering, otherwise the

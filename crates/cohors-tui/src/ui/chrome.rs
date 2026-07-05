@@ -1252,11 +1252,20 @@ pub(crate) fn render_loading(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(para, center_v(area, 1));
 }
 
-pub(crate) fn render_empty(frame: &mut Frame, area: Rect, app: &App) {
-    // First-run rescue: we found repos elsewhere — offer to adopt them in one key.
+pub(crate) fn render_empty(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let brand = theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD);
+    let bold = Style::new().add_modifier(Modifier::BOLD);
+    // This is the very first thing a brand-new user sees, so open with a greeting
+    // rather than a bare "nothing found". Two shapes: if we detected repos
+    // elsewhere, offer the one-key adopt; otherwise show a sample command that
+    // points cohors at their code.
+    let welcome = Line::from(vec![
+        Span::raw("Welcome to "),
+        Span::styled("cohors", brand),
+    ]);
     let text = if app.empty_picker_active() {
         Text::from(vec![
-            Line::from(format!("No git repos under: {}", roots_label(app))),
+            welcome,
             Line::from(""),
             Line::from(format!(
                 "Found repos under: {}",
@@ -1264,17 +1273,21 @@ pub(crate) fn render_empty(frame: &mut Frame, area: Rect, app: &App) {
             )),
             Line::from(""),
             Line::from(vec![
-                Span::styled("[u]", Style::new().add_modifier(Modifier::BOLD)),
+                Span::styled("[u]", bold),
                 Span::raw(" use these  ·  "),
-                Span::styled("[q]", Style::new().add_modifier(Modifier::BOLD)),
+                Span::styled("[q]", bold),
                 Span::raw(" quit"),
             ]),
         ])
     } else {
         Text::from(vec![
-            Line::from(format!("No git repos found under: {}", roots_label(app))),
+            welcome,
             Line::from(""),
-            Line::from("Run `cohors init` — it auto-detects your repos — or pass --root <dir>."),
+            Line::from("Point cohors at your git projects to get started:"),
+            Line::from(""),
+            Line::from(Span::styled("cohors --root ~/code", bold)),
+            Line::from(""),
+            Line::from(vec![Span::styled("[q]", bold), Span::raw(" quit")]),
         ])
     };
     let height = text.lines.len() as u16;
