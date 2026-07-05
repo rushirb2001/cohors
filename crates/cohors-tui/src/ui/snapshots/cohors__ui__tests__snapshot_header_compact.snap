@@ -1,5 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 60, 16)"
 ---
 ╭──────────────────────────────────────────────────────────╮
@@ -15,6 +15,6 @@ expression: "render_to_string(&app, 60, 16)"
 │ a mark │ Esc cl │ │ ⏎ open  │ P push │ │ ↑/↓ mo │ ? help │
 │ / filt │        │ │ f fetch │ S stas │ │ s sort │ q quit │
 │ ─────────────── │ │ p pull  │        │ │ ─────────────── │
-│ Space mark repo │ │ ──────────────── │ │ d dirty-only    │
+│ Space mark repo │ │ ──────────────── │ │ d attention     │
 │                 │ │ ! run command    │ │ Tab standup     │
 ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯

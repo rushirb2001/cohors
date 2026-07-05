@@ -8,7 +8,7 @@ expression: "render_to_string(&app, 100, 20)"
 │ ▀▐▖▀█▀▗▌▀  status · fetch · pull · weekly standup  │  active 20m                                 │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 / pay▏                                                                                              
-╭ Repositories (2) · sort: dirty-first ────────────────────────────────────────────────────────────╮
+╭ Repositories (2) · sort: dirty-first · /pay ─────────────────────────────────────────────────────╮
 │    Repo                   Sync      Changes  Last  Status                                        │
 │▌   payments @main         ↑2 ● 2pr  4 s1       2h  ↑2 unpushed                                   │
 │    legacy-billing                                  could not read .git (permission denied)       │

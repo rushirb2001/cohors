@@ -8,7 +8,9 @@ pub(crate) fn render_repos_panel(
     theme: &Theme,
 ) {
     // The list's view state lives in its own title: the (visible) count in bold,
-    // then the sort mode (and the dirty-only filter, when on) in dim.
+    // then the sort mode, the needs-attention filter, and the active fuzzy query
+    // in dim — so a narrowed list always says on-screen WHY it is narrowed
+    // (matching the web, where the filter input and toggle stay visible).
     let mut title = vec![Span::styled(
         format!(" Repositories ({}) ", app.visible_len()),
         Style::new().add_modifier(Modifier::BOLD),
@@ -18,7 +20,10 @@ pub(crate) fn render_repos_panel(
         theme.dim(),
     ));
     if app.dirty_only {
-        title.push(Span::styled("· dirty-only ", theme.dim()));
+        title.push(Span::styled("· needs attention ", theme.dim()));
+    }
+    if !app.filter.is_empty() {
+        title.push(Span::styled(format!("· /{} ", app.filter), theme.dim()));
     }
     let mut block = Block::bordered()
         .border_type(BorderType::Rounded)

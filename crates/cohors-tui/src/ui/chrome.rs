@@ -477,7 +477,11 @@ pub(crate) fn render_attention_panel(
         let mut spans: Vec<Span> = Vec::new();
 
         // Readable, word-labeled chips; skip any category with a zero count.
-        // The risk bucket leads: it's the "drop everything" number.
+        // The risk bucket leads: it's the "drop everything" number. Each chip is
+        // coloured by its reason's CORE severity (via severity_style), so the
+        // summary's colour language matches the Status column and the web —
+        // unpushed (Warn) reads louder than behind/dirty (Notice), never the
+        // reverse.
         let mut items: Vec<(String, Style)> = Vec::new();
         if s.risk > 0 {
             items.push((format!("{} at risk", s.risk), theme.risk()));
@@ -489,20 +493,29 @@ pub(crate) fn render_attention_panel(
                     theme.risk(),
                 ));
             } else {
-                items.push((format!("{} unpushed", s.unpushed), theme.ahead()));
+                items.push((
+                    format!("{} unpushed", s.unpushed),
+                    severity_style(Severity::Warn, theme),
+                ));
             }
         }
         if s.conflicted > 0 {
             items.push((format!("{} conflicted", s.conflicted), theme.risk()));
         }
         if s.behind > 0 {
-            items.push((format!("{} behind", s.behind), theme.behind()));
+            items.push((
+                format!("{} behind", s.behind),
+                severity_style(Severity::Notice, theme),
+            ));
         }
         if s.dirty > 0 {
-            items.push((format!("{} dirty", s.dirty), theme.modified()));
+            items.push((
+                format!("{} dirty", s.dirty),
+                severity_style(Severity::Notice, theme),
+            ));
         }
         if s.stash > 0 {
-            items.push((format!("{} stashed", s.stash), Style::new()));
+            items.push((format!("{} stashed", s.stash), theme.dim()));
         }
         if s.errors > 0 {
             items.push((format!("{} unreadable", s.errors), theme.risk()));
@@ -636,7 +649,7 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
                 vec![
                     ("↑/↓", "move"),
                     ("s", "sort"),
-                    ("d", "dirty-only"),
+                    ("d", "attention"),
                     ("Tab", "standup"),
                     ("?", "help"),
                     ("q", "quit"),
@@ -755,7 +768,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
             ),
             (
                 vec![cmd(":dirty"), dim("   "), cmd("/<text>")],
-                "dirty-only · fuzzy filter",
+                "needs-attention · fuzzy filter",
             ),
             (
                 vec![cmd(":jump"), dim(" <repo>")],

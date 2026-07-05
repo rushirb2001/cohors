@@ -21,6 +21,6 @@ expression: "render_to_string(&app, 56, 22)"
 │ a mark │ Esc c │ │ ⏎ open │ P pus │ │ ↑/↓ mo │ ? hel │
 │ / filt │       │ │ f fetc │ S sta │ │ s sort │ q qui │
 │ ────────────── │ │ p pull │       │ │ ────────────── │
-│ Space mark rep │ │ ────────────── │ │ d dirty-only   │
+│ Space mark rep │ │ ────────────── │ │ d attention    │
 │                │ │ ! run command  │ │ Tab standup    │
 ╰────────────────╯ ╰────────────────╯ ╰────────────────╯

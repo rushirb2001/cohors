@@ -1,6 +1,5 @@
 ---
-source: crates/cohors-tui/src/ui.rs
-assertion_line: 3779
+source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 64)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
@@ -37,7 +36,7 @@ expression: "render_to_string(&app, 100, 64)"
 │              │    /               fuzzy filter (Esc clears)                       │              │
 │              │    :               command mode (:fetch, :!cmd shell, :sort,       │              │
 │              │  :jump …)                                                          │              │
-│              │    d               toggle dirty-only                               │              │
+│              │    d               toggle needs-attention                          │              │
 │              │    s               cycle sort mode                                 │              │
 │              │    Tab             weekly standup                                  │              │
 │              │                                                                    │              │
