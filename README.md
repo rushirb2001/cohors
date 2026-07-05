@@ -70,15 +70,31 @@ cohors demo
 
 ## Install
 
-Requires [Rust](https://rustup.rs) and `git` on your `PATH`.
+**Prebuilt binaries** (macOS Apple Silicon / Intel, Linux x86_64) — no Rust needed, just `git` on your `PATH`:
+
+```sh
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/rushirb2001/cohors/releases/latest/download/cohors-aarch64-apple-darwin.tar.gz | tar xz
+sudo mv cohors /usr/local/bin/
+
+# macOS (Intel): cohors-x86_64-apple-darwin.tar.gz
+# Linux (x86_64): cohors-x86_64-unknown-linux-gnu.tar.gz
+```
+
+**From source** (requires [Rust](https://rustup.rs)):
 
 ```sh
 cargo install --git https://github.com/rushirb2001/cohors cohors-tui   # the `cohors` binary
+```
+
+Then:
+
+```sh
 cohors init     # auto-detects where your repos live and writes a config
 cohors          # launch the dashboard
 ```
 
-Or clone and `cargo install --path crates/cohors-tui`. Distribution via crates.io, Homebrew, and prebuilt release binaries is planned.
+Or clone and `cargo install --path crates/cohors-tui`. crates.io and Homebrew distribution are planned.
 
 ## Usage
 

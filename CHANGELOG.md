@@ -19,6 +19,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-05
+
+The first release with prebuilt binaries. Highlights of everything since 0.4.21,
+detailed in the sections below: the web dashboard grew a first-run guided tour,
+always-live polling, a severity-bucketed attention breakdown, row tints, and a
+detail panel whose empty state mirrors the filled one; the TUI reached design
+parity — fleet-activity and attention cards in the header, consolidated table
+columns ending in Last + Status with per-repo activity sparklines, a one-box
+hint bar, and a two-column grey dock card; repo groups, the MCP `changes` tool,
+and per-repo commit-activity data landed in the core.
+
 ### Added
 
 - **Config `[groups]` + a `group` selector — repo clusters as a fact, not a guess.**
