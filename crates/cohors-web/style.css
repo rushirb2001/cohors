@@ -168,11 +168,13 @@ body {
 .link a:hover { text-decoration: underline; }
 .empty { padding: 1.2rem 0.95rem; color: var(--faint); font-size: 0.82rem; }
 
-/* Top-strip stat cards: the fleet's activity sparkline and attention breakdown,
-   sat beside the Overview in the header row. */
-.stat-card {
-  flex: none; width: 15rem; justify-content: center;
-  padding: 12px 16px;
+/* The activity sparkline + attention breakdown fill the rest of the Overview
+   card (below the fleet name / live row) — no wasted whitespace. */
+.ov-stats { display: flex; padding: 12px 16px; gap: 1.4rem; align-items: stretch; }
+.stat-block { display: flex; flex-direction: column; justify-content: center; }
+.stat-block:first-child { flex: 0 0 14rem; }
+.attn-block {
+  flex: 1; min-width: 0; padding-left: 1.4rem; border-left: 1px solid var(--line);
 }
 .stat-h {
   font-family: var(--mono); font-size: 0.66rem; font-weight: 700;
@@ -201,9 +203,6 @@ body {
 .pulse-stack .seg.notice { background: var(--sev-notice); }
 .pulse-stack .seg.calm { background: var(--sev-calm); }
 
-/* The attention card is wider — it carries the per-severity legend that
-   replaced the old summary chips. */
-.attn-card { width: 20rem; }
 .stat-head {
   display: flex; align-items: baseline; justify-content: space-between;
   margin-bottom: 0.55rem;

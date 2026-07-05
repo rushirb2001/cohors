@@ -479,17 +479,19 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                             }}
                         </div>
                     </div>
+                    // The fleet's activity and attention breakdown fill the rest
+                    // of the header card — always in view, no wasted space.
+                    <div class="ov-stats">
+                        {move || {
+                            let r = repos.get();
+                            activity_widget(&r)
+                        }}
+                        {move || {
+                            let r = repos.get();
+                            attention_widget(&r, now)
+                        }}
+                    </div>
                 </section>
-                // The fleet's activity and attention breakdown, promoted to the
-                // top strip so they're always in view (not just the empty aside).
-                {move || {
-                    let r = repos.get();
-                    activity_widget(&r)
-                }}
-                {move || {
-                    let r = repos.get();
-                    attention_widget(&r, now)
-                }}
             </div>
             <div class="grid">
                 // 2 · Repositories: filter + act controls in the subhead row; the
@@ -1918,11 +1920,11 @@ fn activity_widget(repos: &[RepoSnapshot]) -> impl IntoView + use<> {
         })
         .collect::<Vec<_>>();
     view! {
-        <section class="card stat-card">
+        <div class="stat-block">
             <div class="stat-h">"Fleet activity · 12 wks"</div>
             <div class="pulse-spark">{bars}</div>
             <div class="stat-cap">{format!("{total} commits · {count} repos")}</div>
-        </section>
+        </div>
     }
 }
 
@@ -1953,7 +1955,7 @@ fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
         }
     };
     view! {
-        <section class="card stat-card attn-card">
+        <div class="stat-block attn-block">
             <div class="stat-head">
                 <span class="stat-h">"Attention"</span>
                 <span class="stat-total">{format!("{total} repos")}</span>
@@ -1966,7 +1968,7 @@ fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
                 {leg(counts[4], "risk", "At risk")} {leg(counts[3], "warn", "Warning")}
                 {leg(counts[2], "notice", "Minor")} {leg(calm, "calm", "Calm")}
             </div>
-        </section>
+        </div>
     }
 }
 
