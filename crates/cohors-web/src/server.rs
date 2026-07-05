@@ -297,6 +297,8 @@ fn content_type(name: &str) -> Header {
         "application/wasm"
     } else if name.ends_with(".css") {
         "text/css; charset=utf-8"
+    } else if name.ends_with(".svg") {
+        "image/svg+xml"
     } else {
         "application/octet-stream"
     };
