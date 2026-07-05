@@ -330,10 +330,10 @@ fn dashboard(
 
     view! {
         <>
-            // 1 · Overview — the page header: brand on the left, the fleet name +
-            // path, at-a-glance stats, and scan status on the right.
-            <section class="card overview">
-                <div class="ov-brand">
+            // 1 · Header row — the brand mark in its own isolated card, then the
+            // overview (fleet name + path, stats, scan status) beside it.
+            <div class="top-row">
+                <section class="card brand-card">
                     <div class="mark">
                         <span>"▜▒▟███▙▒▛"</span>
                         <span>"▟██▌█▐██▙"</span>
@@ -343,8 +343,8 @@ fn dashboard(
                         <span class="brand">"cohors"</span>
                         <span class="pill">"web"</span>
                     </div>
-                </div>
-                <div class="ov-body">
+                </section>
+                <section class="card overview">
                     <div class="ov-top">
                         <div class="fleet-name">
                             <span class="fleet-label">"Your Fleet"</span>
@@ -381,8 +381,8 @@ fn dashboard(
                         </div>
                     </div>
                     <section class="attention">{summary}</section>
-                </div>
-            </section>
+                </section>
+            </div>
             <div class="grid">
                 // 2 · Repositories: filter + act controls in the subhead row; the
                 // column headers double as the sort control (no separate buttons).
