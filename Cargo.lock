@@ -586,6 +586,7 @@ dependencies = [
  "serde_json",
  "tiny_http",
  "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

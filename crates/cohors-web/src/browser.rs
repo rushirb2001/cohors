@@ -66,6 +66,10 @@ fn App() -> impl IntoView {
     let menu = RwSignal::new(None::<String>);
     // The modal's free-text argument: commit message / run command.
     let action_arg = RwSignal::new(String::new());
+    // Guided tour: the current step (None = not touring) and the on-screen rect
+    // of the step's highlighted element (for the spotlight).
+    let tour = RwSignal::new(None::<usize>);
+    let tour_rect = RwSignal::new(None::<(f64, f64, f64, f64)>);
     let roots = RwSignal::new(Vec::<String>::new());
     // True while the remote-enrichment pass is in flight, so rows that *could* be
     // GitHub (have a remote URL, no `remote` yet) show a spinner instead of "—".
@@ -191,6 +195,48 @@ fn App() -> impl IntoView {
         });
     });
 
+    // Guided tour: when the step changes, apply its demo side-effect (select /
+    // mark the first visible repo, or clear) and — after a tick, so the DOM has
+    // settled — measure the highlighted element's rect for the spotlight.
+    Effect::new(move |_| {
+        let Some(i) = tour.get() else {
+            tour_rect.set(None);
+            return;
+        };
+        let step = &TOUR[i];
+        match step.act {
+            TourAct::Select => {
+                if let Some(id) = first_visible_repo() {
+                    marked.update(|m| m.clear());
+                    selected.set(Some(id));
+                }
+            }
+            TourAct::Mark => {
+                selected.set(None);
+                if let Some(id) = first_visible_repo() {
+                    marked.update(|m| {
+                        m.insert(id);
+                    });
+                }
+            }
+            TourAct::Clear => {
+                selected.set(None);
+                marked.update(|m| m.clear());
+            }
+            TourAct::None => {}
+        }
+        match step.target {
+            None => tour_rect.set(None),
+            Some(sel) => {
+                let sel = sel.to_string();
+                spawn_local(async move {
+                    gloo_timers::future::TimeoutFuture::new(90).await;
+                    tour_rect.set(element_rect(&sel));
+                });
+            }
+        }
+    });
+
     view! {
         <div class="app">
             {move || notice.get().map(|n| view! { <div class="banner">{n}</div> })}
@@ -216,6 +262,7 @@ fn App() -> impl IntoView {
                         enriching,
                         mode,
                         roots,
+                        tour,
                     },
                     reload,
                 )
@@ -237,6 +284,7 @@ fn App() -> impl IntoView {
                         enriching,
                         mode,
                         roots,
+                        tour,
                     },
                     reload,
                 )
@@ -244,6 +292,7 @@ fn App() -> impl IntoView {
             }}
             {confirm_modal(pending, action_arg, notice, result)}
             {result_modal(result)}
+            {tour_overlay(tour, tour_rect, selected, marked)}
         </div>
     }
 }
@@ -267,6 +316,7 @@ struct DashCtx {
     enriching: RwSignal<bool>,
     mode: RwSignal<Mode>,
     roots: RwSignal<Vec<String>>,
+    tour: RwSignal<Option<usize>>,
 }
 
 /// The dashboard body: a header-band Overview (brand + fleet + at-a-glance
@@ -293,6 +343,7 @@ fn dashboard(
         enriching,
         mode,
         roots,
+        tour,
     } = cx;
     let summary = move || summary_chips(&repos.get(), now);
     let visible = move || {
@@ -327,7 +378,7 @@ fn dashboard(
             .and_then(|id| list.iter().find(|s| s.id.0 == id).cloned())
         {
             Some(s) => detail_panel(&s, now, detail).into_any(),
-            None => hint_panel().into_any(),
+            None => hint_panel(tour).into_any(),
         }
     };
 
@@ -1048,6 +1099,7 @@ fn repo_row(
     let id_mark = id.clone();
     let id_tog = id.clone();
     let id_act = id.clone();
+    let id_data = id.clone();
     let is_sel = move || selected.get().as_deref() == Some(id.as_str());
     let mark_td = view! {
         <td
@@ -1099,7 +1151,11 @@ fn repo_row(
     };
 
     view! {
-        <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
+        <tr
+            data-repo=id_data
+            class:selected=is_sel
+            on:click=move |_| selected.set(Some(id_click.clone()))
+        >
             {mark_td}
             <td class=name_class>{repo_cell(s)}</td>
             <td>{sync_cell(s)}</td>
@@ -1834,12 +1890,11 @@ fn working_tree_block(state: DetailState) -> AnyView {
     view! { {files}{patch} }.into_any()
 }
 
-/// The aside's default panel (nothing selected).
 /// The detail aside when nothing is selected: a short lead line plus a tinted,
-/// icon-led "getting started" card — the tips a first-time user needs. The
-/// fleet's state already lives in the table and the Overview chips, so this
-/// panel deliberately stays a guide, not a second status view.
-fn hint_panel() -> impl IntoView {
+/// icon-led "getting started" card — the tips a first-time user needs, and a
+/// button that launches the guided tour. The fleet's state already lives in the
+/// table and the Overview chips, so this panel stays a guide, not a status view.
+fn hint_panel(tour: RwSignal<Option<usize>>) -> impl IntoView {
     view! {
         <div class="card">
             <div class="card-title">"Detail"</div>
@@ -1882,9 +1937,205 @@ fn hint_panel() -> impl IntoView {
                             <span>"Filter the fleet by name with the search box up top."</span>
                         </li>
                     </ul>
+                    <button class="tour-start" on:click=move |_| tour.set(Some(0))>
+                        "Take the 60-second tour →"
+                    </button>
                 </div>
             </div>
         </div>
+    }
+}
+
+// ── Guided tour ──────────────────────────────────────────────────────────────
+
+/// A demo side-effect a tour step performs when entered — kept to selection and
+/// marking only, so the tour never runs a real git action.
+#[derive(Clone, Copy, PartialEq)]
+enum TourAct {
+    None,
+    /// Open the first visible repo's detail.
+    Select,
+    /// Check the first visible repo.
+    Mark,
+    /// Clear any selection / marks.
+    Clear,
+}
+
+/// One step of the guided tour: an optional element to spotlight (a CSS
+/// selector), the copy, and a demo action.
+struct TourStep {
+    target: Option<&'static str>,
+    title: &'static str,
+    body: &'static str,
+    act: TourAct,
+}
+
+const TOUR: &[TourStep] = &[
+    TourStep {
+        target: None,
+        title: "Welcome to cohors",
+        body: "This is a demo fleet of sample repositories. Take the quick tour to see how it works — nothing here touches real git.",
+        act: TourAct::Clear,
+    },
+    TourStep {
+        target: Some(".overview .attention"),
+        title: "Your fleet at a glance",
+        body: "The Overview counts everything up: how many repos you have, and how many need attention, are dirty, or hold stashes.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some(".repos-head .filter"),
+        title: "Find a repo fast",
+        body: "Filter the fleet by name as you type — handy once you have dozens or hundreds of repos.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some(".fleet thead th.sorted"),
+        title: "Sort by any column",
+        body: "Click a column header to sort by it; the active one shows an arrow. The \"needs attention\" toggle narrows the list to repos that want you.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some("tbody tr:nth-child(1) td.mk"),
+        title: "Pick a subset",
+        body: "Check rows to build a selection, then act on just those repos instead of the whole fleet.",
+        act: TourAct::Mark,
+    },
+    TourStep {
+        target: Some(".act-controls"),
+        title: "Run git across the fleet",
+        body: "Fetch, pull, push, commit, stash, or a shell command — on every repo or your selection. Each action previews its exact targets before anything runs.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some("tbody tr:nth-child(1) td.repo"),
+        title: "Drill into a repo",
+        body: "Click any repo to inspect its commits, branches, working-tree changes, and pull requests in the Detail panel.",
+        act: TourAct::Select,
+    },
+    TourStep {
+        target: None,
+        title: "You're ready",
+        body: "Point cohors at your own code: `cohors web --root ~/code`. Reads are always on; add `--allow-writes` to enable actions.",
+        act: TourAct::Clear,
+    },
+];
+
+/// The on-screen rect (left, top, width, height) of the first element matching
+/// `sel`, scrolling it into view first. `None` if it isn't in the DOM.
+fn element_rect(sel: &str) -> Option<(f64, f64, f64, f64)> {
+    let doc = web_sys::window()?.document()?;
+    let el = doc.query_selector(sel).ok().flatten()?;
+    el.scroll_into_view();
+    let r = el.get_bounding_client_rect();
+    Some((r.left(), r.top(), r.width(), r.height()))
+}
+
+/// The repo id of the first visible fleet row (its `data-repo` attribute), so a
+/// tour step can act on exactly the row it highlights.
+fn first_visible_repo() -> Option<String> {
+    let doc = web_sys::window()?.document()?;
+    let tr = doc.query_selector("tbody tr[data-repo]").ok().flatten()?;
+    tr.get_attribute("data-repo")
+}
+
+/// The guided-tour overlay: a spotlight over the current step's element plus a
+/// card with the copy and Back / Next / Skip. Runs entirely on the demo fleet
+/// and only ever selects or marks (never a real git action), so it's safe
+/// anywhere. `None` when not touring.
+fn tour_overlay(
+    tour: RwSignal<Option<usize>>,
+    tour_rect: RwSignal<Option<(f64, f64, f64, f64)>>,
+    selected: RwSignal<Option<String>>,
+    marked: RwSignal<HashSet<String>>,
+) -> impl IntoView {
+    let end = move || {
+        selected.set(None);
+        marked.update(|m| m.clear());
+        tour.set(None);
+    };
+    move || {
+        tour.get().map(|i| {
+            let step = &TOUR[i];
+            let last = i + 1 >= TOUR.len();
+            let counter = format!("{} / {}", i + 1, TOUR.len());
+            let rect = tour_rect.get();
+            // Spotlight box over the target (a little padding); a step with no
+            // target dims the whole screen instead (`.tour-dim`).
+            let spot = rect.map(|(x, y, w, h)| {
+                let p = 6.0;
+                format!(
+                    "left:{}px;top:{}px;width:{}px;height:{}px;",
+                    x - p,
+                    y - p,
+                    w + 2.0 * p,
+                    h + 2.0 * p
+                )
+            });
+            // Card below the target if it's in the upper half, else above it.
+            let card_pos = match rect {
+                Some((_, y, _, h)) => {
+                    let vh = web_sys::window()
+                        .and_then(|w| w.inner_height().ok())
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(800.0);
+                    if y + h < vh * 0.55 {
+                        format!("top:{}px;", y + h + 16.0)
+                    } else {
+                        format!("bottom:{}px;", vh - y + 16.0)
+                    }
+                }
+                None => String::new(),
+            };
+            let card_class = if rect.is_some() {
+                "tour-card"
+            } else {
+                "tour-card center"
+            };
+            view! {
+                <div class="tour">
+                    {match spot {
+                        Some(s) => view! { <div class="tour-spot" style=s></div> }.into_any(),
+                        None => view! { <div class="tour-dim"></div> }.into_any(),
+                    }}
+                    <div class=card_class style=card_pos>
+                        <div class="tour-step">{counter}</div>
+                        <h3>{step.title}</h3>
+                        <p>{step.body}</p>
+                        <div class="tour-actions">
+                            <button class="ghost" on:click=move |_| end()>
+                                "Skip"
+                            </button>
+                            <span class="tour-nav">
+                                {(i > 0)
+                                    .then(|| {
+                                        view! {
+                                            <button
+                                                class="ghost"
+                                                on:click=move |_| tour.set(Some(i - 1))
+                                            >
+                                                "Back"
+                                            </button>
+                                        }
+                                    })}
+                                <button
+                                    class="confirm"
+                                    on:click=move |_| {
+                                        if last {
+                                            end()
+                                        } else {
+                                            tour.set(Some(i + 1))
+                                        }
+                                    }
+                                >
+                                    {if last { "Done" } else { "Next" }}
+                                </button>
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            }
+        })
     }
 }
 
