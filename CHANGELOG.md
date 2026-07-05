@@ -19,6 +19,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.5.9] — 2026-07-05
+
+### Changed
+
+- **The first-run empty state shows both ways in as one "or", with a default-root
+  note.** The welcome now presents `[u] use these  or  cohors --root <dir>`
+  together, then explains the model: `~/projects` is the default root — pass
+  `--root <dir>` to scope cohors to a single folder, or use the default to fold
+  every folder it detects into one **super fleet**.
+
 ## [0.5.8] — 2026-07-05
 
 ### Changed

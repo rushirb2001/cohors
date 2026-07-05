@@ -1,6 +1,6 @@
 ---
 source: crates/cohors-tui/src/ui/tests.rs
-expression: "render_to_string(&app, 100, 20)"
+expression: "render_to_string(&app, 100, 26)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
@@ -8,11 +8,17 @@ expression: "render_to_string(&app, 100, 20)"
 │ ▀▐▖▀█▀▗▌▀  ~/projects                             │  quiet · 12 weeks                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                     
+                                                                                                    
                                           Welcome to cohors                                         
                                                                                                     
                                   Found repos under: ~/code, ~/work                                 
                                                                                                     
-                                     [u] use these  ·  [q] quit                                     
+                              [u] use these   or   cohors --root <dir>                              
+                                                                                                    
+                   ~/projects is the default root. Pass --root <dir> to scope to a                  
+                     single folder, or use the default for the full super fleet.                    
+                                                                                                    
+                                              [q] quit                                              
                                                                                                     
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭─────────────────────────────────┬──────────────────────────────┬─────────────────────────────────╮

@@ -1255,41 +1255,62 @@ pub(crate) fn render_loading(frame: &mut Frame, area: Rect, app: &App) {
 pub(crate) fn render_empty(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let brand = theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD);
     let bold = Style::new().add_modifier(Modifier::BOLD);
-    // This is the very first thing a brand-new user sees, so open with a greeting
-    // rather than a bare "nothing found". Two shapes: if we detected repos
-    // elsewhere, offer the one-key adopt; otherwise show a sample command that
-    // points cohors at their code.
+    let dim = theme.dim();
+
+    // The very first thing a brand-new user sees. Open with a greeting, then lay
+    // out *both* ways in as one "or" choice so the decision is explicit: adopt the
+    // folders we detected, or point cohors at a specific folder with `--root`.
+    // Close with a note that spells out the default-root behaviour — a bare
+    // `cohors` gathers every folder it detects into one "super fleet", while
+    // `--root <dir>` scopes it to a single folder you want to manage on its own.
     let welcome = Line::from(vec![
         Span::raw("Welcome to "),
         Span::styled("cohors", brand),
     ]);
-    let text = if app.empty_picker_active() {
-        Text::from(vec![
-            welcome,
-            Line::from(""),
-            Line::from(format!(
-                "Found repos under: {}",
-                app.suggested_roots.join(", ")
-            )),
-            Line::from(""),
-            Line::from(vec![
-                Span::styled("[u]", bold),
-                Span::raw(" use these  ·  "),
-                Span::styled("[q]", bold),
-                Span::raw(" quit"),
-            ]),
-        ])
+    let mut lines: Vec<Line> = vec![welcome, Line::from("")];
+
+    // The two ways in, always shown together as an "or". When we detected repos,
+    // the first option is the one-key adopt; otherwise it's a nudge to look.
+    if app.empty_picker_active() {
+        lines.push(Line::from(format!(
+            "Found repos under: {}",
+            app.suggested_roots.join(", ")
+        )));
+        lines.push(Line::from(""));
+        lines.push(Line::from(vec![
+            Span::styled("[u]", bold),
+            Span::raw(" use these"),
+            Span::styled("   or   ", dim),
+            Span::styled("cohors --root <dir>", bold),
+        ]));
     } else {
-        Text::from(vec![
-            welcome,
-            Line::from(""),
-            Line::from("Point cohors at your git projects to get started:"),
-            Line::from(""),
-            Line::from(Span::styled("cohors --root ~/code", bold)),
-            Line::from(""),
-            Line::from(vec![Span::styled("[q]", bold), Span::raw(" quit")]),
-        ])
-    };
+        lines.push(Line::from(
+            "Point cohors at your git projects to get started:",
+        ));
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled("cohors --root ~/code", bold)));
+    }
+
+    // The default-root disclaimer: scoped fleet vs. the full super fleet.
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        format!(
+            "{} is the default root. Pass --root <dir> to scope to a",
+            roots_label(app)
+        ),
+        dim,
+    )));
+    lines.push(Line::from(Span::styled(
+        "single folder, or use the default for the full super fleet.",
+        dim,
+    )));
+    lines.push(Line::from(""));
+    lines.push(Line::from(vec![
+        Span::styled("[q]", bold),
+        Span::raw(" quit"),
+    ]));
+
+    let text = Text::from(lines);
     let height = text.lines.len() as u16;
     let para = Paragraph::new(text).alignment(Alignment::Center);
     frame.render_widget(para, center_v(area, height));

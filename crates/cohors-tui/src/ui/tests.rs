@@ -627,7 +627,7 @@ fn snapshot_standup_collecting() {
 #[test]
 fn snapshot_empty() {
     let app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 100, 26));
 }
 
 /// Empty fleet, but repos detected elsewhere: the first-run rescue prompt.
@@ -635,7 +635,7 @@ fn snapshot_empty() {
 fn snapshot_empty_picker() {
     let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
     app.suggested_roots = vec!["~/code".to_string(), "~/work".to_string()];
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 100, 26));
 }
 
 #[test]
