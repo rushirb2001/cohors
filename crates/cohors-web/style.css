@@ -156,32 +156,49 @@ body {
 .link a:hover { text-decoration: underline; }
 .empty { padding: 1.2rem 0.95rem; color: var(--faint); font-size: 0.82rem; }
 
-/* Empty-state for the detail aside: a lead line and an amber-tinted, icon-led
-   getting-started card. It's a guide, not a status view — the fleet's state
-   already lives in the table and the Overview chips. */
+/* Empty-state for the detail aside: a live "fleet pulse" — a combined activity
+   sparkline that grows in, and an attention breakdown bar — drawn from the
+   loaded fleet. Onboarding lives in the tour now, so this is a status glance. */
 .scroll.hint { padding: 0; }
 .hint-lead {
   margin: 0; padding: 0.8rem 0.95rem; color: var(--dim); font-size: 0.86rem;
 }
-.tips-card {
-  margin: 0.2rem 0.8rem 0.9rem;
-  padding: 0.85rem 0.9rem;
-  background: rgba(146, 97, 10, 0.06);              /* amber tint */
-  border: 1px solid rgba(146, 97, 10, 0.22);
-  border-radius: 9px;
+.pulse-card {
+  margin: 0.2rem 0.8rem 0.9rem; padding: 0.85rem 0.9rem;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 9px;
 }
-.tips-h {
-  font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.07em; color: var(--amber);
-  margin-bottom: 0.55rem;
+.pulse-h {
+  font-family: var(--mono); font-size: 0.66rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em; color: var(--dim);
+  margin-bottom: 0.6rem;
 }
-.tips { list-style: none; margin: 0; padding: 0; }
-.tips li {
-  display: flex; align-items: flex-start; gap: 0.6rem;
-  padding: 0.32rem 0; color: var(--dim); font-size: 0.82rem; line-height: 1.45;
+.pulse-spark { display: flex; align-items: flex-end; gap: 3px; height: 54px; }
+.pulse-bar {
+  flex: 1; min-height: 4px; background: var(--accent); border-radius: 2px 2px 0 0;
+  transform-origin: bottom; animation: pulse-grow 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
 }
-.tips .tip-ic { flex: none; color: var(--amber); margin-top: 0.12rem; line-height: 1; }
-.tips b { color: var(--text); font-weight: 600; }
+@keyframes pulse-grow {
+  from { transform: scaleY(0); opacity: 0.2; }
+  to { transform: scaleY(1); opacity: 1; }
+}
+.pulse-cap {
+  margin-top: 0.55rem; color: var(--faint); font-size: 0.76rem; font-family: var(--mono);
+}
+.pulse-stack {
+  display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line);
+}
+.pulse-stack .seg { animation: seg-in 0.5s ease backwards; }
+@keyframes seg-in { from { width: 0 !important; } }
+.pulse-stack .seg.risk { background: var(--red); }
+.pulse-stack .seg.warn { background: var(--amber); }
+.pulse-stack .seg.notice { background: var(--blue); }
+.pulse-stack .seg.calm { background: #c7d2c0; }
+.pulse-legend {
+  display: flex; justify-content: space-between; margin-top: 0.55rem;
+  font-family: var(--mono); font-size: 0.76rem;
+}
+.pulse-legend .need { color: var(--amber); font-weight: 600; }
+.pulse-legend .calm { color: var(--faint); }
 
 /* ── Attention chips (quiet: muted text, no coloured fills) ─────────────── */
 .attention { display: flex; flex-wrap: wrap; gap: 0.45rem; }
@@ -526,10 +543,16 @@ td.act { width: 2.4em; text-align: center; }
 .dd { position: relative; display: inline-block; }
 .dd-btn { font-family: var(--mono); }
 .dd-menu {
-  position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 9em;
+  position: fixed; z-index: 45; min-width: 9em;
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.12);
+  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.14);
   padding: 4px; display: flex; flex-direction: column;
+  transform-origin: top left;
+  animation: dd-in 0.12s ease;
+}
+@keyframes dd-in {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .dd-item {
   background: none; border: none; text-align: left; padding: 6px 12px;
@@ -750,11 +773,48 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 }
 .tour-card .confirm:hover { filter: brightness(1.08); }
 
-/* The "Take the tour" button inside the tips card. */
+/* The "Replay the tour" button under the fleet-pulse cards. */
 .tour-start {
-  margin-top: 0.8rem; width: 100%;
+  margin: 0.1rem 0.8rem 0.9rem; width: calc(100% - 1.6rem);
   background: var(--accent-soft); color: var(--accent);
   border: 1px solid rgba(124, 58, 237, 0.3); border-radius: 8px;
   padding: 8px 12px; cursor: pointer; font-weight: 600; font-size: 0.82rem;
+  transition: background 0.15s ease;
 }
 .tour-start:hover { background: #ece9f9; }
+
+/* ── Micro-animations: small moments across the page ─────────────────────── */
+/* Action modals fade + rise in. */
+.overlay { animation: overlay-in 0.16s ease; }
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+.modal { animation: modal-in 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+/* The detail drawer fades in when a repo is opened (and back to the pulse). */
+.side .card { animation: fade-in 0.2s ease; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+/* Notice banner drops in. */
+.banner { animation: banner-in 0.2s ease; }
+@keyframes banner-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+/* Rows, buttons, chips, and headers ease on hover / selection. */
+.fleet tbody tr { transition: background 0.12s ease, box-shadow 0.12s ease; }
+.ghost, .chip, .dd-btn, .toggle, .sort, .fleet th.sortable, .act-controls .dd-btn,
+.tour-card .confirm, .modal .confirm {
+  transition: background 0.14s ease, color 0.14s ease, border-color 0.14s ease,
+              filter 0.14s ease;
+}
+/* Sort caret settles when the active column changes. */
+.fleet th .caret { transition: color 0.14s ease; }
+
+/* Honour the user's reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

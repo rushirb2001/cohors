@@ -17,6 +17,7 @@ use cohors_core::{
 };
 use leptos::prelude::*;
 use std::collections::HashSet;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
 /// Fixed clock for the *demo* fleet, so its relative ages stay sensible.
@@ -197,24 +198,42 @@ fn App() -> impl IntoView {
         });
     });
 
+    // First-ever visit: auto-run the tour once, after the fleet has rendered so
+    // the spotlight targets exist. A localStorage flag makes it show only once.
+    if !tour_seen() {
+        spawn_local(async move {
+            gloo_timers::future::TimeoutFuture::new(750).await;
+            if !tour_seen() {
+                tour.set(Some(0));
+            }
+        });
+    }
+
     // Guided tour: when the step changes, apply its demo side-effect (select /
-    // mark the first visible repo, or clear) and — after a tick, so the DOM has
-    // settled — measure the highlighted element and place the floating card.
+    // mark a repo, or conjure a modal — all safe, never a real git action) and,
+    // after a tick so the DOM has settled, measure the target and float the card.
     Effect::new(move |_| {
         let Some(i) = tour.get() else {
+            // Tour closed: clear everything it may have staged.
             tour_rect.set(None);
             tour_card_pos.set(None);
+            pending.set(None);
+            result.set(None);
             return;
         };
         let step = &TOUR[i];
         match step.act {
             TourAct::Select => {
+                pending.set(None);
+                result.set(None);
                 if let Some(id) = first_visible_repo() {
                     marked.update(|m| m.clear());
                     selected.set(Some(id));
                 }
             }
             TourAct::Mark => {
+                pending.set(None);
+                result.set(None);
                 selected.set(None);
                 if let Some(id) = first_visible_repo() {
                     marked.update(|m| {
@@ -222,16 +241,57 @@ fn App() -> impl IntoView {
                     });
                 }
             }
+            TourAct::ShowConfirm => {
+                selected.set(None);
+                result.set(None);
+                let names: Vec<String> = repos
+                    .get_untracked()
+                    .iter()
+                    .take(3)
+                    .map(|r| r.name.clone())
+                    .collect();
+                pending.set(Some(PendingAction {
+                    verb: "pull".to_string(),
+                    selector: serde_json::json!({ "all": true }),
+                    targets: names,
+                }));
+            }
+            TourAct::ShowResults => {
+                selected.set(None);
+                pending.set(None);
+                let rows: Vec<ResultRow> = repos
+                    .get_untracked()
+                    .iter()
+                    .take(3)
+                    .enumerate()
+                    .map(|(n, r)| ResultRow {
+                        repo: r.name.clone(),
+                        state: if n == 2 { "skip" } else { "ok" },
+                        message: if n == 2 {
+                            "1 conflict — resolve first".to_string()
+                        } else {
+                            "pulled".to_string()
+                        },
+                        stdout: String::new(),
+                        stderr: String::new(),
+                    })
+                    .collect();
+                result.set(Some(ActionResult {
+                    verb: "pull".to_string(),
+                    summary: "2 ok · 1 skipped".to_string(),
+                    rows,
+                }));
+            }
             TourAct::Clear => {
                 selected.set(None);
                 marked.update(|m| m.clear());
+                pending.set(None);
+                result.set(None);
             }
             TourAct::None => {}
         }
         let target = step.target;
         spawn_local(async move {
-            // Let the DOM settle (a demo action may have changed the layout),
-            // then measure the target and compute where the card should float.
             gloo_timers::future::TimeoutFuture::new(90).await;
             let rect = target.and_then(element_rect);
             tour_rect.set(rect);
@@ -380,7 +440,7 @@ fn dashboard(
             .and_then(|id| list.iter().find(|s| s.id.0 == id).cloned())
         {
             Some(s) => detail_panel(&s, now, detail).into_any(),
-            None => hint_panel(tour).into_any(),
+            None => hint_panel(&list, now, tour).into_any(),
         }
     };
 
@@ -677,12 +737,23 @@ fn act_dropdown(
 ) -> impl IntoView {
     let key_open = key.clone();
     let key_toggle = key;
+    // The menu is positioned `fixed` at the trigger so it escapes the table's
+    // overflow clipping (a row's menu was getting cut off by the scroll box).
+    let pos = RwSignal::new((0.0_f64, 0.0_f64));
     view! {
         <span class="dd">
             <button
                 class="ghost dd-btn"
                 on:click=move |ev| {
                     ev.stop_propagation();
+                    if let Some(el) = ev
+                        .current_target()
+                        .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+                    {
+                        let r = el.get_bounding_client_rect();
+                        let vw = viewport().0;
+                        pos.set((r.left().min(vw - 172.0).max(8.0), r.bottom() + 4.0));
+                    }
                     menu.update(|m| {
                         *m = if m.as_deref() == Some(key_toggle.as_str()) {
                             None
@@ -699,8 +770,9 @@ fn act_dropdown(
                 (menu.get().as_deref() == Some(key_open.as_str()))
                     .then(|| {
                         let sel = selector.clone();
+                        let (l, t) = pos.get();
                         view! {
-                            <div class="dd-menu">
+                            <div class="dd-menu" style=format!("left:{l}px;top:{t}px")>
                                 {cohors_web::ACTION_VERBS
                                     .iter()
                                     .map(|v| {
@@ -1347,39 +1419,6 @@ fn activity_icon() -> impl IntoView {
     icon! { <path d="M3 12h4l3 8 4-16 3 8h4" /> }
 }
 
-/// Mouse pointer — the "click a row to inspect" tip.
-fn cursor_icon() -> impl IntoView {
-    icon! {
-        <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" />
-    }
-}
-
-/// Checkbox — the "check rows to select" tip.
-fn check_square_icon() -> impl IntoView {
-    icon! {
-        <rect width="18" height="18" x="3" y="3" rx="2" />
-        <path d="m9 12 2 2 4-4" />
-    }
-}
-
-/// Up/down arrows — the "sort / filter" tip.
-fn sort_icon() -> impl IntoView {
-    icon! {
-        <path d="m21 16-4 4-4-4" />
-        <path d="M17 20V4" />
-        <path d="m3 8 4-4 4 4" />
-        <path d="M7 4v16" />
-    }
-}
-
-/// Magnifier — the "filter by name" tip.
-fn search_icon() -> impl IntoView {
-    icon! {
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.3-4.3" />
-    }
-}
-
 /// Folder — the scanned fleet root in the header.
 fn folder_icon() -> impl IntoView {
     icon! {
@@ -1892,57 +1931,88 @@ fn working_tree_block(state: DetailState) -> AnyView {
     view! { {files}{patch} }.into_any()
 }
 
-/// The detail aside when nothing is selected: a short lead line plus a tinted,
-/// icon-led "getting started" card — the tips a first-time user needs, and a
-/// button that launches the guided tour. The fleet's state already lives in the
-/// table and the Overview chips, so this panel stays a guide, not a status view.
-fn hint_panel(tour: RwSignal<Option<usize>>) -> impl IntoView {
+/// The severity → bucket index used by the fleet-pulse breakdown.
+fn sev_index(s: Severity) -> usize {
+    match s {
+        Severity::Ok => 0,
+        Severity::Info => 1,
+        Severity::Notice => 2,
+        Severity::Warn => 3,
+        Severity::Risk => 4,
+    }
+}
+
+/// The detail aside when nothing is selected. Onboarding now lives in the tour,
+/// so instead of tips this shows a live "fleet pulse" — a combined activity
+/// sparkline and an attention breakdown, drawn from the loaded fleet — plus a
+/// button to replay the tour.
+fn hint_panel(repos: &[RepoSnapshot], now: i64, tour: RwSignal<Option<usize>>) -> impl IntoView {
+    // Element-wise sum of every repo's weekly activity into one fleet sparkline.
+    let weeks = repos.iter().map(|r| r.activity.len()).max().unwrap_or(0);
+    let mut agg = vec![0u32; weeks];
+    for r in repos {
+        for (i, &v) in r.activity.iter().enumerate() {
+            if i < weeks {
+                agg[i] += v as u32;
+            }
+        }
+    }
+    let peak = agg.iter().copied().max().unwrap_or(1).max(1);
+    let total_commits: u32 = agg.iter().sum();
+    let repo_count = repos.len();
+    let bars = agg
+        .iter()
+        .enumerate()
+        .map(|(i, &v)| {
+            let h = (v as f64 / peak as f64 * 100.0).max(4.0);
+            let delay = i as f64 * 45.0;
+            view! { <div class="pulse-bar" style=format!("height:{h}%;animation-delay:{delay}ms")></div> }
+        })
+        .collect::<Vec<_>>();
+
+    // Attention breakdown by severity.
+    let mut counts = [0usize; 5];
+    for r in repos {
+        counts[sev_index(assess(r, now).severity)] += 1;
+    }
+    let total = repo_count.max(1);
+    let attention = counts[2] + counts[3] + counts[4];
+    let calm = counts[0] + counts[1];
+    let seg = |n: usize, cls: &'static str| {
+        (n > 0).then(|| {
+            let w = n as f64 / total as f64 * 100.0;
+            view! { <div class=format!("seg {cls}") style=format!("width:{w}%")></div> }
+        })
+    };
+
     view! {
         <div class="card">
             <div class="card-title">"Detail"</div>
             <div class="scroll hint">
                 <p class="hint-lead">
-                    "Select a repository to inspect its commits, branches, changes, and pull requests."
+                    "Pick a repository to inspect it — or take in the fleet's pulse."
                 </p>
-                <div class="tips-card">
-                    <div class="tips-h">"Getting started"</div>
-                    <ul class="tips">
-                        <li>
-                            <span class="tip-ic">{cursor_icon()}</span>
-                            <span>
-                                "Click any repo row to inspect its commits, branches, changes, and PRs."
-                            </span>
-                        </li>
-                        <li>
-                            <span class="tip-ic">{check_square_icon()}</span>
-                            <span>
-                                "Check rows, then " <b>"act on selected"</b>
-                                " to run git on just those repos."
-                            </span>
-                        </li>
-                        <li>
-                            <span class="tip-ic">{branch_icon()}</span>
-                            <span>
-                                <b>"act on all"</b>
-                                " fetches, pulls, or commits across the whole fleet — with a preview first."
-                            </span>
-                        </li>
-                        <li>
-                            <span class="tip-ic">{sort_icon()}</span>
-                            <span>
-                                "Click a column header to sort; " <b>"needs attention"</b>
-                                " filters to what wants you."
-                            </span>
-                        </li>
-                        <li>
-                            <span class="tip-ic">{search_icon()}</span>
-                            <span>"Filter the fleet by name with the search box up top."</span>
-                        </li>
-                    </ul>
-                    <button class="tour-start" on:click=move |_| tour.set(Some(0))>
-                        "Take the 60-second tour →"
-                    </button>
+                <div class="pulse-card">
+                    <div class="pulse-h">"Fleet activity · last 12 weeks"</div>
+                    <div class="pulse-spark">{bars}</div>
+                    <div class="pulse-cap">
+                        {format!("{total_commits} commits across {repo_count} repos")}
+                    </div>
                 </div>
+                <div class="pulse-card">
+                    <div class="pulse-h">"Attention"</div>
+                    <div class="pulse-stack">
+                        {seg(counts[4], "risk")} {seg(counts[3], "warn")}
+                        {seg(counts[2], "notice")} {seg(calm, "calm")}
+                    </div>
+                    <div class="pulse-legend">
+                        <span class="need">{format!("{attention} need you")}</span>
+                        <span class="calm">{format!("{calm} calm")}</span>
+                    </div>
+                </div>
+                <button class="tour-start" on:click=move |_| tour.set(Some(0))>
+                    "↻ Replay the tour"
+                </button>
             </div>
         </div>
     }
@@ -1950,8 +2020,8 @@ fn hint_panel(tour: RwSignal<Option<usize>>) -> impl IntoView {
 
 // ── Guided tour ──────────────────────────────────────────────────────────────
 
-/// A demo side-effect a tour step performs when entered — kept to selection and
-/// marking only, so the tour never runs a real git action.
+/// A demo side-effect a tour step performs when entered. All are safe — they
+/// only move UI state (selection, a preview modal), never a real git action.
 #[derive(Clone, Copy, PartialEq)]
 enum TourAct {
     None,
@@ -1959,8 +2029,30 @@ enum TourAct {
     Select,
     /// Check the first visible repo.
     Mark,
-    /// Clear any selection / marks.
+    /// Pop the confirm/preview modal with sample targets.
+    ShowConfirm,
+    /// Pop the results modal with a sample outcome.
+    ShowResults,
+    /// Clear any selection / marks / modals.
     Clear,
+}
+
+/// localStorage key marking that this browser has seen the intro tour.
+const TOUR_FLAG: &str = "cohors_toured";
+
+/// Whether the intro tour has already run in this browser.
+fn tour_seen() -> bool {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok().flatten())
+        .and_then(|s| s.get_item(TOUR_FLAG).ok().flatten())
+        .is_some()
+}
+
+/// Remember that the tour ran, so it won't auto-open again.
+fn set_tour_seen() {
+    if let Some(s) = web_sys::window().and_then(|w| w.local_storage().ok().flatten()) {
+        let _ = s.set_item(TOUR_FLAG, "1");
+    }
 }
 
 /// One step of the guided tour: an optional element to spotlight (a CSS
@@ -1976,67 +2068,91 @@ const TOUR: &[TourStep] = &[
     TourStep {
         target: None,
         title: "Welcome to cohors",
-        body: "cohors shows every git repository you have in one place — their status, and what needs you. This is a demo fleet; take the quick tour to learn the ropes. Nothing here touches real git.",
+        body: "Every git repo you have, on one screen — their status and what needs you. Here's a quick tour. It only looks around and stages a preview; it never runs git.",
         act: TourAct::Clear,
     },
     TourStep {
-        target: Some("tbody tr:nth-child(1)"),
-        title: "One row per repo",
-        body: "Each repo is a row: its branch, how it stands against the remote, stashes, CI, recent activity — and, at the end, why it needs you.",
-        act: TourAct::Clear,
+        target: Some(".ov-top .fleet-name"),
+        title: "This is your fleet",
+        body: "cohors scanned this folder. Every repository below lives somewhere under it — no setup, no config to point at each one.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some(".overview .conn"),
+        title: "A live local scan",
+        body: "It reads your repos straight from disk. Made changes in a terminal? Hit Rescan and the fleet catches up.",
+        act: TourAct::None,
     },
     TourStep {
         target: Some(".overview .attention"),
-        title: "The whole fleet at a glance",
-        body: "Start here: how many repositories you have, and how many need attention, are dirty, or hold stashes. It updates as you act.",
+        title: "Your fleet's pulse",
+        body: "The at-a-glance count: how many repositories you have, and how many need attention, are dirty, or hold stashes. Watch it drop as you deal with things.",
         act: TourAct::None,
     },
     TourStep {
-        target: Some("tbody tr:nth-child(1) td.status"),
-        title: "Why a repo needs you",
-        body: "The Status column is the headline — uncommitted changes, unpushed work, a branch never pushed, a stale remote. It's the same judgment across the TUI, CLI, and this page.",
+        target: Some("tbody tr:nth-child(1)"),
+        title: "One row, one repo",
+        body: "Read a row left to right: its name and branch, sync with the remote, stashes, PRs, CI, last commit, and activity — ending with the Status column, the headline that says exactly why it needs you.",
         act: TourAct::None,
     },
     TourStep {
-        target: Some(".repos-head"),
-        title: "Filter and focus",
-        body: "Filter the fleet by name as you type, or flip \"needs attention\" to hide the calm repos and see only what wants you.",
+        target: Some(".repos-head .filter"),
+        title: "Filter by name",
+        body: "Start typing to narrow the fleet — useful once you're tracking dozens or hundreds of repos.",
+        act: TourAct::None,
+    },
+    TourStep {
+        target: Some(".repos-head .toggle"),
+        title: "Focus on what matters",
+        body: "Flip \"needs attention\" to hide the calm repos and see only the ones that want something from you.",
         act: TourAct::None,
     },
     TourStep {
         target: Some(".fleet thead th.sorted"),
         title: "Sort any column",
-        body: "Click a column header to sort by it — attention, recency, name, or how far out of sync. The active column shows an arrow.",
+        body: "Click a column header to sort — by attention, recency, name, or how far out of sync. The active column shows an arrow.",
         act: TourAct::None,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1) td.mk"),
         title: "Pick a subset",
-        body: "Check rows to build a selection — we've ticked the first repo for you. Then you can act on just those, instead of the whole fleet.",
+        body: "Tick rows to build a selection — we've checked the first one for you. Now you can act on just those repos.",
         act: TourAct::Mark,
     },
     TourStep {
         target: Some(".act-controls"),
-        title: "Run git across the fleet",
-        body: "\"act on all\" targets every repo; \"act on selected\" targets your ticked ones. Fetch, pull, push, commit, stash, or a shell command — each one previews its exact targets and asks you to confirm before anything runs.",
+        title: "Act on the fleet",
+        body: "\"act on selected\" targets your ticked repos; \"act on all\" targets everything. Either way you pick a verb — fetch, pull, push, commit, stash, or a shell command.",
         act: TourAct::None,
+    },
+    TourStep {
+        target: Some(".modal"),
+        title: "Preview before it runs",
+        body: "Nothing happens by surprise. First, cohors shows you the exact repositories an action will touch — like this — and waits for you to confirm.",
+        act: TourAct::ShowConfirm,
+    },
+    TourStep {
+        target: Some(".modal.results"),
+        title: "See what happened",
+        body: "After it runs, you get a per-repo report: what succeeded, what was skipped and why, and any command output.",
+        act: TourAct::ShowResults,
     },
     TourStep {
         target: Some("tbody tr:nth-child(1) td.act"),
         title: "Or act on one repo",
-        body: "Every row has its own Git menu — the same actions, scoped to that single repository.",
-        act: TourAct::None,
+        body: "Prefer one at a time? Every row has its own Git menu with the same actions, scoped to that single repository.",
+        act: TourAct::Clear,
     },
     TourStep {
-        target: Some("tbody tr:nth-child(1) td.repo"),
-        title: "Drill into a repo",
-        body: "Click any repo to open it. The Detail panel on the right now shows this one's recent commits, branches, working-tree changes, and pull requests.",
+        target: Some(".side"),
+        title: "Look closer",
+        body: "Click a repo to open it — its recent commits, branches, working-tree changes, and pull requests all fill in right here in the Detail panel.",
         act: TourAct::Select,
     },
     TourStep {
         target: None,
-        title: "You're ready",
-        body: "Point cohors at your own code: cohors web --root ~/code. Reads are always on; add --allow-writes to enable actions. That's the tour — happy shipping.",
+        title: "That's the tour",
+        body: "Reads are always on. Relaunch with --allow-writes to enable the actions you just saw. Happy shipping — you can replay this tour anytime from the Detail panel.",
         act: TourAct::Clear,
     },
 ];
@@ -2128,6 +2244,7 @@ fn tour_overlay(
     // Only flips on start/end, so the tour DOM persists across steps.
     let touring = Memo::new(move |_| tour.get().is_some());
     let end = move || {
+        set_tour_seen();
         selected.set(None);
         marked.update(|m| m.clear());
         tour.set(None);
