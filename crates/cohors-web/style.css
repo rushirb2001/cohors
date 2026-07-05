@@ -401,6 +401,16 @@ body {
 }
 .fleet tbody tr { border-bottom: 1px solid var(--line); cursor: pointer; }
 .fleet tbody tr:last-child { border-bottom: none; }
+/* A 10% severity wash on the row — hover and selection override it. */
+.fleet tbody tr.sev-risk:not(:hover):not(.selected) {
+  background: color-mix(in srgb, var(--sev-risk) 10%, transparent);
+}
+.fleet tbody tr.sev-warn:not(:hover):not(.selected) {
+  background: color-mix(in srgb, var(--sev-warn) 10%, transparent);
+}
+.fleet tbody tr.sev-notice:not(:hover):not(.selected) {
+  background: color-mix(in srgb, var(--sev-notice) 10%, transparent);
+}
 .fleet tbody tr:hover { background: #fafafb; }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 

@@ -599,6 +599,17 @@ fn ci_tint(s: &RepoSnapshot) -> &'static str {
     }
 }
 
+/// The row-tint class for a severity (a faint background wash); calm repos get
+/// none. Uses the overall assessment severity, like the Status colour.
+fn severity_row_class(sev: Severity) -> &'static str {
+    match sev {
+        Severity::Risk => "sev-risk",
+        Severity::Warn => "sev-warn",
+        Severity::Notice => "sev-notice",
+        Severity::Ok | Severity::Info => "",
+    }
+}
+
 /// The CSS color class for a severity — mirrors the TUI's `severity_style`.
 fn severity_class(sev: Severity) -> &'static str {
     match sev {
@@ -1154,7 +1165,11 @@ fn repo_row(
         let name = s.name.clone();
         let reason = reason.clone();
         return view! {
-            <tr class:selected=is_sel on:click=move |_| selected.set(Some(id_click.clone()))>
+            <tr
+                class="sev-risk"
+                class:selected=is_sel
+                on:click=move |_| selected.set(Some(id_click.clone()))
+            >
                 {mark_td}
                 <td class="repo error">{name}</td>
                 <td></td>
@@ -1176,10 +1191,14 @@ fn repo_row(
         Severity::Warn | Severity::Risk => "repo strong",
         Severity::Notice => "repo",
     };
+    // A faint severity wash on the whole row (same overall severity the Status
+    // colour and the Attention breakdown use).
+    let row_class = severity_row_class(a.severity);
 
     view! {
         <tr
             data-repo=id_data
+            class=row_class
             class:selected=is_sel
             on:click=move |_| selected.set(Some(id_click.clone()))
         >
