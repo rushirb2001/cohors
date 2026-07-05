@@ -330,7 +330,9 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
         return Some(DockBox {
             title,
             right: Some("Enter: full detail"),
-            border: theme.dim(),
+            // Full-strength (not dim): the separator should read as a solid
+            // structural line, matching the box borders around it.
+            border: Style::new(),
             left: vec![Line::from(Span::styled(
                 format!("⚠ {reason}"),
                 theme.error(),
@@ -563,7 +565,8 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
     Some(DockBox {
         title,
         right: Some("Enter: full detail"),
-        border: theme.dim(),
+        // Full-strength (not dim): a solid structural line, like the borders.
+        border: Style::new(),
         left: lines,
         right_col,
     })
