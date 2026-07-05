@@ -7,18 +7,18 @@ expression: "render_to_string(&app, 100, 22)"
 │ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
 │ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk ·╭ Command ───────────────────────────────────────────────────────────────╮            │
-╰────────────│ : sort name▏                                                           │────────────╯
-╭ Repositorie│ ────────────────────────────────────────────────────────────────────── │────────────╮
-│    Repo    │ :fetch :pull :push         │ sync the targets with their remotes       │            │
-│▌   legacy-b│ :!<cmd>                    │ run any shell command across the targets  │.git (permi…│
-│  ○ payments│ :sort <name·dirty·recent>  │ change the sort order                     │            │
-│            │ :dirty   /<text>           │ needs-attention · fuzzy filter            │            │
-╰────────────│ :jump <repo>               │ move the cursor to a repo                 │────────────╯
-─────────────│ :standup :refresh :quit    │ standup · rescan · exit                   │─────────────
-╭────────────╰────────────────────────── ⏎ run · Esc cancel ──────────────────────────╯────────────╮
-│             select              │     act → legacy-billing     │              view               │
+╭ Attention (╭ Command ───────────────────────────────────────────────────────────────╮────────────╮
+│ 1 at risk ·│ : sort name▏                                                           │            │
+╰────────────│ ────────────────────────────────────────────────────────────────────── │────────────╯
+╭ Repositorie│ :fetch :pull :push         │ sync the targets with their remotes       │────────────╮
+│    Repo    │ :!<cmd>                    │ run any shell command across the targets  │            │
+│▌   legacy-b│ :sort <name·dirty·recent>  │ change the sort order                     │.git (permi…│
+│  ○ payments│ :dirty   /<text>           │ needs-attention · fuzzy filter            │            │
+│            │ :jump <repo>               │ move the cursor to a repo                 │            │
+╰────────────│ :standup :refresh :quit    │ standup · rescan · exit                   │────────────╯
+─────────────├────────────────────────────────────────────────────────────────────────┤─────────────
+╭────────────│                           ⏎ run · Esc cancel                           │────────────╮
+│            ╰────────────────────────────────────────────────────────────────────────╯            │
 │ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── │
 │     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       │
 │     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          │

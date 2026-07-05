@@ -19,7 +19,7 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-## [0.5.3] — 2026-07-05
+## [0.5.4] — 2026-07-05
 
 TUI design polish (no behaviour changes):
 
@@ -39,9 +39,10 @@ TUI design polish (no behaviour changes):
   the word.
 - **Marked repos show a brand-purple filled circle** in a checkbox-style gutter
   (an empty `○` when unmarked).
-- **Each modal carries its own key hints on its bottom border** (Command, Shell,
-  Confirm, Open-with, Detail, Standup, Help), so the root footer keeps the
-  `select`/`act`/`view` keys instead of being taken over by the overlay's.
+- **Each modal carries its own key hints inside its box** — below a solid
+  separator joined into the borders (Command, Shell, Confirm, Open-with, Detail,
+  Standup, Help) — so the root footer keeps the `select`/`act`/`view` keys
+  instead of being taken over by the overlay's.
 
 ## [0.5.0] — 2026-07-05
 

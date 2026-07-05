@@ -7,18 +7,17 @@ expression: "render_to_string(&app, 100, 64)"
 │ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
 │ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ █████████████╭ Help ──────────────────────────────────────────────────────────────╮█████████████ │
-│ 1 at risk · 2│                                                                    │              │
-╰──────────────│  Legend — what each column shows                                   │──────────────╯
-╭ Repositories │    ↑2              commits ahead of upstream                       │──────────────╮
-│    Repo      │    ↓5              commits behind upstream                         │              │
-│▌   legacy-bil│    ●               in sync with upstream                           │d .git (permi…│
-│  ○ payments @│    local           no upstream (local only)                        │              │
-│  ○ web-app @f│    ● ● ●           CI: pass / fail / pending                       │ull           │
-│  ○ infra @a1b│    2pr             open pull requests                              │ changes      │
-│  ○ auth-servi│    3               changed files, all staged                       │              │
-│              │    3               changed files, some unstaged                    │              │
+╭ Attention (4 ╭ Help ──────────────────────────────────────────────────────────────╮──────────────╮
+│ █████████████│                                                                    │█████████████ │
+│ 1 at risk · 2│  Legend — what each column shows                                   │              │
+╰──────────────│    ↑2              commits ahead of upstream                       │──────────────╯
+╭ Repositories │    ↓5              commits behind upstream                         │──────────────╮
+│    Repo      │    ●               in sync with upstream                           │              │
+│▌   legacy-bil│    local           no upstream (local only)                        │d .git (permi…│
+│  ○ payments @│    ● ● ●           CI: pass / fail / pending                       │              │
+│  ○ web-app @f│    2pr             open pull requests                              │ull           │
+│  ○ infra @a1b│    3               changed files, all staged                       │ changes      │
+│  ○ auth-servi│    3               changed files, some unstaged                    │              │
 │              │    s1              stash entries                                   │              │
 │              │    name            row: clean                                      │              │
 │              │    name            row: needs attention                            │              │
@@ -53,14 +52,15 @@ expression: "render_to_string(&app, 100, 64)"
 │              │                                                                    │              │
 │              │  App                                                               │              │
 │              │    r               refresh (re-scan)                               │              │
-├──────────────│    h               show / hide the hint bar                        │──────────────┤
-│ legacy-billin│    ?               toggle this help                                │: full detail │
-│              │    q / Ctrl-C      quit                                            │              │
-│ ⚠ could not r│                                                                    │              │
-╰──────────────│  cohors vX.Y.Z                                                     │──────────────╯
-───────────────│                                                                    │───────────────
-╭──────────────╰────────────────────────── ? / Esc close ───────────────────────────╯──────────────╮
-│             select              │     act → legacy-billing     │              view               │
+│              │    h               show / hide the hint bar                        │              │
+├──────────────│    ?               toggle this help                                │──────────────┤
+│ legacy-billin│    q / Ctrl-C      quit                                            │: full detail │
+│              │                                                                    │              │
+│ ⚠ could not r│  cohors vX.Y.Z                                                     │              │
+╰──────────────├────────────────────────────────────────────────────────────────────┤──────────────╯
+───────────────│                            ? / Esc close                           │───────────────
+╭──────────────│                                                                    │──────────────╮
+│             s╰────────────────────────────────────────────────────────────────────╯              │
 │ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── │
 │     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       │
 │     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          │

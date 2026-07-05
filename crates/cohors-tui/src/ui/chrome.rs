@@ -972,24 +972,77 @@ pub(crate) fn footer_lines(app: &App, theme: &Theme) -> Vec<Line<'static>> {
         .collect()
 }
 
-/// The current mode's key hints as one styled line — flushed onto a modal's
-/// bottom border so the overlay is self-contained (the root footer keeps the
-/// root keys). Keys accent-bold, descriptions dim, `·`-separated, with a space
-/// of border breathing room each end.
+/// The current mode's key hints as one styled line: keys accent-bold,
+/// descriptions dim, `·`-separated. Rendered *inside* a modal, above its bottom
+/// border, by [`render_modal_hints`].
 pub(crate) fn modal_hint_line(app: &App, theme: &Theme) -> Line<'static> {
     let key_style = theme.ahead().add_modifier(Modifier::BOLD);
-    let mut spans: Vec<Span> = vec![Span::raw(" ")];
+    let mut spans: Vec<Span> = Vec::new();
     for (_, items) in footer_groups(app) {
         for (key, desc) in items {
-            if spans.len() > 1 {
+            if !spans.is_empty() {
                 spans.push(Span::styled(" · ", theme.dim()));
             }
             spans.push(Span::styled(key.to_string(), key_style));
             spans.push(Span::styled(format!(" {desc}"), theme.dim()));
         }
     }
-    spans.push(Span::raw(" "));
     Line::from(spans)
+}
+
+/// Draw a modal's key-hint footer *inside* its box: a solid separator joined
+/// into the side borders (`├─┤`, like the dock card), then the centered hints
+/// on the row below. Returns the content area above the footer, so the caller
+/// lays its body out in what's left. Pass the outer `area` (for the border
+/// junctions) and the block's `inner`.
+pub(crate) fn render_modal_hints(
+    frame: &mut Frame,
+    area: Rect,
+    inner: Rect,
+    app: &App,
+    theme: &Theme,
+) -> Rect {
+    if inner.height < 3 {
+        return inner; // no room to carve out a footer
+    }
+    let rule_y = inner.y + inner.height - 2;
+    let hint_y = inner.y + inner.height - 1;
+    frame.render_widget(
+        Paragraph::new(Line::from(Span::styled(
+            "─".repeat(area.width as usize),
+            theme.dim(),
+        ))),
+        Rect {
+            x: area.x,
+            y: rule_y,
+            width: area.width,
+            height: 1,
+        },
+    );
+    for (x, ch) in [(area.x, "├"), (area.x + area.width.saturating_sub(1), "┤")] {
+        frame.render_widget(
+            Paragraph::new(Span::styled(ch, theme.dim())),
+            Rect {
+                x,
+                y: rule_y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+    frame.render_widget(
+        Paragraph::new(modal_hint_line(app, theme).centered()),
+        Rect {
+            x: inner.x,
+            y: hint_y,
+            width: inner.width,
+            height: 1,
+        },
+    );
+    Rect {
+        height: inner.height - 2,
+        ..inner
+    }
 }
 
 /// The "what will an action affect" hint for the footer: the count of marked
@@ -1089,7 +1142,8 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     };
     let desc_style = if shell { accent } else { theme.dim() };
 
-    let area = centered_modal(full, 74, rows.len() as u16 + 4);
+    // +2 rows for the in-box hint footer (a rule + the keys).
+    let area = centered_modal(full, 74, rows.len() as u16 + 6);
     frame.render_widget(Clear, area);
     let title = if shell {
         " Shell command "
@@ -1100,10 +1154,10 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
         .border_type(BorderType::Rounded)
         .border_style(if shell { accent } else { Style::new() })
         .title(Line::from(title).bold())
-        .title_bottom(modal_hint_line(app, theme).centered())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Prompt · horizontal divider · the two-column grid.
     let [prompt_area, hr_area, grid_area] = Layout::vertical([

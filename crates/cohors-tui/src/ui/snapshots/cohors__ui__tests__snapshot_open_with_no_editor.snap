@@ -8,14 +8,14 @@ expression: "render_to_string(&app, 100, 20)"
 │ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ 1 at risk · 2 warning · 1 minor · 1 calm                                                         │
-╰───────────────────────╭ Open legacy-billing with… ───────────────────────╮───────────────────────╯
-╭ Repositories (5) · sor│ No editor CLI found on your PATH.                │───────────────────────╮
-│    Repo               │ Install its shell command to list it here.       │us                     │
-│                       │ ▌ Reveal in file manager                         │                       │
-╰───────────────────────│   Open in lazygit                                │───────────────────────╯
-────────────────────────╰ ↑/↓ choose · ⏎ open · d set default · Esc cancel ╯────────────────────────
-╭─────────────────────────────────┬──────────────────────────────┬─────────────────────────────────╮
+│ 1 at risk · 2 warning ╭ Open legacy-billing with… ───────────────────────╮                       │
+╰───────────────────────│ No editor CLI found on your PATH.                │───────────────────────╯
+╭ Repositories (5) · sor│ Install its shell command to list it here.       │───────────────────────╮
+│    Repo               │ ▌ Reveal in file manager                         │us                     │
+│                       │   Open in lazygit                                │                       │
+╰───────────────────────├──────────────────────────────────────────────────┤───────────────────────╯
+────────────────────────│ ↑/↓ choose · ⏎ open · d set default · Esc cancel │────────────────────────
+╭───────────────────────╰──────────────────────────────────────────────────╯───────────────────────╮
 │             select              │     act → legacy-billing     │              view               │
 │ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── │
 │     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       │
