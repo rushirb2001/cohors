@@ -429,7 +429,12 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
             .collect::<Vec<_>>()
     };
     let aside = move || {
-        let list = repos.get();
+        // Re-render only when the *selection* changes, not on every poll: reading
+        // `repos` untracked means a background rescan updates the table (its own
+        // reactive closure) without rebuilding the detail pane. That keeps the
+        // pane steady while you read it — most importantly, sections you collapse
+        // stay collapsed instead of springing open when the next poll lands.
+        let list = repos.get_untracked();
         match selected
             .get()
             .and_then(|id| list.iter().find(|s| s.id.0 == id).cloned())
@@ -2004,10 +2009,22 @@ fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
     }
 }
 
-/// The detail aside when nothing is selected: a skeleton of the drill-in — the
-/// same section headers a selected repo shows, each empty — so the panel reads
-/// as "pick a repo and these fill in," not dead space.
+/// The detail aside when nothing is selected: a skeleton that mirrors a selected
+/// repo's panel — the same facts grid (icons + labels) and the same section
+/// headers, in the same order — so the empty state previews exactly what fills
+/// in, rather than reading as dead space or a different layout.
 fn hint_panel() -> impl IntoView {
+    // One facts row: the real icon and label a selected repo shows, with a
+    // shimmer bar standing in for the value that fills in.
+    let fact = |icon: AnyView, label: &'static str| {
+        view! {
+            <div class="fact">
+                <span class="fi">{icon}</span>
+                <span class="fl">{label}</span>
+                <span class="fv"><span class="skel-line"></span></span>
+            </div>
+        }
+    };
     let section = |name: &'static str| {
         view! {
             <div class="sec skel">
@@ -2021,11 +2038,17 @@ fn hint_panel() -> impl IntoView {
             <div class="card-title">"Detail"</div>
             <div class="scroll">
                 <p class="hint-lead">"Select a repository, and these fill in for it."</p>
+                <div class="facts">
+                    {fact(edit_icon().into_any(), "Changes")}
+                    {fact(stash_icon().into_any(), "Stash")}
+                    {fact(pr_icon().into_any(), "PRs")}
+                    {fact(clock_icon().into_any(), "Last")}
+                    {fact(activity_icon().into_any(), "Activity")}
+                </div>
                 {section("Needs attention")}
-                {section("Changes")}
                 {section("Recent commits")}
                 {section("Open PRs")}
-                {section("Contributors")}
+                {section("Top contributors")}
             </div>
         </div>
     }
