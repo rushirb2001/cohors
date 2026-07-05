@@ -217,31 +217,6 @@ fn App() -> impl IntoView {
                         })
                     }}
                 </div>
-                {act_dropdown(
-                    "act on all".to_string(),
-                    "all".to_string(),
-                    serde_json::json!({ "all": true }),
-                    menu,
-                    pending,
-                    action_arg,
-                    notice,
-                )}
-                {move || {
-                    let m = marked.get();
-                    (!m.is_empty())
-                        .then(|| {
-                            let ids: Vec<String> = m.iter().cloned().collect();
-                            act_dropdown(
-                                format!("act on selected ({})", ids.len()),
-                                "selected".to_string(),
-                                serde_json::json!({ "ids": ids }),
-                                menu,
-                                pending,
-                                action_arg,
-                                notice,
-                            )
-                        })
-                }}
             </header>
 
             {move || notice.get().map(|n| view! { <div class="banner">{n}</div> })}
@@ -337,25 +312,58 @@ fn dashboard(
 
     view! {
         <>
-            <div class="grid">
-                <section class="card fleet-wrap">
-                    // The fleet card header: the attention summary chips on the
-                    // left, the scan status + rescan on the right (the count of
-                    // matches is the first chip; "demo" only appears as a fallback).
-                    <div class="card-title fleet-head">
-                        <section class="attention">{summary}</section>
-                        <div class="conn">
-                            {move || {
-                                let demo = mode.get() == Mode::Demo;
-                                view! {
-                                    <span class=if demo { "src demo" } else { "src" }>
-                                        {if demo { "demo fleet" } else { "● local scan" }}
-                                    </span>
-                                    <button class="ghost" on:click=reload>"rescan"</button>
-                                }
-                            }}
-                        </div>
+            // 1 · Overview: the fleet-wide judgment at a glance.
+            <section class="card overview">
+                <div class="card-title subhead">"Overview"</div>
+                <div class="fleet-head">
+                    <section class="attention">{summary}</section>
+                    <div class="conn">
+                        {move || {
+                            let demo = mode.get() == Mode::Demo;
+                            view! {
+                                <span class=if demo { "src demo" } else { "src" }>
+                                    {if demo { "demo fleet" } else { "● local scan" }}
+                                </span>
+                                <button class="ghost" on:click=reload>"rescan"</button>
+                            }
+                        }}
                     </div>
+                </div>
+            </section>
+            <div class="grid">
+                // 2 · Repositories: act + filter + the fleet table.
+                <section class="card fleet-wrap">
+                    <div class="card-title subhead">"Repositories"</div>
+                    <section class="toolbar">
+                        {act_dropdown(
+                            "act on all".to_string(),
+                            "all".to_string(),
+                            serde_json::json!({ "all": true }),
+                            menu,
+                            pending,
+                            action_arg,
+                            notice,
+                        )}
+                        {move || {
+                            let m = marked.get();
+                            (!m.is_empty())
+                                .then(|| {
+                                    let ids: Vec<String> = m.iter().cloned().collect();
+                                    act_dropdown(
+                                        format!("act on selected ({})", ids.len()),
+                                        "selected".to_string(),
+                                        serde_json::json!({ "ids": ids }),
+                                        menu,
+                                        pending,
+                                        action_arg,
+                                        notice,
+                                    )
+                                })
+                        }}
+                        <span class="toolbar-hint">
+                            "mark rows to target a subset · every action previews its repos before running"
+                        </span>
+                    </section>
                     <section class="controls">
                         <input
                             class="filter"
@@ -381,7 +389,7 @@ fn dashboard(
                         <table class="fleet">
                             <thead>
                                 <tr>
-                                    <th class="mk"></th>
+                                    <th class="mk">"Mark"</th>
                                     <th>"Repo"</th>
                                     <th>"Sync"</th>
                                     <th>"Changes"</th>
@@ -391,7 +399,7 @@ fn dashboard(
                                     <th>"Last"</th>
                                     <th>"Activity"</th>
                                     <th>"Status"</th>
-                                    <th class="act"></th>
+                                    <th class="act">"Act"</th>
                                     <th class="spacer"></th>
                                 </tr>
                             </thead>
