@@ -1,0 +1,5 @@
+dist/
+build/
+*.egg-info/
+src/cohors/cohors
+src/cohors/cohors.exe

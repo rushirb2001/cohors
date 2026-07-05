@@ -1,0 +1,102 @@
+name: PyPI
+
+# Publishes the `cohors` pip package after a GitHub Release is out: for each
+# target it downloads that release's prebuilt binary, bundles it into a
+# platform-specific wheel, and uploads all wheels to PyPI. Runs after the
+# cargo-dist Release workflow has created the release (so the binaries exist).
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to package (e.g. v0.5.0)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    name: wheel (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            plat: macosx_11_0_arm64
+          - target: x86_64-apple-darwin
+            plat: macosx_10_12_x86_64
+          - target: x86_64-unknown-linux-gnu
+            plat: manylinux_2_31_x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve release tag
+        id: tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: echo "tag=${RELEASE_TAG:-$INPUT_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch the prebuilt binary from the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          TARGET: ${{ matrix.target }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "cohors-tui-$TARGET.tar.xz" --output bin.tar.xz
+          mkdir -p extracted packaging/pypi/src/cohors
+          tar -xf bin.tar.xz -C extracted
+          bin=$(find extracted -type f -name cohors | head -n1)
+          test -n "$bin" || { echo "cohors binary not found in tarball" >&2; exit 1; }
+          cp "$bin" packaging/pypi/src/cohors/cohors
+          chmod +x packaging/pypi/src/cohors/cohors
+
+      - name: Stamp the version from the tag
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          v="${TAG#v}"
+          sed -i "s/^version = .*/version = \"$v\"/" packaging/pypi/pyproject.toml
+
+      - name: Build the platform wheel
+        working-directory: packaging/pypi
+        env:
+          PLAT: ${{ matrix.plat }}
+        run: |
+          python -m pip install --upgrade build wheel
+          python -m build --wheel
+          # The wheel is built pure (py3-none-any) but carries a native binary;
+          # retag it to this platform so pip installs the right one per machine.
+          python -m wheel tags --platform-tag "$PLAT" --remove dist/*.whl
+          ls -l dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.target }}
+          path: packaging/pypi/dist/*.whl
+
+  publish:
+    name: publish to PyPI
+    needs: wheels
+    runs-on: ubuntu-latest
+    # Trusted Publishing (OIDC): configure a publisher on PyPI for this repo +
+    # workflow + the `pypi` environment. No API token secret required.
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+      - name: Show what will be uploaded
+        run: ls -l dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

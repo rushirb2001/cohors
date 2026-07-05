@@ -78,7 +78,13 @@ No Rust needed — just `git` on your `PATH`. Every channel installs the same pr
 brew install rushirb2001/tap/cohors
 ```
 
-**Shell one-liner** (macOS Apple Silicon / Intel, Linux x86_64 — checksum-verified):
+**pip** (macOS Apple Silicon / Intel, Linux x86_64 — installs a prebuilt binary, no Rust):
+
+```sh
+pip install cohors
+```
+
+**Shell one-liner** (checksum-verified):
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh

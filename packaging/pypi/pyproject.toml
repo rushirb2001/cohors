@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# A thin wrapper package so `pip install cohors` drops the prebuilt `cohors`
+# binary on your PATH. CI builds one platform-specific wheel per target, each
+# bundling the matching binary from that version's GitHub Release — nothing is
+# downloaded at install or run time. The `version` is overwritten from the
+# release tag by the publish workflow.
+[project]
+name = "cohors"
+version = "0.0.0"
+description = "A fast dashboard for all your git repos — one terminal view, plus web and MCP front-ends."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Rushir Bhavsar" }]
+keywords = ["git", "tui", "dashboard", "cli", "developer-tools"]
+classifiers = [
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+
+[project.urls]
+Homepage = "https://github.com/rushirb2001/cohors"
+Repository = "https://github.com/rushirb2001/cohors"
+Changelog = "https://github.com/rushirb2001/cohors/blob/main/CHANGELOG.md"
+
+# The `cohors` command is a tiny Python shim that execs the bundled binary.
+[project.scripts]
+cohors = "cohors.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# Bundle the native binary (dropped into the package dir by CI) into the wheel.
+[tool.setuptools.package-data]
+cohors = ["cohors", "cohors.exe"]
