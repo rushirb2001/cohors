@@ -17,8 +17,8 @@ expression: "render_to_string(&app, 100, 30)"
                                                                                                     
                                         cohors --root ~/code                                        
                                                                                                     
-                 ~/projects is the default root — pass --root <dir> to scope to one                 
-             folder, or use the default: every folder auto-scanned into one super fleet.            
+               By default cohors gathers every folder it detects into one super fleet;              
+                      pass --root <dir> to scope it to a single folder instead.                     
                                                                                                     
                                               [q] quit                                              
                                                                                                     

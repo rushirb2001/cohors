@@ -100,9 +100,10 @@ impl Default for ActionsConfig {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            // `~` (the whole home) is too broad; default to ~/projects and nudge
-            // the user toward `cohors init`.
-            roots: vec!["~/projects".to_string()],
+            // No config yet: leave roots empty so the Scanner auto-detects where
+            // the user actually keeps repos (the "super fleet") rather than
+            // guessing a single directory. `cohors init` persists the detection.
+            roots: Vec::new(),
             max_depth: 4,
             ignore: default_ignores(),
             aliases: BTreeMap::new(),
@@ -399,7 +400,8 @@ mod tests {
     #[test]
     fn defaults_are_sensible() {
         let c = Config::default();
-        assert_eq!(c.roots, ["~/projects"]);
+        // Empty by design: the Scanner auto-detects roots when none are set.
+        assert!(c.roots.is_empty());
         assert_eq!(c.max_depth, 4);
         assert!(c.stop_at_repo);
         assert!(!c.follow_symlinks);

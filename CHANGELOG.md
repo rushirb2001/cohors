@@ -19,7 +19,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-## [0.5.11] — 2026-07-05
+## [0.5.12] — 2026-07-05
+
+### Changed
+
+- **Plain `cohors` (and `cohors web`) now shows the whole super fleet by default.**
+  With no config and no `--root`, the default roots are empty, so the Scanner
+  auto-detects *every* folder that holds git repos and shows them all — instead of
+  defaulting to a single `~/projects` and prompting to adopt. `cohors --root <dir>`
+  still scopes to that one folder. Onboarding only greets + guides when nothing is
+  found anywhere (a cheap `detect_roots` probe, so the common path adds no scan).
+  Removed the `[u]`-adopt prompt — the super fleet is the default, nothing to adopt.
 
 ### Changed
 

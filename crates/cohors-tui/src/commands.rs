@@ -296,12 +296,7 @@ pub fn run_web(
     // then back to `cohors web`. Checked *before* the Trunk install + WASM build,
     // so a first run isn't spent waiting only to be told to start over.
     if scanner.scan().is_empty() {
-        let home = cohors_config::paths::home_dir().ok();
-        let detected = cohors_fleet::detect_roots(home.as_deref());
-        eprint!(
-            "{}",
-            web_setup_hint(&scanner.roots(), &detected, stderr_wants_color())
-        );
+        eprint!("{}", web_setup_hint(&scanner.roots(), stderr_wants_color()));
         return Ok(());
     }
 
@@ -443,132 +438,58 @@ fn welcome_header(color: bool) -> String {
     out
 }
 
-/// The shared default-root note: `--root` scopes to one folder; the default
-/// gathers every detected folder into the "super fleet".
-fn super_fleet_note(roots: &[String], color: bool) -> String {
+/// The shared super-fleet note: by default cohors gathers every folder it
+/// detects into one fleet; `--root` scopes it to a single folder.
+fn super_fleet_note(color: bool) -> String {
     let mut out = String::new();
     out.push_str(&dim(
         color,
-        &format!(
-            "  {} is the default root — pass --root <dir> to scope to one folder,",
-            roots.join(", ")
-        ),
+        "  By default cohors gathers every folder it detects into one super fleet;",
     ));
     out.push('\n');
     out.push_str(&dim(
         color,
-        "  or use the default: every folder auto-scanned into one super fleet.",
+        "  pass --root <dir> to scope it to a single folder instead.",
     ));
     out.push('\n');
     out
 }
 
-/// The guidance `cohors web` prints when it's run before any repos are set up:
-/// the shared welcome header, the two ways in (launch now with `--root`, or save
-/// a config via `cohors` then `cohors web`), and the super-fleet note. `color`
-/// gates the ANSI; otherwise pure (roots + detections in) so it's unit-testable.
-fn web_setup_hint(roots: &[String], detected: &[String], color: bool) -> String {
+/// The guidance a front-end prints when it finds no repos anywhere: the shared
+/// welcome header, a "nothing found under <roots>" line, a nudge to point at a
+/// folder, and the super-fleet note. `cmd` is the invoking command (`cohors` or
+/// `cohors web`) so the sample line matches. `color` gates the ANSI; otherwise
+/// pure so it's unit-testable.
+fn nothing_found_hint(cmd: &str, roots: &[String], color: bool) -> String {
     let mut out = welcome_header(color);
-    if detected.is_empty() {
-        out.push_str(&format!(
-            "  No git repos under {} yet — that's the default root.\n\n",
-            bold(color, &roots.join(", "))
-        ));
-        out.push_str(&format!(
-            "  Point cohors at your projects   {}\n\n",
-            bold(color, "cohors web --root ~/code")
-        ));
-    } else {
-        out.push_str(&format!(
-            "  No repos under {}, but found some under:\n",
-            bold(color, &roots.join(", "))
-        ));
-        out.push_str(&format!("    {}\n\n", bold(color, &detected.join(", "))));
-        out.push_str(&format!(
-            "  Launch now   {}\n",
-            bold(color, &format!("cohors web --root {}", detected[0]))
-        ));
-        out.push_str(&format!(
-            "  Or save it   run {} first {}, then {}\n\n",
-            bold(color, "cohors"),
-            dim(color, "(writes your config)"),
-            bold(color, "cohors web")
-        ));
-    }
-    out.push_str(&super_fleet_note(roots, color));
+    out.push_str(&format!(
+        "  {} found no git repositories under {}.\n\n",
+        cmd,
+        bold(color, &roots.join(", "))
+    ));
+    out.push_str(&format!(
+        "  Create a repo, or point cohors at a folder:   {}\n\n",
+        bold(color, &format!("{cmd} --root ~/code"))
+    ));
+    out.push_str(&super_fleet_note(color));
     out
 }
 
-/// The first-run welcome `cohors` prints in the plain terminal (before the TUI)
-/// when the fleet is empty. With detected roots it lays out the `[u]` / `--root`
-/// choice and the `[q] quit` key (the live prompt reads `u`/`q`); with none it
-/// nudges the user to point cohors at their code. `color` gates the ANSI.
-fn tui_welcome(roots: &[String], detected: &[String], color: bool) -> String {
-    let mut out = welcome_header(color);
-    if detected.is_empty() {
-        out.push_str(&format!(
-            "  No git repos under {} yet — that's the default root.\n\n",
-            bold(color, &roots.join(", "))
-        ));
-        out.push_str(&format!(
-            "  Point cohors at your projects   {}\n\n",
-            bold(color, "cohors --root ~/code")
-        ));
-        out.push_str(&super_fleet_note(roots, color));
-    } else {
-        out.push_str(&format!(
-            "  We found repos under: {}\n\n",
-            bold(color, &detected.join(", "))
-        ));
-        out.push_str(&format!(
-            "  {} launch the fleet dashboard using these\n\n",
-            bold(color, "[u]")
-        ));
-        out.push_str(&format!("  {}\n\n", bold(color, "OR")));
-        out.push_str(&format!(
-            "  you could run:  {}\n\n",
-            bold(color, "cohors --root <dir>")
-        ));
-        out.push_str(&super_fleet_note(roots, color));
-        out.push('\n');
-        out.push_str(&format!("  {} quit\n", bold(color, "[q]")));
-    }
-    out
+/// The `cohors web` no-repos guidance.
+fn web_setup_hint(roots: &[String], color: bool) -> String {
+    nothing_found_hint("cohors web", roots, color)
 }
 
-/// Read a single key for the first-run prompt: `u` adopts the detected roots,
-/// `q`/`Esc`/`Ctrl-C` quits, and any other key is ignored (keep waiting). Uses
-/// raw mode briefly so a lone keypress is enough — no Enter required.
-fn prompt_adopt() -> Result<bool> {
-    use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
-    use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
-
-    enable_raw_mode().context("entering raw mode for the setup prompt")?;
-    let adopt = loop {
-        match event::read() {
-            Ok(Event::Key(k)) => match k.code {
-                KeyCode::Char('u') | KeyCode::Char('U') => break true,
-                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break false,
-                KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => break false,
-                _ => continue, // ignore stray keys; wait for a real choice
-            },
-            Ok(_) => continue,
-            Err(_) => break false,
-        }
-    };
-    // Best-effort: leaving raw mode must not mask the user's actual choice.
-    let _ = disable_raw_mode();
-    println!(); // land the cursor on a fresh line before the TUI / shell prompt
-    Ok(adopt)
+/// The bare-`cohors` no-repos guidance.
+fn tui_welcome(roots: &[String], color: bool) -> String {
+    nothing_found_hint("cohors", roots, color)
 }
 
 /// Outcome of the first-run onboarding step.
 enum Onboard {
-    /// Roots were adopted — launch the dashboard with this (rebuilt) scanner.
-    Adopted(Arc<crate::scan::Scanner>),
-    /// The fleet is already non-empty — just launch with the original scanner.
+    /// Repos exist somewhere — launch the dashboard on the super fleet.
     Proceed,
-    /// The user declined, or there was nothing to adopt — don't launch the TUI.
+    /// Nothing was found anywhere — guidance was printed; don't launch the TUI.
     Quit,
 }
 
@@ -580,37 +501,21 @@ fn config_path(cli: &Cli) -> Result<Utf8PathBuf> {
     }
 }
 
-/// First-run onboarding, in the plain terminal *before* the alt-screen. If the
-/// (default) root already has repos, returns `Proceed`. Otherwise it prints the
-/// branded welcome: with detected roots it prompts (`u` adopts + writes the
-/// config, `q` quits); with none — or no terminal to read from — it prints
-/// guidance and quits.
-fn onboard(cli: &Cli, scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
-    if !scanner.scan().is_empty() {
+/// First-run onboarding, in the plain terminal *before* the alt-screen. cohors
+/// auto-detects where the user keeps repos (the super fleet), so if anything is
+/// found we go straight to the dashboard. Only when nothing is found anywhere do
+/// we greet + guide in the terminal instead of launching an empty dashboard. The
+/// check is a shallow probe (`detect_roots` only returns dirs that hold a repo),
+/// so the common path adds no scan cost.
+fn onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
+    let home = cohors_config::paths::home_dir().ok();
+    if !cohors_fleet::detect_roots(home.as_deref()).is_empty() {
         return Ok(Onboard::Proceed);
     }
-
     let color = wants_color(std::io::stdout().is_terminal());
-    let home = cohors_config::paths::home_dir().ok();
-    let detected = cohors_fleet::detect_roots(home.as_deref());
-
-    print!("{}", tui_welcome(&scanner.roots(), &detected, color));
+    print!("{}", tui_welcome(&scanner.roots(), color));
     let _ = std::io::stdout().flush();
-
-    // Only prompt when there's something to adopt *and* a real terminal to read
-    // from; otherwise the welcome doubles as printed guidance and we stop.
-    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
-    if detected.is_empty() || !interactive || !prompt_adopt()? {
-        return Ok(Onboard::Quit);
-    }
-
-    // Adopt: persist the detected roots (merges, never clobbers), then rebuild
-    // the scanner from the freshly-written config so the dashboard is populated.
-    let path = config_path(cli)?;
-    cohors_config::edit::add_roots(&path, &detected)
-        .with_context(|| format!("writing config to {path}"))?;
-    println!("{}\n", dim(color, &format!("  Saved to {path}")));
-    Ok(Onboard::Adopted(Arc::new(crate::scan::from_cli(cli)?)))
+    Ok(Onboard::Quit)
 }
 
 /// Make sure Trunk (the WASM bundler) is available, installing it via Cargo when
@@ -739,9 +644,8 @@ pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = if configured {
         scanner
     } else {
-        match onboard(cli, &scanner)? {
+        match onboard(&scanner)? {
             Onboard::Proceed => scanner,
-            Onboard::Adopted(rebuilt) => rebuilt,
             Onboard::Quit => return Ok(()),
         }
     };
@@ -799,61 +703,29 @@ mod tests {
     }
 
     #[test]
-    fn web_setup_hint_offers_detected_roots() {
+    fn web_setup_hint_guides_to_root_and_super_fleet() {
         // Plain (color = false) so we assert on content, not escapes.
-        let hint = web_setup_hint(
-            &["/home/me/projects".to_string()],
-            &["~/code".to_string(), "~/work".to_string()],
-            false,
-        );
+        let hint = web_setup_hint(&["/home/me/projects".to_string()], false);
         assert!(hint.contains("Welcome to cohors"));
-        assert!(hint.contains("~/code, ~/work")); // the detected roots
-        assert!(hint.contains("cohors web --root ~/code")); // launch-now uses the first
-        assert!(hint.contains("cohors web")); // the save-then-launch path
-        assert!(hint.contains("super fleet")); // the default-root note
+        assert!(hint.contains("cohors web found no git repositories under /home/me/projects"));
+        assert!(hint.contains("cohors web --root ~/code")); // the sample command
+        assert!(hint.contains("super fleet")); // the model note
         assert!(!hint.contains('\x1b')); // no ANSI when color is off
     }
 
     #[test]
-    fn web_setup_hint_nudges_when_nothing_detected() {
-        let hint = web_setup_hint(&["/home/me/projects".to_string()], &[], false);
-        assert!(hint.contains("Welcome to cohors"));
-        assert!(!hint.contains("found some under")); // the detected-branch phrasing
-        assert!(hint.contains("cohors web --root ~/code")); // the sample command
-        assert!(hint.contains("super fleet"));
-        assert!(!hint.contains('\x1b'));
-    }
-
-    #[test]
-    fn web_setup_hint_emits_ansi_when_colored() {
-        let colored = web_setup_hint(&["p".to_string()], &["~/code".to_string()], true);
-        assert!(colored.contains('\x1b')); // styled…
-        let plain = web_setup_hint(&["p".to_string()], &["~/code".to_string()], false);
-        assert!(!plain.contains('\x1b')); // …only when asked
-    }
-
-    #[test]
-    fn tui_welcome_offers_the_u_or_root_choice() {
-        let w = tui_welcome(
-            &["~/projects".to_string()],
-            &["~/Main/code".to_string()],
-            false,
-        );
-        assert!(w.contains("We found repos under: ~/Main/code"));
-        assert!(w.contains("[u]")); // adopt key
-        assert!(w.contains("OR"));
-        assert!(w.contains("cohors --root <dir>")); // the scoped alternative
+    fn tui_welcome_guides_to_root_and_super_fleet() {
+        let w = tui_welcome(&["/home/me/projects".to_string()], false);
+        assert!(w.contains("cohors found no git repositories under /home/me/projects"));
+        assert!(!w.contains("cohors web")); // the bare-cohors variant, not web
+        assert!(w.contains("cohors --root ~/code"));
         assert!(w.contains("super fleet"));
-        assert!(w.contains("[q]")); // quit key
         assert!(!w.contains('\x1b'));
     }
 
     #[test]
-    fn tui_welcome_nudges_when_nothing_detected() {
-        let w = tui_welcome(&["~/projects".to_string()], &[], false);
-        assert!(!w.contains("We found repos under"));
-        assert!(!w.contains("[u]")); // nothing to adopt, so no adopt key
-        assert!(w.contains("cohors --root ~/code")); // the sample command
-        assert!(w.contains("super fleet"));
+    fn hint_ansi_is_gated_on_color() {
+        assert!(web_setup_hint(&["p".to_string()], true).contains('\x1b')); // styled…
+        assert!(!web_setup_hint(&["p".to_string()], false).contains('\x1b')); // …only when asked
     }
 }

@@ -1298,17 +1298,14 @@ pub(crate) fn render_empty(frame: &mut Frame, area: Rect, app: &App, theme: &The
         lines.push(Line::from(Span::styled("cohors --root ~/code", bold)));
     }
 
-    // The default-root disclaimer: scoped fleet vs. the full super fleet.
+    // The super-fleet note: scoped fleet vs. the whole auto-detected fleet.
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
-        format!(
-            "{} is the default root — pass --root <dir> to scope to one",
-            roots_label(app)
-        ),
+        "By default cohors gathers every folder it detects into one super fleet;",
         dim,
     )));
     lines.push(Line::from(Span::styled(
-        "folder, or use the default: every folder auto-scanned into one super fleet.",
+        "pass --root <dir> to scope it to a single folder instead.",
         dim,
     )));
     lines.push(Line::from(""));
