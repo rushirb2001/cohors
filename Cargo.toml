@@ -137,3 +137,9 @@ debug = "line-tables-only"
 lto = true
 codegen-units = 1
 strip = true
+
+# Dist: the profile cargo-dist builds release artifacts with. Inherit everything
+# from `release` (LTO, single codegen unit, stripped) so distributed binaries
+# match a local `--release` build.
+[profile.dist]
+inherits = "release"
