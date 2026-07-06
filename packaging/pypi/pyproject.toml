@@ -10,7 +10,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cohors"
 version = "0.0.0"
-description = "A fast dashboard for all your git repos — one terminal view, plus web and MCP front-ends."
+description = "A fast git-fleet dashboard for you and your coding agent: terminal, browser, and MCP."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
