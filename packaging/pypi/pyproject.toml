@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 # A thin wrapper package so `pip install cohors` drops the prebuilt `cohors`
 # binary on your PATH. CI builds one platform-specific wheel per target, each
-# bundling the matching binary from that version's GitHub Release — nothing is
+# bundling the matching binary from that version's GitHub Release; nothing is
 # downloaded at install or run time. The `version` is overwritten from the
 # release tag by the publish workflow.
 [project]
