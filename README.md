@@ -17,7 +17,7 @@ Coding agents made single-repo work cheap. The bottleneck moved to the *fleet*: 
 
 <div align="center">
 
-![cohors in the terminal — every repo on one screen, sorted dirty-first](assets/tui.gif)
+![cohors in the terminal: every repo on one screen, sorted dirty-first](assets/tui.gif)
 
 </div>
 
@@ -76,7 +76,7 @@ cohors demo
 
 <div align="center">
 
-![cohors in the browser — the same fleet, rendered by the same core](assets/web.gif)
+![cohors in the browser: the same fleet, rendered by the same core](assets/web.gif)
 
 </div>
 
