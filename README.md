@@ -90,6 +90,12 @@ No Rust needed, just `git` on your `PATH`. Every channel installs the same prebu
 brew install rushirb2001/tap/cohors
 ```
 
+> If your Homebrew enforces tap-trust (newer versions), the install can silently no-op. Trust the formula once, then install:
+> ```sh
+> brew trust --formula rushirb2001/tap/cohors
+> brew install rushirb2001/tap/cohors
+> ```
+
 **pip** (macOS Apple Silicon / Intel, Linux x86_64; installs a prebuilt binary, no Rust):
 
 ```sh
