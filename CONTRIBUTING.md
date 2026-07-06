@@ -31,7 +31,7 @@ CI runs all of these; a PR is only mergeable when they're green.
 ## Conventions
 
 - **Errors:** libraries use `thiserror`; the binary uses `anyhow` at the edges. No `unwrap()`/`panic!` in library code paths that handle user data.
-- **Core stays pure:** no `std::fs`, `std::process`, `std::net`, threads, or `std::time::Instant` in `cohors-core` — it must compile to WASM.
+- **Core stays pure:** no `std::fs`, `std::process`, `std::net`, threads, or `std::time::Instant` in `cohors-core`; it must compile to WASM.
 - **Tests with changes:** new logic in `cohors-core` needs unit tests; new TUI states should get an `insta` snapshot.
 - **Commits:** [Conventional Commits](https://www.conventionalcommits.org/), **single subject line, no body** (e.g. `feat(tui): add dirty-only filter`). No AI-attribution trailers.
 - **Docs:** if you change user-facing behavior, update the `README` and `CHANGELOG` accordingly.
