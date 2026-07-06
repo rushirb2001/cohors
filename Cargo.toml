@@ -116,13 +116,19 @@ pr-run-mode = "plan"
 # Install into the user's ~/.cargo/bin equivalent, adding it to PATH if needed.
 install-path = "CARGO_HOME"
 
-# GitHub retired the `ubuntu-20.04` hosted runner, so cargo-dist's default pin
-# leaves the release jobs queued forever. Point them at available images: a
-# modern one for the housekeeping/global jobs, and 22.04 for the Linux binary so
-# it still links against an older glibc (broad Linux compatibility).
+# cargo-dist's default runner pins (ubuntu-20.04, macos-13) are retired images, so
+# the release jobs queue forever waiting for machines that no longer exist. Point
+# every job at a currently-supported image (checked July 2026):
+#   - global/housekeeping: ubuntu-latest
+#   - Linux binary: ubuntu-22.04 (older glibc = broad Linux compatibility)
+#   - macOS binaries: macos-15 (Sequoia, Apple Silicon). macos-13 is unsupported
+#     and macos-14 entered deprecation on 2026-07-06; macos-15 cross-builds both
+#     the aarch64 and x86_64 Darwin targets.
 [workspace.metadata.dist.github-custom-runners]
 global = "ubuntu-latest"
 x86_64-unknown-linux-gnu = "ubuntu-22.04"
+aarch64-apple-darwin = "macos-15"
+x86_64-apple-darwin = "macos-15"
 
 # ── Build profiles ───────────────────────────────────────────────────────────
 # Dev: keep line-table debuginfo (backtraces still resolve) but drop the full
