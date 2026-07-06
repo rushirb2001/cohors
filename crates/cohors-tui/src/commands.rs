@@ -501,21 +501,83 @@ fn config_path(cli: &Cli) -> Result<Utf8PathBuf> {
     }
 }
 
+/// The first-run welcome `cohors` shows when it detected repos: the branded
+/// header, the folders they were found under, and a launch prompt. Enter launches
+/// the whole super fleet; `q` quits. `color` gates the ANSI; otherwise pure so
+/// it's unit-testable.
+fn super_fleet_welcome(detected: &[String], color: bool) -> String {
+    let mut out = welcome_header(color);
+    out.push_str("  Found git repos under:\n");
+    for root in detected {
+        out.push_str(&format!("    {}\n", bold(color, root)));
+    }
+    out.push('\n');
+    out.push_str(&format!(
+        "  {} launch the super fleet   {}   {} quit\n\n",
+        bold(color, "[enter]"),
+        dim(color, "·"),
+        bold(color, "[q]")
+    ));
+    out.push_str(&dim(
+        color,
+        "  or run cohors --root <dir> to scope to a single folder.",
+    ));
+    out.push('\n');
+    out
+}
+
+/// Read a key for the launch prompt: Enter / `y` launches, `q` / `Esc` /
+/// `Ctrl-C` quits, and any other key is ignored (keep waiting). Raw mode so a
+/// lone keypress is enough — no Enter required for the `q`/`y` shortcuts.
+fn prompt_launch() -> Result<bool> {
+    use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
+    use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+
+    enable_raw_mode().context("entering raw mode for the launch prompt")?;
+    let launch = loop {
+        match event::read() {
+            Ok(Event::Key(k)) => match k.code {
+                KeyCode::Enter | KeyCode::Char('y') | KeyCode::Char('Y') => break true,
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break false,
+                KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => break false,
+                _ => continue,
+            },
+            Ok(_) => continue,
+            Err(_) => break false,
+        }
+    };
+    let _ = disable_raw_mode();
+    println!(); // land the cursor on a fresh line before the TUI / shell prompt
+    Ok(launch)
+}
+
 /// First-run onboarding, in the plain terminal *before* the alt-screen. cohors
-/// auto-detects where the user keeps repos (the super fleet), so if anything is
-/// found we go straight to the dashboard. Only when nothing is found anywhere do
-/// we greet + guide in the terminal instead of launching an empty dashboard. The
-/// check is a shallow probe (`detect_roots` only returns dirs that hold a repo),
-/// so the common path adds no scan cost.
+/// auto-detects where the user keeps repos (the super fleet). When repos are
+/// found we greet, list the folders, and prompt to launch (Enter) or quit; when
+/// nothing is found we greet + guide instead of launching an empty dashboard.
+/// Detection is a shallow probe, so no full scan happens until the dashboard.
 fn onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
     let home = cohors_config::paths::home_dir().ok();
-    if !cohors_fleet::detect_roots(home.as_deref()).is_empty() {
-        return Ok(Onboard::Proceed);
-    }
+    let detected = cohors_fleet::detect_roots(home.as_deref());
     let color = wants_color(std::io::stdout().is_terminal());
-    print!("{}", tui_welcome(&scanner.roots(), color));
+
+    if detected.is_empty() {
+        print!("{}", tui_welcome(&scanner.roots(), color));
+        let _ = std::io::stdout().flush();
+        return Ok(Onboard::Quit);
+    }
+
+    print!("{}", super_fleet_welcome(&detected, color));
     let _ = std::io::stdout().flush();
-    Ok(Onboard::Quit)
+
+    // A real terminal is needed both to read the prompt and to run the TUI at
+    // all; without one we've printed the welcome as guidance and stop.
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    if interactive && prompt_launch()? {
+        Ok(Onboard::Proceed)
+    } else {
+        Ok(Onboard::Quit)
+    }
 }
 
 /// Make sure Trunk (the WASM bundler) is available, installing it via Cargo when
@@ -727,5 +789,19 @@ mod tests {
     fn hint_ansi_is_gated_on_color() {
         assert!(web_setup_hint(&["p".to_string()], true).contains('\x1b')); // styled…
         assert!(!web_setup_hint(&["p".to_string()], false).contains('\x1b')); // …only when asked
+    }
+
+    #[test]
+    fn super_fleet_welcome_lists_roots_and_prompts_to_launch() {
+        let w = super_fleet_welcome(&["~/projects".to_string(), "~/code".to_string()], false);
+        assert!(w.contains("Welcome to cohors"));
+        assert!(w.contains("Found git repos under:"));
+        assert!(w.contains("~/projects")); // each detected folder is listed
+        assert!(w.contains("~/code"));
+        assert!(w.contains("[enter]")); // launch key
+        assert!(w.contains("super fleet"));
+        assert!(w.contains("[q]")); // quit key
+        assert!(w.contains("--root")); // scope-to-one hint
+        assert!(!w.contains('\x1b'));
     }
 }

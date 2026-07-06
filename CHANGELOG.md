@@ -19,7 +19,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-## [0.5.12] — 2026-07-05
+## [0.5.13] — 2026-07-05
+
+### Changed
+
+- **First-run `cohors` greets you and lists where repos were found before
+  launching.** When run unconfigured, it prints the branded welcome, the folders
+  it detected repos under, and a prompt — Enter launches the whole super fleet,
+  `q` quits (or `cohors --root <dir>` to scope to one). Replaces the straight-to-
+  dashboard jump from 0.5.12 so you can see what the super fleet comprises first.
 
 ### Changed
 
