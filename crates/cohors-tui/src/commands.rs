@@ -270,6 +270,7 @@ pub fn run_web(
     install: bool,
     allow_writes: bool,
     allow_run: bool,
+    demo: bool,
 ) -> Result<()> {
     // `cohors web` builds the dashboard from source, so it needs the repo. This
     // is the *developer* path. End users won't run this at all: once the
@@ -295,7 +296,9 @@ pub fn run_web(
     // them at `cohors` (which detects the roots and saves them to the config),
     // then back to `cohors web`. Checked *before* the Trunk install + WASM build,
     // so a first run isn't spent waiting only to be told to start over.
-    if scanner.scan().is_empty() {
+    // `--demo` serves the built-in sample fleet (like `cohors demo`): skip the
+    // real scan and this fresh-user gate entirely.
+    if !demo && scanner.scan().is_empty() {
         eprint!("{}", web_setup_hint(&scanner.roots(), stderr_wants_color()));
         return Ok(());
     }
@@ -331,13 +334,19 @@ pub fn run_web(
     }
 
     let url = format!("http://{WEB_HOST}:{port}");
-    let roots = scanner.roots().join(", ");
-    let auth = if token.is_some() {
+    let source = if demo {
+        "serving the built-in demo fleet".to_string()
+    } else {
+        format!("scanning {}", scanner.roots().join(", "))
+    };
+    let auth = if demo {
+        "sample data — nothing on disk is read"
+    } else if token.is_some() {
         "remote CI/PRs enriched with your GitHub login"
     } else {
         "no GitHub login found — local status only (run `gh auth login` for CI/PRs)"
     };
-    println!("\n  cohors web is live → {url}\n  scanning {roots}\n  {auth}\n  Ctrl-C to stop.\n");
+    println!("\n  cohors web is live → {url}\n  {source}\n  {auth}\n  Ctrl-C to stop.\n");
     if open {
         let url = url.clone();
         std::thread::spawn(move || {
@@ -357,7 +366,10 @@ pub fn run_web(
         allow_writes,
         allow_run,
     };
-    let scan: std::sync::Arc<cohors_web::ScanFn> = {
+    let scan: std::sync::Arc<cohors_web::ScanFn> = if demo {
+        let now = now_secs();
+        std::sync::Arc::new(move || cohors_core::demo::fleet(now))
+    } else {
         let scanner = scanner.clone();
         std::sync::Arc::new(move || scanner.scan())
     };

@@ -100,6 +100,9 @@ pub enum Command {
         /// Enable the `run` action over `/api/action` (arbitrary shell across repos).
         #[arg(long)]
         allow_run: bool,
+        /// Serve the built-in sample fleet instead of scanning (like `cohors demo`).
+        #[arg(long)]
+        demo: bool,
     },
     /// Run as a Model Context Protocol server over stdio, so a coding agent can
     /// see and (opt-in) act on your fleet. Read-only by default.

@@ -19,7 +19,22 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
-## [0.5.13] — 2026-07-05
+## [0.5.14] — 2026-07-05
+
+### Added
+
+- **`cohors web --demo`** serves the built-in sample fleet in the browser (the web
+  counterpart to `cohors demo`): zero setup, nothing read from disk, a safe way to
+  preview the dashboard.
+
+### Changed
+
+- **Docs refresh:** the README is rewritten around the super-fleet model (plain
+  `cohors` shows every detected repo; `--root` scopes), stripped of em-dashes, and
+  gains crisp light-mode demo GIFs for both the terminal and browser dashboards.
+- **CI runners:** the release jobs are pinned to available images (`ubuntu-latest`
+  for housekeeping, `ubuntu-22.04` for the Linux build) since GitHub retired
+  `ubuntu-20.04`.
 
 ### Changed
 
