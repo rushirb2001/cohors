@@ -116,6 +116,14 @@ pr-run-mode = "plan"
 # Install into the user's ~/.cargo/bin equivalent, adding it to PATH if needed.
 install-path = "CARGO_HOME"
 
+# GitHub retired the `ubuntu-20.04` hosted runner, so cargo-dist's default pin
+# leaves the release jobs queued forever. Point them at available images: a
+# modern one for the housekeeping/global jobs, and 22.04 for the Linux binary so
+# it still links against an older glibc (broad Linux compatibility).
+[workspace.metadata.dist.github-custom-runners]
+global = "ubuntu-latest"
+x86_64-unknown-linux-gnu = "ubuntu-22.04"
+
 # ── Build profiles ───────────────────────────────────────────────────────────
 # Dev: keep line-table debuginfo (backtraces still resolve) but drop the full
 # debuginfo that is the bulk of the target dir's growth across rebuilds.
