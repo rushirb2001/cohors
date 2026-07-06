@@ -318,6 +318,9 @@ pub struct App {
     pub suggested_roots: Vec<String>,
     /// Configured glyph mode for the dashboard (auto / ascii / unicode / nerd).
     pub icons: cohors_config::IconMode,
+    /// Whether the terminal has a dark background (detected once at startup), so
+    /// the dock / hint cards can adapt their wash. Defaults to light.
+    pub dark: bool,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -422,6 +425,7 @@ impl App {
             detail: None,
             suggested_roots: Vec::new(),
             icons: cohors_config::IconMode::default(),
+            dark: false,
         }
     }
 
@@ -688,17 +692,23 @@ impl App {
 
     fn on_key_filter(&mut self, key: KeyEvent) -> Cmd {
         match key.code {
-            // Esc clears the filter and leaves filter mode.
+            // The list filters live as you type. Esc cancels (clears + closes).
             KeyCode::Esc => {
                 self.filter.clear();
                 self.selected = 0;
                 self.mode = Mode::Normal;
             }
-            // Enter confirms, keeping the filter active.
+            // Enter confirms: keep the filtered list, return to navigation.
             KeyCode::Enter => self.mode = Mode::Normal,
+            // Backspace deletes a char; backspacing past the empty query removes
+            // the leading `/` and closes the filter (nothing left to filter on).
             KeyCode::Backspace => {
-                self.filter.pop();
-                self.selected = 0;
+                if self.filter.is_empty() {
+                    self.mode = Mode::Normal;
+                } else {
+                    self.filter.pop();
+                    self.selected = 0;
+                }
             }
             // Arrows navigate the filtered list while typing.
             KeyCode::Down => self.move_down(),
@@ -1351,6 +1361,31 @@ mod tests {
         assert_eq!(app.mode, Mode::Normal);
         assert!(app.filter.is_empty());
         assert_eq!(app.visible_len(), 2);
+    }
+
+    /// Live filtering: typing narrows immediately, and backspacing past the
+    /// empty query removes the leading `/` and closes the filter.
+    #[test]
+    fn filter_backspace_past_empty_closes() {
+        let mut app = app_with(&[("payments", false), ("auth", false)]);
+        app.on_key(key('/'));
+        assert_eq!(app.mode, Mode::Filter);
+
+        // Typing narrows live — no Enter needed.
+        app.on_key(key('p'));
+        assert_eq!(app.filter, "p");
+        assert_eq!(app.visible_len(), 1);
+
+        // Backspace deletes the char but stays in filter mode (query now empty).
+        app.on_key(code(KeyCode::Backspace));
+        assert!(app.filter.is_empty());
+        assert_eq!(app.mode, Mode::Filter);
+        assert_eq!(app.visible_len(), 2);
+
+        // Backspacing again (past empty) closes the filter.
+        app.on_key(code(KeyCode::Backspace));
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.filter.is_empty());
     }
 
     #[test]

@@ -36,6 +36,17 @@ pub(crate) fn render_repos_panel(
     let inner = block.inner(area);
     frame.render_widget(block, area);
 
+    // When filtering, a boxed input sits at the top of the panel — above the
+    // column headers — with a muted placeholder, matching the web's filter field.
+    let inner = if app.mode == Mode::Filter {
+        let [filter_area, rest] =
+            Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(inner);
+        render_filter_input(frame, filter_area, app, theme);
+        rest
+    } else {
+        inner
+    };
+
     // The context pane lives *inside* this box. When the panel is tall enough,
     // reserve its bottom rows (a divider rule + a blank pad + the content) for the
     // selected repo's facts and lay the table out in what's left; on short panels
@@ -541,24 +552,25 @@ pub(crate) fn build_dock(app: &App, now: i64, theme: &Theme, inner_w: usize) -> 
     let mut right_col: Vec<Line> = Vec::new();
 
     // Release — the newest reachable tag and how far the repo has moved since.
-    if let Some(tag) = &snap.latest_tag {
-        let val = if tag.commits_since == 0 {
+    // Repos with no tag still show the field, with a muted "No Releases" placeholder.
+    let release_val = match &snap.latest_tag {
+        Some(tag) if tag.commits_since == 0 => {
             vec![Span::styled(format!("{} (current)", tag.name), theme.ok())]
-        } else {
-            vec![
-                Span::raw(tag.name.clone()),
-                Span::styled(
-                    format!(
-                        "  ·  {} commit{} since",
-                        tag.commits_since,
-                        if tag.commits_since == 1 { "" } else { "s" }
-                    ),
-                    theme.dim(),
+        }
+        Some(tag) => vec![
+            Span::raw(tag.name.clone()),
+            Span::styled(
+                format!(
+                    "  ·  {} commit{} since",
+                    tag.commits_since,
+                    if tag.commits_since == 1 { "" } else { "s" }
                 ),
-            ]
-        };
-        dock_field(&mut right_col, "Release", val, theme);
-    }
+                theme.dim(),
+            ),
+        ],
+        None => vec![Span::styled("No Releases", theme.dim())],
+    };
+    dock_field(&mut right_col, "Release", release_val, theme);
 
     // Last commit — age + the full message (the row no longer shows it),
     // word-wrapped within the right column rather than truncated.

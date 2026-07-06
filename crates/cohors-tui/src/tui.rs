@@ -9,7 +9,7 @@
 //! A panic hook restores the terminal before the panic prints.
 
 use std::collections::VecDeque;
-use std::io::Stdout;
+use std::io::{IsTerminal, Stdout};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -96,9 +96,30 @@ enum BgMsg {
 }
 
 /// Run the dashboard to completion, always restoring the terminal afterward.
+/// Detect the terminal's background so the cards can adapt. `COHORS_THEME`
+/// (`dark` / `light`) overrides; otherwise ask the terminal over OSC 11 (short
+/// timeout), falling back to light — the historical default — when the query is
+/// unsupported or stdout isn't a terminal. Run once at startup, before we take
+/// over the screen.
+fn detect_dark() -> bool {
+    match std::env::var("COHORS_THEME").ok().as_deref() {
+        Some("dark") => return true,
+        Some("light") => return false,
+        _ => {}
+    }
+    if !std::io::stdout().is_terminal() {
+        return false;
+    }
+    matches!(
+        termbg::theme(Duration::from_millis(100)),
+        Ok(termbg::Theme::Dark)
+    )
+}
+
 pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Result<()> {
+    let dark = detect_dark();
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_loop(&mut terminal, scanner, cli, use_cache, watch);
+    let result = run_loop(&mut terminal, scanner, cli, use_cache, watch, dark);
     let _ = restore_terminal(&mut terminal);
     result
 }
@@ -110,17 +131,19 @@ const WATCH_INTERVAL: Duration = Duration::from_secs(5);
 /// the app from `cohors_core::demo` and stubs every action, so nothing touches
 /// the disk or network — a zero-config way to try cohors.
 pub fn run_demo() -> Result<()> {
+    let dark = detect_dark();
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_demo_loop(&mut terminal);
+    let result = run_demo_loop(&mut terminal, dark);
     let _ = restore_terminal(&mut terminal);
     result
 }
 
-fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
+fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
     // A fixed "now" so the sample commit ages stay exactly as designed for the
     // length of the session.
     let now = now_secs();
     let mut app = App::new(vec!["(demo)".to_string()], "(demo — no config)".to_string());
+    app.dark = dark;
     app.set_repos(cohors_core::demo::fleet(now));
     app.status = Some("demo mode — sample data; actions are stubbed".to_string());
 
@@ -239,11 +262,13 @@ fn run_loop(
     cli: &Cli,
     use_cache: bool,
     watch: bool,
+    dark: bool,
 ) -> Result<()> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
     app.icons = scanner.icon_mode();
+    app.dark = dark;
     // Warm start: paint cached snapshots instantly, then refresh in background.
     if use_cache
         && let Some(cached) = crate::cache::load()

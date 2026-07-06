@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
-│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▆▆██▇▇██▇▇▆▆▆▆▄▄▇▇▅▅██▇▇                    │
-│ ▀▐▖▀█▀▗▌▀  (demo)                                 │  535 commits · 12 weeks                      │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
+│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▆▒█▒▇▒█▒▇▒▆▒▆▒▄▒▇▒▅▒█▒▇ │
+│ ▀▐▖▀█▀▗▌▀  (demo)                                                     │  535 commits · 12 weeks  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
 │ 2 at risk · 4 warning · 4 minor · 2 calm                                                         │

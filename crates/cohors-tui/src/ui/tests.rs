@@ -539,7 +539,59 @@ fn snapshot_filtered() {
     let mut app = demo_app();
     app.mode = Mode::Filter;
     app.filter = "pay".to_string();
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
+}
+
+/// A just-opened filter (empty query): the boxed input inside the repos panel
+/// shows its muted placeholder above the column headers.
+#[test]
+fn snapshot_filter_empty() {
+    let mut app = demo_app();
+    app.mode = Mode::Filter;
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
+}
+
+/// The footer hint bar washes its *inner* cells with the faint brand-purple card
+/// colour, but never the box outline (styles aren't captured by the symbol
+/// snapshots, so assert both directly).
+#[test]
+fn footer_hint_bar_wash_stays_inside_the_outline() {
+    let app = demo_app();
+    let backend = TestBackend::new(100, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| render(f, &app, NOW)).unwrap();
+    let buf = terminal.backend().buffer();
+    let wash = Color::Rgb(0xFA, 0xF5, 0xFF);
+
+    // The inner hints carry the wash...
+    let has_wash = (0..buf.area.height)
+        .any(|y| (0..buf.area.width).any(|x| buf.cell((x, y)).is_some_and(|c| c.bg == wash)));
+    assert!(has_wash, "footer hints should carry the purple wash");
+
+    // ...but the box outline stays clean — the footer spans the full width, so its
+    // bottom-left corner (last row, column 0) is a border cell that must not wash.
+    let corner = buf.cell((0, buf.area.height - 1)).unwrap();
+    assert_ne!(corner.bg, wash, "the wash must not bleed onto the outline");
+}
+
+/// In a dark terminal the cards flip to a dark wash (so the native accent colours
+/// read), never the light one.
+#[test]
+fn footer_hint_bar_uses_the_dark_wash_in_dark_mode() {
+    let mut app = demo_app();
+    app.dark = true;
+    let backend = TestBackend::new(100, 24);
+    let mut terminal = Terminal::new(backend).unwrap();
+    terminal.draw(|f| render(f, &app, NOW)).unwrap();
+    let buf = terminal.backend().buffer();
+    let dark = Color::Rgb(0x2E, 0x27, 0x3E);
+    let light = Color::Rgb(0xFA, 0xF5, 0xFF);
+    let any_bg = |want: Color| {
+        (0..buf.area.height)
+            .any(|y| (0..buf.area.width).any(|x| buf.cell((x, y)).is_some_and(|c| c.bg == want)))
+    };
+    assert!(any_bg(dark), "dark mode should use the dark purple wash");
+    assert!(!any_bg(light), "dark mode must not use the light wash");
 }
 
 #[test]
@@ -643,4 +695,39 @@ fn snapshot_loading() {
     let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
     app.scanning = true;
     insta::assert_snapshot!(render_to_string(&app, 100, 12));
+}
+
+/// The header leads with the root holding the most repos, and ties (or no
+/// matching repos) keep the first configured root.
+#[test]
+fn header_dir_leads_with_the_busiest_root() {
+    let repo_at = |name: &str, path: &str| {
+        let mut r = snap(
+            name,
+            Branch::Named("main".into()),
+            None,
+            (0, 0, 0),
+            0,
+            None,
+            None,
+        );
+        r.path = Some(camino::Utf8PathBuf::from(path));
+        r
+    };
+
+    let mut app = App::new(
+        vec!["/srv/projects".to_string(), "/srv/work".to_string()],
+        "cfg".to_string(),
+    );
+    // More repos under the second root → it leads; the other counts as "(+1)".
+    app.repos = vec![
+        repo_at("a", "/srv/projects/a"),
+        repo_at("b", "/srv/work/b"),
+        repo_at("c", "/srv/work/c"),
+    ];
+    assert_eq!(header_dir(&app), "/srv/work (+1)");
+
+    // A tie (here, no repo under either root) keeps the first configured root.
+    app.repos = vec![repo_at("x", "/elsewhere/x")];
+    assert_eq!(header_dir(&app), "/srv/projects (+1)");
 }

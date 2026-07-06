@@ -100,6 +100,16 @@ impl Glyphs {
         }
     }
 
+    /// The spacer drawn between fleet-activity bars: the brand mark's own shade
+    /// texture element (`▒`) in the glyph tiers, a plain colon under Ascii (where
+    /// `▒` may be missing). Dim-styled by the caller.
+    pub fn spark_spacer(&self) -> &'static str {
+        match self.kind {
+            IconKind::Unicode | IconKind::Nerd => "▒",
+            IconKind::Ascii => ":",
+        }
+    }
+
     /// The compact CI indicator for the narrow table: a filled square whose
     /// *colour* carries the state (green pass / red fail / amber pending / grey
     /// none), the stand-in for the "passing"/"failing" word when the column
