@@ -292,7 +292,7 @@ pub(crate) fn render_repos_panel(
 
     let table = Table::new(rows, widths)
         .column_spacing(2)
-        .row_highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+        .row_highlight_style(theme.selection())
         .highlight_symbol("▌ ");
 
     let mut state = TableState::default();

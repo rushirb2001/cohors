@@ -124,6 +124,21 @@ impl Theme {
                 .fg(Color::Indexed(235))
         }
     }
+
+    /// The selected-row wash: a soft, dark-adaptive brand tint rather than a full
+    /// reverse — so a multi-line (multi-branch) row doesn't become a harsh block,
+    /// and dim cells (PRs, activity) stay legible on the highlight (reverse turns
+    /// dim text invisible). Under NO_COLOR it falls back to reverse, the only
+    /// structural way to mark a row.
+    fn selection(&self) -> Style {
+        if !self.color {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else if self.dark {
+            Style::new().bg(Color::Rgb(0x39, 0x30, 0x54))
+        } else {
+            Style::new().bg(Color::Rgb(0xE7, 0xDE, 0xF9))
+        }
+    }
 }
 
 /// Render the whole dashboard for one frame. `now` (Unix seconds) is injected
