@@ -128,11 +128,9 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
     );
 }
 
-/// The standup overlay: a "Repos" box (per-repo commit counts) beside a box of
-/// the focused repo's commits, scrollable. The active pane's title is bold; the
-/// other is dim. `None` shows a "collecting" placeholder.
-/// Below this inner width a two-pane overlay can't show both panes side-by-side
-/// without squeezing one of them, so it stacks the list on top instead.
+/// Below this inner width a two-pane overlay (used by the detail pane) can't show
+/// both panes side-by-side without squeezing one of them, so it stacks the list on
+/// top instead.
 pub(crate) const TWO_PANE_MIN_WIDTH: u16 = 64;
 
 /// Lay out a two-pane overlay (a list + a detail view). On a wide terminal the
@@ -253,8 +251,9 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         })
         .unwrap_or(3)
         .clamp(6, 16) as u16;
-    // body + description(3) + gap(1) + pane border(2) + outer border(2) + pad(1).
-    let h = (body + 9).min(full.height.saturating_sub(2)).max(12);
+    // body + title(1) + header rule(1) + description(3) + column header(1) +
+    // hints rule(1) + hints(1) + outer border(2).
+    let h = (body + 10).min(full.height.saturating_sub(2)).max(12);
     let w = (full.width as u32 * 84 / 100) as u16;
     let area = Rect {
         x: full.x + full.width.saturating_sub(w) / 2,
@@ -265,11 +264,11 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     frame.render_widget(Clear, area);
 
     let window = app.standup_window.label();
-    // The outer frame, padded so the inner boxes breathe. Title + hints ride
-    // inside the box, not on its borders.
+    // The outer frame. Title + hints ride inside the box (on their own rules), and
+    // the title sits directly under the top border — no blank pad line above it.
     let outer = Block::bordered()
         .border_type(BorderType::Rounded)
-        .padding(Padding::new(1, 1, 1, 0));
+        .padding(Padding::new(1, 1, 0, 0));
 
     // Still walking the commits: a placeholder.
     let Some(view) = &app.standup else {
@@ -325,13 +324,10 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         .get(view.focus)
         .map(|(r, _)| r.as_str())
         .unwrap_or("");
-    // The description (up to 3 wrapped lines), then a blank gap, then the panes.
-    let [desc_area, _gap, panes_area] = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Length(1),
-        Constraint::Min(0),
-    ])
-    .areas(inner);
+    // The description (up to 3 wrapped lines), then the two columns directly below
+    // (no blank gap — the bold column headers are separation enough).
+    let [desc_area, panes_area] =
+        Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(inner);
 
     // A glance of *what you did*, as one flowing, wrapping sentence:
     // "You authored 130 commits this week across 5 repos, shipping 68 features,
@@ -395,11 +391,9 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         desc_area,
     );
 
-    // A "Repos" box and a "{repo}" commits box: side-by-side when there's room,
-    // stacked (repos on top) on a narrow terminal.
-    let (left_area, right_area) = two_pane(panes_area, 26, 8);
-
-    // Highlight the active pane's title (bold) and dim the inactive one.
+    // Two columns split by a vertical divider (no inner boxes): the repos on the
+    // left, the focused repo's commits on the right. The active column is marked by
+    // a bold header; the other is dim.
     let active = |on: bool| {
         if on {
             Style::new().add_modifier(Modifier::BOLD)
@@ -408,43 +402,75 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         }
     };
 
-    // Left: the repos with commit counts.
-    let repos_block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .title(Line::from(" Repos ").style(active(!view.commits_focused)))
-        .padding(Padding::horizontal(1));
-    let repos_inner = repos_block.inner(left_area);
-    frame.render_widget(repos_block, left_area);
+    // repos column | 1-col divider | commits column, with a space either side of
+    // the divider (`.spacing(1)`).
+    let [repos_col, divider_col, commits_col] = Layout::horizontal([
+        Constraint::Length(22),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .spacing(1)
+    .areas(panes_area);
+
+    // The divider: a dim vertical rule down the full height of the columns (spanning
+    // both headers and both lists), so the two read as one table.
+    for y in divider_col.y..divider_col.y + divider_col.height {
+        frame.render_widget(
+            Paragraph::new(Span::styled("│", theme.dim())),
+            Rect {
+                x: divider_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+
+    // Each column is a header row, then its list below.
+    let [repos_hdr, repos_list_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(repos_col);
+    let [commits_hdr, commits_list_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(commits_col);
+
+    // Left column: a "Repos" header, then each repo with its commit count right-
+    // aligned so the numbers line up. The focused repo gets the soft selection wash
+    // (never a hard reverse, which buried the dim count and made the row unreadable).
+    frame.render_widget(
+        Paragraph::new(Span::styled("Repos", active(!view.commits_focused))),
+        repos_hdr,
+    );
+    let col_w = repos_list_area.width as usize;
     let items: Vec<ListItem> = view
         .groups
         .iter()
         .map(|(repo, commits)| {
+            let count = commits.len().to_string();
+            let name = ellipsize(repo, col_w.saturating_sub(count.len() + 1));
+            let pad = col_w.saturating_sub(name.chars().count() + count.len());
             ListItem::new(Line::from(vec![
-                Span::raw(ellipsize(repo, 16)),
-                Span::styled(format!("  {}", commits.len()), theme.dim()),
+                Span::raw(name),
+                Span::styled(format!("{}{count}", " ".repeat(pad)), theme.dim()),
             ]))
         })
         .collect();
-    let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let list = List::new(items).highlight_style(theme.selection());
     let mut list_state = ListState::default();
     list_state.select(Some(view.focus));
-    frame.render_stateful_widget(list, repos_inner, &mut list_state);
+    frame.render_stateful_widget(list, repos_list_area, &mut list_state);
 
-    // Right: the focused repo's commits, with the commit count in the title and
-    // a highlighted cursor (so scrolling is contextual).
+    // Right column: a "{repo} · N commits" header, then the commit list with a
+    // scrollbar. The cursor shows only when this column has focus.
     let n = view.focused_len();
-    let commits_block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .title(
-            Line::from(format!(
-                " {repo_name}  ·  {n} commit{} ",
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            format!(
+                "{repo_name}  ·  {n} commit{}",
                 if n == 1 { "" } else { "s" }
-            ))
-            .style(active(view.commits_focused)),
-        )
-        .padding(Padding::new(1, 0, 0, 0));
-    let commits_inner = commits_block.inner(right_area);
-    frame.render_widget(commits_block, right_area);
+            ),
+            active(view.commits_focused),
+        )),
+        commits_hdr,
+    );
 
     let items: Vec<ListItem> = view
         .groups
@@ -465,7 +491,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         .unwrap_or_default();
 
     let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(commits_inner);
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(commits_list_area);
 
     // Keep the highlighted commit visible: nudge the scroll offset only as far as
     // needed, then clamp. This drives both the list and the scrollbar.
@@ -481,7 +507,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     offset = offset.min(total.saturating_sub(viewport));
     view.set_offset(offset);
 
-    let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let list = List::new(items).highlight_style(theme.selection());
     let mut list_state = ListState::default();
     // Only show the cursor when the commits pane has focus.
     if view.commits_focused {

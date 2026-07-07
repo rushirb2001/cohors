@@ -6,23 +6,23 @@ expression: "render_to_string(&app, 50, 24)"
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                      │
 │ ▟██▌█▐██▙  ~/projects (+1)                     │
 │ ▀▐╭────────────────────────────────────────╮   │
-╰───│                                        │───╯
-╭ At│ Standup · this week   ·   11 commits · │───╮
-│ 1 ├────────────────────────────────────────┤   │
-╰───│ You authored 11 commits this week      │───╯
-╭ Re│ across 2 repos, shipping 8 features    │───╮
-│   │ and fixing 3 bugs.                     │ St│
-│▌  │                                        │ c…│
-│   │ ╭ Repos ─────────────────────────────╮ │   │
-╰───│ │ payments  8                        │ │───╯
-────│ │ web-app  3                         │ │────
-╭───│ │                                    │ │───╮
-│ se│ ╰────────────────────────────────────╯ │   │
-│   │                                        │   │
-│   ├────────────────────────────────────────┤   │
-│ ac│ ↑/↓ repo · →/⏎ view commits · w window │   │
-│   ╰────────────────────────────────────────╯sh │
-│   ! run cmd                                    │
+╰───│ Standup · this week   ·   11 commits · │───╯
+╭ At├────────────────────────────────────────┤───╮
+│ 1 │ You authored 11 commits this week      │   │
+╰───│ across 2 repos, shipping 8 features    │───╯
+╭ Re│ and fixing 3 bugs.                     │───╮
+│   │ Repos                  │ payments  ·   │ St│
+│▌  │ payments             8 │ aa00000  fea  │ c…│
+│   │ web-app              3 │ aa00001  fea  │   │
+╰───│                        │ aa00002  fea  │───╯
+────│                        │ aa00003  fea  │────
+╭───│                        │ aa00004  fea  │───╮
+│ se│                        │ aa00005  fea  │   │
+│   │                        │ aa00006  fea  │   │
+│   │                        │ aa00007  fea  │   │
+│ ac├────────────────────────────────────────┤   │
+│   │ ↑/↓ repo · →/⏎ view commits · w window │sh │
+│   ╰────────────────────────────────────────╯   │
 │ view                                           │
 │   ↑/↓ move · s sort · d attn · ⇥ standup       │
 ╰────────────────────────────────────────────────╯

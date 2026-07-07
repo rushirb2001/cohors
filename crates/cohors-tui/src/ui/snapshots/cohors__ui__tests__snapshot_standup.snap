@@ -4,22 +4,22 @@ expression: "render_to_string(&app, 100, 22)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███╭──────────────────────────────────────────────────────────────────────────────────╮       │
-│ ▟██▌█▐│                                                                                  │▒▁▒▁▒▁ │
-│ ▀▐▖▀█▀│ Standup · this week   ·   29 commits · 2 repos                                   │       │
-╰───────├──────────────────────────────────────────────────────────────────────────────────┤───────╯
-╭ Attent│ You authored 29 commits this week across 2 repos, shipping 24 features and       │───────╮
-│ 1 at r│ fixing 5 bugs.                                                                   │       │
-╰───────│                                                                                  │───────╯
-╭ Reposi│                                                                                  │───────╮
-│    Rep│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │       │
-│▌   leg│ │ payments  24           │  │ aa00014  feat: payments work item 14            ║│ │ (perm…│
-│  ○ pay│ │ web-app  5             │  │ aa00015  feat: payments work item 15            ║│ │       │
-│       │ │                        │  │ aa00016  feat: payments work item 16            ║│ │       │
-╰───────│ │                        │  │ aa00017  feat: payments work item 17            █│ │───────╯
-────────│ │                        │  │ aa00018  feat: payments work item 18            █│ │────────
-╭───────│ │                        │  │ aa00019  feat: payments work item 19            ║│ │───────╮
-│       │ │                        │  │ aa00020  feat: payments work item 20            ║│ │       │
-│ ──────│ ╰────────────────────────╯  ╰──────────────────────────────────────────────────╯ │────── │
+│ ▟██▌█▐│ Standup · this week   ·   29 commits · 2 repos                                   │▒▁▒▁▒▁ │
+│ ▀▐▖▀█▀├──────────────────────────────────────────────────────────────────────────────────┤       │
+╰───────│ You authored 29 commits this week across 2 repos, shipping 24 features and       │───────╯
+╭ Attent│ fixing 5 bugs.                                                                   │───────╮
+│ 1 at r│                                                                                  │       │
+╰───────│ Repos                  │ payments  ·  24 commits                                 │───────╯
+╭ Reposi│ payments            24 │ aa00011  feat: payments work item 11                  ║ │───────╮
+│    Rep│ web-app              5 │ aa00012  feat: payments work item 12                  ║ │       │
+│▌   leg│                        │ aa00013  feat: payments work item 13                  ║ │ (perm…│
+│  ○ pay│                        │ aa00014  feat: payments work item 14                  █ │       │
+│       │                        │ aa00015  feat: payments work item 15                  █ │       │
+╰───────│                        │ aa00016  feat: payments work item 16                  █ │───────╯
+────────│                        │ aa00017  feat: payments work item 17                  ║ │────────
+╭───────│                        │ aa00018  feat: payments work item 18                  ║ │───────╮
+│       │                        │ aa00019  feat: payments work item 19                  ║ │       │
+│ ──────│                        │ aa00020  feat: payments work item 20                  ║ │────── │
 │     ␣ ├──────────────────────────────────────────────────────────────────────────────────┤       │
 │     a │        ↑/↓ scroll commits · ← back to repos · w window · y copy · q close        │       │
 │       ╰──────────────────────────────────────────────────────────────────────────────────╯       │
