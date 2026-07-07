@@ -1040,7 +1040,23 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
                 .map(|r| r.name.as_str())
         })
         .collect();
-    let area = centered_rect(54, 32, full);
+    // Size to the content (prompt + affected repos) so the dialog never clips. The
+    // y / n keys live in the footer hint bar (`y confirm · N / Esc cancel`), so the
+    // body doesn't repeat them.
+    let names_str = names.join(", ");
+    let w = 60.min(full.width.saturating_sub(4)).max(24);
+    let inner_w = w.saturating_sub(4).max(1); // borders(2) + h-padding(2)
+    let wrapped = |s: &str| (s.chars().count() as u16).div_ceil(inner_w).max(1);
+    let content_h = wrapped(&pending.prompt) + 1 + wrapped(&names_str); // prompt + gap + names
+    let h = (content_h + 6) // +2 header, +2 footer, +2 border
+        .min(full.height.saturating_sub(2))
+        .max(7);
+    let area = Rect {
+        x: full.x + full.width.saturating_sub(w) / 2,
+        y: full.y + full.height.saturating_sub(h) / 2,
+        width: w,
+        height: h,
+    };
     frame.render_widget(Clear, area);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -1055,15 +1071,7 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
             Style::new().add_modifier(Modifier::BOLD),
         )),
         Line::from(""),
-        Line::from(Span::styled(names.join(", "), theme.dim())),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled("[y]", theme.ok()),
-            Span::raw(" yes    "),
-            Span::styled("[N]", theme.warn()),
-            Span::raw(" no    "),
-            Span::styled("(Esc cancels)", theme.dim()),
-        ]),
+        Line::from(Span::styled(names_str, theme.dim())),
     ];
     frame.render_widget(
         Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
@@ -1081,9 +1089,9 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
 
     let repo = app.selected_repo().map(|r| r.name.as_str()).unwrap_or("");
     let title = if repo.is_empty() {
-        " Open with… ".to_string()
+        "Open with…".to_string()
     } else {
-        format!(" Open {repo} with… ")
+        format!("Open {repo} with…")
     };
 
     // When PATH has no editor CLI, the list is just Reveal/lazygit — explain why
@@ -1153,9 +1161,9 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
             Opener::Lazygit => ListItem::new(Span::styled("Open in lazygit", theme.dim())),
         })
         .collect();
-    let list = List::new(items)
-        .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
-        .highlight_symbol("▌ ");
+    // The soft selection wash (matching the fleet list and the other modals), never
+    // a hard reverse that buries a dim row like "Reveal in file manager".
+    let list = List::new(items).highlight_style(theme.selection());
     let mut state = ListState::default();
     state.select(Some(ow.cursor));
     frame.render_stateful_widget(list, list_area, &mut state);
