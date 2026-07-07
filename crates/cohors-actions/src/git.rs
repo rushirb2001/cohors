@@ -9,14 +9,29 @@ use std::process::Command;
 
 use camino::Utf8Path;
 
+/// Errors from running a git command.
+#[derive(Debug, thiserror::Error)]
+pub enum GitActionError {
+    /// The `git` binary could not be spawned (e.g., not on `$PATH`).
+    #[error("could not run git: {0}")]
+    SpawnFailed(#[source] std::io::Error),
+}
+
+/// Convert to string so callers returning `Result<_, String>` can use `?`.
+impl From<GitActionError> for String {
+    fn from(e: GitActionError) -> String {
+        e.to_string()
+    }
+}
+
 /// Run `git -C <path> <args>`, capturing output.
-fn run_git(path: &Utf8Path, args: &[&str]) -> Result<std::process::Output, String> {
+fn run_git(path: &Utf8Path, args: &[&str]) -> Result<std::process::Output, GitActionError> {
     Command::new("git")
         .arg("-C")
         .arg(path.as_str())
         .args(args)
         .output()
-        .map_err(|e| format!("could not run git: {e}"))
+        .map_err(GitActionError::SpawnFailed)
 }
 
 /// Fetch the repo's default remote. Returns a short status message.
