@@ -97,12 +97,18 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
     }
 
     // Phase 3: apply from the cache — covers both prior hits and fresh stores.
+    // We OVERWRITE any remote already on the snapshot, but only when the cache
+    // actually holds an entry. Front-ends carry the previous enrichment across a
+    // rescan (so the Remote column doesn't blank to "—" mid-refresh); that stale
+    // copy must not block the refresh — otherwise CI/PR counts never update once
+    // set. When the fetch failed or was rate-limited (no cache entry), the
+    // snapshot keeps whatever it already had.
     for snap in snapshots.iter_mut() {
-        if snap.remote.is_none()
-            && let Some(url) = snap.remote_url.as_deref()
+        if let Some(url) = snap.remote_url.as_deref()
             && let Some((owner, repo)) = url::parse_repo(url)
+            && let Some(fresh) = cached(&format!("{owner}/{repo}"))
         {
-            snap.remote = cached(&format!("{owner}/{repo}"));
+            snap.remote = Some(fresh);
         }
     }
 }
