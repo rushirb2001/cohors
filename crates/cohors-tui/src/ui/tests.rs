@@ -74,6 +74,7 @@ fn demo_app() -> App {
             open_prs_by_base: std::collections::HashMap::from([("main".to_string(), open_prs)]),
             prs_awaiting_review: 0,
             ci,
+            ci_by_branch: std::collections::HashMap::new(),
             description: None,
             topics: Vec::new(),
             stars: 0,
@@ -91,6 +92,12 @@ fn demo_app() -> App {
         None,
     );
     payments.remote = remote(2, CiStatus::Passing);
+    // Per-branch CI: `main` passes, the feature branch fails — each branch row
+    // shows its own checks, since CI is keyed by ref, not the worktree.
+    payments.remote.as_mut().unwrap().ci_by_branch = std::collections::HashMap::from([
+        ("main".to_string(), CiStatus::Passing),
+        ("feat/checkout-rework".to_string(), CiStatus::Failing),
+    ]);
     // A multi-branch repo: the dashboard lists each branch, with the open-PR count
     // attached to the branch the PRs target (both target `main`).
     payments.branches = vec![
@@ -111,7 +118,7 @@ fn demo_app() -> App {
             name: "feat/checkout-rework".into(),
             ahead: 5,
             behind: 1,
-            has_upstream: false,
+            has_upstream: true,
             is_current: false,
             last_commit: Some(CommitMeta {
                 short_id: "e5f6a7b".into(),

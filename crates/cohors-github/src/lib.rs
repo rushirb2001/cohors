@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use cohors_core::{CiStatus, Contributor, PullRequest, RemoteDetail, RemoteInfo, RepoSnapshot};
+use cohors_core::{
+    BranchInfo, CiStatus, Contributor, PullRequest, RemoteDetail, RemoteInfo, RepoSnapshot,
+};
 
 /// Base URL of the GitHub REST API.
 const API_BASE: &str = "https://api.github.com";
@@ -55,12 +57,15 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
 
     // Phase 1 (cheap, sequential): resolve which repos are GitHub and which of
     // those miss the cache. Cache hits cost nothing and are applied at the end.
-    let pending: Vec<(String, String, String)> = snapshots
+    let pending: Vec<(String, String, String, Vec<String>)> = snapshots
         .iter()
         .filter_map(|snap| {
             let (owner, repo) = url::parse_repo(snap.remote_url.as_deref()?)?;
             let key = format!("{owner}/{repo}");
-            cached(&key).is_none().then_some((owner, repo, key))
+            if cached(&key).is_some() {
+                return None;
+            }
+            Some((owner, repo, key, ci_refs_for(&snap.branches)))
         })
         .collect();
 
@@ -68,11 +73,11 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
     // HTTP round-trips, so a sequential pass over a large fleet took minutes;
     // ENRICH_POOL_SIZE keeps it fast without hammering the API (which would
     // trip secondary rate limits — deliberately NOT one-task-per-repo).
-    let fetch_one = |(owner, repo, key): &(String, String, String)| {
+    let fetch_one = |(owner, repo, key, ci_refs): &(String, String, String, Vec<String>)| {
         if rate_limited.load(std::sync::atomic::Ordering::Relaxed) {
             return;
         }
-        match fetch_remote(&agent, token, owner, repo) {
+        match fetch_remote(&agent, token, owner, repo, ci_refs) {
             Ok(info) => store(key, info),
             Err(FetchError::RateLimited) => {
                 tracing::warn!(repo = %key, "github rate limit hit; skipping remaining repos this round");
@@ -215,11 +220,17 @@ enum FetchError {
 /// - `GET /repos/{owner}/{repo}/pulls?state=open` → open PR count (regular REST)
 /// - `GET /search/issues?...+review-requested:@me` → review-requested `total_count`
 /// - `GET /repos/{owner}/{repo}/commits/{branch}/check-runs` → Actions checks
+///   (once for the default branch, then once per extra pushed branch in `ci_refs`)
+///
+/// `ci_refs` lists the repo's pushed local branches when it has several, so each
+/// branch row can show its own checks; it's empty for single-branch repos, which
+/// then cost no extra requests.
 fn fetch_remote(
     agent: &ureq::Agent,
     token: &str,
     owner: &str,
     repo: &str,
+    ci_refs: &[String],
 ) -> Result<RemoteInfo, FetchError> {
     // 1) Repo metadata → default branch + identity/popularity (one call).
     let repo_json: RepoResponse = get_json(agent, token, &format!("/repos/{owner}/{repo}"))?;
@@ -257,18 +268,28 @@ fn fetch_remote(
     //    "pending" even when a repo posts zero statuses, which made Actions-only
     //    repos look perpetually pending (and produced stale/broken signals). The
     //    Checks API is the modern, accurate source.
-    let ci = {
-        let checks = match get_json::<CheckRunsResponse>(
-            agent,
-            token,
-            &format!("/repos/{owner}/{repo}/commits/{default_branch}/check-runs?per_page=100"),
-        ) {
-            Ok(c) => Some(c),
-            Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
-            Err(FetchError::Other(_)) => None,
-        };
-        combine_ci(checks.as_ref())
-    };
+    let ci = fetch_ci(agent, token, owner, repo, &default_branch)?;
+
+    // 5) Per-branch CI for a multi-branch repo, so each branch row shows its own
+    //    checks (CI is keyed by ref, not the worktree). The default branch is
+    //    already in hand from (4); fetch each *other* pushed branch, capped so a
+    //    very branchy repo can't blow the rate budget. Best-effort: a rate limit
+    //    mid-loop stops the extras but keeps the PRs + default CI already gathered
+    //    (the next repo's first call re-trips the limit and backs the fleet off).
+    let mut ci_by_branch = HashMap::from([(default_branch.clone(), ci)]);
+    for r#ref in ci_refs
+        .iter()
+        .filter(|r| **r != default_branch)
+        .take(CI_BRANCH_CAP)
+    {
+        match fetch_ci(agent, token, owner, repo, r#ref) {
+            Ok(status) => {
+                ci_by_branch.insert(r#ref.clone(), status);
+            }
+            Err(FetchError::RateLimited) => break,
+            Err(FetchError::Other(_)) => {}
+        }
+    }
 
     Ok(RemoteInfo {
         host: "github.com".to_string(),
@@ -279,6 +300,7 @@ fn fetch_remote(
         open_prs_by_base,
         prs_awaiting_review,
         ci,
+        ci_by_branch,
         description: repo_json.description.filter(|d| !d.trim().is_empty()),
         topics: repo_json.topics,
         stars: repo_json.stargazers_count,
@@ -286,6 +308,52 @@ fn fetch_remote(
         watchers: repo_json.subscribers_count,
     })
 }
+
+/// CI status of one ref's latest commit, from the **Checks API** (GitHub Actions
+/// and other Checks-API integrations). An `Other` failure — a 404 for a ref with
+/// no remote counterpart, a transient 5xx — folds to `None` ("no CI"), the same
+/// as a repo that posts no checks. A rate limit propagates so the caller can back
+/// the whole fleet off. See the note on the default-branch fetch for why the
+/// legacy commit Status API is deliberately avoided.
+fn fetch_ci(
+    agent: &ureq::Agent,
+    token: &str,
+    owner: &str,
+    repo: &str,
+    git_ref: &str,
+) -> Result<CiStatus, FetchError> {
+    match get_json::<CheckRunsResponse>(
+        agent,
+        token,
+        &format!("/repos/{owner}/{repo}/commits/{git_ref}/check-runs?per_page=100"),
+    ) {
+        Ok(checks) => Ok(combine_ci(Some(&checks))),
+        Err(FetchError::RateLimited) => Err(FetchError::RateLimited),
+        Err(FetchError::Other(_)) => Ok(CiStatus::None),
+    }
+}
+
+/// Which branches to fetch per-branch CI for, given a repo's local branches. Only
+/// when the repo has several (single-branch repos are covered by the default-branch
+/// `ci`), and only branches with an upstream — local-only branches have no remote
+/// checks, so they cost no request. The default branch may appear here; the fetch
+/// loop skips re-fetching it since (4) already has it.
+fn ci_refs_for(branches: &[BranchInfo]) -> Vec<String> {
+    if branches.len() > 1 {
+        branches
+            .iter()
+            .filter(|b| b.has_upstream)
+            .map(|b| b.name.clone())
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Most pushed branches we'll fetch per-branch CI for in one repo — a safety valve
+/// so a repo with dozens of pushed branches can't dominate the rate budget. Well
+/// above a typical repo's handful of active branches.
+const CI_BRANCH_CAP: usize = 10;
 
 /// Fetch the per-repo drill-in detail (open PRs + top contributors) for the
 /// detail pane. Best-effort: a section that fails (or has no data) is empty
@@ -803,6 +871,32 @@ mod tests {
         assert_eq!(by_base.get("main"), Some(&2));
         assert_eq!(by_base.get("develop"), Some(&1));
         assert_eq!(by_base.len(), 2, "PR #4 (no base) is omitted from the map");
+    }
+
+    /// Per-branch CI is fetched only for multi-branch repos, and only for pushed
+    /// branches — a single-branch repo (covered by the default-branch `ci`) and any
+    /// local-only branch cost no extra request.
+    #[test]
+    fn ci_refs_selects_pushed_branches_of_multi_branch_repos() {
+        let branch = |name: &str, has_upstream: bool| BranchInfo {
+            name: name.into(),
+            ahead: 0,
+            behind: 0,
+            has_upstream,
+            is_current: false,
+            last_commit: None,
+        };
+
+        // Single-branch repo: nothing to fetch, even when that branch is pushed.
+        assert!(ci_refs_for(&[branch("main", true)]).is_empty());
+
+        // Multi-branch: only the pushed branches; the local-only one is skipped.
+        let refs = ci_refs_for(&[
+            branch("main", true),
+            branch("feat/x", true),
+            branch("scratch", false),
+        ]);
+        assert_eq!(refs, ["main", "feat/x"]);
     }
 
     /// Open PRs are counted from the pulls list (regular REST budget, not the

@@ -981,16 +981,36 @@ fn multi_branch_row<'a>(
     header_name.push(Span::styled(branch_suffix(&snap.branch), bstyle));
     let mut name_lines = vec![Line::from(header_name)];
 
-    // The header PR count is the checked-out branch's (the full per-branch
-    // breakdown is on the lines below); the repo total is the fallback for a
-    // detached HEAD with no current branch.
-    let header_prs = match current {
-        Some(bi) => branch_prs_spans(snap, &bi.name, theme),
-        None => prs_spans(snap, theme),
+    // The header carries the checked-out branch's own signals — PRs targeting it,
+    // its CI (keyed by ref, so it's the branch's real state, not the default's).
+    // The repo total / default CI is the fallback for a detached HEAD with no
+    // current branch. Each *other* branch fills its own line below.
+    let (header_prs, header_ci, header_ci_sq) = match current {
+        Some(bi) => (
+            branch_prs_spans(snap, &bi.name, theme),
+            branch_ci_spans(snap, bi, theme),
+            branch_ci_square_spans(snap, bi, theme),
+        ),
+        None => (
+            prs_spans(snap, theme),
+            ci_spans(snap, theme),
+            ci_square_spans(snap, theme),
+        ),
     };
     let mut sync_lines = vec![Line::from(ahead_behind_spans(snap, theme))];
     let mut prs_lines = vec![Line::from(header_prs)];
     let mut age_lines = vec![age_line(snap.last_commit.as_ref(), now, age_w, theme)];
+    let mut ci_lines = vec![Line::from(header_ci)];
+    let mut ci_sq_lines = vec![Line::from(header_ci_sq)];
+    // The header Status is the repo's compounded attention reason (worktree + sync
+    // + stash of the checkout); each branch below shows its own sync state — the
+    // only status that exists off the working tree.
+    let mut status_lines = vec![Line::from(reason_spans(
+        assessment.primary.as_ref(),
+        severity,
+        fmt.reason_max,
+        theme,
+    ))];
     for &bi in &others {
         name_lines.push(branch_name_line(bi, theme));
         sync_lines.push(Line::from(sync_spans(
@@ -1001,20 +1021,21 @@ fn multi_branch_row<'a>(
         )));
         prs_lines.push(Line::from(branch_prs_spans(snap, &bi.name, theme)));
         age_lines.push(age_line(bi.last_commit.as_ref(), now, age_w, theme));
+        ci_lines.push(Line::from(branch_ci_spans(snap, bi, theme)));
+        ci_sq_lines.push(Line::from(branch_ci_square_spans(snap, bi, theme)));
+        status_lines.push(Line::from(branch_status_spans(bi, theme)));
     }
     let name = Cell::from(Text::from(name_lines));
     let sync = Cell::from(Text::from(sync_lines));
     let prs = Cell::from(Text::from(prs_lines));
     let age = Cell::from(Text::from(age_lines));
+    let ci = Cell::from(Text::from(ci_lines));
+    let ci_sq = Cell::from(Text::from(ci_sq_lines));
+    let status = Cell::from(Text::from(status_lines));
 
-    // Repo-level signals ride the header line; the branch lines stay blank below.
-    let ci = header_cell(ci_spans(snap, theme), extra);
-    let ci_sq = header_cell(ci_square_spans(snap, theme), extra);
+    // Activity is a repo-level sparkline (per-branch history is a heavier fetch,
+    // deferred); it rides the header line, blank on the branch lines below.
     let activity = header_cell(vec![activity_span(snap, theme)], extra);
-    let status = header_cell(
-        reason_spans(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
-        extra,
-    );
 
     let height = 1 + extra as u16;
     match fmt.layout {
@@ -1216,20 +1237,75 @@ pub(crate) fn prs_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>
     }
 }
 
+/// A CI status as a coloured word — `passing`/`failing`/`pending`/"no CI". Shared
+/// by the repo CI cell and each per-branch CI line.
+fn ci_label_spans(ci: CiStatus, theme: &Theme) -> Vec<Span<'static>> {
+    let (label, style) = match ci {
+        CiStatus::Passing => ("passing", theme.ok()),
+        CiStatus::Failing => ("failing", theme.risk()),
+        CiStatus::Pending => ("pending", theme.warn()),
+        CiStatus::None => ("no CI", theme.dim()),
+    };
+    vec![Span::styled(label, style)]
+}
+
+/// The colour a CI status reads in, shared by the word and compact-square cells.
+fn ci_style(ci: CiStatus, theme: &Theme) -> Style {
+    match ci {
+        CiStatus::Passing => theme.ok(),
+        CiStatus::Failing => theme.risk(),
+        CiStatus::Pending => theme.warn(),
+        CiStatus::None => theme.dim(),
+    }
+}
+
 /// The "CI" column (dock layout): the check status spelled out and colored;
 /// "local" when the repo isn't on a remote, "no CI" when it is but has no checks.
 pub(crate) fn ci_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.remote {
         None => vec![Span::styled("local", theme.dim())],
-        Some(r) => {
-            let (label, style) = match r.ci {
-                CiStatus::Passing => ("passing", theme.ok()),
-                CiStatus::Failing => ("failing", theme.risk()),
-                CiStatus::Pending => ("pending", theme.warn()),
-                CiStatus::None => ("no CI", theme.dim()),
-            };
-            vec![Span::styled(label, style)]
-        }
+        Some(r) => ci_label_spans(r.ci, theme),
+    }
+}
+
+/// The CI status for one branch of a multi-branch repo. "local" when the repo has
+/// no remote or the branch was never pushed (nothing was ever built for it); else
+/// its *own* checks from `ci_by_branch` — "no CI" when the map has no entry for it
+/// (e.g. a branch past the per-repo fetch cap). This is why the passing badge sits
+/// on the branch that was actually built, not on whichever branch is checked out.
+fn branch_ci_spans(
+    snap: &RepoSnapshot,
+    branch: &cohors_core::BranchInfo,
+    theme: &Theme,
+) -> Vec<Span<'static>> {
+    match &snap.remote {
+        Some(r) if branch.has_upstream => ci_label_spans(
+            r.ci_by_branch
+                .get(&branch.name)
+                .copied()
+                .unwrap_or(CiStatus::None),
+            theme,
+        ),
+        _ => vec![Span::styled("local", theme.dim())],
+    }
+}
+
+/// Per-branch Status, derived from sync state alone: a branch that isn't the
+/// checkout has no working tree, so there's no dirty/stash signal — only its
+/// relationship to its upstream. "never pushed", "N unpushed", "N behind",
+/// "N ahead · M behind", or a dim "up to date"; coloured to match the sync arrows.
+fn branch_status_spans(bi: &cohors_core::BranchInfo, theme: &Theme) -> Vec<Span<'static>> {
+    if !bi.has_upstream {
+        return vec![Span::styled("never pushed", theme.warn())];
+    }
+    match (bi.ahead, bi.behind) {
+        (0, 0) => vec![Span::styled("up to date", theme.dim())],
+        (a, 0) => vec![Span::styled(format!("{a} unpushed"), theme.ahead())],
+        (0, b) => vec![Span::styled(format!("{b} behind"), theme.behind())],
+        (a, b) => vec![Span::styled(
+            format!("{a} ahead · {b} behind"),
+            theme.warn(),
+        )],
     }
 }
 
@@ -1238,19 +1314,32 @@ pub(crate) fn ci_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>>
 /// remote. So CI never simply vanishes when the terminal is too narrow for
 /// "passing"; it shrinks to a square the colour still reads on.
 pub(crate) fn ci_square_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
-    let (ci, style) = match &snap.remote {
-        None => (CiStatus::None, theme.dim()),
-        Some(r) => (
-            r.ci,
-            match r.ci {
-                CiStatus::Passing => theme.ok(),
-                CiStatus::Failing => theme.risk(),
-                CiStatus::Pending => theme.warn(),
-                CiStatus::None => theme.dim(),
-            },
-        ),
+    let ci = snap.remote.as_ref().map_or(CiStatus::None, |r| r.ci);
+    vec![Span::styled(
+        theme.glyphs.ci_square(ci),
+        ci_style(ci, theme),
+    )]
+}
+
+/// The compact CI square for one branch (narrow layout): a grey square when the
+/// branch has no remote checks (no remote, or never pushed), else its own colour.
+fn branch_ci_square_spans(
+    snap: &RepoSnapshot,
+    branch: &cohors_core::BranchInfo,
+    theme: &Theme,
+) -> Vec<Span<'static>> {
+    let ci = match &snap.remote {
+        Some(r) if branch.has_upstream => r
+            .ci_by_branch
+            .get(&branch.name)
+            .copied()
+            .unwrap_or(CiStatus::None),
+        _ => CiStatus::None,
     };
-    vec![Span::styled(theme.glyphs.ci_square(ci), style)]
+    vec![Span::styled(
+        theme.glyphs.ci_square(ci),
+        ci_style(ci, theme),
+    )]
 }
 
 /// The repo name, preceded by a selection gutter: a cyan `●` when the repo is

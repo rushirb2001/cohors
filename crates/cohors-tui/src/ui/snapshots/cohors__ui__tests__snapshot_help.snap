@@ -15,7 +15,7 @@ expression: "render_to_string(&app, 100, 64)"
 │    Repo      │    ↓5              commits behind upstream                         │              │
 │▌   legacy-bil│    ●               in sync with upstream                           │ad .git (perm…│
 │  ○ payments @│    local           no upstream (local only)                        │              │
-│      @feat/ch│    ● ● ●           CI: pass / fail / pending                       │              │
+│      @feat/ch│    ● ● ●           CI: pass / fail / pending                       │behind        │
 │  ○ web-app @f│    2pr             open pull requests                              │pull          │
 │  ○ infra @a1b│    3               changed files, all staged                       │d changes     │
 │  ○ auth-servi│    3               changed files, some unstaged                    │              │

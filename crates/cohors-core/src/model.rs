@@ -202,6 +202,13 @@ pub struct RemoteInfo {
     pub prs_awaiting_review: u32,
     /// CI/checks status of the default branch's latest commit.
     pub ci: CiStatus,
+    /// CI/checks status per local branch (branch name → status), populated only
+    /// for repos with several local branches so each branch row can show its own
+    /// checks. CI is keyed by ref, not the worktree, so this is a real per-branch
+    /// fetch. Empty for single-branch repos (their `ci` above suffices) and older
+    /// cached snapshots.
+    #[serde(default)]
+    pub ci_by_branch: HashMap<String, CiStatus>,
     /// The repo's GitHub description, if set — a human label for what it does.
     /// All identity/popularity fields below are parsed from the same `GET /repos`
     /// call the enrich pass already makes (zero extra requests) and default so
@@ -623,6 +630,7 @@ mod tests {
             default_branch: "main".to_string(),
             open_prs: 5,
             open_prs_by_base: HashMap::from([("main".to_string(), 5)]),
+            ci_by_branch: HashMap::new(),
             prs_awaiting_review: 0,
             ci: CiStatus::Passing,
             description: None,

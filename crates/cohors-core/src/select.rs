@@ -610,6 +610,7 @@ mod tests {
             open_prs_by_base: Default::default(),
             prs_awaiting_review: 0,
             ci: CiStatus::Failing,
+            ci_by_branch: Default::default(),
             description: None,
             topics: Vec::new(),
             stars: 0,

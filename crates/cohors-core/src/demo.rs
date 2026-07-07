@@ -198,6 +198,14 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         },
         prs_awaiting_review: 0,
         ci,
+        // The multi-branch demo repo carries per-branch CI so `cohors demo` shows
+        // the per-branch checks column; only its pushed branch (main) has a remote,
+        // hence CI — the local-only feature branch renders "local".
+        ci_by_branch: if s.name == "payments" {
+            HashMap::from([("main".to_string(), ci)])
+        } else {
+            HashMap::new()
+        },
         description: Some(format!("demo repo — {}", s.summary)),
         topics: Vec::new(),
         // Deterministic (clock-free) but varied, derived from the name.
