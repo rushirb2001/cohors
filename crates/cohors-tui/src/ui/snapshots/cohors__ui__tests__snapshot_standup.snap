@@ -12,7 +12,7 @@ expression: "render_to_string(&app, 100, 22)"
 ╰───────│                                                                                  │───────╯
 ╭ Reposi│                                                                                  │───────╮
 │    Rep│ ╭ Repos ─────────────────╮  ╭ payments  ·  24 commits ─────────────────────────╮ │       │
-│▌   leg│ │ payments  24           │  │ aa00014  feat: payments work item 14            ║│ │(permi…│
+│▌   leg│ │ payments  24           │  │ aa00014  feat: payments work item 14            ║│ │ (perm…│
 │  ○ pay│ │ web-app  5             │  │ aa00015  feat: payments work item 15            ║│ │       │
 │       │ │                        │  │ aa00016  feat: payments work item 16            ║│ │       │
 ╰───────│ │                        │  │ aa00017  feat: payments work item 17            █│ │───────╯

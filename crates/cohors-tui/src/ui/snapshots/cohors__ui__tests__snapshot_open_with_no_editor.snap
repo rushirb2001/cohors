@@ -11,7 +11,7 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 at risk · 2 warning │  Open legacy-billing with…                       │                       │
 ╰───────────────────────├──────────────────────────────────────────────────┤───────────────────────╯
 ╭ Repositories (5) · sor│ No editor CLI found on your PATH.                │───────────────────────╮
-│    Repo               │ Install its shell command to list it here.       │us                     │
+│    Repo               │ Install its shell command to list it here.       │tus                    │
 │                       │ ▌ Reveal in file manager                         │                       │
 ╰───────────────────────│   Open in lazygit                                │───────────────────────╯
 ────────────────────────├──────────────────────────────────────────────────┤────────────────────────

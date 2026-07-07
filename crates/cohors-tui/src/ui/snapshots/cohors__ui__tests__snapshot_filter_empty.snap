@@ -14,8 +14,8 @@ expression: "render_to_string(&app, 100, 24)"
 │╭────────────────────────────────────────────────────────────────────────────────────────────────╮│
 ││ / ▏filter repos by name…                                                                       ││
 │╰────────────────────────────────────────────────────────────────────────────────────────────────╯│
-│    Repo                    Sync   PRs    CI       Last  Activity      Status                     │
-│▌   legacy-billing                                                     could not read .git (permi…│
+│    Repo                     Sync   PRs    CI       Last  Activity      Status                    │
+│▌   legacy-billing                                                      could not read .git (perm…│
 │                                             ↓ 4 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────

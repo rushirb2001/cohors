@@ -1323,17 +1323,3 @@ pub(crate) fn roots_label(app: &App) -> String {
         app.roots.join(", ")
     }
 }
-
-/// The "Repositories" panel: the repo table wrapped in a titled box. The column
-/// headers act as the legend, so the bare numbers in each row read clearly.
-/// The scroll offset that keeps `selected` visible in a `viewport`-tall window,
-/// nudging from `prev` only as far as needed, then clamping to the end.
-pub(crate) fn keep_visible(prev: usize, selected: usize, viewport: usize, total: usize) -> usize {
-    let mut off = prev;
-    if selected < off {
-        off = selected;
-    } else if viewport > 0 && selected >= off + viewport {
-        off = selected + 1 - viewport;
-    }
-    off.min(total.saturating_sub(viewport))
-}

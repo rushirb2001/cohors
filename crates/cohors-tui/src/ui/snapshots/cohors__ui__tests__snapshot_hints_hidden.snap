@@ -12,13 +12,13 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 at risk · 2 warning · 1 minor · 1 calm                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo                    Sync   PRs    CI       Last  Activity      Status                     │
-│▌   legacy-billing                                                     could not read .git (permi…│
-│  ○ payments @main          ↑2     2      passing    2h     quiet      ↑2 unpushed                │
-│  ○ web-app @feat/checkout  ↓5     0      failing   20m     quiet      ↓5 behind — pull           │
-│  ○ infra @a1b2c3d          local  local  local      1w     quiet      4 uncommitted changes      │
-│  ○ auth-service @main      local  1      pending    3d     quiet      up to date                 │
-│                                                                                                  │
-│                                                                                                  │
+│    Repo                     Sync   PRs    CI       Last  Activity      Status                    │
+│▌   legacy-billing                                                      could not read .git (perm…│
+│  ○ payments                               passing           quiet      ↑2 unpushed               │
+│    ▸ @main                  ↑2     2                 2h                                          │
+│      @feat/checkout-rework  local  0                 1d                                          │
+│  ○ web-app @feat/checkout   ↓5     0      failing   20m     quiet      ↓5 behind — pull          │
+│  ○ infra @a1b2c3d           local  local  local      1w     quiet      4 uncommitted changes     │
+│  ○ auth-service @main       local  1      pending    3d     quiet      up to date                │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

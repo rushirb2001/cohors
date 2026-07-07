@@ -66,28 +66,35 @@ pub(crate) fn render_repos_panel(
     let total = view.len();
     // The header is its own row (no blank margin); the data fills the rest. When
     // the fleet overflows, a scroll hint is reserved above and/or below the data —
-    // both at once when repos are hidden in both directions.
-    let avail = table_inner.height.saturating_sub(1) as usize; // data rows with header only
-    let overflow = total > avail;
+    // both at once when repos are hidden in both directions. Because a
+    // multi-branch repo occupies several lines, the scroll math counts LINES, not
+    // repos (`heights` is one entry per repo, in view order).
+    let heights: Vec<usize> = view
+        .iter()
+        .map(|vr| row_height(&app.repos[vr.index]))
+        .collect();
+    let total_lines: usize = heights.iter().sum();
+    let avail = table_inner.height.saturating_sub(1) as usize; // data lines (header excluded)
+    let overflow = total_lines > avail;
 
-    // First assume one hint row; if that still hides repos both above and below,
-    // two hint rows are needed (shrinking the viewport by one more).
-    let one_vp = avail.saturating_sub(usize::from(overflow)).max(1);
-    let one_off = keep_visible(app.repos_scroll.get(), app.selected, one_vp, total);
-    let two_hints = overflow && one_off > 0 && total.saturating_sub(one_off + one_vp) > 0;
-    let viewport = if two_hints {
-        avail.saturating_sub(2).max(1)
+    // First assume one hint line; if repos are hidden both above and below, a
+    // second hint line is needed (shrinking the data area by one more).
+    let vp1 = avail.saturating_sub(usize::from(overflow)).max(1);
+    let (off1, cnt1) = window(app.repos_scroll.get(), app.selected, vp1, &heights);
+    let two_hints = overflow && off1 > 0 && total.saturating_sub(off1 + cnt1) > 0;
+    let (offset, visible) = if two_hints {
+        window(
+            app.repos_scroll.get(),
+            app.selected,
+            avail.saturating_sub(2).max(1),
+            &heights,
+        )
     } else {
-        one_vp
-    };
-    let offset = if two_hints {
-        keep_visible(app.repos_scroll.get(), app.selected, viewport, total)
-    } else {
-        one_off
+        (off1, cnt1)
     };
     app.repos_scroll.set(offset);
     let above = offset;
-    let below = total.saturating_sub(offset + viewport);
+    let below = total.saturating_sub(offset + visible);
 
     // header row, then the data, with `↑ N more` below the header when repos are
     // hidden above and `… N more ↓` at the bottom when hidden below — either or
@@ -149,7 +156,20 @@ pub(crate) fn render_repos_panel(
     // run away. This mirrors the web and reclaims a whole column for Status.
     // There is no Changes column on either surface any more: the dirty count is
     // Status's job ("4 uncommitted changes"), exactly as on the web.
-    let repo_w = col_w(repo_spans, 12, 30);
+    let repo_w = {
+        let names = col_w(repo_spans, 12, 30);
+        // Multi-branch repos also render `    @branch` lines; size the column to
+        // the widest branch line too (4-space indent + `@` + name), same cap.
+        let branches = view
+            .iter()
+            .map(|vr| &app.repos[vr.index])
+            .filter(|s| s.branches.len() > 1)
+            .flat_map(|s| &s.branches)
+            .map(|b| 5 + b.name.chars().count() as u16)
+            .max()
+            .unwrap_or(0);
+        names.max(branches).clamp(12, 30)
+    };
     // No Stash column either: like Changes, the stash count is Status's job
     // ("1 stash · stale"), and the dock card spells it out for the selection.
     //
@@ -850,6 +870,13 @@ pub(crate) fn repo_row<'a>(
         };
     }
 
+    // A repo with several local branches lists each on its own indented line
+    // under the repo (display-only: selection, Enter, and actions stay
+    // repo-level, so `app.selected` still indexes repos).
+    if snap.branches.len() > 1 {
+        return multi_branch_row(snap, highlights, now, theme, marked, fmt);
+    }
+
     let assessment = assess(snap, now);
     let severity = assessment.severity;
     let name = name_cell(
@@ -920,6 +947,157 @@ pub(crate) fn repo_row<'a>(
     }
 }
 
+/// A repo with several local branches: a header line carrying the repo-level
+/// signals (name, CI, activity, and the checked-out branch's dirty status), then
+/// one indented line per local branch with that branch's own sync, open-PR count
+/// (PRs targeting it as base), and last commit. Display-only — the whole thing is
+/// still one selectable repo row.
+fn multi_branch_row<'a>(
+    snap: &'a RepoSnapshot,
+    highlights: &[u32],
+    now: i64,
+    theme: &Theme,
+    marked: bool,
+    fmt: &RowFmt,
+) -> Row<'a> {
+    let assessment = assess(snap, now);
+    let severity = assessment.severity;
+    let n = snap.branches.len();
+
+    // Repo cell: header name, then one indented `@branch` line each. The
+    // per-branch columns (sync / PRs / last) start blank on the header line.
+    let mut name_lines = vec![Line::from(name_spans(
+        &snap.name, highlights, severity, marked, theme,
+    ))];
+    let mut sync_lines = vec![Line::default()];
+    let mut prs_lines = vec![Line::default()];
+    let mut age_lines = vec![Line::default()];
+    for bi in &snap.branches {
+        name_lines.push(branch_name_line(bi, theme));
+        sync_lines.push(Line::from(sync_spans(
+            bi.has_upstream,
+            bi.ahead,
+            bi.behind,
+            theme,
+        )));
+        prs_lines.push(Line::from(branch_prs_spans(snap, &bi.name, theme)));
+        age_lines.push(branch_age_line(bi, now, fmt.age_w as usize, theme));
+    }
+    let name = Cell::from(Text::from(name_lines));
+    let sync = Cell::from(Text::from(sync_lines));
+    let prs = Cell::from(Text::from(prs_lines));
+    let age = Cell::from(Text::from(age_lines));
+
+    // Repo-level signals ride the header line; the branch lines stay blank below.
+    let ci = header_cell(ci_spans(snap, theme), n);
+    let ci_sq = header_cell(ci_square_spans(snap, theme), n);
+    let activity = header_cell(vec![activity_span(snap, theme)], n);
+    let status = header_cell(
+        reason_spans(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
+        n,
+    );
+
+    let height = 1 + n as u16;
+    match fmt.layout {
+        Tier::Wide => Row::new(vec![name, sync, prs, ci, age, activity, status]).height(height),
+        Tier::Medium => Row::new(vec![name, sync, prs, ci, age, status]).height(height),
+        Tier::Narrow => Row::new(vec![name, sync, ci_sq, age, status]).height(height),
+    }
+}
+
+/// The height (lines) a repo's row occupies: 1, or 1 header + one line per local
+/// branch when it has several.
+fn row_height(snap: &RepoSnapshot) -> usize {
+    if snap.branches.len() > 1 {
+        1 + snap.branches.len()
+    } else {
+        1
+    }
+}
+
+/// Height-aware viewport: pick the first-visible repo index so the selected repo
+/// fits within `avail_lines`, and count how many repos fit from there. Mirrors
+/// `keep_visible` but in LINES, since a multi-branch repo spans several rows.
+/// Returns `(offset, visible_repo_count)`.
+fn window(prev: usize, selected: usize, avail_lines: usize, heights: &[usize]) -> (usize, usize) {
+    let n = heights.len();
+    if n == 0 {
+        return (0, 0);
+    }
+    let selected = selected.min(n - 1);
+    // Never scroll past the selected repo, then scroll down until it fits.
+    let mut offset = prev.min(selected);
+    while offset < selected && heights[offset..=selected].iter().sum::<usize>() > avail_lines {
+        offset += 1;
+    }
+    // Count repos that fit from `offset` (always at least one, even if a single
+    // tall repo overflows the viewport on its own).
+    let mut used = 0usize;
+    let mut count = 0usize;
+    for &h in &heights[offset..] {
+        if count > 0 && used + h > avail_lines {
+            break;
+        }
+        used += h;
+        count += 1;
+    }
+    (offset, count)
+}
+
+/// A cell whose first line carries `spans`, followed by `extra` blank lines — a
+/// repo-level signal on the header line, with the branch lines below left empty.
+fn header_cell(spans: Vec<Span<'static>>, extra: usize) -> Cell<'static> {
+    let mut lines = vec![Line::from(spans)];
+    lines.extend(std::iter::repeat_with(Line::default).take(extra));
+    Cell::from(Text::from(lines))
+}
+
+/// One indented branch line under a repo: `@name`, the checked-out branch marked
+/// with a `▸` and bold, the rest dim (matching the `@branch` suffix style).
+fn branch_name_line(bi: &cohors_core::BranchInfo, theme: &Theme) -> Line<'static> {
+    if bi.is_current {
+        Line::from(vec![
+            Span::styled("  ▸ ", theme.ahead()),
+            Span::styled(
+                format!("@{}", bi.name),
+                Style::new().add_modifier(Modifier::BOLD),
+            ),
+        ])
+    } else {
+        Line::from(vec![
+            Span::raw("    "),
+            Span::styled(format!("@{}", bi.name), theme.dim()),
+        ])
+    }
+}
+
+/// The open-PR count targeting one branch (as base): a dim "0" when none, the
+/// count in accent when there are some, "local" when the repo isn't on a remote.
+fn branch_prs_spans(snap: &RepoSnapshot, branch: &str, theme: &Theme) -> Vec<Span<'static>> {
+    match &snap.remote {
+        None => vec![Span::styled("local", theme.dim())],
+        Some(r) => match r.open_prs_by_base.get(branch).copied().unwrap_or(0) {
+            0 => vec![Span::styled("0", theme.dim())],
+            k => vec![Span::styled(k.to_string(), theme.ahead())],
+        },
+    }
+}
+
+/// One branch's last-commit age, right-aligned like the single-line Last column.
+fn branch_age_line(
+    bi: &cohors_core::BranchInfo,
+    now: i64,
+    age_w: usize,
+    theme: &Theme,
+) -> Line<'static> {
+    let age = bi
+        .last_commit
+        .as_ref()
+        .map(|c| time::relative(c.timestamp, now))
+        .unwrap_or_else(|| "—".to_string());
+    Line::from(Span::styled(format!("{age:>age_w$}"), theme.dim()))
+}
+
 /// How many weeks of history the Activity sparkline shows (the width of the
 /// column, one cell per week) — matches the web's 12-week window.
 pub(crate) const ACTIVITY_WEEKS: usize = 12;
@@ -930,12 +1108,15 @@ pub(crate) const ACTIVITY_WEEKS: usize = 12;
 /// window says "quiet" instead of drawing a flat baseline, which reads as
 /// data, not as an empty cell.
 pub(crate) fn activity_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> {
+    Cell::from(activity_span(snap, theme))
+}
+
+/// The activity sparkline as a single styled span (a repo-level signal), reused
+/// on the header line of a multi-branch row.
+fn activity_span(snap: &RepoSnapshot, theme: &Theme) -> Span<'static> {
     let max = snap.activity.iter().copied().max().unwrap_or(0);
     if max == 0 {
-        return Cell::from(Span::styled(
-            format!("{:^ACTIVITY_WEEKS$}", "quiet"),
-            theme.dim(),
-        ));
+        return Span::styled(format!("{:^ACTIVITY_WEEKS$}", "quiet"), theme.dim());
     }
     let ramp = theme.glyphs.spark_ramp();
     let mut spark = String::with_capacity(ACTIVITY_WEEKS * 3);
@@ -943,7 +1124,7 @@ pub(crate) fn activity_cell<'a>(snap: &RepoSnapshot, theme: &Theme) -> Cell<'a> 
         let n = snap.activity.get(w).copied().unwrap_or(0) as usize;
         spark.push(ramp[(n * 7).div_ceil(max as usize).min(7)]);
     }
-    Cell::from(Span::styled(spark, theme.dim()))
+    Span::styled(spark, theme.dim())
 }
 
 /// The "Last" column: the commit age alone, right-aligned (the message lives in
@@ -967,12 +1148,24 @@ pub(crate) fn reason_cell<'a>(
     max: usize,
     theme: &Theme,
 ) -> Cell<'a> {
+    Cell::from(Line::from(reason_spans(primary, severity, max, theme)))
+}
+
+/// The Status text as spans (primary attention reason, coloured by overall
+/// severity; a dim "up to date" when nothing's wrong) — shared by the row cell
+/// and a multi-branch repo's header line.
+fn reason_spans(
+    primary: Option<&AttentionReason>,
+    severity: Severity,
+    max: usize,
+    theme: &Theme,
+) -> Vec<Span<'static>> {
     match primary {
-        Some(r) => Cell::from(Span::styled(
+        Some(r) => vec![Span::styled(
             ellipsize(&r.label(), max),
             severity_style(severity, theme),
-        )),
-        None => Cell::from(Span::styled(ellipsize("up to date", max), theme.dim())),
+        )],
+        None => vec![Span::styled(ellipsize("up to date", max), theme.dim())],
     }
 }
 
@@ -981,24 +1174,32 @@ pub(crate) fn reason_cell<'a>(
 /// upstream. The remote PR/CI signal moved to its own columns.
 pub(crate) fn ahead_behind_spans(snap: &RepoSnapshot, theme: &Theme) -> Vec<Span<'static>> {
     match &snap.upstream {
-        None => vec![Span::styled("local", theme.dim())],
-        Some(up) if up.ahead == 0 && up.behind == 0 => {
-            vec![Span::styled(theme.glyphs.synced(), theme.ok())]
-        }
-        Some(up) => {
-            let mut spans = Vec::new();
-            if up.ahead > 0 {
-                spans.push(Span::styled(format!("↑{}", up.ahead), theme.ahead()));
-            }
-            if up.ahead > 0 && up.behind > 0 {
-                spans.push(Span::raw(" "));
-            }
-            if up.behind > 0 {
-                spans.push(Span::styled(format!("↓{}", up.behind), theme.behind()));
-            }
-            spans
-        }
+        None => sync_spans(false, 0, 0, theme),
+        Some(up) => sync_spans(true, up.ahead, up.behind, theme),
     }
+}
+
+/// Ahead/behind arrows for a single branch vs its own upstream: "local" (no
+/// upstream), a synced dot (0/0), or `↑a ↓b`. Shared by the HEAD row and the
+/// per-branch lines of a multi-branch repo.
+fn sync_spans(has_upstream: bool, ahead: u32, behind: u32, theme: &Theme) -> Vec<Span<'static>> {
+    if !has_upstream {
+        return vec![Span::styled("local", theme.dim())];
+    }
+    if ahead == 0 && behind == 0 {
+        return vec![Span::styled(theme.glyphs.synced(), theme.ok())];
+    }
+    let mut spans = Vec::new();
+    if ahead > 0 {
+        spans.push(Span::styled(format!("↑{ahead}"), theme.ahead()));
+    }
+    if ahead > 0 && behind > 0 {
+        spans.push(Span::raw(" "));
+    }
+    if behind > 0 {
+        spans.push(Span::styled(format!("↓{behind}"), theme.behind()));
+    }
+    spans
 }
 
 /// The "PRs" column (dock layout): open pull-request count — a dim "0" on a remote
@@ -1060,6 +1261,28 @@ pub(crate) fn name_cell<'a>(
     branch: &Branch,
     theme: &Theme,
 ) -> Cell<'a> {
+    let mut spans = name_spans(name, highlights, severity, marked, theme);
+    // The branch is fused onto the name (`name @branch`), mirroring the web — a
+    // dim suffix (or magenta for a detached `@sha`), so Repo + Branch share one
+    // tight column. (Multi-branch repos list branches on their own lines instead.)
+    let bstyle = match branch {
+        Branch::Detached(_) => theme.detached(),
+        _ => theme.dim(),
+    };
+    spans.push(Span::styled(branch_suffix(branch), bstyle));
+    Cell::from(Line::from(spans))
+}
+
+/// The selection gutter + styled repo name (fuzzy highlights bolded), WITHOUT the
+/// `@branch` suffix — shared by the single-line row and a multi-branch repo's
+/// header line.
+fn name_spans(
+    name: &str,
+    highlights: &[u32],
+    severity: Severity,
+    marked: bool,
+    theme: &Theme,
+) -> Vec<Span<'static>> {
     // Red is reserved for genuinely broken repos (the `snap.error` row); a repo
     // that merely wants attention (aging unpushed, behind, dirty) is conveyed by
     // weight here and by the coloured Status cell — never an alarming red name.
@@ -1092,15 +1315,7 @@ pub(crate) fn name_cell<'a>(
             Span::styled(ch.to_string(), style)
         }));
     }
-    // The branch is fused onto the name (`name @branch`), mirroring the web — a
-    // dim suffix (or magenta for a detached `@sha`), so Repo + Branch share one
-    // tight column.
-    let bstyle = match branch {
-        Branch::Detached(_) => theme.detached(),
-        _ => theme.dim(),
-    };
-    spans.push(Span::styled(branch_suffix(branch), bstyle));
-    Cell::from(Line::from(spans))
+    spans
 }
 
 /// The `@branch` suffix appended to the repo name: `@main`, `@a1b2c3d` for a

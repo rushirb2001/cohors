@@ -13,13 +13,13 @@ expression: "render_to_string(&app, 100, 28)"
 ╰───────│ │ 4 uncommitted changes              █ │ │ c3d4e5f    1d  refactor: extract pro ││───────╯
 ╭ Reposi│ │ 1 stash                            █ │ │ d4e5f60    3d  feat: idempotency key ││───────╮
 │    Rep│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││       │
-│▌   leg│ │ Changes (3)                        █ │ │                                      ││(permi…│
+│▌   leg│ │ Changes (3)                        █ │ │                                      ││ (perm…│
 │  ○ pay│ │  M src/charge.rs                   ║ │ │                                      ││       │
-│  ○ web│ │  M src/refund.rs                   ║ │ │                                      ││       │
-│  ○ inf│ │ ?? notes.md                        ║ │ │                                      ││s      │
-│  ○ aut│ │                                    ║ │ │                                      ││       │
-│       │ │ Branches (3)                       ║ │ │                                      ││       │
-│       │ │ ● main  ↑2                         ║ │ │                                      ││       │
+│    ▸ @│ │  M src/refund.rs                   ║ │ │                                      ││       │
+│      @│ │ ?? notes.md                        ║ │ │                                      ││       │
+│  ○ web│ │                                    ║ │ │                                      ││       │
+│  ○ inf│ │ Branches (3)                       ║ │ │                                      ││es     │
+│  ○ aut│ │ ● main  ↑2                         ║ │ │                                      ││       │
 │       │ │   feat/idempotency  ↑3 ↓1          ║ │ │                                      ││       │
 ╰───────│ │   spike/webhooks  · no upstream    ║ │ │                                      ││───────╯
 ────────│ │                                    ║ │ │                                      ││────────

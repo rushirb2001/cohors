@@ -242,9 +242,44 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         error: s.error.map(|e| e.to_string()),
         activity: demo_activity(s.name, s.error.is_some()),
         groups: Vec::new(),
-        // Populated with a multi-branch showcase repo in the rendering phase.
-        branches: Vec::new(),
+        branches: demo_branches(s.name, now),
     }
+}
+
+/// Demo branches for the showcase: most repos are single-branch (an empty list
+/// renders inline), but `payments` carries a couple so the multi-branch layout is
+/// visible in `cohors demo`. The demo's open PRs all target `main`, so `main` is
+/// where the count lands.
+fn demo_branches(name: &str, now: i64) -> Vec<BranchInfo> {
+    if name != "payments" {
+        return Vec::new();
+    }
+    let commit = |ts: i64, summary: &str| {
+        Some(CommitMeta {
+            short_id: "abc1234".into(),
+            author: "you".into(),
+            timestamp: ts,
+            summary: summary.into(),
+        })
+    };
+    vec![
+        BranchInfo {
+            name: "main".into(),
+            ahead: 2,
+            behind: 0,
+            has_upstream: true,
+            is_current: true,
+            last_commit: commit(now - 7200, "fix: retry on 5xx"),
+        },
+        BranchInfo {
+            name: "feat/idempotency-keys".into(),
+            ahead: 6,
+            behind: 1,
+            has_upstream: false,
+            is_current: false,
+            last_commit: commit(now - 86_400, "wip: idempotency"),
+        },
+    ]
 }
 
 /// A deterministic, varied-looking 12-week commit sparkline for a demo repo, so

@@ -1,7 +1,8 @@
 use super::*;
 use crate::app::{App, Mode};
 use cohors_core::{
-    Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, Upstream, WorktreeStatus,
+    Branch, BranchInfo, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, Upstream,
+    WorktreeStatus,
 };
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
@@ -90,6 +91,36 @@ fn demo_app() -> App {
         None,
     );
     payments.remote = remote(2, CiStatus::Passing);
+    // A multi-branch repo: the dashboard lists each branch, with the open-PR count
+    // attached to the branch the PRs target (both target `main`).
+    payments.branches = vec![
+        BranchInfo {
+            name: "main".into(),
+            ahead: 2,
+            behind: 0,
+            has_upstream: true,
+            is_current: true,
+            last_commit: Some(CommitMeta {
+                short_id: "a1b2c3d".into(),
+                author: "Dev".into(),
+                timestamp: NOW - 7200,
+                summary: "fix: retry on 5xx".into(),
+            }),
+        },
+        BranchInfo {
+            name: "feat/checkout-rework".into(),
+            ahead: 5,
+            behind: 1,
+            has_upstream: false,
+            is_current: false,
+            last_commit: Some(CommitMeta {
+                short_id: "e5f6a7b".into(),
+                author: "Dev".into(),
+                timestamp: NOW - 86_400,
+                summary: "wip: checkout".into(),
+            }),
+        },
+    ];
     let mut web_app = snap(
         "web-app",
         Branch::Named("feat/checkout".into()),
@@ -158,7 +189,9 @@ fn render_to_string(app: &App, w: u16, h: u16) -> String {
 #[test]
 fn snapshot_list() {
     let app = demo_app();
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    // Tall enough to show the whole fleet, including the multi-branch `payments`
+    // repo expanded into its per-branch lines.
+    insta::assert_snapshot!(render_to_string(&app, 100, 28));
 }
 
 /// The medium width tier: too narrow for the Activity sparkline, but the modern

@@ -11,7 +11,7 @@ expression: "render_to_string(&app, 100, 20)"
 │ 1 at risk · 2 warning │  Open legacy-billing with…                       │                       │
 ╰───────────────────────├──────────────────────────────────────────────────┤───────────────────────╯
 ╭ Repositories (5) · sor│ ▌ VS Code  · default                             │───────────────────────╮
-│    Repo               │   Neovim                                         │us                     │
+│    Repo               │   Neovim                                         │tus                    │
 │                       │   Reveal in file manager                         │                       │
 ╰───────────────────────│   Open in lazygit                                │───────────────────────╯
 ────────────────────────├──────────────────────────────────────────────────┤────────────────────────

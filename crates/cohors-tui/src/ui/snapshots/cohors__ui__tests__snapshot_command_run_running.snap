@@ -12,7 +12,7 @@ expression: "render_to_string(&app, 100, 22)"
 ╰─────│ │ ⠋ web-app              │  │                                                       ││─────╯
 ╭ Repo│ │ ⠋ auth-service         │  │  M src/lib.rs                                         ││─────╮
 │    R│ │                        │  │ ?? notes.txt                                          ││     │
-│▌   l│ │                        │  │                                                       ││ermi…│
+│▌   l│ │                        │  │                                                       ││perm…│
 │  ○ p│ │                        │  │                                                       ││     │
 │     │ │                        │  │                                                       ││     │
 ╰─────│ │                        │  │                                                       ││─────╯
