@@ -1119,11 +1119,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     // (command spans, description) — a structured two-column cheat sheet.
     let rows: Vec<(Vec<Span<'static>>, &str)> = if shell {
         vec![(
-            vec![
-                Span::styled("▌ ", accent.add_modifier(Modifier::BOLD)),
-                cmd(":!"),
-                Span::styled("<cmd>", accent),
-            ],
+            vec![cmd(":!"), Span::styled("<cmd>", accent)],
             "run any shell command across the targets",
         )]
     } else {
@@ -1190,8 +1186,10 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     );
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
-    // Prompt · horizontal divider · the two-column grid.
-    let [prompt_area, hr_area, grid_area] = Layout::vertical([
+    // Prompt, a solid rule, then the two-column cheat sheet (commands │ what they
+    // do) as one framed table — the divider joined into the rule above (`┬`) and the
+    // footer rule below (`┴`), matching the standup and detail panes.
+    let [prompt_area, mid_rule_area, grid_area] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Min(0),
@@ -1209,15 +1207,8 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
         ])),
         prompt_area,
     );
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "─".repeat(hr_area.width as usize),
-            theme.dim(),
-        ))),
-        hr_area,
-    );
 
-    // Commands │ descriptions, with a vertical divider between the columns.
+    // Commands column | descriptions column.
     let [cmd_col, div_col, desc_col] = Layout::horizontal([
         Constraint::Length(26),
         Constraint::Length(1),
@@ -1225,17 +1216,42 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     ])
     .spacing(1)
     .areas(grid_area);
+
+    // The solid rule under the prompt, and the solid vertical divider joined into
+    // it (`┬`) and the footer rule below (`┴`).
+    modal_rule(frame, area, mid_rule_area.y);
+    for y in div_col.y..div_col.y + div_col.height {
+        frame.render_widget(
+            Paragraph::new(Span::raw("│")),
+            Rect {
+                x: div_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+    for (ch, y) in [
+        ("┬", mid_rule_area.y),
+        ("┴", grid_area.y + grid_area.height),
+    ] {
+        frame.render_widget(
+            Paragraph::new(Span::raw(ch)),
+            Rect {
+                x: div_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+
     let cmd_lines: Vec<Line> = rows.iter().map(|(s, _)| Line::from(s.clone())).collect();
-    let div_lines: Vec<Line> = rows
-        .iter()
-        .map(|_| Line::from(Span::styled("│", theme.dim())))
-        .collect();
     let desc_lines: Vec<Line> = rows
         .iter()
         .map(|(_, d)| Line::from(Span::styled(d.to_string(), desc_style)))
         .collect();
     frame.render_widget(Paragraph::new(Text::from(cmd_lines)), cmd_col);
-    frame.render_widget(Paragraph::new(Text::from(div_lines)), div_col);
     frame.render_widget(Paragraph::new(Text::from(desc_lines)), desc_col);
 }
 
