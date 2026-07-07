@@ -169,21 +169,26 @@ fn gh_candidates() -> Vec<std::path::PathBuf> {
 }
 
 /// Look up a still-fresh cache entry, cloning out the `RemoteInfo` if its TTL
-/// hasn't elapsed.
+/// hasn't elapsed. Stale entries are removed on access so they don't linger
+/// until the next insert sweeps them.
 fn cached(key: &str) -> Option<RemoteInfo> {
-    let guard = cache().lock().ok()?;
+    let mut guard = cache().lock().ok()?;
     let (fetched_at, info) = guard.get(key)?;
     if fetched_at.elapsed() < CACHE_TTL {
         Some(info.clone())
     } else {
+        guard.remove(key);
         None
     }
 }
 
-/// Insert/replace a cache entry, stamped with the current time. A poisoned lock
-/// is ignored — caching is best-effort.
+/// Insert/replace a cache entry, stamped with the current time. Expired
+/// entries are evicted on each insert to keep the cache from growing unbounded
+/// across long-running sessions. A poisoned lock is ignored — caching is
+/// best-effort.
 fn store(key: &str, info: RemoteInfo) {
     if let Ok(mut guard) = cache().lock() {
+        guard.retain(|_, (fetched_at, _)| fetched_at.elapsed() < CACHE_TTL);
         guard.insert(key.to_string(), (Instant::now(), info));
     }
 }
