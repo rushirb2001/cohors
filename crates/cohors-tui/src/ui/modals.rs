@@ -686,8 +686,10 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
     // Collapse the modal to the taller pane's content (its rows + the pane's own
     // border) rather than a fixed 84% box, so short repos don't show acres of
     // whitespace. `detail_rect` caps it at 84% of the screen.
+    // +1 column-header row + 1 (title/header rule and hint footer are absorbed by
+    // detail_rect's own border allowance); no inner pane borders any more.
     let content_rows = clines.len().max(lines.len()) as u16;
-    let area = detail_rect(full, content_rows + 4); // +2 header, +2 hint footer
+    let area = detail_rect(full, content_rows + 3);
     frame.render_widget(Clear, area);
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
@@ -697,33 +699,69 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
     let inner = render_modal_header(frame, area, inner, Line::from(title).bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
-    // Two panes (like the standup): repo state on the left, commits on the right.
-    let [left_area, right_area] =
-        Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .spacing(1)
-            .areas(inner);
+    // Two columns split by a solid vertical divider that ties into the rules above
+    // and below — no inner boxes, the outer frame is the only box — matching the
+    // standup: repo state on the left, commits on the right.
+    let header_rule_y = inner.y.saturating_sub(1);
+    let footer_rule_y = inner.y + inner.height;
+    let [left_col, divider_col, right_col] = Layout::horizontal([
+        Constraint::Fill(1),
+        Constraint::Length(1),
+        Constraint::Fill(1),
+    ])
+    .spacing(1)
+    .areas(inner);
 
-    // Both panes share `dv.scroll`, each clamped to its own overflow — so a short
-    // pane stops while the longer one keeps scrolling, and either shows a
-    // scrollbar only when it actually overflows.
-    let commits_inner = render_pane_block(
-        frame,
-        right_area,
-        format!(" Commits ({}) ", d.recent_commits.len()),
-        theme,
+    // The solid divider joins the header rule (`┬`) and the footer rule (`┴`) so
+    // the pane reads as one framed table.
+    for y in divider_col.y..divider_col.y + divider_col.height {
+        frame.render_widget(
+            Paragraph::new(Span::raw("│")),
+            Rect {
+                x: divider_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+    for (ch, y) in [("┬", header_rule_y), ("┴", footer_rule_y)] {
+        frame.render_widget(
+            Paragraph::new(Span::raw(ch)),
+            Rect {
+                x: divider_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+
+    // Each column is a bold header row, then its scrolling body. Both bodies share
+    // `dv.scroll`, each clamped to its own overflow — so a short column stops while
+    // the longer keeps scrolling, and either shows a scrollbar only when it needs one.
+    let bold = Style::new().add_modifier(Modifier::BOLD);
+    let [left_hdr, left_body] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(left_col);
+    let [right_hdr, right_body] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(right_col);
+    frame.render_widget(
+        Paragraph::new(Span::styled("Changes · branches · PRs", bold)),
+        left_hdr,
     );
-    let state_inner = render_pane_block(
-        frame,
-        left_area,
-        " Changes · branches · PRs ".to_string(),
-        theme,
+    frame.render_widget(
+        Paragraph::new(Span::styled(
+            format!("Commits ({})", d.recent_commits.len()),
+            bold,
+        )),
+        right_hdr,
     );
-    let c_max = (clines.len() as u16).saturating_sub(commits_inner.height);
-    let l_max = (lines.len() as u16).saturating_sub(state_inner.height);
+
+    let c_max = (clines.len() as u16).saturating_sub(right_body.height);
+    let l_max = (lines.len() as u16).saturating_sub(left_body.height);
     dv.set_max_scroll(c_max.max(l_max));
-
-    render_scrolling_pane(frame, commits_inner, clines, dv.scroll.min(c_max));
-    render_scrolling_pane(frame, state_inner, lines, dv.scroll.min(l_max));
+    render_scrolling_pane(frame, right_body, clines, dv.scroll.min(c_max));
+    render_scrolling_pane(frame, left_body, lines, dv.scroll.min(l_max));
 }
 
 /// A centred detail-modal rect sized to `content_rows` of pane content (plus the
@@ -739,23 +777,6 @@ pub(crate) fn detail_rect(full: Rect, content_rows: u16) -> Rect {
         width: w,
         height: h,
     }
-}
-
-/// Draw a detail sub-pane's bordered block and return its inner area.
-pub(crate) fn render_pane_block(
-    frame: &mut Frame,
-    area: Rect,
-    title: String,
-    theme: &Theme,
-) -> Rect {
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim())
-        .title(Line::from(title).bold())
-        .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    inner
 }
 
 /// Render `lines` into `inner` scrolled by `offset`, reserving the rightmost
