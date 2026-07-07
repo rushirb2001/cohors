@@ -134,9 +134,9 @@ impl Theme {
         if !self.color {
             Style::new().add_modifier(Modifier::REVERSED)
         } else if self.dark {
-            Style::new().bg(Color::Rgb(0x39, 0x30, 0x54))
+            Style::new().bg(Color::Rgb(0x4A, 0x3D, 0x74))
         } else {
-            Style::new().bg(Color::Rgb(0xE7, 0xDE, 0xF9))
+            Style::new().bg(Color::Rgb(0xC9, 0xB8, 0xF0))
         }
     }
 }

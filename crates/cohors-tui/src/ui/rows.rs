@@ -947,11 +947,12 @@ pub(crate) fn repo_row<'a>(
     }
 }
 
-/// A repo with several local branches: a header line carrying the repo-level
-/// signals (name, CI, activity, and the checked-out branch's dirty status), then
-/// one indented line per local branch with that branch's own sync, open-PR count
-/// (PRs targeting it as base), and last commit. Display-only — the whole thing is
-/// still one selectable repo row.
+/// A repo with several local branches. The header line is the repo's HEAD row —
+/// bold `name @current`, the checked-out branch's own sync / PR-count / last,
+/// plus repo-level CI, activity, and status — so nothing on it is blank. Each
+/// OTHER local branch then follows on its own indented line with its sync, open
+/// PRs (targeting it as base), and last commit. Display-only: still one
+/// selectable repo row.
 fn multi_branch_row<'a>(
     snap: &'a RepoSnapshot,
     highlights: &[u32],
@@ -962,17 +963,35 @@ fn multi_branch_row<'a>(
 ) -> Row<'a> {
     let assessment = assess(snap, now);
     let severity = assessment.severity;
-    let n = snap.branches.len();
+    let age_w = fmt.age_w as usize;
 
-    // Repo cell: header name, then one indented `@branch` line each. The
-    // per-branch columns (sync / PRs / last) start blank on the header line.
-    let mut name_lines = vec![Line::from(name_spans(
-        &snap.name, highlights, severity, marked, theme,
-    ))];
-    let mut sync_lines = vec![Line::default()];
-    let mut prs_lines = vec![Line::default()];
-    let mut age_lines = vec![Line::default()];
-    for bi in &snap.branches {
+    // The header carries the checked-out branch (its sync + last come from HEAD);
+    // the remaining local branches each get their own indented line below.
+    let current = snap.branches.iter().find(|b| b.is_current);
+    let others: Vec<&cohors_core::BranchInfo> =
+        snap.branches.iter().filter(|b| !b.is_current).collect();
+    let extra = others.len();
+
+    // Repo cell: bold `name @current`, then one indented `@branch` per other.
+    let mut header_name = name_spans(&snap.name, highlights, severity, marked, theme, true);
+    let bstyle = match &snap.branch {
+        Branch::Detached(_) => theme.detached(),
+        _ => theme.dim(),
+    };
+    header_name.push(Span::styled(branch_suffix(&snap.branch), bstyle));
+    let mut name_lines = vec![Line::from(header_name)];
+
+    // The header PR count is the checked-out branch's (the full per-branch
+    // breakdown is on the lines below); the repo total is the fallback for a
+    // detached HEAD with no current branch.
+    let header_prs = match current {
+        Some(bi) => branch_prs_spans(snap, &bi.name, theme),
+        None => prs_spans(snap, theme),
+    };
+    let mut sync_lines = vec![Line::from(ahead_behind_spans(snap, theme))];
+    let mut prs_lines = vec![Line::from(header_prs)];
+    let mut age_lines = vec![age_line(snap.last_commit.as_ref(), now, age_w, theme)];
+    for &bi in &others {
         name_lines.push(branch_name_line(bi, theme));
         sync_lines.push(Line::from(sync_spans(
             bi.has_upstream,
@@ -981,7 +1000,7 @@ fn multi_branch_row<'a>(
             theme,
         )));
         prs_lines.push(Line::from(branch_prs_spans(snap, &bi.name, theme)));
-        age_lines.push(branch_age_line(bi, now, fmt.age_w as usize, theme));
+        age_lines.push(age_line(bi.last_commit.as_ref(), now, age_w, theme));
     }
     let name = Cell::from(Text::from(name_lines));
     let sync = Cell::from(Text::from(sync_lines));
@@ -989,15 +1008,15 @@ fn multi_branch_row<'a>(
     let age = Cell::from(Text::from(age_lines));
 
     // Repo-level signals ride the header line; the branch lines stay blank below.
-    let ci = header_cell(ci_spans(snap, theme), n);
-    let ci_sq = header_cell(ci_square_spans(snap, theme), n);
-    let activity = header_cell(vec![activity_span(snap, theme)], n);
+    let ci = header_cell(ci_spans(snap, theme), extra);
+    let ci_sq = header_cell(ci_square_spans(snap, theme), extra);
+    let activity = header_cell(vec![activity_span(snap, theme)], extra);
     let status = header_cell(
         reason_spans(assessment.primary.as_ref(), severity, fmt.reason_max, theme),
-        n,
+        extra,
     );
 
-    let height = 1 + n as u16;
+    let height = 1 + extra as u16;
     match fmt.layout {
         Tier::Wide => Row::new(vec![name, sync, prs, ci, age, activity, status]).height(height),
         Tier::Medium => Row::new(vec![name, sync, prs, ci, age, status]).height(height),
@@ -1052,23 +1071,14 @@ fn header_cell(spans: Vec<Span<'static>>, extra: usize) -> Cell<'static> {
     Cell::from(Text::from(lines))
 }
 
-/// One indented branch line under a repo: `@name`, the checked-out branch marked
-/// with a `▸` and bold, the rest dim (matching the `@branch` suffix style).
+/// One indented `@branch` line under a repo header, dim (matching the `@branch`
+/// suffix style). Only the *other* branches list here — the checked-out one rides
+/// the bold header line.
 fn branch_name_line(bi: &cohors_core::BranchInfo, theme: &Theme) -> Line<'static> {
-    if bi.is_current {
-        Line::from(vec![
-            Span::styled("  ▸ ", theme.ahead()),
-            Span::styled(
-                format!("@{}", bi.name),
-                Style::new().add_modifier(Modifier::BOLD),
-            ),
-        ])
-    } else {
-        Line::from(vec![
-            Span::raw("    "),
-            Span::styled(format!("@{}", bi.name), theme.dim()),
-        ])
-    }
+    Line::from(vec![
+        Span::raw("    "),
+        Span::styled(format!("@{}", bi.name), theme.dim()),
+    ])
 }
 
 /// The open-PR count targeting one branch (as base): a dim "0" when none, the
@@ -1084,15 +1094,13 @@ fn branch_prs_spans(snap: &RepoSnapshot, branch: &str, theme: &Theme) -> Vec<Spa
 }
 
 /// One branch's last-commit age, right-aligned like the single-line Last column.
-fn branch_age_line(
-    bi: &cohors_core::BranchInfo,
+fn age_line(
+    last: Option<&cohors_core::CommitMeta>,
     now: i64,
     age_w: usize,
     theme: &Theme,
 ) -> Line<'static> {
-    let age = bi
-        .last_commit
-        .as_ref()
+    let age = last
         .map(|c| time::relative(c.timestamp, now))
         .unwrap_or_else(|| "—".to_string());
     Line::from(Span::styled(format!("{age:>age_w$}"), theme.dim()))
@@ -1130,11 +1138,7 @@ fn activity_span(snap: &RepoSnapshot, theme: &Theme) -> Span<'static> {
 /// The "Last" column: the commit age alone, right-aligned (the message lives in
 /// the dock when this layout is active).
 pub(crate) fn age_cell<'a>(snap: &RepoSnapshot, now: i64, age_w: usize, theme: &Theme) -> Cell<'a> {
-    let age = match &snap.last_commit {
-        Some(c) => time::relative(c.timestamp, now),
-        None => "—".to_string(),
-    };
-    Cell::from(Span::styled(format!("{age:>age_w$}"), theme.dim()))
+    Cell::from(age_line(snap.last_commit.as_ref(), now, age_w, theme))
 }
 
 /// The "Status" column: the repo's primary attention reason as text, colored by
@@ -1261,7 +1265,7 @@ pub(crate) fn name_cell<'a>(
     branch: &Branch,
     theme: &Theme,
 ) -> Cell<'a> {
-    let mut spans = name_spans(name, highlights, severity, marked, theme);
+    let mut spans = name_spans(name, highlights, severity, marked, theme, false);
     // The branch is fused onto the name (`name @branch`), mirroring the web — a
     // dim suffix (or magenta for a detached `@sha`), so Repo + Branch share one
     // tight column. (Multi-branch repos list branches on their own lines instead.)
@@ -1282,14 +1286,21 @@ fn name_spans(
     severity: Severity,
     marked: bool,
     theme: &Theme,
+    force_bold: bool,
 ) -> Vec<Span<'static>> {
     // Red is reserved for genuinely broken repos (the `snap.error` row); a repo
     // that merely wants attention (aging unpushed, behind, dirty) is conveyed by
     // weight here and by the coloured Status cell — never an alarming red name.
-    let base = match severity {
-        Severity::Ok | Severity::Info => theme.dim(),
-        Severity::Warn | Severity::Risk => Style::new().add_modifier(Modifier::BOLD),
-        Severity::Notice => Style::new(),
+    // A multi-branch repo's header always bolds (`force_bold`) so the repo name
+    // stands out above its dimmer branch lines.
+    let base = if force_bold {
+        Style::new().add_modifier(Modifier::BOLD)
+    } else {
+        match severity {
+            Severity::Ok | Severity::Info => theme.dim(),
+            Severity::Warn | Severity::Risk => Style::new().add_modifier(Modifier::BOLD),
+            Severity::Notice => Style::new(),
+        }
     };
     // Checkbox gutter: an empty circle that fills brand-purple when marked.
     let gutter = if marked {

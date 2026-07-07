@@ -13,9 +13,9 @@ expression: "render_to_string(&app, 30, 30)"
 ╭ Repositories (5) · sort: di╮
 │    Repo     Sync   CI  La  │
 │▌   legacy-                 │
-│  ○ payment         ■       │
-│    ▸ @main  ↑2             │
+│  ○ payment  ↑2     ■       │
 │      @feat  local          │
+│  ○ web-app  ↓5     ■    2  │
 │          ↓ 3 more          │
 ╰────────────────────────────╯
 ─── press h to hide hints ────
