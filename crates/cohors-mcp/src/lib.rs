@@ -39,7 +39,7 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 pub struct Caps {
     pub allow_writes: bool,
     pub allow_run: bool,
-    #[allow(dead_code)] // the local-only `open` tool is deferred.
+    /// Enable the local-only `open` tool (shared desktop session).
     pub allow_open: bool,
 }
 
@@ -357,7 +357,13 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
             now,
             "cohors mcp",
         ),
-        "open" => Err("`open` is not available in this build (local-desktop tool).".to_string()),
+        "open" => {
+            if ctx.caps.allow_open {
+                Err("`open` is not yet implemented — will open the repo in the system file manager.".to_string())
+            } else {
+                Err("`open` requires --allow-open (local-desktop tool).".to_string())
+            }
+        }
         other => Err(format!("unknown tool `{other}`")),
     }
 }
