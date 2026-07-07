@@ -1017,7 +1017,7 @@ pub(crate) fn render_modal_header(
 /// A solid, full-strength horizontal rule across a modal at row `y`, joined into
 /// its side borders with `├`/`┤`. Full strength (the default border style, not
 /// dim) so it reads as a real structural line, matching the box borders.
-fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
+pub(crate) fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
     let style = Style::new();
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(

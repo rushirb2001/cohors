@@ -4,13 +4,13 @@ expression: "render_to_string(&app, 50, 24)"
 ---
 ╭────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛  cohors  vX.Y.Z                      │
-│ ▟██▌█▐██▙  ~/projects (+1)                     │
-│ ▀▐╭────────────────────────────────────────╮   │
-╰───│ Standup · this week   ·   11 commits · │───╯
-╭ At├────────────────────────────────────────┤───╮
-│ 1 │ You authored 11 commits this week      │   │
-╰───│ across 2 repos, shipping 8 features    │───╯
-╭ Re│ and fixing 3 bugs.                     │───╮
+│ ▟█╭────────────────────────────────────────╮   │
+│ ▀▐│ Standup · this week   ·   11 commits · │   │
+╰───├────────────────────────────────────────┤───╯
+╭ At│ You authored 11 commits this week      │───╮
+│ 1 │ across 2 repos, shipping 8 features    │   │
+╰───│ and fixing 3 bugs.                     │───╯
+╭ Re├────────────────────────┬───────────────┤───╮
 │   │ Repos                  │ payments  ·   │ St│
 │▌  │ payments             8 │ aa00000  fea  │ c…│
 │   │ web-app              3 │ aa00001  fea  │   │
@@ -20,7 +20,7 @@ expression: "render_to_string(&app, 50, 24)"
 │ se│                        │ aa00005  fea  │   │
 │   │                        │ aa00006  fea  │   │
 │   │                        │ aa00007  fea  │   │
-│ ac├────────────────────────────────────────┤   │
+│ ac├────────────────────────┴───────────────┤   │
 │   │ ↑/↓ repo · →/⏎ view commits · w window │sh │
 │   ╰────────────────────────────────────────╯   │
 │ view                                           │

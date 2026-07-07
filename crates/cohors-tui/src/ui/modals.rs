@@ -251,9 +251,9 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         })
         .unwrap_or(3)
         .clamp(6, 16) as u16;
-    // body + title(1) + header rule(1) + description(3) + column header(1) +
-    // hints rule(1) + hints(1) + outer border(2).
-    let h = (body + 10).min(full.height.saturating_sub(2)).max(12);
+    // body + title(1) + header rule(1) + description(3) + mid rule(1) +
+    // column header(1) + hints rule(1) + hints(1) + outer border(2).
+    let h = (body + 11).min(full.height.saturating_sub(2)).max(12);
     let w = (full.width as u32 * 84 / 100) as u16;
     let area = Rect {
         x: full.x + full.width.saturating_sub(w) / 2,
@@ -324,10 +324,13 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         .get(view.focus)
         .map(|(r, _)| r.as_str())
         .unwrap_or("");
-    // The description (up to 3 wrapped lines), then the two columns directly below
-    // (no blank gap — the bold column headers are separation enough).
-    let [desc_area, panes_area] =
-        Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).areas(inner);
+    // The description (up to 3 wrapped lines), a solid rule, then the two columns.
+    let [desc_area, mid_rule_area, panes_area] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(inner);
 
     // A glance of *what you did*, as one flowing, wrapping sentence:
     // "You authored 130 commits this week across 5 repos, shipping 68 features,
@@ -412,19 +415,29 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     .spacing(1)
     .areas(panes_area);
 
-    // The divider: a dim vertical rule down the full height of the columns (spanning
-    // both headers and both lists), so the two read as one table.
-    for y in divider_col.y..divider_col.y + divider_col.height {
-        frame.render_widget(
-            Paragraph::new(Span::styled("│", theme.dim())),
+    // A solid rule between the description and the columns, plus a solid vertical
+    // divider that ties into it: the two read as one framed table. The vertical line
+    // joins the rule above with `┬` and the footer rule below with `┴`.
+    modal_rule(frame, area, mid_rule_area.y);
+    let cell = |ch: &'static str, x: u16, y: u16| {
+        (
+            Paragraph::new(Span::raw(ch)),
             Rect {
-                x: divider_col.x,
+                x,
                 y,
                 width: 1,
                 height: 1,
             },
-        );
+        )
+    };
+    for y in divider_col.y..divider_col.y + divider_col.height {
+        let (p, r) = cell("│", divider_col.x, y);
+        frame.render_widget(p, r);
     }
+    let (p, r) = cell("┬", divider_col.x, mid_rule_area.y);
+    frame.render_widget(p, r);
+    let (p, r) = cell("┴", divider_col.x, panes_area.y + panes_area.height);
+    frame.render_widget(p, r);
 
     // Each column is a header row, then its list below.
     let [repos_hdr, repos_list_area] =
