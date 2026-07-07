@@ -1098,6 +1098,7 @@ mod tests {
             error: None,
             activity: Vec::new(),
             groups: Vec::new(),
+            branches: Vec::new(),
         }
     }
 

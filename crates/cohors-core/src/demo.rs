@@ -7,6 +7,8 @@
 //! ahead/behind, dirty, stashed, CI pass/fail/pending, open PRs, a detached
 //! HEAD, an off-remote repo, and one unreadable repo.
 
+use std::collections::HashMap;
+
 use camino::Utf8PathBuf;
 
 use crate::detail::{BranchInfo, ChangedFile, RepoDetail};
@@ -188,6 +190,12 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         repo: s.name.into(),
         default_branch: "main".into(),
         open_prs,
+        // Demo PRs all target the default branch.
+        open_prs_by_base: if open_prs > 0 {
+            HashMap::from([("main".to_string(), open_prs)])
+        } else {
+            HashMap::new()
+        },
         prs_awaiting_review: 0,
         ci,
         description: Some(format!("demo repo — {}", s.summary)),
@@ -234,6 +242,8 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         error: s.error.map(|e| e.to_string()),
         activity: demo_activity(s.name, s.error.is_some()),
         groups: Vec::new(),
+        // Populated with a multi-branch showcase repo in the rendering phase.
+        branches: Vec::new(),
     }
 }
 
@@ -334,6 +344,7 @@ pub fn detail(now: i64) -> RepoDetail {
                 behind: 0,
                 has_upstream: true,
                 is_current: true,
+                last_commit: None,
             },
             BranchInfo {
                 name: "feat/idempotency".to_string(),
@@ -341,6 +352,7 @@ pub fn detail(now: i64) -> RepoDetail {
                 behind: 1,
                 has_upstream: true,
                 is_current: false,
+                last_commit: None,
             },
             BranchInfo {
                 name: "spike/webhooks".to_string(),

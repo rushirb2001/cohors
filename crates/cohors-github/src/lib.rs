@@ -219,17 +219,17 @@ fn fetch_remote(
     let repo_json: RepoResponse = get_json(agent, token, &format!("/repos/{owner}/{repo}"))?;
     let default_branch = repo_json.default_branch;
 
-    // 2) Open PR count from the pulls list on the regular REST budget
-    //    (5000/hour) — deliberately NOT the search API. Search has a tiny
-    //    30-requests/minute budget that a fleet blows through in a single scan
-    //    (two searches per repo), after which enrich() backs off and every
-    //    remaining repo's PR count silently stays at its stale/zero cache value.
-    //    `per_page=100` counts exactly up to 100 open PRs — finer than a
-    //    dashboard needs to distinguish.
-    let open_prs = {
+    // 2) Open PRs from the pulls list on the regular REST budget (5000/hour) —
+    //    deliberately NOT the search API, whose tiny 30-requests/minute budget a
+    //    fleet blows through in a single scan, after which enrich() backs off and
+    //    every remaining repo's PR count silently stays at its stale/zero cache
+    //    value. We count the total AND group by base branch, so the dashboard can
+    //    show each PR count on the branch it targets. `per_page=100` counts up to
+    //    100 open PRs — finer than a dashboard needs to distinguish.
+    let (open_prs, open_prs_by_base) = {
         let path = format!("/repos/{owner}/{repo}/pulls?state=open&per_page=100");
-        let prs: Vec<serde::de::IgnoredAny> = get_json(agent, token, &path)?;
-        prs.len() as u32
+        let prs: Vec<PrResponse> = get_json(agent, token, &path)?;
+        (prs.len() as u32, count_by_base(&prs))
     };
 
     // 3) PRs awaiting *my* review — the one signal that still needs the search
@@ -270,6 +270,7 @@ fn fetch_remote(
         repo: repo.to_string(),
         default_branch,
         open_prs,
+        open_prs_by_base,
         prs_awaiting_review,
         ci,
         description: repo_json.description.filter(|d| !d.trim().is_empty()),
@@ -593,6 +594,8 @@ struct PrResponse {
     draft: Option<bool>,
     user: Option<UserResponse>,
     head: Option<HeadResponse>,
+    /// The branch the PR targets (`base.ref`), so the count lands on that branch.
+    base: Option<BaseResponse>,
     #[serde(default)]
     requested_reviewers: Vec<UserResponse>,
 }
@@ -606,6 +609,26 @@ struct UserResponse {
 struct HeadResponse {
     #[serde(rename = "ref")]
     r#ref: String,
+}
+
+/// The PR's target branch (`base.ref`) — the branch it lands on, used to
+/// attribute the open-PR count to the right branch in the dashboard.
+#[derive(serde::Deserialize)]
+struct BaseResponse {
+    #[serde(rename = "ref")]
+    r#ref: String,
+}
+
+/// Tally open PRs by the branch they target (`base.ref`). A PR whose base wasn't
+/// captured is omitted from the map but still counted in the total elsewhere.
+fn count_by_base(prs: &[PrResponse]) -> HashMap<String, u32> {
+    let mut by_base: HashMap<String, u32> = HashMap::new();
+    for pr in prs {
+        if let Some(base) = &pr.base {
+            *by_base.entry(base.r#ref.clone()).or_default() += 1;
+        }
+    }
+    by_base
 }
 
 /// `GET /repos/{owner}/{repo}/contributors` — login + commit count. `login` is
@@ -756,6 +779,24 @@ mod tests {
             .map(|u| u.login.as_str())
             .collect();
         assert_eq!(logins, ["bob", "carol"]);
+    }
+
+    /// Open PRs tally by the branch they target: the total counts every PR while
+    /// the by-base map groups on `base.ref`, omitting a PR whose base is absent.
+    #[test]
+    fn open_prs_tally_by_base_branch() {
+        let json = r#"[
+            {"number":1,"title":"a","html_url":"u","base":{"ref":"main"}},
+            {"number":2,"title":"b","html_url":"u","base":{"ref":"main"}},
+            {"number":3,"title":"c","html_url":"u","base":{"ref":"develop"}},
+            {"number":4,"title":"d","html_url":"u"}
+        ]"#;
+        let prs: Vec<PrResponse> = serde_json::from_str(json).unwrap();
+        assert_eq!(prs.len(), 4, "total counts every PR");
+        let by_base = count_by_base(&prs);
+        assert_eq!(by_base.get("main"), Some(&2));
+        assert_eq!(by_base.get("develop"), Some(&1));
+        assert_eq!(by_base.len(), 2, "PR #4 (no base) is omitted from the map");
     }
 
     /// Open PRs are counted from the pulls list (regular REST budget, not the

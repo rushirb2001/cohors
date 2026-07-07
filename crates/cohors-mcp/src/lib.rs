@@ -418,7 +418,14 @@ fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
         .iter()
         .filter_map(|s| {
             s.remote.as_ref().map(|r| {
-                json!({ "repo": s.id.0, "open_prs": r.open_prs, "awaiting_review": r.prs_awaiting_review })
+                json!({
+                    "repo": s.id.0,
+                    "open_prs": r.open_prs,
+                    // Open PRs grouped by the branch they target, so an agent can
+                    // see which branch each PR lands on.
+                    "open_prs_by_base": r.open_prs_by_base,
+                    "awaiting_review": r.prs_awaiting_review,
+                })
             })
         })
         .collect();

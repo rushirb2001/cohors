@@ -607,6 +607,7 @@ mod tests {
             repo: "clean".into(),
             default_branch: "main".into(),
             open_prs: 3,
+            open_prs_by_base: Default::default(),
             prs_awaiting_review: 0,
             ci: CiStatus::Failing,
             description: None,

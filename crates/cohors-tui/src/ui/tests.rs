@@ -52,6 +52,7 @@ fn snap(
         error: error.map(str::to_string),
         activity: Vec::new(),
         groups: Vec::new(),
+        branches: Vec::new(),
     }
 }
 
@@ -69,6 +70,7 @@ fn demo_app() -> App {
             repo: "demo".to_string(),
             default_branch: "main".to_string(),
             open_prs,
+            open_prs_by_base: std::collections::HashMap::from([("main".to_string(), open_prs)]),
             prs_awaiting_review: 0,
             ci,
             description: None,

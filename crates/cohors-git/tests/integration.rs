@@ -456,3 +456,45 @@ fn remote_url_falls_back_beyond_origin() {
         Some("https://github.com/o/origin.git")
     );
 }
+
+/// A repo with several local branches: the snapshot lists all of them,
+/// current-first and flagged, each carrying its own tip commit.
+#[test]
+fn snapshot_lists_all_local_branches() {
+    let tmp = TempDir::new().unwrap();
+    let dir = tmp.path();
+    init_repo_with_commit(dir, "a.txt", "1", "init on main");
+
+    // A feature branch with its own commit, then back to main.
+    git(dir, &["checkout", "-q", "-b", "feat/x"]);
+    write(dir, "b.txt", "2");
+    git(dir, &["add", "."]);
+    git(dir, &["commit", "-q", "-m", "feat commit"]);
+    git(dir, &["checkout", "-q", "main"]);
+
+    let snap = snapshot_repo(&repo_ref(dir), COMMIT_TS);
+
+    let names: Vec<&str> = snap.branches.iter().map(|b| b.name.as_str()).collect();
+    assert!(names.contains(&"main"), "branches: {names:?}");
+    assert!(names.contains(&"feat/x"), "branches: {names:?}");
+
+    // The checked-out branch is hoisted first and flagged current.
+    let first = &snap.branches[0];
+    assert_eq!(first.name, "main");
+    assert!(first.is_current);
+
+    // Each branch carries its OWN tip commit, not HEAD's.
+    let feat = snap.branches.iter().find(|b| b.name == "feat/x").unwrap();
+    assert!(!feat.is_current);
+    assert_eq!(
+        feat.last_commit.as_ref().map(|c| c.summary.as_str()),
+        Some("feat commit")
+    );
+    let main = snap.branches.iter().find(|b| b.name == "main").unwrap();
+    assert_eq!(
+        main.last_commit.as_ref().map(|c| c.summary.as_str()),
+        Some("init on main")
+    );
+    // No remote → no per-branch upstream.
+    assert!(!main.has_upstream);
+}

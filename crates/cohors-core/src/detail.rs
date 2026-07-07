@@ -134,6 +134,10 @@ pub struct BranchInfo {
     pub has_upstream: bool,
     #[serde(default)]
     pub is_current: bool,
+    /// The branch's own tip commit — so the dashboard can show each branch's last
+    /// activity, not just HEAD's. `None` when it couldn't be read.
+    #[serde(default)]
+    pub last_commit: Option<CommitMeta>,
 }
 
 #[cfg(test)]
