@@ -206,7 +206,7 @@ enum FetchError {
 ///
 /// Endpoints used (all under <https://api.github.com>):
 /// - `GET /repos/{owner}/{repo}` → `default_branch`
-/// - `GET /search/issues?q=repo:{o}/{r}+is:pr+is:open` → open PR `total_count`
+/// - `GET /repos/{owner}/{repo}/pulls?state=open` → open PR count (regular REST)
 /// - `GET /search/issues?...+review-requested:@me` → review-requested `total_count`
 /// - `GET /repos/{owner}/{repo}/commits/{branch}/check-runs` → Actions checks
 fn fetch_remote(
@@ -219,26 +219,30 @@ fn fetch_remote(
     let repo_json: RepoResponse = get_json(agent, token, &format!("/repos/{owner}/{repo}"))?;
     let default_branch = repo_json.default_branch;
 
-    // 2) Open PR count via the search API (`total_count`, capped page size of 1
-    //    since we only want the count).
+    // 2) Open PR count from the pulls list on the regular REST budget
+    //    (5000/hour) — deliberately NOT the search API. Search has a tiny
+    //    30-requests/minute budget that a fleet blows through in a single scan
+    //    (two searches per repo), after which enrich() backs off and every
+    //    remaining repo's PR count silently stays at its stale/zero cache value.
+    //    `per_page=100` counts exactly up to 100 open PRs — finer than a
+    //    dashboard needs to distinguish.
     let open_prs = {
-        let q = format!("repo:{owner}/{repo} is:pr is:open");
-        let path = format!("/search/issues?q={}&per_page=1", encode_query(&q));
-        let res: SearchResponse = get_json(agent, token, &path)?;
-        res.total_count
+        let path = format!("/repos/{owner}/{repo}/pulls?state=open&per_page=100");
+        let prs: Vec<serde::de::IgnoredAny> = get_json(agent, token, &path)?;
+        prs.len() as u32
     };
 
-    // 3) PRs awaiting *my* review. Best-effort: a failure here shouldn't sink the
-    //    whole repo, so fall back to 0 rather than propagating.
+    // 3) PRs awaiting *my* review — the one signal that still needs the search
+    //    API (there's no cheap REST equivalent). Strictly best-effort: ANY
+    //    failure, rate-limit included, degrades to 0, so it can never sink the
+    //    repo's enrichment or trip the fleet-wide backoff. Open PRs and CI come
+    //    from the regular REST budget above, so they're always populated.
     let prs_awaiting_review = {
         let q = format!("repo:{owner}/{repo} is:pr is:open review-requested:@me");
         let path = format!("/search/issues?q={}&per_page=1", encode_query(&q));
-        match get_json::<SearchResponse>(agent, token, &path) {
-            Ok(res) => res.total_count,
-            // A rate-limit here still aborts the round; other errors degrade to 0.
-            Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
-            Err(FetchError::Other(_)) => 0,
-        }
+        get_json::<SearchResponse>(agent, token, &path)
+            .map(|res| res.total_count)
+            .unwrap_or(0)
     };
 
     // 4) CI status of the default branch's latest commit, from the **Checks API**
@@ -752,6 +756,18 @@ mod tests {
             .map(|u| u.login.as_str())
             .collect();
         assert_eq!(logins, ["bob", "carol"]);
+    }
+
+    /// Open PRs are counted from the pulls list (regular REST budget, not the
+    /// rate-limited search API) with `Vec<IgnoredAny>` — no per-PR allocation,
+    /// just the array length stored as `open_prs`.
+    #[test]
+    fn open_pr_count_is_the_pulls_array_length() {
+        let three: Vec<serde::de::IgnoredAny> =
+            serde_json::from_str(r#"[{"number":1},{"number":2},{"number":3}]"#).unwrap();
+        assert_eq!(three.len() as u32, 3);
+        let none: Vec<serde::de::IgnoredAny> = serde_json::from_str("[]").unwrap();
+        assert_eq!(none.len(), 0);
     }
 
     #[test]
