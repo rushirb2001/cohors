@@ -14,7 +14,7 @@ expression: "render_to_string(&app, 30, 30)"
 │    Repo     Sync   CI  La  │
 │▌   legacy-                 │
 │  ○ payment  ↑2     ■       │
-│      @feat  ↑5 ↓1  ■       │
+│    ▷ @feat  ↑5 ↓1  ■       │
 │  ○ web-app  ↓5     ■    2  │
 │          ↓ 3 more          │
 ╰────────────────────────────╯

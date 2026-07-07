@@ -89,6 +89,17 @@ impl Glyphs {
         }
     }
 
+    /// The sub-row marker for a branch line under a multi-branch repo: a hollow
+    /// triangle that echoes the [`unmarked`](Self::unmarked) checkbox circle, so a
+    /// branch reads as a child of the repo above it. A `▷` in the glyph tiers, a
+    /// plain `>` under Ascii.
+    pub fn branch_marker(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => ">",
+            IconKind::Unicode | IconKind::Nerd => "▷",
+        }
+    }
+
     /// The 8-level ramp for activity sparklines (fleet heartbeat + per-repo
     /// cadence), lowest to highest. Block elements in the glyph tiers; a plain
     /// ASCII density ramp otherwise — the *shape* carries the reading either
@@ -181,6 +192,15 @@ mod tests {
     fn marked_marker_falls_back_to_ascii() {
         assert_eq!(Glyphs::resolve(IconMode::Unicode, false).marked(), "●");
         assert_eq!(Glyphs::resolve(IconMode::Ascii, false).marked(), "*");
+    }
+
+    #[test]
+    fn branch_marker_is_a_hollow_triangle_with_ascii_fallback() {
+        assert_eq!(
+            Glyphs::resolve(IconMode::Unicode, false).branch_marker(),
+            "▷"
+        );
+        assert_eq!(Glyphs::resolve(IconMode::Ascii, false).branch_marker(), ">");
     }
 
     #[test]

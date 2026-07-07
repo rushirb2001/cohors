@@ -158,8 +158,9 @@ pub(crate) fn render_repos_panel(
     // Status's job ("4 uncommitted changes"), exactly as on the web.
     let repo_w = {
         let names = col_w(repo_spans, 12, 30);
-        // Multi-branch repos also render `    @branch` lines; size the column to
-        // the widest branch line too (4-space indent + `@` + name), same cap.
+        // Multi-branch repos also render `  ▷ @branch` lines; size the column to
+        // the widest branch line too (2 spaces + marker + space + `@` + name = 5 +
+        // name, matching the plain 4-space indent it replaced), same cap.
         let branches = view
             .iter()
             .map(|vr| &app.repos[vr.index])
@@ -1011,19 +1012,30 @@ fn multi_branch_row<'a>(
         fmt.reason_max,
         theme,
     ))];
+    // Every branch line renders italic (the whole row), so it reads as secondary to
+    // the bold, upright repo header above.
     for &bi in &others {
-        name_lines.push(branch_name_line(bi, theme));
-        sync_lines.push(Line::from(sync_spans(
+        name_lines.push(italic_line(branch_name_line(bi, theme)));
+        sync_lines.push(italic_line(Line::from(sync_spans(
             bi.has_upstream,
             bi.ahead,
             bi.behind,
             theme,
+        ))));
+        prs_lines.push(italic_line(Line::from(branch_prs_spans(
+            snap, &bi.name, theme,
+        ))));
+        age_lines.push(italic_line(age_line(
+            bi.last_commit.as_ref(),
+            now,
+            age_w,
+            theme,
         )));
-        prs_lines.push(Line::from(branch_prs_spans(snap, &bi.name, theme)));
-        age_lines.push(age_line(bi.last_commit.as_ref(), now, age_w, theme));
-        ci_lines.push(Line::from(branch_ci_spans(snap, bi, theme)));
-        ci_sq_lines.push(Line::from(branch_ci_square_spans(snap, bi, theme)));
-        status_lines.push(Line::from(branch_status_spans(bi, theme)));
+        ci_lines.push(italic_line(Line::from(branch_ci_spans(snap, bi, theme))));
+        ci_sq_lines.push(italic_line(Line::from(branch_ci_square_spans(
+            snap, bi, theme,
+        ))));
+        status_lines.push(italic_line(Line::from(branch_status_spans(bi, theme))));
     }
     let name = Cell::from(Text::from(name_lines));
     let sync = Cell::from(Text::from(sync_lines));
@@ -1094,12 +1106,24 @@ fn header_cell(spans: Vec<Span<'static>>, extra: usize) -> Cell<'static> {
 
 /// One indented `@branch` line under a repo header, dim (matching the `@branch`
 /// suffix style). Only the *other* branches list here — the checked-out one rides
-/// the bold header line.
+/// the bold header line. A hollow triangle sub-marker (echoing the repo's checkbox
+/// circle) sits under the repo name, so the branch reads as its child; `@branch`
+/// keeps its column (the marker replaces two of the indent spaces).
 fn branch_name_line(bi: &cohors_core::BranchInfo, theme: &Theme) -> Line<'static> {
     Line::from(vec![
-        Span::raw("    "),
+        Span::styled(format!("  {} ", theme.glyphs.branch_marker()), theme.dim()),
         Span::styled(format!("@{}", bi.name), theme.dim()),
     ])
+}
+
+/// Set every span of a line to italic — used to render a multi-branch repo's
+/// branch lines (the whole row: marker, name, sync, PRs, CI, status, age) in
+/// italic, so they read as secondary to the bold, upright repo header above.
+fn italic_line(mut line: Line<'static>) -> Line<'static> {
+    for span in &mut line.spans {
+        span.style = span.style.add_modifier(Modifier::ITALIC);
+    }
+    line
 }
 
 /// The open-PR count targeting one branch (as base): a dim "0" when none, the

@@ -15,7 +15,7 @@ expression: "render_to_string(&app, 100, 28)"
 │    Rep│ │                                    █ │ │ e5f6071    4d  chore: bump stripe sd ││       │
 │▌   leg│ │ Changes (3)                        ║ │ │                                      ││ (perm…│
 │  ○ pay│ │  M src/charge.rs                   ║ │ │                                      ││       │
-│      @│ │  M src/refund.rs                   ║ │ │                                      ││       │
+│    ▷ @│ │  M src/refund.rs                   ║ │ │                                      ││       │
 │  ○ web│ │ ?? notes.md                        ║ │ │                                      ││       │
 │  ○ inf│ │                                    ║ │ │                                      ││es     │
 │  ○ aut│ │ Branches (3)                       ║ │ │                                      ││       │

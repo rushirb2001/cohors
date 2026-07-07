@@ -15,7 +15,7 @@ expression: "render_to_string(&app, 72, 32)"
 │    Repo                     Sync   CI  Last  Status                  │
 │▌   legacy-billing                            could not read .git (pe…│
 │  ○ payments @main           ↑2     ■     2h  ↑2 unpushed             │
-│      @feat/checkout-rework  ↑5 ↓1  ■     1d  5 ahead · 1 behind      │
+│    ▷ @feat/checkout-rework  ↑5 ↓1  ■     1d  5 ahead · 1 behind      │
 │  ○ web-app @feat/checkout   ↓5     ■    20m  ↓5 behind — pull        │
 │  ○ infra @a1b2c3d           local  ■     1w  4 uncommitted changes   │
 │  ○ auth-service @main       local  ■     3d  up to date              │
