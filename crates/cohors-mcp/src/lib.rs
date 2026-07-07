@@ -27,6 +27,7 @@ use anyhow::Result;
 use cohors_core::{
     RepoSnapshot, SearchKind, Selector, SortMode, assess, fleet_summary, resolve, search_metadata,
 };
+use rayon::prelude::*;
 use serde_json::{Value, json};
 
 /// The MCP protocol version we implement. We echo the client's requested
@@ -617,25 +618,25 @@ fn search(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let mut truncated = false;
 
     if kind == SearchKind::Content {
-        for snap in &selected {
-            if hits.len() >= max_results {
-                truncated = true;
-                break;
-            }
-            let Some(path) = &snap.path else {
-                continue;
-            };
-            let remaining = max_results - hits.len();
-            for hit in cohors_fleet::search_content(path, &query, remaining + 1) {
-                if hits.len() >= max_results {
-                    truncated = true;
-                    break;
-                }
-                hits.push(json!({
-                    "repo": snap.id.0, "path": hit.path, "line": hit.line, "text": hit.text
-                }));
-            }
-        }
+        let max = max_results;
+        let repo_results: Vec<Vec<Value>> = selected
+            .par_iter()
+            .map(|snap| {
+                let Some(path) = &snap.path else {
+                    return Vec::new();
+                };
+                cohors_fleet::search_content(path, &query, max + 1)
+                    .map(|hit| {
+                        json!({
+                            "repo": snap.id.0, "path": hit.path,
+                            "line": hit.line, "text": hit.text
+                        })
+                    })
+                    .collect()
+            })
+            .collect();
+        hits = repo_results.into_iter().flatten().take(max).collect();
+        truncated = hits.len() >= max_results;
     } else {
         let owned: Vec<RepoSnapshot> = selected.iter().map(|s| (*s).clone()).collect();
         for hit in search_metadata(&owned, &query, kind) {
