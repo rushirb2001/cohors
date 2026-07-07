@@ -106,9 +106,15 @@ pub fn serve_stdio(
             Err(_) => Some(error_response(Value::Null, -32700, "parse error")),
         };
         if let Some(response) = response {
-            serde_json::to_writer(&mut out, &response)?;
-            out.write_all(b"\n")?;
-            out.flush()?;
+            if let Err(e) = serde_json::to_writer(&mut out, &response)
+                .and_then(|_| out.write_all(b"\n"))
+                .and_then(|_| out.flush())
+            {
+                match e.kind() {
+                    std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::WriteZero => break,
+                    _ => return Err(e.into()),
+                }
+            }
         }
     }
     Ok(())
