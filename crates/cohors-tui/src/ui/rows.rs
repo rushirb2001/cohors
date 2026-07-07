@@ -880,14 +880,7 @@ pub(crate) fn repo_row<'a>(
 
     let assessment = assess(snap, now);
     let severity = assessment.severity;
-    let name = name_cell(
-        &snap.name,
-        highlights,
-        severity,
-        marked,
-        &snap.branch,
-        theme,
-    );
+    let name = name_cell(&snap.name, highlights, marked, &snap.branch, theme);
 
     // The "synced" state (even with upstream): in the glyph tiers it's a blinking
     // green dot (blank on the off phase); under ASCII it's a steady "ok" word that
@@ -974,7 +967,7 @@ fn multi_branch_row<'a>(
     let extra = others.len();
 
     // Repo cell: bold `name @current`, then one indented `@branch` per other.
-    let mut header_name = name_spans(&snap.name, highlights, severity, marked, theme, true);
+    let mut header_name = name_spans(&snap.name, highlights, marked, theme);
     let bstyle = match &snap.branch {
         Branch::Detached(_) => theme.detached(),
         _ => theme.dim(),
@@ -1373,12 +1366,11 @@ fn branch_ci_square_spans(
 pub(crate) fn name_cell<'a>(
     name: &str,
     highlights: &[u32],
-    severity: Severity,
     marked: bool,
     branch: &Branch,
     theme: &Theme,
 ) -> Cell<'a> {
-    let mut spans = name_spans(name, highlights, severity, marked, theme, false);
+    let mut spans = name_spans(name, highlights, marked, theme);
     // The branch is fused onto the name (`name @branch`), mirroring the web — a
     // dim suffix (or magenta for a detached `@sha`), so Repo + Branch share one
     // tight column. (Multi-branch repos list branches on their own lines instead.)
@@ -1393,28 +1385,13 @@ pub(crate) fn name_cell<'a>(
 /// The selection gutter + styled repo name (fuzzy highlights bolded), WITHOUT the
 /// `@branch` suffix — shared by the single-line row and a multi-branch repo's
 /// header line.
-fn name_spans(
-    name: &str,
-    highlights: &[u32],
-    severity: Severity,
-    marked: bool,
-    theme: &Theme,
-    force_bold: bool,
-) -> Vec<Span<'static>> {
-    // Red is reserved for genuinely broken repos (the `snap.error` row); a repo
-    // that merely wants attention (aging unpushed, behind, dirty) is conveyed by
-    // weight here and by the coloured Status cell — never an alarming red name.
-    // A multi-branch repo's header always bolds (`force_bold`) so the repo name
-    // stands out above its dimmer branch lines.
-    let base = if force_bold {
-        Style::new().add_modifier(Modifier::BOLD)
-    } else {
-        match severity {
-            Severity::Ok | Severity::Info => theme.dim(),
-            Severity::Warn | Severity::Risk => Style::new().add_modifier(Modifier::BOLD),
-            Severity::Notice => Style::new(),
-        }
-    };
+fn name_spans(name: &str, highlights: &[u32], marked: bool, theme: &Theme) -> Vec<Span<'static>> {
+    // The repo name is every row's anchor, so it always renders bold — single- and
+    // multi-branch repos alike (no more bolding only the branched ones). Weight is
+    // pure identity; a repo's state is carried by the coloured Status cell and the
+    // attention bar, and its branch lines sit dim + italic beneath it. Red stays
+    // reserved for genuinely broken repos (the `snap.error` row).
+    let base = Style::new().add_modifier(Modifier::BOLD);
     // Checkbox gutter: an empty circle that fills brand-purple when marked.
     let gutter = if marked {
         Span::styled(
