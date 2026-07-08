@@ -513,83 +513,42 @@ fn config_path(cli: &Cli) -> Result<Utf8PathBuf> {
     }
 }
 
-/// The first-run welcome `cohors` shows when it detected repos: the branded
-/// header, the folders they were found under, and a launch prompt. Enter launches
-/// the whole super fleet; `q` quits. `color` gates the ANSI; otherwise pure so
-/// it's unit-testable.
-fn super_fleet_welcome(detected: &[String], color: bool) -> String {
+/// The shared launch screen: the branded header, a purple mode heading with one
+/// dim descriptor, the folder(s) in play (each behind a brand `▸`), then a spare
+/// launch prompt. The super-fleet and scoped greetings both render through this so
+/// they read as two faces of one welcome. `color` gates the ANSI; otherwise pure
+/// so it's unit-testable.
+fn launch_screen(heading: &str, descriptor: &str, folders: &[String], color: bool) -> String {
     let mut out = welcome_header(color);
-
-    // What it actually does — so a first-timer knows what they're about to see,
-    // not just that a fleet exists.
-    out.push_str(&dim(
-        color,
-        "  cohors gathers all your repos into one dashboard. At a glance you see:",
-    ));
-    out.push('\n');
-    for line in [
-        "    · branch, ahead/behind, uncommitted changes, stashes, last commit",
-        "    · GitHub CI and open pull requests (when a token is configured)",
-        "    · whatever needs attention, floated to the top of the list",
-    ] {
-        out.push_str(&dim(color, line));
-        out.push('\n');
+    out.push_str(&format!("  {}\n", brand(color, heading)));
+    out.push_str(&format!("  {}\n\n", dim(color, descriptor)));
+    for f in folders {
+        out.push_str(&format!("    {}  {}\n", brand(color, "▸"), bold(color, f)));
     }
     out.push('\n');
-
-    out.push_str("  Found git repos under:\n");
-    for root in detected {
-        out.push_str(&format!("    {}\n", bold(color, root)));
-    }
-    out.push('\n');
-
-    // A taste of the keymap so you can act right away; `?` inside has the rest.
-    out.push_str(&dim(
-        color,
-        "  A few keys to get started (press ? inside for the full keymap):",
-    ));
-    out.push('\n');
-    let sep = dim(color, "  ·  ");
-    let keyline = |pairs: &[(&str, &str)]| -> String {
-        let cells: Vec<String> = pairs
-            .iter()
-            .map(|(k, d)| format!("{} {}", bold(color, k), dim(color, d)))
-            .collect();
-        format!("    {}\n", cells.join(&sep))
-    };
-    out.push_str(&keyline(&[
-        ("↑/↓", "move"),
-        ("⏎", "inspect a repo"),
-        ("/", "filter"),
-        ("Space", "mark"),
-    ]));
-    out.push_str(&keyline(&[
-        ("f", "fetch"),
-        ("p", "pull"),
-        ("P", "push"),
-        ("S", "stash"),
-        ("!", "run a command"),
-    ]));
-    out.push_str(&keyline(&[
-        ("Tab", "standup"),
-        ("s", "sort"),
-        ("d", "needs-attention"),
-        ("q", "quit"),
-    ]));
-    out.push('\n');
-
     out.push_str(&format!(
-        "  {} launch the super fleet   {}   {} quit\n\n",
+        "  {} launch   {}   {} quit\n",
         bold(color, "[enter]"),
         dim(color, "·"),
         bold(color, "[q]")
     ));
-    out.push_str(&dim(
-        color,
-        "  or run cohors --root <dir> to scope to a single folder.",
-    ));
-    out.push('\n');
     out
+}
+
+/// The bare-`cohors` greeting: every repo it detected, gathered into one fleet.
+fn super_fleet_welcome(detected: &[String], color: bool) -> String {
+    launch_screen(
+        "your super fleet",
+        "every repo it found, gathered from",
+        detected,
+        color,
+    )
+}
+
+/// The `cohors --root <dir>` greeting: the dashboard scoped to the folder(s) you
+/// pointed it at.
+fn scoped_welcome(roots: &[String], color: bool) -> String {
+    launch_screen("a scoped view", "just the repos under", roots, color)
 }
 
 /// Read a key for the launch prompt: Enter / `y` launches, `q` / `Esc` /
@@ -638,6 +597,27 @@ fn onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
 
     // A real terminal is needed both to read the prompt and to run the TUI at
     // all; without one we've printed the welcome as guidance and stop.
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    if interactive && prompt_launch()? {
+        Ok(Onboard::Proceed)
+    } else {
+        Ok(Onboard::Quit)
+    }
+}
+
+/// The `--root` counterpart to [`onboard`]: greet with the scoped-view launch
+/// screen (the roots the scanner will actually walk), then prompt to launch or
+/// quit. The dashboard needs a terminal anyway, so a non-interactive run just
+/// prints the greeting and stops.
+fn scoped_onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
+    let color = wants_color(std::io::stdout().is_terminal());
+    let roots: Vec<String> = scanner
+        .roots()
+        .iter()
+        .map(|r| crate::ui::abbrev_home(r))
+        .collect();
+    print!("{}", scoped_welcome(&roots, color));
+    let _ = std::io::stdout().flush();
     let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
     if interactive && prompt_launch()? {
         Ok(Onboard::Proceed)
@@ -764,12 +744,16 @@ fn open_url(url: &str) -> std::io::Result<()> {
 pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = Arc::new(crate::scan::from_cli(cli)?);
 
-    // First-run onboarding lives in the plain terminal, not the alt-screen: only
-    // when cohors isn't set up yet (no `--root`, no config file) do we greet the
-    // user and let them adopt the detected roots — or bail — before we launch.
-    // A configured user goes straight to the dashboard (no pre-scan cost).
-    let configured = !cli.root.is_empty() || config_path(cli).map(|p| p.exists()).unwrap_or(false);
-    let scanner = if configured {
+    // The launch screen lives in the plain terminal, not the alt-screen. `--root`
+    // gets the scoped-view greeting; a bare first run (no `--root`, no config)
+    // gets the super-fleet one; a user who's already configured a config file goes
+    // straight to the dashboard (no pre-scan cost, no repeat greeting).
+    let scanner = if !cli.root.is_empty() {
+        match scoped_onboard(&scanner)? {
+            Onboard::Proceed => scanner,
+            Onboard::Quit => return Ok(()),
+        }
+    } else if config_path(cli).map(|p| p.exists()).unwrap_or(false) {
         scanner
     } else {
         match onboard(&scanner)? {
@@ -861,13 +845,22 @@ mod tests {
     fn super_fleet_welcome_lists_roots_and_prompts_to_launch() {
         let w = super_fleet_welcome(&["~/projects".to_string(), "~/code".to_string()], false);
         assert!(w.contains("Welcome to cohors"));
-        assert!(w.contains("Found git repos under:"));
+        assert!(w.contains("super fleet")); // the mode heading
         assert!(w.contains("~/projects")); // each detected folder is listed
         assert!(w.contains("~/code"));
         assert!(w.contains("[enter]")); // launch key
-        assert!(w.contains("super fleet"));
         assert!(w.contains("[q]")); // quit key
-        assert!(w.contains("--root")); // scope-to-one hint
+        assert!(!w.contains('\x1b'));
+    }
+
+    #[test]
+    fn scoped_welcome_names_the_scoped_folder_and_prompts() {
+        let w = scoped_welcome(&["~/Main/code".to_string()], false);
+        assert!(w.contains("Welcome to cohors"));
+        assert!(w.contains("scoped")); // the mode heading
+        assert!(w.contains("~/Main/code")); // the single folder in focus
+        assert!(w.contains("[enter]"));
+        assert!(w.contains("[q]"));
         assert!(!w.contains('\x1b'));
     }
 }
