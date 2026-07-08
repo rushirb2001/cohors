@@ -128,30 +128,6 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
     );
 }
 
-/// Below this inner width a two-pane overlay (used by the detail pane) can't show
-/// both panes side-by-side without squeezing one of them, so it stacks the list on
-/// top instead.
-pub(crate) const TWO_PANE_MIN_WIDTH: u16 = 64;
-
-/// Lay out a two-pane overlay (a list + a detail view). On a wide terminal the
-/// panes sit side-by-side (`list_w` wide list, gap, detail fills the rest); on a
-/// narrow one the list stacks on top (`stacked_list_h` tall) so neither pane is
-/// squeezed. Returns `(list_area, detail_area)`.
-pub(crate) fn two_pane(inner: Rect, list_w: u16, stacked_list_h: u16) -> (Rect, Rect) {
-    if inner.width >= TWO_PANE_MIN_WIDTH {
-        let [list, detail] = Layout::horizontal([Constraint::Length(list_w), Constraint::Min(0)])
-            .spacing(2)
-            .areas(inner);
-        (list, detail)
-    } else {
-        let [list, detail] =
-            Layout::vertical([Constraint::Length(stacked_list_h), Constraint::Min(0)])
-                .spacing(1)
-                .areas(inner);
-        (list, detail)
-    }
-}
-
 /// Count commits by their conventional-commit type (the word before the first
 /// `:`, scope stripped: `feat(ui): …` → `feat`), most-common first. Powers the
 /// standup's at-a-glance "what you did" description.
@@ -892,42 +868,115 @@ pub(crate) fn render_remote_sections(
 /// focused one highlighted) and the focused repo's scrollable output on the
 /// right, with a live combined pass/fail summary in the bottom border.
 pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
-    let area = centered_rect(88, 85, full);
-    frame.render_widget(Clear, area);
     let Some(run) = &app.run else {
         return;
     };
     let (ok, fail, running) = run.summary();
     let summary = if running > 0 {
-        format!(" {ok} ✓ · {fail} ✗ · {running} running ")
+        format!("{ok} ✓ · {fail} ✗ · {running} running")
     } else {
-        format!(" {ok} ✓ · {fail} ✗ ")
+        format!("{ok} ✓ · {fail} ✗")
     };
+
+    // Auto-collapse: size to the taller column (the repo list vs the busiest repo's
+    // output) so a short command like `git status` doesn't fill an 85%-tall box.
+    // Capped at 85% of the screen (then it scrolls) and floored so it never looks
+    // cramped. Measured over *all* repos so the box stays put as you switch focus.
+    let busiest_out = run
+        .results
+        .iter()
+        .map(|r| match &r.state {
+            RunState::Done { stdout, stderr, .. } => {
+                2 + stdout.lines().count()
+                    + if stderr.is_empty() {
+                        0
+                    } else {
+                        1 + stderr.lines().count()
+                    }
+            }
+            RunState::Running => 1,
+        })
+        .max()
+        .unwrap_or(1);
+    let content_rows = run.results.len().max(busiest_out) as u16;
+    let w = (full.width * 88 / 100).max(24);
+    // content + title(1) + header rule(1) + column header(1) + footer rule(1) +
+    // hints(1) + border(2).
+    let h = (content_rows + 7).clamp(10, (full.height * 85 / 100).max(10));
+    let area = Rect {
+        x: full.x + full.width.saturating_sub(w) / 2,
+        y: full.y + full.height.saturating_sub(h) / 2,
+        width: w,
+        height: h,
+    };
+    frame.render_widget(Clear, area);
+
     let block = Block::bordered()
         .border_type(BorderType::Rounded)
-        .padding(Padding::new(1, 0, 0, 0));
+        .padding(Padding::new(1, 1, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let header = Line::from(vec![
         Span::styled(format!("Run · {}", run.command), Style::new().bold()),
-        Span::styled(format!("   ·  {}", summary.trim()), theme.dim()),
+        Span::styled(format!("   ·  {summary}"), theme.dim()),
     ]);
     let inner = render_modal_header(frame, area, inner, header);
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
-    // Two boxed panes — a "Repos" list and the focused repo's output — matching
-    // the standup view's structure. Side-by-side, stacking on a narrow terminal.
-    let (list_area, out_area) = two_pane(inner, 26, 6);
+    // Two columns split by a solid divider joined into the rules (`┬`/`┴`), like the
+    // standup: the repo list on the left, the focused repo's output on the right.
+    let header_rule_y = inner.y.saturating_sub(1);
+    let footer_rule_y = inner.y + inner.height;
+    let [repos_col, divider_col, out_col] = Layout::horizontal([
+        Constraint::Length(22),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .spacing(1)
+    .areas(inner);
+    for y in divider_col.y..divider_col.y + divider_col.height {
+        frame.render_widget(
+            Paragraph::new(Span::raw("│")),
+            Rect {
+                x: divider_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+    for (ch, y) in [("┬", header_rule_y), ("┴", footer_rule_y)] {
+        frame.render_widget(
+            Paragraph::new(Span::raw(ch)),
+            Rect {
+                x: divider_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
 
-    // Left: the repos box.
-    let repos_block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .title(Line::from(" Repos ").bold())
-        .padding(Padding::horizontal(1));
-    let repos_inner = repos_block.inner(list_area);
-    frame.render_widget(repos_block, list_area);
+    // Each column: a bold header, then its body.
+    let [repos_hdr, repos_list_area] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(repos_col);
+    let focused_name = run
+        .results
+        .get(run.focus)
+        .map(|r| r.name.as_str())
+        .unwrap_or("");
+    let [out_hdr, out_body] =
+        Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(out_col);
+    let bold = Style::new().add_modifier(Modifier::BOLD);
+    frame.render_widget(Paragraph::new(Span::styled("Repos", bold)), repos_hdr);
+    frame.render_widget(
+        Paragraph::new(Span::styled(focused_name.to_string(), bold)),
+        out_hdr,
+    );
 
+    // Left column: status glyph + name; the focused row takes the soft wash.
     let spin = spinner_frame(app.spinner);
+    let name_w = (repos_list_area.width as usize).saturating_sub(4);
     let items: Vec<ListItem> = run
         .results
         .iter()
@@ -940,40 +989,28 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
             ListItem::new(Line::from(vec![
                 Span::styled(glyph, style),
                 Span::raw(" "),
-                Span::raw(ellipsize(&r.name, 16)),
+                Span::raw(ellipsize(&r.name, name_w)),
                 Span::styled(note, theme.dim()),
             ]))
         })
         .collect();
-    let list = List::new(items).highlight_style(Style::new().add_modifier(Modifier::REVERSED));
+    let list = List::new(items).highlight_style(theme.selection());
     let mut list_state = ListState::default();
     if !run.results.is_empty() {
         list_state.select(Some(run.focus));
     }
-    frame.render_stateful_widget(list, repos_inner, &mut list_state);
+    frame.render_stateful_widget(list, repos_list_area, &mut list_state);
 
-    // Right: the focused repo's output box (stdout, then a dim stderr divider).
-    let focused_name = run
-        .results
-        .get(run.focus)
-        .map(|r| r.name.as_str())
-        .unwrap_or("");
-    let out_block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .title(Line::from(format!(" {focused_name} ")).bold())
-        .padding(Padding::new(1, 0, 0, 0));
-    let out_inner = out_block.inner(out_area);
-    frame.render_widget(out_block, out_area);
-
+    // Right column: the focused repo's output (stdout, then a dim stderr divider),
+    // scrollable.
     let out_lines = run_output_lines(run, theme);
     let total = out_lines.len() as u16;
-    let viewport = out_inner.height;
+    let viewport = out_body.height;
     let max_scroll = total.saturating_sub(viewport);
     run.set_max_scroll(max_scroll);
     let offset = run.scroll.min(max_scroll);
-
     let [text_area, bar_area] =
-        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(out_inner);
+        Layout::horizontal([Constraint::Min(0), Constraint::Length(1)]).areas(out_body);
     frame.render_widget(
         Paragraph::new(Text::from(out_lines)).scroll((offset, 0)),
         text_area,
@@ -1167,23 +1204,6 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
     let mut state = ListState::default();
     state.select(Some(ow.cursor));
     frame.render_stateful_widget(list, list_area, &mut state);
-}
-
-/// A rect centered within `area`, sized as a percentage of it.
-pub(crate) fn centered_rect(pct_x: u16, pct_y: u16, area: Rect) -> Rect {
-    let [_, vmid, _] = Layout::vertical([
-        Constraint::Percentage((100 - pct_y) / 2),
-        Constraint::Percentage(pct_y),
-        Constraint::Percentage((100 - pct_y) / 2),
-    ])
-    .areas(area);
-    let [_, hmid, _] = Layout::horizontal([
-        Constraint::Percentage((100 - pct_x) / 2),
-        Constraint::Percentage(pct_x),
-        Constraint::Percentage((100 - pct_x) / 2),
-    ])
-    .areas(vmid);
-    hmid
 }
 
 /// A fixed-height rect centered vertically within `area`.
