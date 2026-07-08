@@ -538,6 +538,7 @@ dependencies = [
  "cohors-actions",
  "cohors-core",
  "cohors-fleet",
+ "rayon",
  "serde_json",
  "tracing",
 ]

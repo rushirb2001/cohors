@@ -107,10 +107,12 @@ pub fn serve_stdio(
             Err(_) => Some(error_response(Value::Null, -32700, "parse error")),
         };
         if let Some(response) = response {
-            if let Err(e) = serde_json::to_writer(&mut out, &response)
-                .and_then(|_| out.write_all(b"\n"))
-                .and_then(|_| out.flush())
-            {
+            // Serialize first (a `Value` → bytes can't fail on I/O), then do the
+            // I/O as one `io::Result` so a client that hung up (broken pipe / zero
+            // write) ends the loop cleanly instead of crashing the server.
+            let mut buf = serde_json::to_vec(&response)?;
+            buf.push(b'\n');
+            if let Err(e) = out.write_all(&buf).and_then(|_| out.flush()) {
                 match e.kind() {
                     std::io::ErrorKind::BrokenPipe | std::io::ErrorKind::WriteZero => break,
                     _ => return Err(e.into()),
@@ -360,7 +362,7 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         ),
         "open" => {
             if ctx.caps.allow_open {
-                Err("`open` is not yet implemented — will open the repo in the system file manager.".to_string())
+                Err("`open` is not yet implemented; it will open the repo in the system file manager.".to_string())
             } else {
                 Err("`open` requires --allow-open (local-desktop tool).".to_string())
             }
@@ -626,6 +628,7 @@ fn search(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
                     return Vec::new();
                 };
                 cohors_fleet::search_content(path, &query, max + 1)
+                    .into_iter()
                     .map(|hit| {
                         json!({
                             "repo": snap.id.0, "path": hit.path,
@@ -635,8 +638,11 @@ fn search(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
                     .collect()
             })
             .collect();
-        hits = repo_results.into_iter().flatten().take(max).collect();
-        truncated = hits.len() >= max_results;
+        // `truncated` should reflect whether hits were actually dropped, so compare
+        // the full count to the cap *before* taking `max`.
+        let all: Vec<Value> = repo_results.into_iter().flatten().collect();
+        truncated = all.len() > max;
+        hits = all.into_iter().take(max).collect();
     } else {
         let owned: Vec<RepoSnapshot> = selected.iter().map(|s| (*s).clone()).collect();
         for hit in search_metadata(&owned, &query, kind) {
