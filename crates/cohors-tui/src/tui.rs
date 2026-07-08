@@ -580,7 +580,16 @@ fn start_action_targets(
     let mut targets: Vec<(RepoId, Utf8PathBuf, String)> = Vec::new();
     let mut skipped: Option<String> = None;
     let mut skipped_count = 0usize;
-    for id in app.action_targets() {
+    // "Push all": on a big fleet most checked-out branches are local-only or up to
+    // date, so pushing every one just fails with "no upstream". A *bulk* push targets
+    // only repos whose current branch is ahead of its upstream and counts the rest
+    // as "nothing to push", instead of firing a `git push` at each that reports back
+    // a failure. A single-repo push still attempts, so its real git result shows
+    // (and a specific branch is chosen through the picker, not here).
+    let ids = app.action_targets();
+    let bulk_push = ids.len() > 1 && matches!(kind, ActionKind::Push);
+    let mut nothing_count = 0usize;
+    for id in ids {
         let Some(r) = app.repos.iter().find(|r| r.id == id) else {
             continue;
         };
@@ -593,12 +602,17 @@ fn start_action_targets(
             skipped = Some(format!("{}: {reason}", r.name));
             continue;
         }
+        if bulk_push && r.upstream.as_ref().is_none_or(|u| u.ahead == 0) {
+            nothing_count += 1;
+            continue;
+        }
         targets.push((r.id.clone(), path, r.name.clone()));
     }
     if targets.is_empty() {
-        app.status = Some(match skipped {
-            Some(reason) => format!("skipped — {reason}"),
-            None => "no repo selected".to_string(),
+        app.status = Some(match (skipped, nothing_count) {
+            (Some(reason), _) => format!("skipped — {reason}"),
+            (None, n) if n > 0 => format!("nothing to push — {n} up to date or local-only"),
+            _ => "no repo selected".to_string(),
         });
         return;
     }
@@ -612,6 +626,8 @@ fn start_action_targets(
     // Surface any guarded skips alongside the progress note.
     let skip_note = if skipped_count > 0 {
         format!("  ·  {skipped_count} skipped (conflict/operation)")
+    } else if nothing_count > 0 {
+        format!("  ·  {nothing_count} nothing to push")
     } else {
         String::new()
     };
