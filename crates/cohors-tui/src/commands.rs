@@ -513,42 +513,68 @@ fn config_path(cli: &Cli) -> Result<Utf8PathBuf> {
     }
 }
 
-/// The shared launch screen: the branded header, a purple mode heading with one
-/// dim descriptor, the folder(s) in play (each behind a brand `▸`), then a spare
-/// launch prompt. The super-fleet and scoped greetings both render through this so
-/// they read as two faces of one welcome. `color` gates the ANSI; otherwise pure
-/// so it's unit-testable.
-fn launch_screen(heading: &str, descriptor: &str, folders: &[String], color: bool) -> String {
-    let mut out = welcome_header(color);
-    out.push_str(&format!("  {}\n", brand(color, heading)));
-    out.push_str(&format!("  {}\n\n", dim(color, descriptor)));
-    for f in folders {
-        out.push_str(&format!("    {}  {}\n", brand(color, "▸"), bold(color, f)));
+/// One block of a launch screen: a brand-purple heading, a dim descriptor, then
+/// the items (each behind a brand `▸`, bold).
+fn welcome_block(heading: &str, descriptor: &str, items: &[String], color: bool) -> String {
+    let mut out = format!(
+        "  {}\n  {}\n",
+        brand(color, heading),
+        dim(color, descriptor)
+    );
+    for it in items {
+        out.push_str(&format!("    {}  {}\n", brand(color, "▸"), bold(color, it)));
     }
     out.push('\n');
-    out.push_str(&format!(
+    out
+}
+
+/// The Enter/quit line shared by every launch screen.
+fn launch_prompt(color: bool) -> String {
+    format!(
         "  {} launch   {}   {} quit\n",
         bold(color, "[enter]"),
         dim(color, "·"),
         bold(color, "[q]")
-    ));
-    out
+    )
 }
 
-/// The bare-`cohors` greeting: every repo it detected, gathered into one fleet.
+/// The bare-`cohors` greeting: the two ways to fly, side by side — the whole super
+/// fleet (Enter launches it), or scoping to a single folder with `--root`. `color`
+/// gates the ANSI; otherwise pure so it's unit-testable.
 fn super_fleet_welcome(detected: &[String], color: bool) -> String {
-    launch_screen(
+    let mut out = welcome_header(color);
+    out.push_str(&welcome_block(
         "your super fleet",
         "every repo it found, gathered from",
         detected,
         color,
-    )
+    ));
+    // The scoped alternative, kept front and centre: not the super fleet? point it
+    // at one folder instead. `<dir>` stays dim, a placeholder to fill in.
+    out.push_str(&format!(
+        "  {}\n  {}\n    {}  {} {}\n\n",
+        brand(color, "or a single folder"),
+        dim(color, "scope the dashboard to just one"),
+        brand(color, "▸"),
+        bold(color, "cohors --root"),
+        dim(color, "<dir>"),
+    ));
+    out.push_str(&launch_prompt(color));
+    out
 }
 
 /// The `cohors --root <dir>` greeting: the dashboard scoped to the folder(s) you
 /// pointed it at.
 fn scoped_welcome(roots: &[String], color: bool) -> String {
-    launch_screen("a scoped view", "just the repos under", roots, color)
+    let mut out = welcome_header(color);
+    out.push_str(&welcome_block(
+        "a scoped view",
+        "just the repos under",
+        roots,
+        color,
+    ));
+    out.push_str(&launch_prompt(color));
+    out
 }
 
 /// Read a key for the launch prompt: Enter / `y` launches, `q` / `Esc` /
@@ -845,9 +871,11 @@ mod tests {
     fn super_fleet_welcome_lists_roots_and_prompts_to_launch() {
         let w = super_fleet_welcome(&["~/projects".to_string(), "~/code".to_string()], false);
         assert!(w.contains("Welcome to cohors"));
-        assert!(w.contains("super fleet")); // the mode heading
+        assert!(w.contains("super fleet")); // state 1: the fleet heading
         assert!(w.contains("~/projects")); // each detected folder is listed
         assert!(w.contains("~/code"));
+        assert!(w.contains("single folder")); // state 2: the scoped alternative
+        assert!(w.contains("cohors --root")); // …kept, not removed
         assert!(w.contains("[enter]")); // launch key
         assert!(w.contains("[q]")); // quit key
         assert!(!w.contains('\x1b'));
