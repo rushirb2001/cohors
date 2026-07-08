@@ -277,6 +277,24 @@ fn snapshot_open_with_no_editor() {
     insta::assert_snapshot!(render_to_string(&app, 100, 20));
 }
 
+/// The "push which branch?" picker lists a repo's local branches (current marked
+/// and pre-selected) with each branch's push state — reached from `P` on a
+/// multi-branch repo.
+#[test]
+fn snapshot_push_branch() {
+    use crate::app::PushPick;
+    let mut app = demo_app();
+    app.mode = Mode::PushBranch;
+    let payments = app.repos.iter().find(|r| r.name == "payments").unwrap();
+    app.push_pick = Some(PushPick {
+        id: payments.id.clone(),
+        name: payments.name.clone(),
+        branches: payments.branches.clone(),
+        cursor: 0,
+    });
+    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+}
+
 /// On a compact terminal the footer's group boxes collapse to single columns
 /// (so the keys never clip) instead of falling back to a different layout.
 /// Even at an ultra-narrow width the stacked footer shows every hint (one per

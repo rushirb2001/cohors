@@ -903,6 +903,10 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
                 ("Esc", "cancel"),
             ],
         )],
+        Mode::PushBranch => vec![(
+            "",
+            vec![("↑/↓", "choose"), ("⏎", "push"), ("Esc", "cancel")],
+        )],
         // Filter mode keeps the normal "root" hints visible (the filter field's
         // own blinking cursor signals the active input) rather than swapping in a
         // separate filter legend.

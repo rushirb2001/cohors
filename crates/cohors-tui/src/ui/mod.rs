@@ -192,6 +192,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
             | Mode::CommandRun
             | Mode::Confirm
             | Mode::OpenWith
+            | Mode::PushBranch
             | Mode::Detail
     );
     if overlay_open {
@@ -215,6 +216,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::OpenWith {
         render_open_with(frame, area, app, &theme);
+    }
+    if app.mode == Mode::PushBranch {
+        render_push_branch(frame, area, app, &theme);
     }
     if app.mode == Mode::Detail {
         render_detail(frame, area, app, now, &theme);

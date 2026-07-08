@@ -1206,6 +1206,72 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
     frame.render_stateful_widget(list, list_area, &mut state);
 }
 
+/// The "push which branch?" picker for a repo with several local branches: each
+/// branch (current first, marked `●`) with its push state — `↑2` to push, `local`
+/// for a never-pushed branch, "up to date" when synced. `↑/↓` choose, `⏎` pushes
+/// the highlighted one. Reached from `P` when the target repo is multi-branch.
+pub(crate) fn render_push_branch(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
+    let Some(pick) = &app.push_pick else {
+        return;
+    };
+    let title = format!("Push {} · which branch?", pick.name);
+
+    // Size to the content: items + header (title + rule) + hint footer + border.
+    let w = 56.min(full.width.saturating_sub(2)).max(24);
+    let h = (pick.branches.len() as u16 + 6)
+        .min(full.height.saturating_sub(2))
+        .max(5);
+    let area = Rect {
+        x: full.x + full.width.saturating_sub(w) / 2,
+        y: full.y + full.height.saturating_sub(h) / 2,
+        width: w,
+        height: h,
+    };
+    frame.render_widget(Clear, area);
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+    let inner = render_modal_header(frame, area, inner, Line::from(title).bold());
+    let inner = render_modal_hints(frame, area, inner, app, theme);
+
+    let items: Vec<ListItem> = pick
+        .branches
+        .iter()
+        .map(|b| {
+            let style = if b.is_current {
+                theme.ahead().add_modifier(Modifier::BOLD)
+            } else {
+                Style::new()
+            };
+            let mut spans = vec![
+                Span::styled(if b.is_current { "● " } else { "  " }, style),
+                Span::styled(b.name.clone(), style),
+            ];
+            let sync = if !b.has_upstream {
+                "  local".to_string()
+            } else {
+                match (b.ahead, b.behind) {
+                    (0, 0) => "  up to date".to_string(),
+                    (a, 0) => format!("  ↑{a}"),
+                    (0, d) => format!("  ↓{d}"),
+                    (a, d) => format!("  ↑{a} ↓{d}"),
+                }
+            };
+            spans.push(Span::styled(sync, theme.dim()));
+            if b.is_current {
+                spans.push(Span::styled("  · current", theme.dim()));
+            }
+            ListItem::new(Line::from(spans))
+        })
+        .collect();
+    let list = List::new(items).highlight_style(theme.selection());
+    let mut state = ListState::default();
+    state.select(Some(pick.cursor));
+    frame.render_stateful_widget(list, inner, &mut state);
+}
+
 /// A fixed-height rect centered vertically within `area`.
 pub(crate) fn center_v(area: Rect, height: u16) -> Rect {
     let [_, mid, _] = Layout::vertical([

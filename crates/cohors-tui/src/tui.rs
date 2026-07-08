@@ -29,8 +29,8 @@ use ratatui::crossterm::terminal::{
 
 use crate::action;
 use crate::app::{
-    App, Cmd, CommandRun, ConfirmAction, DetailView, Mode, OpenWith, Opener, RunResult, RunState,
-    StandupView,
+    App, Cmd, CommandRun, ConfirmAction, DetailView, Mode, OpenWith, Opener, PushPick, RunResult,
+    RunState, StandupView,
 };
 use crate::cli::Cli;
 use crate::scan::Scanner;
@@ -47,6 +47,12 @@ enum ActionKind {
     Fetch,
     Pull,
     Push,
+    /// Push one specific local branch (chosen in the picker) to origin, setting
+    /// upstream when it was never pushed.
+    PushBranch {
+        branch: String,
+        set_upstream: bool,
+    },
     Stash,
     /// Commit with this message (the others carry no payload).
     Commit(String),
@@ -195,6 +201,7 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
                     | Cmd::FetchAll
                     | Cmd::PullSelected
                     | Cmd::PushSelected
+                    | Cmd::PushBranchAccept
                     | Cmd::Lazygit
                     | Cmd::ConfirmAccept => {
                         app.status =
@@ -311,9 +318,8 @@ fn run_loop(
                     Cmd::PullSelected => {
                         start_action_targets(&mut app, &tx, ActionKind::Pull, &mut batch)
                     }
-                    Cmd::PushSelected => {
-                        start_action_targets(&mut app, &tx, ActionKind::Push, &mut batch)
-                    }
+                    Cmd::PushSelected => start_push(&mut app, &tx, &mut batch),
+                    Cmd::PushBranchAccept => accept_push_branch(&mut app, &tx),
                     Cmd::CopyPath => copy_selected(&mut app),
                     Cmd::OpenDetail => open_detail(&mut app, &scanner, &tx),
                     Cmd::Lazygit => open_lazygit(terminal, &mut app, &scanner, &tx)?,
@@ -599,7 +605,7 @@ fn start_action_targets(
     let (doing, done) = match &kind {
         ActionKind::Fetch => ("fetching", "fetched"),
         ActionKind::Pull => ("pulling", "pulled"),
-        ActionKind::Push => ("pushing", "pushed"),
+        ActionKind::Push | ActionKind::PushBranch { .. } => ("pushing", "pushed"),
         ActionKind::Stash => ("stashing", "stashed"),
         ActionKind::Commit(_) => ("committing", "committed"),
     };
@@ -623,6 +629,69 @@ fn start_action_targets(
         app.busy.insert(id.clone());
         spawn_action(tx.clone(), kind.clone(), id, path, name);
     }
+}
+
+/// Push: a single multi-branch target asks *which* branch first (a repo can have
+/// several local branches, and `git push` only pushes the checked-out one); a
+/// single-branch repo or a bulk selection pushes each target's current branch
+/// directly, as before.
+fn start_push(app: &mut App, tx: &Sender<BgMsg>, batch: &mut Option<Batch>) {
+    let targets = app.action_targets();
+    if let [only] = targets.as_slice()
+        && let Some(repo) = app.repos.iter().find(|r| &r.id == only)
+        && repo.branches.len() > 1
+        && !repo.has_error()
+        && !app.busy.contains(&repo.id)
+    {
+        // Current branch pre-selected (Enter pushes the checkout by default).
+        let cursor = repo.branches.iter().position(|b| b.is_current).unwrap_or(0);
+        app.push_pick = Some(PushPick {
+            id: repo.id.clone(),
+            name: repo.name.clone(),
+            branches: repo.branches.clone(),
+            cursor,
+        });
+        app.mode = Mode::PushBranch;
+        return;
+    }
+    start_action_targets(app, tx, ActionKind::Push, batch);
+}
+
+/// Push the branch highlighted in the picker. The checked-out branch (with an
+/// upstream) goes through plain `git push` so it respects its configured remote;
+/// any other branch — or a never-pushed one — pushes explicitly to origin, setting
+/// upstream when needed.
+fn accept_push_branch(app: &mut App, tx: &Sender<BgMsg>) {
+    app.mode = Mode::Normal;
+    let Some(pick) = app.push_pick.take() else {
+        return;
+    };
+    let Some(branch) = pick.branches.get(pick.cursor).cloned() else {
+        return;
+    };
+    let Some((id, name, path)) = app
+        .repos
+        .iter()
+        .find(|r| r.id == pick.id)
+        .and_then(|r| r.path.clone().map(|p| (r.id.clone(), r.name.clone(), p)))
+    else {
+        app.status = Some(format!("{}: no path", pick.name));
+        return;
+    };
+    if app.busy.contains(&id) {
+        return;
+    }
+    let kind = if branch.is_current && branch.has_upstream {
+        ActionKind::Push
+    } else {
+        ActionKind::PushBranch {
+            branch: branch.name.clone(),
+            set_upstream: !branch.has_upstream,
+        }
+    };
+    app.status = Some(format!("pushing {name} ({})…", branch.name));
+    app.busy.insert(id.clone());
+    spawn_action(tx.clone(), kind, id, path, name);
 }
 
 /// Start a fetch on every (readable) repo.
@@ -1078,6 +1147,10 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
             ActionKind::Fetch => action::fetch(&path, &name),
             ActionKind::Pull => action::pull_ff(&path, &name),
             ActionKind::Push => action::push(&path, &name),
+            ActionKind::PushBranch {
+                branch,
+                set_upstream,
+            } => action::push_branch(&path, &name, &branch, set_upstream),
             ActionKind::Stash => action::stash_push(&path, &name),
             ActionKind::Commit(message) => action::commit(&path, &name, &message),
         };
