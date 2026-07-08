@@ -519,11 +519,65 @@ fn config_path(cli: &Cli) -> Result<Utf8PathBuf> {
 /// it's unit-testable.
 fn super_fleet_welcome(detected: &[String], color: bool) -> String {
     let mut out = welcome_header(color);
+
+    // What it actually does — so a first-timer knows what they're about to see,
+    // not just that a fleet exists.
+    out.push_str(&dim(
+        color,
+        "  cohors gathers all your repos into one dashboard. At a glance you see:",
+    ));
+    out.push('\n');
+    for line in [
+        "    · branch, ahead/behind, uncommitted changes, stashes, last commit",
+        "    · GitHub CI and open pull requests (when a token is configured)",
+        "    · whatever needs attention, floated to the top of the list",
+    ] {
+        out.push_str(&dim(color, line));
+        out.push('\n');
+    }
+    out.push('\n');
+
     out.push_str("  Found git repos under:\n");
     for root in detected {
         out.push_str(&format!("    {}\n", bold(color, root)));
     }
     out.push('\n');
+
+    // A taste of the keymap so you can act right away; `?` inside has the rest.
+    out.push_str(&dim(
+        color,
+        "  A few keys to get started (press ? inside for the full keymap):",
+    ));
+    out.push('\n');
+    let sep = dim(color, "  ·  ");
+    let keyline = |pairs: &[(&str, &str)]| -> String {
+        let cells: Vec<String> = pairs
+            .iter()
+            .map(|(k, d)| format!("{} {}", bold(color, k), dim(color, d)))
+            .collect();
+        format!("    {}\n", cells.join(&sep))
+    };
+    out.push_str(&keyline(&[
+        ("↑/↓", "move"),
+        ("⏎", "inspect a repo"),
+        ("/", "filter"),
+        ("Space", "mark"),
+    ]));
+    out.push_str(&keyline(&[
+        ("f", "fetch"),
+        ("p", "pull"),
+        ("P", "push"),
+        ("S", "stash"),
+        ("!", "run a command"),
+    ]));
+    out.push_str(&keyline(&[
+        ("Tab", "standup"),
+        ("s", "sort"),
+        ("d", "needs-attention"),
+        ("q", "quit"),
+    ]));
+    out.push('\n');
+
     out.push_str(&format!(
         "  {} launch the super fleet   {}   {} quit\n\n",
         bold(color, "[enter]"),
