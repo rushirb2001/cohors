@@ -42,6 +42,10 @@ pub enum Command {
         /// dirty-first order. Omit to print the whole fleet.
         #[arg(long, value_name = "QUERY")]
         select: Option<String>,
+        /// Print raw JSON instead of the human report. JSON is already the
+        /// default whenever stdout is piped, so existing scripts keep working.
+        #[arg(long)]
+        json: bool,
     },
     /// Launch the dashboard on a built-in sample fleet — no config, no scanning.
     ///

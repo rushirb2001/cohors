@@ -33,12 +33,16 @@ pub fn init(cli: &Cli, force: bool) -> Result<()> {
     Ok(())
 }
 
-/// `cohors scan` — discover + snapshot all repos and print JSON to stdout.
+/// `cohors scan` — discover + snapshot all repos and report them.
+///
+/// A human at a terminal gets the styled report ([`scan_report`]); anything else
+/// (a pipe, a redirect, or an explicit `--json`) gets the raw JSON, so scripts
+/// keep the contract they always had.
 ///
 /// With `--select`, only the matching repos are printed, in dirty-first order,
 /// using the same [`cohors_core::resolve`] the dashboard and (later) the MCP
 /// server use — so `scan --select behind` and `list_repos({behind:true})` agree.
-pub fn scan(cli: &Cli, select: Option<&str>) -> Result<()> {
+pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
     let scanner = crate::scan::from_cli(cli)?;
     let mut snapshots = scanner.scan();
 
@@ -68,9 +72,236 @@ pub fn scan(cli: &Cli, select: Option<&str>) -> Result<()> {
         snapshots = picked.into_iter().map(|i| snapshots[i].clone()).collect();
     }
 
-    let json = serde_json::to_string_pretty(&snapshots).context("serializing snapshots")?;
-    println!("{json}");
+    // JSON stays the contract for scripts: forced by `--json`, and the default
+    // whenever stdout is not a terminal (piped into jq and friends). A human at a
+    // TTY gets the styled report instead.
+    if json || !std::io::stdout().is_terminal() {
+        let out = serde_json::to_string_pretty(&snapshots).context("serializing snapshots")?;
+        println!("{out}");
+        return Ok(());
+    }
+    print!(
+        "{}",
+        scan_report(&snapshots, &scanner.roots(), now_secs(), wants_color(true))
+    );
     Ok(())
+}
+
+/// Clip `s` to `max` columns, marking the cut with an ellipsis.
+fn clip(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
+/// A repo's sync cell: `↑2`, `↓5`, `↑2 ↓5`, `ok` when level with upstream, and
+/// `local` when there is no upstream at all.
+fn sync_label(s: &cohors_core::RepoSnapshot) -> String {
+    match &s.upstream {
+        None => "local".to_string(),
+        Some(u) if u.ahead == 0 && u.behind == 0 => "ok".to_string(),
+        Some(u) => {
+            let mut t = String::new();
+            if u.ahead > 0 {
+                t.push_str(&format!("↑{}", u.ahead));
+            }
+            if u.ahead > 0 && u.behind > 0 {
+                t.push(' ');
+            }
+            if u.behind > 0 {
+                t.push_str(&format!("↓{}", u.behind));
+            }
+            t
+        }
+    }
+}
+
+/// Paint `s` in the dashboard's colour for `sev`, so the CLI and the TUI speak
+/// one colour language (calm green, info dim, notice cyan, warn amber, risk red).
+fn severity_paint(sev: cohors_core::Severity, color: bool, s: &str) -> String {
+    use cohors_core::Severity as S;
+    match sev {
+        S::Ok => sgr(color, "32", s),
+        S::Info => dim(color, s),
+        S::Notice => sgr(color, "36", s),
+        S::Warn => sgr(color, "33", s),
+        S::Risk => sgr(color, "31", s),
+    }
+}
+
+/// The human-facing `cohors scan` report: a branded header, one line per repo in
+/// the dashboard's colour language, then the fleet's headline counts and the
+/// commands that would actually clear them. `color` gates the ANSI; otherwise
+/// pure so it's unit-testable.
+fn scan_report(
+    snaps: &[cohors_core::RepoSnapshot],
+    roots: &[String],
+    now: i64,
+    color: bool,
+) -> String {
+    let where_at = roots
+        .iter()
+        .map(|r| crate::ui::abbrev_home(r))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut out = format!(
+        "\n  {}  {}\n\n",
+        brand(color, "cohors"),
+        dim(
+            color,
+            &format!(
+                "· {} repo{} · {where_at}",
+                snaps.len(),
+                if snaps.len() == 1 { "" } else { "s" }
+            )
+        ),
+    );
+    if snaps.is_empty() {
+        out.push_str(&format!("  {}\n\n", dim(color, "nothing to report")));
+        return out;
+    }
+
+    // Size the columns to their content (capped) so short fleets stay tight and a
+    // long branch name cannot push Status off the screen.
+    let name_w = snaps
+        .iter()
+        .map(|s| s.name.chars().count())
+        .max()
+        .unwrap_or(4)
+        .clamp(4, 28);
+    let branch_w = snaps
+        .iter()
+        .map(|s| s.branch.label().chars().count())
+        .max()
+        .unwrap_or(6)
+        .clamp(6, 22);
+    let sync_w = snaps
+        .iter()
+        .map(|s| sync_label(s).chars().count())
+        .max()
+        .unwrap_or(5)
+        .clamp(5, 8);
+
+    // Most urgent first, the same dirty-first instinct the dashboard opens with,
+    // then alphabetical so the order is stable run to run.
+    let mut rows: Vec<(&cohors_core::RepoSnapshot, cohors_core::Assessment)> = snaps
+        .iter()
+        .map(|s| (s, cohors_core::assess(s, now)))
+        .collect();
+    rows.sort_by(|a, b| {
+        b.1.severity
+            .cmp(&a.1.severity)
+            .then_with(|| a.0.name.cmp(&b.0.name))
+    });
+
+    for (s, a) in &rows {
+        // A filled dot marks the repos that want you, so the list still reads
+        // when colour is off (NO_COLOR, or piped to a pager).
+        let marker = if a.needs_attention() {
+            severity_paint(a.severity, color, "●")
+        } else {
+            " ".to_string()
+        };
+        let status = a
+            .primary
+            .as_ref()
+            .map(|r| r.label())
+            .unwrap_or_else(|| "up to date".to_string());
+        let sync = sync_label(s);
+        // Pad before painting: ANSI escapes have no width, so colouring first
+        // would throw the column alignment off.
+        let sync_cell = format!("{:<sync_w$}", sync);
+        let sync_cell = match &s.upstream {
+            None => dim(color, &sync_cell),
+            Some(u) if u.ahead > 0 => sgr(color, "36", &sync_cell),
+            Some(u) if u.behind > 0 => sgr(color, "33", &sync_cell),
+            Some(_) => sgr(color, "32", &sync_cell),
+        };
+        out.push_str(&format!(
+            "  {} {}  {}  {}  {}\n",
+            marker,
+            bold(color, &format!("{:<name_w$}", clip(&s.name, name_w))),
+            dim(
+                color,
+                &format!("{:<branch_w$}", clip(&s.branch.label(), branch_w))
+            ),
+            sync_cell,
+            severity_paint(a.severity, color, &status),
+        ));
+    }
+
+    // Headline: how much of the fleet wants you, split the same four ways the
+    // dashboard's attention bar splits it.
+    let sum = cohors_core::fleet_summary(snaps, now);
+    out.push_str(&format!(
+        "\n  {}  {}\n",
+        bold(
+            color,
+            &format!("{} of {} need attention", sum.needs_attention, sum.total)
+        ),
+        dim(
+            color,
+            &format!(
+                "· {} risk · {} warn · {} minor · {} calm",
+                sum.risk, sum.warn, sum.notice, sum.calm
+            )
+        ),
+    ));
+
+    // Only the non-zero counts, so a clean fleet does not read as a wall of zeros.
+    let mut bits: Vec<String> = Vec::new();
+    for (n, label) in [
+        (sum.dirty, "dirty"),
+        (sum.unpushed, "unpushed"),
+        (sum.behind, "behind"),
+        (sum.conflicted, "conflicted"),
+        (sum.stash, "with stashes"),
+        (sum.errors, "unreadable"),
+    ] {
+        if n > 0 {
+            bits.push(format!("{n} {label}"));
+        }
+    }
+    if !bits.is_empty() {
+        out.push_str(&format!("  {}\n", dim(color, &bits.join(" · "))));
+    }
+
+    // Turn the counts into the commands that clear them, listing only what is
+    // actually true right now. Both are safe verbs (pull is fast-forward-only,
+    // push never force-pushes).
+    let mut next: Vec<(String, String)> = Vec::new();
+    if sum.behind > 0 {
+        next.push((
+            "cohors pull --select behind".to_string(),
+            format!("fast-forward {} behind", sum.behind),
+        ));
+    }
+    if sum.unpushed > 0 {
+        next.push((
+            "cohors push --select ahead".to_string(),
+            format!("send {} with unpushed commits", sum.unpushed),
+        ));
+    }
+    if !next.is_empty() {
+        let cmd_w = next
+            .iter()
+            .map(|(c, _)| c.chars().count())
+            .max()
+            .unwrap_or(0);
+        out.push_str(&format!("\n  {}\n", dim(color, "next")));
+        for (cmd, why) in next {
+            out.push_str(&format!(
+                "    {}  {}\n",
+                bold(color, &format!("{cmd:<cmd_w$}")),
+                dim(color, &why),
+            ));
+        }
+    }
+    out.push('\n');
+    out
 }
 
 /// A bulk git action issued from the CLI. Mirrors the TUI verbs and the MCP
@@ -879,6 +1110,45 @@ mod tests {
         assert!(w.contains("[enter]")); // launch key
         assert!(w.contains("[q]")); // quit key
         assert!(!w.contains('\x1b'));
+    }
+
+    /// The human report lists every repo, carries the headline counts, and turns
+    /// the ones that are actionable into the command that clears them.
+    #[test]
+    fn scan_report_lists_repos_with_counts_and_next_steps() {
+        let now = 1_700_000_000;
+        let snaps = cohors_core::demo::fleet(now);
+        let roots = ["/home/me/projects".to_string()];
+        let r = scan_report(&snaps, &roots, now, false);
+
+        assert!(r.contains("cohors")); // branded header
+        assert!(r.contains("need attention")); // the headline
+        for s in &snaps {
+            assert!(r.contains(&s.name), "repo {} missing from report", s.name);
+        }
+        // Next steps appear exactly when the fleet actually has that problem.
+        let sum = cohors_core::fleet_summary(&snaps, now);
+        assert_eq!(
+            r.contains("cohors pull --select behind"),
+            sum.behind > 0,
+            "pull suggestion should track the behind count"
+        );
+        assert_eq!(
+            r.contains("cohors push --select ahead"),
+            sum.unpushed > 0,
+            "push suggestion should track the unpushed count"
+        );
+        assert!(!r.contains('\x1b')); // no ANSI when colour is off
+        assert!(scan_report(&snaps, &roots, now, true).contains('\x1b')); // …and some when it is
+    }
+
+    #[test]
+    fn scan_report_handles_an_empty_fleet() {
+        let r = scan_report(&[], &["/home/me/projects".to_string()], 0, false);
+        assert!(r.contains("0 repos"));
+        assert!(r.contains("nothing to report"));
+        assert!(!r.contains("need attention")); // no headline for an empty fleet
+        assert!(!r.contains('\x1b'));
     }
 
     #[test]
