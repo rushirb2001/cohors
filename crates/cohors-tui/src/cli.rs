@@ -55,7 +55,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_cache: bool,
 
-    /// Keep the dashboard live: re-scan automatically every few seconds.
+    /// Keep the dashboard live: re-scan every few seconds (skips the launch screen).
     #[arg(long, global = true)]
     pub watch: bool,
 

@@ -1264,7 +1264,13 @@ fn prompt_launch() -> Result<bool> {
 /// found we greet, list the folders, and prompt to launch (Enter) or quit; when
 /// nothing is found we greet + guide instead of launching an empty dashboard.
 /// Detection is a shallow probe, so no full scan happens until the dashboard.
-fn onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
+///
+/// `watch` skips the greeting *and* the prompt. `--watch` is a live-monitoring
+/// mode people re-run in a loop, so a "press Enter" gate there is a keypress on
+/// every iteration and the greeting is a flash before the dashboard paints over
+/// it. The empty-fleet guard still applies: watching nothing is worse than being
+/// told why.
+fn onboard(scanner: &Arc<crate::scan::Scanner>, watch: bool) -> Result<Onboard> {
     let home = cohors_config::paths::home_dir().ok();
     let detected = cohors_fleet::detect_roots(home.as_deref());
     let color = wants_color(std::io::stdout().is_terminal());
@@ -1273,6 +1279,9 @@ fn onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
         print!("{}", tui_welcome(&scanner.roots(), color));
         let _ = std::io::stdout().flush();
         return Ok(Onboard::Quit);
+    }
+    if watch {
+        return Ok(Onboard::Proceed);
     }
 
     print!("{}", super_fleet_welcome(&detected, color));
@@ -1292,7 +1301,14 @@ fn onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
 /// screen (the roots the scanner will actually walk), then prompt to launch or
 /// quit. The dashboard needs a terminal anyway, so a non-interactive run just
 /// prints the greeting and stops.
-fn scoped_onboard(scanner: &Arc<crate::scan::Scanner>) -> Result<Onboard> {
+///
+/// `watch` goes straight to the dashboard, for the same reason as in [`onboard`]:
+/// `--root … --watch` is a deliberate, repeated invocation that already names the
+/// folder on the command line, so there is nothing left to confirm.
+fn scoped_onboard(scanner: &Arc<crate::scan::Scanner>, watch: bool) -> Result<Onboard> {
+    if watch {
+        return Ok(Onboard::Proceed);
+    }
     let color = wants_color(std::io::stdout().is_terminal());
     let roots: Vec<String> = scanner
         .roots()
@@ -1430,16 +1446,17 @@ pub fn run_tui(cli: &Cli) -> Result<()> {
     // The launch screen lives in the plain terminal, not the alt-screen. `--root`
     // gets the scoped-view greeting; a bare first run (no `--root`, no config)
     // gets the super-fleet one; a user who's already configured a config file goes
-    // straight to the dashboard (no pre-scan cost, no repeat greeting).
+    // straight to the dashboard (no pre-scan cost, no repeat greeting). `--watch`
+    // opts out of the greeting entirely — see [`onboard`].
     let scanner = if !cli.root.is_empty() {
-        match scoped_onboard(&scanner)? {
+        match scoped_onboard(&scanner, cli.watch)? {
             Onboard::Proceed => scanner,
             Onboard::Quit => return Ok(()),
         }
     } else if config_path(cli).map(|p| p.exists()).unwrap_or(false) {
         scanner
     } else {
-        match onboard(&scanner)? {
+        match onboard(&scanner, cli.watch)? {
             Onboard::Proceed => scanner,
             Onboard::Quit => return Ok(()),
         }
