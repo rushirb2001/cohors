@@ -389,7 +389,8 @@ pub enum CliAction {
     Fetch,
     Pull,
     Push,
-    Commit(String),
+    /// `None` means the message was omitted, which prints the guide.
+    Commit(Option<String>),
     Stash,
 }
 
@@ -414,6 +415,21 @@ impl CliAction {
             CliAction::Commit(_) => "committing",
             CliAction::Stash => "stashing",
         }
+    }
+
+    /// The extra argument this verb needs beyond a selector, shown in the guide's
+    /// worked examples so the shape of a real invocation is obvious.
+    fn arg_hint(&self) -> &'static str {
+        match self {
+            CliAction::Commit(_) => "-m \"your message\"",
+            _ => "",
+        }
+    }
+
+    /// Whether a required argument other than the selector is still missing, which
+    /// (like a missing selector) sends the user to the guide rather than an error.
+    fn missing_arg(&self) -> bool {
+        matches!(self, CliAction::Commit(None))
     }
 
     /// What the verb does, and why it is safe to run. Shown in the command's own
@@ -468,12 +484,19 @@ const SELECTORS: [(&str, &str); 6] = [
 /// to pick repos, and where to start if you are new. A selector is required so an
 /// action never silently hits every repo you own, and a missing one is a question
 /// to answer, not an error to punish.
-fn action_guide(verb: &str, does: &str, safety: &str, color: bool) -> String {
+fn action_guide(verb: &str, arg: &str, does: &str, safety: &str, color: bool) -> String {
     let mut out = masthead(&format!("{verb} · {does}"), safety, color);
 
+    // Verbs needing more than a selector (`commit -m`, `run <cmd>`) carry it into
+    // every example, so the shape of a real invocation is never guesswork.
+    let head = if arg.is_empty() {
+        format!("cohors {verb}")
+    } else {
+        format!("cohors {verb} {arg}")
+    };
     let picks: Vec<(String, &str)> = SELECTORS
         .iter()
-        .map(|(s, why)| (format!("cohors {verb} --select {s}"), *why))
+        .map(|(s, why)| (format!("{head} --select {s}"), *why))
         .collect();
     let starts: Vec<(String, &str)> = vec![
         (
@@ -485,7 +508,7 @@ fn action_guide(verb: &str, does: &str, safety: &str, color: bool) -> String {
             "see what is going on, changes nothing",
         ),
         (
-            format!("cohors {verb} --select dirty --dry-run"),
+            format!("{head} --select dirty --dry-run"),
             "preview the targets without acting",
         ),
     ];
@@ -545,11 +568,18 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
     let verb = action.verb();
     let (does, safety) = action.blurb();
 
-    // No selector is a question, not an error: say what this verb does and how to
-    // choose repos, rather than failing with a bare "required argument" message.
-    let Some(select) = select else {
-        print!("{}", action_guide(verb, does, safety, color));
-        return Ok(());
+    // A missing selector (or a commit with no message) is a question, not an
+    // error: say what this verb does and how to choose repos, rather than failing
+    // with a bare "required argument" message.
+    let select = match select {
+        Some(s) if !action.missing_arg() => s,
+        _ => {
+            print!(
+                "{}",
+                action_guide(verb, action.arg_hint(), does, safety, color)
+            );
+            return Ok(());
+        }
     };
 
     let scanner = crate::scan::from_cli(cli)?;
@@ -611,7 +641,10 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
             CliAction::Fetch => crate::action::fetch(path, &s.name),
             CliAction::Pull => crate::action::pull_ff(path, &s.name),
             CliAction::Push => crate::action::push(path, &s.name),
-            CliAction::Commit(message) => crate::action::commit(path, &s.name, message),
+            // Guarded above: a commit with no message printed the guide and left.
+            CliAction::Commit(message) => {
+                crate::action::commit(path, &s.name, message.as_deref().unwrap_or_default())
+            }
             CliAction::Stash => crate::action::stash_push(path, &s.name),
         };
         match result {
@@ -672,7 +705,7 @@ fn out_nothing_matched(verb: &str, select: &str, color: bool) {
 pub fn run_command_action(
     cli: &Cli,
     select: Option<&str>,
-    command: &str,
+    command: Option<&str>,
     timeout: u64,
     dry_run: bool,
 ) -> Result<()> {
@@ -680,9 +713,13 @@ pub fn run_command_action(
     let does = "run a shell command in each repo you pick";
     let safety = "arbitrary shell, bounded by a per-repo timeout";
 
-    // No selector: explain the verb instead of failing with a clap error.
-    let Some(select) = select else {
-        print!("{}", action_guide("run", does, safety, color));
+    // `run` needs both a command and a selector. Missing either explains the verb
+    // instead of failing with a clap error.
+    let (Some(command), Some(select)) = (command, select) else {
+        print!(
+            "{}",
+            action_guide("run", "\"your command\"", does, safety, color)
+        );
         return Ok(());
     };
 
@@ -1457,6 +1494,7 @@ mod tests {
     fn action_guide_explains_the_verb_and_how_to_select() {
         let g = action_guide(
             "fetch",
+            "",
             "git fetch across the repos you pick",
             "safe anywhere: it never touches your working tree",
             false,
@@ -1473,6 +1511,18 @@ mod tests {
         assert!(g.contains("cohors scan")); // the read-only starting point
         assert!(g.contains("--dry-run")); // look before you leap
         assert!(!g.contains('\x1b'));
+    }
+
+    /// Verbs that need more than a selector carry that argument through every
+    /// worked example, so `commit` and `run` show a usable command, not a stub.
+    #[test]
+    fn action_guide_carries_the_extra_argument_into_examples() {
+        let commit = action_guide("commit", "-m \"your message\"", "does", "safe", false);
+        assert!(commit.contains("cohors commit -m \"your message\" --select dirty"));
+        assert!(commit.contains("cohors commit -m \"your message\" --select dirty --dry-run"));
+
+        let run = action_guide("run", "\"your command\"", "does", "safe", false);
+        assert!(run.contains("cohors run \"your command\" --select all"));
     }
 
     #[test]

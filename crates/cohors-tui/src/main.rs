@@ -65,7 +65,7 @@ fn main() -> anyhow::Result<()> {
         }) => commands::run_command_action(
             &cli,
             action.select.as_deref(),
-            command,
+            command.as_deref(),
             *timeout,
             action.dry_run,
         ),

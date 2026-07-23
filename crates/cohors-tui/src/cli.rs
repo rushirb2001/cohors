@@ -66,9 +66,10 @@ pub enum Command {
     Commit {
         #[command(flatten)]
         action: ActionArgs,
-        /// Commit message (applied to every selected repo).
+        /// Commit message (applied to every selected repo). Omit it to see what
+        /// this command does and how to pick repos.
         #[arg(short, long, value_name = "MSG")]
-        message: String,
+        message: Option<String>,
     },
     /// git stash push (tracked changes) across the selected repos.
     Stash(ActionArgs),
@@ -76,9 +77,10 @@ pub enum Command {
     Run {
         #[command(flatten)]
         action: ActionArgs,
-        /// The shell command to run in each repo.
+        /// The shell command to run in each repo. Omit it to see what this
+        /// command does and how to pick repos.
         #[arg(value_name = "COMMAND")]
-        command: String,
+        command: Option<String>,
         /// Per-repo timeout in seconds.
         #[arg(long, default_value_t = 120)]
         timeout: u64,
