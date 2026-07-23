@@ -9,7 +9,7 @@
 //! A panic hook restores the terminal before the panic prints.
 
 use std::collections::VecDeque;
-use std::io::Stdout;
+use std::io::{IsTerminal, Stdout};
 use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -29,8 +29,8 @@ use ratatui::crossterm::terminal::{
 
 use crate::action;
 use crate::app::{
-    App, Cmd, CommandRun, ConfirmAction, DetailView, Mode, OpenWith, Opener, RunResult, RunState,
-    StandupView,
+    App, Cmd, CommandRun, ConfirmAction, DetailView, Mode, OpenWith, Opener, PushPick, RunResult,
+    RunState, StandupView,
 };
 use crate::cli::Cli;
 use crate::scan::Scanner;
@@ -47,6 +47,12 @@ enum ActionKind {
     Fetch,
     Pull,
     Push,
+    /// Push one specific local branch (chosen in the picker) to origin, setting
+    /// upstream when it was never pushed.
+    PushBranch {
+        branch: String,
+        set_upstream: bool,
+    },
     Stash,
     /// Commit with this message (the others carry no payload).
     Commit(String),
@@ -96,9 +102,30 @@ enum BgMsg {
 }
 
 /// Run the dashboard to completion, always restoring the terminal afterward.
+/// Detect the terminal's background so the cards can adapt. `COHORS_THEME`
+/// (`dark` / `light`) overrides; otherwise ask the terminal over OSC 11 (short
+/// timeout), falling back to light — the historical default — when the query is
+/// unsupported or stdout isn't a terminal. Run once at startup, before we take
+/// over the screen.
+fn detect_dark() -> bool {
+    match std::env::var("COHORS_THEME").ok().as_deref() {
+        Some("dark") => return true,
+        Some("light") => return false,
+        _ => {}
+    }
+    if !std::io::stdout().is_terminal() {
+        return false;
+    }
+    matches!(
+        termbg::theme(Duration::from_millis(100)),
+        Ok(termbg::Theme::Dark)
+    )
+}
+
 pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Result<()> {
+    let dark = detect_dark();
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_loop(&mut terminal, scanner, cli, use_cache, watch);
+    let result = run_loop(&mut terminal, scanner, cli, use_cache, watch, dark);
     let _ = restore_terminal(&mut terminal);
     result
 }
@@ -110,17 +137,19 @@ const WATCH_INTERVAL: Duration = Duration::from_secs(5);
 /// the app from `cohors_core::demo` and stubs every action, so nothing touches
 /// the disk or network — a zero-config way to try cohors.
 pub fn run_demo() -> Result<()> {
+    let dark = detect_dark();
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_demo_loop(&mut terminal);
+    let result = run_demo_loop(&mut terminal, dark);
     let _ = restore_terminal(&mut terminal);
     result
 }
 
-fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
+fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
     // A fixed "now" so the sample commit ages stay exactly as designed for the
     // length of the session.
     let now = now_secs();
     let mut app = App::new(vec!["(demo)".to_string()], "(demo — no config)".to_string());
+    app.dark = dark;
     app.set_repos(cohors_core::demo::fleet(now));
     app.status = Some("demo mode — sample data; actions are stubbed".to_string());
 
@@ -172,6 +201,7 @@ fn run_demo_loop(terminal: &mut Tui) -> Result<()> {
                     | Cmd::FetchAll
                     | Cmd::PullSelected
                     | Cmd::PushSelected
+                    | Cmd::PushBranchAccept
                     | Cmd::Lazygit
                     | Cmd::ConfirmAccept => {
                         app.status =
@@ -239,11 +269,13 @@ fn run_loop(
     cli: &Cli,
     use_cache: bool,
     watch: bool,
+    dark: bool,
 ) -> Result<()> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
     app.icons = scanner.icon_mode();
+    app.dark = dark;
     // Warm start: paint cached snapshots instantly, then refresh in background.
     if use_cache
         && let Some(cached) = crate::cache::load()
@@ -286,9 +318,8 @@ fn run_loop(
                     Cmd::PullSelected => {
                         start_action_targets(&mut app, &tx, ActionKind::Pull, &mut batch)
                     }
-                    Cmd::PushSelected => {
-                        start_action_targets(&mut app, &tx, ActionKind::Push, &mut batch)
-                    }
+                    Cmd::PushSelected => start_push(&mut app, &tx, &mut batch),
+                    Cmd::PushBranchAccept => accept_push_branch(&mut app, &tx),
                     Cmd::CopyPath => copy_selected(&mut app),
                     Cmd::OpenDetail => open_detail(&mut app, &scanner, &tx),
                     Cmd::Lazygit => open_lazygit(terminal, &mut app, &scanner, &tx)?,
@@ -549,7 +580,16 @@ fn start_action_targets(
     let mut targets: Vec<(RepoId, Utf8PathBuf, String)> = Vec::new();
     let mut skipped: Option<String> = None;
     let mut skipped_count = 0usize;
-    for id in app.action_targets() {
+    // "Push all": on a big fleet most checked-out branches are local-only or up to
+    // date, so pushing every one just fails with "no upstream". A *bulk* push targets
+    // only repos whose current branch is ahead of its upstream and counts the rest
+    // as "nothing to push", instead of firing a `git push` at each that reports back
+    // a failure. A single-repo push still attempts, so its real git result shows
+    // (and a specific branch is chosen through the picker, not here).
+    let ids = app.action_targets();
+    let bulk_push = ids.len() > 1 && matches!(kind, ActionKind::Push);
+    let mut nothing_count = 0usize;
+    for id in ids {
         let Some(r) = app.repos.iter().find(|r| r.id == id) else {
             continue;
         };
@@ -562,25 +602,32 @@ fn start_action_targets(
             skipped = Some(format!("{}: {reason}", r.name));
             continue;
         }
+        if bulk_push && r.upstream.as_ref().is_none_or(|u| u.ahead == 0) {
+            nothing_count += 1;
+            continue;
+        }
         targets.push((r.id.clone(), path, r.name.clone()));
     }
     if targets.is_empty() {
-        app.status = Some(match skipped {
-            Some(reason) => format!("skipped — {reason}"),
-            None => "no repo selected".to_string(),
+        app.status = Some(match (skipped, nothing_count) {
+            (Some(reason), _) => format!("skipped — {reason}"),
+            (None, n) if n > 0 => format!("nothing to push — {n} up to date or local-only"),
+            _ => "no repo selected".to_string(),
         });
         return;
     }
     let (doing, done) = match &kind {
         ActionKind::Fetch => ("fetching", "fetched"),
         ActionKind::Pull => ("pulling", "pulled"),
-        ActionKind::Push => ("pushing", "pushed"),
+        ActionKind::Push | ActionKind::PushBranch { .. } => ("pushing", "pushed"),
         ActionKind::Stash => ("stashing", "stashed"),
         ActionKind::Commit(_) => ("committing", "committed"),
     };
     // Surface any guarded skips alongside the progress note.
     let skip_note = if skipped_count > 0 {
         format!("  ·  {skipped_count} skipped (conflict/operation)")
+    } else if nothing_count > 0 {
+        format!("  ·  {nothing_count} nothing to push")
     } else {
         String::new()
     };
@@ -598,6 +645,69 @@ fn start_action_targets(
         app.busy.insert(id.clone());
         spawn_action(tx.clone(), kind.clone(), id, path, name);
     }
+}
+
+/// Push: a single multi-branch target asks *which* branch first (a repo can have
+/// several local branches, and `git push` only pushes the checked-out one); a
+/// single-branch repo or a bulk selection pushes each target's current branch
+/// directly, as before.
+fn start_push(app: &mut App, tx: &Sender<BgMsg>, batch: &mut Option<Batch>) {
+    let targets = app.action_targets();
+    if let [only] = targets.as_slice()
+        && let Some(repo) = app.repos.iter().find(|r| &r.id == only)
+        && repo.branches.len() > 1
+        && !repo.has_error()
+        && !app.busy.contains(&repo.id)
+    {
+        // Current branch pre-selected (Enter pushes the checkout by default).
+        let cursor = repo.branches.iter().position(|b| b.is_current).unwrap_or(0);
+        app.push_pick = Some(PushPick {
+            id: repo.id.clone(),
+            name: repo.name.clone(),
+            branches: repo.branches.clone(),
+            cursor,
+        });
+        app.mode = Mode::PushBranch;
+        return;
+    }
+    start_action_targets(app, tx, ActionKind::Push, batch);
+}
+
+/// Push the branch highlighted in the picker. The checked-out branch (with an
+/// upstream) goes through plain `git push` so it respects its configured remote;
+/// any other branch — or a never-pushed one — pushes explicitly to origin, setting
+/// upstream when needed.
+fn accept_push_branch(app: &mut App, tx: &Sender<BgMsg>) {
+    app.mode = Mode::Normal;
+    let Some(pick) = app.push_pick.take() else {
+        return;
+    };
+    let Some(branch) = pick.branches.get(pick.cursor).cloned() else {
+        return;
+    };
+    let Some((id, name, path)) = app
+        .repos
+        .iter()
+        .find(|r| r.id == pick.id)
+        .and_then(|r| r.path.clone().map(|p| (r.id.clone(), r.name.clone(), p)))
+    else {
+        app.status = Some(format!("{}: no path", pick.name));
+        return;
+    };
+    if app.busy.contains(&id) {
+        return;
+    }
+    let kind = if branch.is_current && branch.has_upstream {
+        ActionKind::Push
+    } else {
+        ActionKind::PushBranch {
+            branch: branch.name.clone(),
+            set_upstream: !branch.has_upstream,
+        }
+    };
+    app.status = Some(format!("pushing {name} ({})…", branch.name));
+    app.busy.insert(id.clone());
+    spawn_action(tx.clone(), kind, id, path, name);
 }
 
 /// Start a fetch on every (readable) repo.
@@ -1053,6 +1163,10 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
             ActionKind::Fetch => action::fetch(&path, &name),
             ActionKind::Pull => action::pull_ff(&path, &name),
             ActionKind::Push => action::push(&path, &name),
+            ActionKind::PushBranch {
+                branch,
+                set_upstream,
+            } => action::push_branch(&path, &name, &branch, set_upstream),
             ActionKind::Stash => action::stash_push(&path, &name),
             ActionKind::Commit(message) => action::commit(&path, &name, &message),
         };

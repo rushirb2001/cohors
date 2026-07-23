@@ -43,9 +43,11 @@ run("<codemod>", {ids:[…]}, confirm)     →  per-repo { ok, exit_code, stdout
 Register it. It's **read-only by default**; opt into actions with flags:
 
 ```sh
-claude mcp add cohors -- cohors mcp                              # read-only
-claude mcp add cohors -- cohors mcp --allow-writes --allow-run   # + bulk actions
+claude mcp add cohors -- "$(which cohors)" mcp                              # read-only
+claude mcp add cohors -- "$(which cohors)" mcp --allow-writes --allow-run   # + bulk actions
 ```
+
+Use the **absolute path**: an agent spawns the server with a stripped `PATH`, so a bare `cohors mcp` often resolves to nothing and the agent silently ends up with no tools. For any other client (Claude Desktop, Cursor, Zed, …), the same command and args go in its `mcpServers` block. Run `cohors mcp` by hand and it prints both lines, already filled in with your install path.
 
 **Why an MCP and not a bash loop?** The value isn't capability: an agent *can* loop over `git`. It's the **governed boundary**, which an agent cannot give itself:
 
@@ -54,7 +56,7 @@ claude mcp add cohors -- cohors mcp --allow-writes --allow-run   # + bulk action
 - Scope-locked to your configured roots; an empty selector matches **nothing**, so a fumbled argument can't fan out across everything.
 - A target cap, an optional `run` command allowlist, and an audit log of every action.
 
-**Tools.** Reads (always on): `list_repos`, `get_repo`, `fleet_summary`, `search`, `repo_path`, `list_prs`, `ci_status`. Actions (flag-gated): `fetch`, `pull`, `stash`, `run`. Every read carries diagnostics (the roots searched, the config in effect), so an empty fleet explains itself instead of reading as "all clear."
+**Tools.** Reads (always on): `list_repos`, `get_repo`, `fleet_summary`, `search`, `changes`, `repo_path`, `list_prs`, `ci_status`. Actions (flag-gated): `fetch`, `pull`, `push`, `commit`, `stash`, `run`. Every read carries diagnostics (the roots searched, the config in effect), so an empty fleet explains itself instead of reading as "all clear."
 
 ## For you: a fast fleet dashboard
 
@@ -65,9 +67,10 @@ cohors demo
 ```
 
 - **Every repo on one screen**: branch, ahead/behind, dirty state, stashes, last activity, sorted dirty-first.
+- **Per-branch rows**: a repo with several local branches expands into one row each, carrying its own CI, ahead/behind, and status. Checks are keyed by ref, not by what happens to be checked out, so each branch reports its own truth.
 - **Fast**: parallel scanning with a warm cache; launches in milliseconds across dozens of repos.
-- **Bulk actions**: fetch, pull (ff-only), stash (confirmed), and run a command across the selected repos with live, per-repo output.
-- **Remote-aware**: open pull-request counts, CI status, and ahead/behind vs upstream, inline.
+- **Bulk actions**: fetch, pull (ff-only), push, commit, stash (confirmed), and run a command across the selected repos with live, per-repo output.
+- **Remote-aware**: open pull-request counts (on the branch each PR targets), CI status, and ahead/behind vs upstream, inline.
 - **Weekly standup**: every commit you made this week, across every repo, in one view.
 
 ## For your team: the same fleet in the browser
@@ -131,14 +134,17 @@ cohors                     # auto-detect every repo and launch the dashboard (th
 cohors --root ~/code       # scope the dashboard to a single folder
 cohors demo                # full UI on built-in sample data (nothing written to disk)
 cohors init                # save an editable config to ~/.config/cohors/config.toml
-cohors scan                # print repository snapshots as JSON (scriptable)
+cohors scan                # a report of what needs you, grouped by urgency (JSON when piped)
 cohors scan --select dirty # filter: e.g. dirty, behind, 'name:pay*', or raw JSON
+cohors fetch --select all --dry-run   # preview any bulk action before it touches anything
 cohors mcp                 # run the MCP server (read-only; --allow-writes / --allow-run to arm)
 cohors web                 # serve the same fleet in the browser (--root to scope, --watch for live)
 cohors web --demo          # browser UI on built-in sample data (nothing scanned)
 ```
 
-Inside the dashboard: `↑`/`↓` move · `Enter` inspect · `/` fuzzy filter · `Space` mark · `f`/`p`/`S` fetch/pull/stash · `!` run a command · `Tab` weekly standup · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked.
+Inside the dashboard: `↑`/`↓` move · `Enter` inspect · `/` fuzzy filter · `:` command palette · `Space` mark · `f`/`p`/`P`/`S` fetch/pull/push/stash · `!` run a command · `Tab` weekly standup · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked. On a repo with several branches, `P` asks which one to push.
+
+Every command surface introduces itself: run an action without a selector and it prints what it does, its safety posture, and how to pick repos rather than erroring at you. Nothing writes without a selector, and every action takes `--dry-run`.
 
 ## How it compares
 

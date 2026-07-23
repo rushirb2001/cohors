@@ -7,6 +7,8 @@
 //! ahead/behind, dirty, stashed, CI pass/fail/pending, open PRs, a detached
 //! HEAD, an off-remote repo, and one unreadable repo.
 
+use std::collections::HashMap;
+
 use camino::Utf8PathBuf;
 
 use crate::detail::{BranchInfo, ChangedFile, RepoDetail};
@@ -188,8 +190,22 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         repo: s.name.into(),
         default_branch: "main".into(),
         open_prs,
+        // Demo PRs all target the default branch.
+        open_prs_by_base: if open_prs > 0 {
+            HashMap::from([("main".to_string(), open_prs)])
+        } else {
+            HashMap::new()
+        },
         prs_awaiting_review: 0,
         ci,
+        // The multi-branch demo repo carries per-branch CI so `cohors demo` shows
+        // the per-branch checks column; only its pushed branch (main) has a remote,
+        // hence CI — the local-only feature branch renders "local".
+        ci_by_branch: if s.name == "payments" {
+            HashMap::from([("main".to_string(), ci)])
+        } else {
+            HashMap::new()
+        },
         description: Some(format!("demo repo — {}", s.summary)),
         topics: Vec::new(),
         // Deterministic (clock-free) but varied, derived from the name.
@@ -234,7 +250,44 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         error: s.error.map(|e| e.to_string()),
         activity: demo_activity(s.name, s.error.is_some()),
         groups: Vec::new(),
+        branches: demo_branches(s.name, now),
     }
+}
+
+/// Demo branches for the showcase: most repos are single-branch (an empty list
+/// renders inline), but `payments` carries a couple so the multi-branch layout is
+/// visible in `cohors demo`. The demo's open PRs all target `main`, so `main` is
+/// where the count lands.
+fn demo_branches(name: &str, now: i64) -> Vec<BranchInfo> {
+    if name != "payments" {
+        return Vec::new();
+    }
+    let commit = |ts: i64, summary: &str| {
+        Some(CommitMeta {
+            short_id: "abc1234".into(),
+            author: "you".into(),
+            timestamp: ts,
+            summary: summary.into(),
+        })
+    };
+    vec![
+        BranchInfo {
+            name: "main".into(),
+            ahead: 2,
+            behind: 0,
+            has_upstream: true,
+            is_current: true,
+            last_commit: commit(now - 7200, "fix: retry on 5xx"),
+        },
+        BranchInfo {
+            name: "feat/idempotency-keys".into(),
+            ahead: 6,
+            behind: 1,
+            has_upstream: false,
+            is_current: false,
+            last_commit: commit(now - 86_400, "wip: idempotency"),
+        },
+    ]
 }
 
 /// A deterministic, varied-looking 12-week commit sparkline for a demo repo, so
@@ -334,6 +387,7 @@ pub fn detail(now: i64) -> RepoDetail {
                 behind: 0,
                 has_upstream: true,
                 is_current: true,
+                last_commit: None,
             },
             BranchInfo {
                 name: "feat/idempotency".to_string(),
@@ -341,6 +395,7 @@ pub fn detail(now: i64) -> RepoDetail {
                 behind: 1,
                 has_upstream: true,
                 is_current: false,
+                last_commit: None,
             },
             BranchInfo {
                 name: "spike/webhooks".to_string(),

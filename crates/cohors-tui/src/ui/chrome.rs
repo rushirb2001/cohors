@@ -113,14 +113,16 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Th
         return;
     };
 
-    // Packed left: spider · brand · divider · fleet activity.
+    // spider · brand · <flexible fill> · divider · fleet activity. The fill sits
+    // between the brand and the divider, so the divider + sparkline are pinned to
+    // the right edge of the header.
     let text_w = brand.width() as u16;
-    let [icon_area, text_area, div_area, act_area, _rest] = Layout::horizontal([
+    let [icon_area, text_area, _fill, div_area, act_area] = Layout::horizontal([
         Constraint::Length(ICON_W),
         Constraint::Length(text_w),
+        Constraint::Min(0),
         Constraint::Length(1),
         Constraint::Length(act_w),
-        Constraint::Min(0),
     ])
     .spacing(2)
     .areas(inner);
@@ -138,12 +140,35 @@ pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Th
     frame.render_widget(Paragraph::new(Text::from(activity)), act_area);
 }
 
-/// The configured root(s) as a compact, home-abbreviated string.
+/// The configured root(s) as a compact, home-abbreviated string. With several
+/// roots, lead with the one that actually holds the most repos (not just the
+/// first configured), since that's the "home base" a glance wants to see.
 pub(crate) fn header_dir(app: &App) -> String {
     match app.roots.as_slice() {
         [] => "(no roots)".to_string(),
         [one] => abbrev_home(one),
-        [first, rest @ ..] => format!("{} (+{})", abbrev_home(first), rest.len()),
+        roots => {
+            // Lead with the root holding the most repos. Strict `>` means ties
+            // keep the *first* configured root (only a genuine lead replaces it).
+            let mut busiest = &roots[0];
+            let mut most = 0usize;
+            for root in roots {
+                let n = app
+                    .repos
+                    .iter()
+                    .filter(|r| {
+                        r.path
+                            .as_ref()
+                            .is_some_and(|p| p.starts_with(root.as_str()))
+                    })
+                    .count();
+                if n > most {
+                    most = n;
+                    busiest = root;
+                }
+            }
+            format!("{} (+{})", abbrev_home(busiest), roots.len() - 1)
+        }
     }
 }
 
@@ -179,22 +204,11 @@ fn footer_bar_fits(app: &App, width: u16) -> bool {
     footer_bar_geometry(app).2 <= width
 }
 
-/// The footer's total height (including borders). In Normal mode it's the hint
-/// bar or the stacked fallback; in the overlay modes it's a single box of
-/// wrapped hint rows.
-pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
-    if app.mode == Mode::Filter {
-        let lines = footer_lines(app, theme);
-        let inner = width.saturating_sub(4).max(1);
-        let rows: u16 = lines
-            .iter()
-            .map(|l| (l.width() as u16).max(1).div_ceil(inner))
-            .sum::<u16>()
-            .clamp(1, 6);
-        return rows + 2;
-    }
-    // The root hint footer (Normal + behind every modal). Collapsed to just the
-    // toggle divider when hidden.
+/// The footer's total height (including borders): the 3-column hint bar, or the
+/// stacked fallback on a narrow terminal, or just the toggle divider when hints
+/// are hidden. The same in every mode — Normal, Filter, and behind the modals.
+pub(crate) fn footer_height(app: &App, width: u16) -> u16 {
+    // Collapsed to just the toggle divider when hidden with `h`.
     if app.hints_hidden {
         return 1;
     }
@@ -206,16 +220,12 @@ pub(crate) fn footer_height(app: &App, width: u16, theme: &Theme) -> u16 {
     content + 2 + 1
 }
 
-/// The footer: the root view's key hints. Filter mode swaps in the filter's own
-/// hints (it has no modal); every other mode — Normal *and* the modal overlays —
-/// keeps the root `select`/`act`/`view` hints here, because each modal now shows
-/// its own keys on its bottom edge. Behind an open modal the footer dims into the
-/// background with the rest of the root.
+/// The footer: the root view's key hints (`select`/`act`/`view`), shown the same
+/// in every mode — Normal, Filter, *and* the modal overlays — because each modal
+/// carries its own keys on its bottom edge and the filter field carries its own
+/// blinking cursor. Behind an open modal the footer dims into the background with
+/// the rest of the root.
 pub(crate) fn render_footer(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
-    if app.mode == Mode::Filter {
-        render_footer_simple(frame, area, footer_lines(app, theme), theme);
-        return;
-    }
     // A divider that doubles as the show/hide affordance, then the one-box bar
     // (or the stacked layout on narrow terminals), unless collapsed with `h`.
     let [divider, boxes] =
@@ -250,24 +260,6 @@ pub(crate) fn render_hint_divider(frame: &mut Frame, area: Rect, hidden: bool, t
     spans.push(Span::raw(" "));
     spans.push(Span::styled("─".repeat(right), theme.dim()));
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-pub(crate) fn render_footer_simple(
-    frame: &mut Frame,
-    area: Rect,
-    lines: Vec<Line<'static>>,
-    theme: &Theme,
-) {
-    let block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(theme.dim())
-        .padding(Padding::horizontal(1));
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-    frame.render_widget(
-        Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
-        inner,
-    );
 }
 
 /// The root view's key hints (select / act / view), short-labelled with symbol
@@ -487,6 +479,10 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
         .border_style(theme.dim());
     let inner = block.inner(area);
     frame.render_widget(block, area);
+    // A faint brand-purple wash behind the hints — filled on the *inner* area only
+    // (a border-less block) so it never bleeds onto the outline, exactly like the
+    // dock card.
+    frame.render_widget(Block::new().style(theme.hint_card()), inner);
 
     // Alternate section / divider constraints. The leftover width is spread
     // evenly across the sections (not dumped into the last one), so the
@@ -731,18 +727,24 @@ pub(crate) fn fleet_activity_lines(app: &App, theme: &Theme) -> Vec<Line<'static
     }
     let total: u64 = weeks.iter().sum();
 
+    // Each week is a single thin, tall bar (height = commit volume, in brand
+    // purple), separated by a dim shade spacer — the brand mark's own texture
+    // element (▒) — so the 12 bins read as distinct columns, not one block.
     let ramp = theme.glyphs.spark_ramp();
+    let spacer = theme.glyphs.spark_spacer();
     let max = weeks.iter().copied().max().unwrap_or(0);
-    let mut spark = String::new();
-    for &n in &weeks {
+    let mut bins: Vec<Span<'static>> = Vec::with_capacity(weeks.len() * 2);
+    for (i, &n) in weeks.iter().enumerate() {
         let idx = if max == 0 {
             0
         } else {
             ((n * 7).div_ceil(max)) as usize
         };
         let ch = ramp[idx.min(7)];
-        spark.push(ch);
-        spark.push(ch);
+        bins.push(Span::styled(ch.to_string(), theme.fg(SPIDER_PURPLE)));
+        if i + 1 < weeks.len() {
+            bins.push(Span::styled(spacer.to_string(), theme.dim()));
+        }
     }
 
     let caption = if total == 0 {
@@ -755,7 +757,7 @@ pub(crate) fn fleet_activity_lines(app: &App, theme: &Theme) -> Vec<Line<'static
             "Fleet activity",
             theme.dim().add_modifier(Modifier::BOLD),
         )),
-        Line::from(Span::styled(spark, theme.fg(SPIDER_PURPLE))),
+        Line::from(bins),
         Line::from(Span::styled(caption, theme.dim())),
     ]
 }
@@ -851,10 +853,6 @@ pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
 /// for (e.g. the "act" keys act on the marked repos).
 pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, &'static str)>)> {
     match app.mode {
-        Mode::Filter => vec![(
-            "filter",
-            vec![("type", "to filter"), ("⏎", "apply"), ("Esc", "clear")],
-        )],
         Mode::Command => vec![("", vec![("⏎", "run"), ("Esc", "cancel")])],
         Mode::Help => vec![("", vec![("? / Esc", "close")])],
         Mode::Standup => {
@@ -905,7 +903,14 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
                 ("Esc", "cancel"),
             ],
         )],
-        Mode::Normal => vec![
+        Mode::PushBranch => vec![(
+            "",
+            vec![("↑/↓", "choose"), ("⏎", "push"), ("Esc", "cancel")],
+        )],
+        // Filter mode keeps the normal "root" hints visible (the filter field's
+        // own blinking cursor signals the active input) rather than swapping in a
+        // separate filter legend.
+        Mode::Normal | Mode::Filter => vec![
             (
                 "select",
                 vec![
@@ -939,38 +944,6 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
             ),
         ],
     }
-}
-
-/// Build one styled footer row per group: a dim group label, then each key in an
-/// accent colour with its dimmed description, `·`-separated.
-pub(crate) fn footer_lines(app: &App, theme: &Theme) -> Vec<Line<'static>> {
-    let key_style = theme.ahead().add_modifier(Modifier::BOLD);
-    footer_groups(app)
-        .into_iter()
-        .map(|(label, items)| {
-            let mut spans: Vec<Span> = Vec::new();
-            if !label.is_empty() {
-                spans.push(Span::styled(format!("{label:<7}"), theme.dim()));
-            }
-            for (i, (key, desc)) in items.into_iter().enumerate() {
-                if i > 0 {
-                    spans.push(Span::styled(" · ", theme.dim()));
-                }
-                spans.push(Span::styled(key, key_style));
-                spans.push(Span::styled(format!(" {desc}"), theme.dim()));
-            }
-            // On the "act" row, spell out *what* an action will hit — the marked
-            // set, or the repo under the cursor when nothing is marked — so the
-            // selection model isn't a hidden rule the user has to infer.
-            if label == "act"
-                && let Some((arrow, target)) = action_target_hint(app)
-            {
-                spans.push(Span::styled(arrow, theme.dim()));
-                spans.push(Span::styled(target, theme.highlight()));
-            }
-            Line::from(spans)
-        })
-        .collect()
 }
 
 /// The current mode's key hints as one styled line: keys accent-bold,
@@ -1048,7 +1021,7 @@ pub(crate) fn render_modal_header(
 /// A solid, full-strength horizontal rule across a modal at row `y`, joined into
 /// its side borders with `├`/`┤`. Full strength (the default border style, not
 /// dim) so it reads as a real structural line, matching the box borders.
-fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
+pub(crate) fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
     let style = Style::new();
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
@@ -1088,13 +1061,40 @@ pub(crate) fn action_target_hint(app: &App) -> Option<(String, String)> {
     }
 }
 
-pub(crate) fn render_filter_input(frame: &mut Frame, area: Rect, app: &App) {
-    let line = Line::from(vec![
-        Span::raw("/ "),
-        Span::raw(app.filter.clone()),
-        Span::raw("▏"),
-    ]);
-    frame.render_widget(Paragraph::new(line), area);
+/// The fuzzy filter input, boxed, sitting inside the repos panel above the
+/// column headers. A leading `/` marks it as the filter prompt (backspacing past
+/// the empty query removes it and closes filtering); a muted placeholder shows
+/// when nothing is typed yet.
+pub(crate) fn render_filter_input(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(theme.dim())
+        .padding(Padding::horizontal(1));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let prompt = Style::new().add_modifier(Modifier::BOLD);
+    // A caret in the brand purple, blinked by the animation tick (~1 Hz; the same
+    // idle tick that drives the "synced" dot). We draw and animate it ourselves so
+    // it carries our colour — the hardware cursor takes the terminal's colour, and
+    // the SGR blink attribute is widely ignored. The cell is always one column (a
+    // bar or a space), so the blink never shifts the text beside it.
+    let caret = if app.spinner % 10 < 5 { "▏" } else { " " };
+    let caret = Span::styled(caret, theme.fg(SPIDER_PURPLE).add_modifier(Modifier::BOLD));
+    let line = if app.filter.is_empty() {
+        Line::from(vec![
+            Span::styled("/ ", prompt),
+            caret,
+            Span::styled("filter repos by name…", theme.dim()),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("/ ", prompt),
+            Span::raw(app.filter.clone()),
+            caret,
+        ])
+    };
+    frame.render_widget(Paragraph::new(line), inner);
 }
 
 /// A centered modal of fixed width (% of the frame) and height, for the command
@@ -1123,11 +1123,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     // (command spans, description) — a structured two-column cheat sheet.
     let rows: Vec<(Vec<Span<'static>>, &str)> = if shell {
         vec![(
-            vec![
-                Span::styled("▌ ", accent.add_modifier(Modifier::BOLD)),
-                cmd(":!"),
-                Span::styled("<cmd>", accent),
-            ],
+            vec![cmd(":!"), Span::styled("<cmd>", accent)],
             "run any shell command across the targets",
         )]
     } else {
@@ -1194,8 +1190,10 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     );
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
-    // Prompt · horizontal divider · the two-column grid.
-    let [prompt_area, hr_area, grid_area] = Layout::vertical([
+    // Prompt, a solid rule, then the two-column cheat sheet (commands │ what they
+    // do) as one framed table — the divider joined into the rule above (`┬`) and the
+    // footer rule below (`┴`), matching the standup and detail panes.
+    let [prompt_area, mid_rule_area, grid_area] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Min(0),
@@ -1213,15 +1211,8 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
         ])),
         prompt_area,
     );
-    frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(
-            "─".repeat(hr_area.width as usize),
-            theme.dim(),
-        ))),
-        hr_area,
-    );
 
-    // Commands │ descriptions, with a vertical divider between the columns.
+    // Commands column | descriptions column.
     let [cmd_col, div_col, desc_col] = Layout::horizontal([
         Constraint::Length(26),
         Constraint::Length(1),
@@ -1229,17 +1220,42 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     ])
     .spacing(1)
     .areas(grid_area);
+
+    // The solid rule under the prompt, and the solid vertical divider joined into
+    // it (`┬`) and the footer rule below (`┴`).
+    modal_rule(frame, area, mid_rule_area.y);
+    for y in div_col.y..div_col.y + div_col.height {
+        frame.render_widget(
+            Paragraph::new(Span::raw("│")),
+            Rect {
+                x: div_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+    for (ch, y) in [
+        ("┬", mid_rule_area.y),
+        ("┴", grid_area.y + grid_area.height),
+    ] {
+        frame.render_widget(
+            Paragraph::new(Span::raw(ch)),
+            Rect {
+                x: div_col.x,
+                y,
+                width: 1,
+                height: 1,
+            },
+        );
+    }
+
     let cmd_lines: Vec<Line> = rows.iter().map(|(s, _)| Line::from(s.clone())).collect();
-    let div_lines: Vec<Line> = rows
-        .iter()
-        .map(|_| Line::from(Span::styled("│", theme.dim())))
-        .collect();
     let desc_lines: Vec<Line> = rows
         .iter()
         .map(|(_, d)| Line::from(Span::styled(d.to_string(), desc_style)))
         .collect();
     frame.render_widget(Paragraph::new(Text::from(cmd_lines)), cmd_col);
-    frame.render_widget(Paragraph::new(Text::from(div_lines)), div_col);
     frame.render_widget(Paragraph::new(Text::from(desc_lines)), desc_col);
 }
 
@@ -1326,18 +1342,4 @@ pub(crate) fn roots_label(app: &App) -> String {
     } else {
         app.roots.join(", ")
     }
-}
-
-/// The "Repositories" panel: the repo table wrapped in a titled box. The column
-/// headers act as the legend, so the bare numbers in each row read clearly.
-/// The scroll offset that keeps `selected` visible in a `viewport`-tall window,
-/// nudging from `prev` only as far as needed, then clamping to the end.
-pub(crate) fn keep_visible(prev: usize, selected: usize, viewport: usize, total: usize) -> usize {
-    let mut off = prev;
-    if selected < off {
-        off = selected;
-    } else if viewport > 0 && selected >= off + viewport {
-        off = selected + 1 - viewport;
-    }
-    off.min(total.saturating_sub(viewport))
 }

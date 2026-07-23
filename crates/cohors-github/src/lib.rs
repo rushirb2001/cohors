@@ -13,7 +13,9 @@ use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use cohors_core::{CiStatus, Contributor, PullRequest, RemoteDetail, RemoteInfo, RepoSnapshot};
+use cohors_core::{
+    BranchInfo, CiStatus, Contributor, PullRequest, RemoteDetail, RemoteInfo, RepoSnapshot,
+};
 
 /// Base URL of the GitHub REST API.
 const API_BASE: &str = "https://api.github.com";
@@ -55,12 +57,15 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
 
     // Phase 1 (cheap, sequential): resolve which repos are GitHub and which of
     // those miss the cache. Cache hits cost nothing and are applied at the end.
-    let pending: Vec<(String, String, String)> = snapshots
+    let pending: Vec<(String, String, String, Vec<String>)> = snapshots
         .iter()
         .filter_map(|snap| {
             let (owner, repo) = url::parse_repo(snap.remote_url.as_deref()?)?;
             let key = format!("{owner}/{repo}");
-            cached(&key).is_none().then_some((owner, repo, key))
+            if cached(&key).is_some() {
+                return None;
+            }
+            Some((owner, repo, key, ci_refs_for(&snap.branches)))
         })
         .collect();
 
@@ -68,11 +73,11 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
     // HTTP round-trips, so a sequential pass over a large fleet took minutes;
     // ENRICH_POOL_SIZE keeps it fast without hammering the API (which would
     // trip secondary rate limits — deliberately NOT one-task-per-repo).
-    let fetch_one = |(owner, repo, key): &(String, String, String)| {
+    let fetch_one = |(owner, repo, key, ci_refs): &(String, String, String, Vec<String>)| {
         if rate_limited.load(std::sync::atomic::Ordering::Relaxed) {
             return;
         }
-        match fetch_remote(&agent, token, owner, repo) {
+        match fetch_remote(&agent, token, owner, repo, ci_refs) {
             Ok(info) => store(key, info),
             Err(FetchError::RateLimited) => {
                 tracing::warn!(repo = %key, "github rate limit hit; skipping remaining repos this round");
@@ -97,12 +102,18 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
     }
 
     // Phase 3: apply from the cache — covers both prior hits and fresh stores.
+    // We OVERWRITE any remote already on the snapshot, but only when the cache
+    // actually holds an entry. Front-ends carry the previous enrichment across a
+    // rescan (so the Remote column doesn't blank to "—" mid-refresh); that stale
+    // copy must not block the refresh — otherwise CI/PR counts never update once
+    // set. When the fetch failed or was rate-limited (no cache entry), the
+    // snapshot keeps whatever it already had.
     for snap in snapshots.iter_mut() {
-        if snap.remote.is_none()
-            && let Some(url) = snap.remote_url.as_deref()
+        if let Some(url) = snap.remote_url.as_deref()
             && let Some((owner, repo)) = url::parse_repo(url)
+            && let Some(fresh) = cached(&format!("{owner}/{repo}"))
         {
-            snap.remote = cached(&format!("{owner}/{repo}"));
+            snap.remote = Some(fresh);
         }
     }
 }
@@ -206,39 +217,49 @@ enum FetchError {
 ///
 /// Endpoints used (all under <https://api.github.com>):
 /// - `GET /repos/{owner}/{repo}` → `default_branch`
-/// - `GET /search/issues?q=repo:{o}/{r}+is:pr+is:open` → open PR `total_count`
+/// - `GET /repos/{owner}/{repo}/pulls?state=open` → open PR count (regular REST)
 /// - `GET /search/issues?...+review-requested:@me` → review-requested `total_count`
 /// - `GET /repos/{owner}/{repo}/commits/{branch}/check-runs` → Actions checks
+///   (once for the default branch, then once per extra pushed branch in `ci_refs`)
+///
+/// `ci_refs` lists the repo's pushed local branches when it has several, so each
+/// branch row can show its own checks; it's empty for single-branch repos, which
+/// then cost no extra requests.
 fn fetch_remote(
     agent: &ureq::Agent,
     token: &str,
     owner: &str,
     repo: &str,
+    ci_refs: &[String],
 ) -> Result<RemoteInfo, FetchError> {
     // 1) Repo metadata → default branch + identity/popularity (one call).
     let repo_json: RepoResponse = get_json(agent, token, &format!("/repos/{owner}/{repo}"))?;
     let default_branch = repo_json.default_branch;
 
-    // 2) Open PR count via the search API (`total_count`, capped page size of 1
-    //    since we only want the count).
-    let open_prs = {
-        let q = format!("repo:{owner}/{repo} is:pr is:open");
-        let path = format!("/search/issues?q={}&per_page=1", encode_query(&q));
-        let res: SearchResponse = get_json(agent, token, &path)?;
-        res.total_count
+    // 2) Open PRs from the pulls list on the regular REST budget (5000/hour) —
+    //    deliberately NOT the search API, whose tiny 30-requests/minute budget a
+    //    fleet blows through in a single scan, after which enrich() backs off and
+    //    every remaining repo's PR count silently stays at its stale/zero cache
+    //    value. We count the total AND group by base branch, so the dashboard can
+    //    show each PR count on the branch it targets. `per_page=100` counts up to
+    //    100 open PRs — finer than a dashboard needs to distinguish.
+    let (open_prs, open_prs_by_base) = {
+        let path = format!("/repos/{owner}/{repo}/pulls?state=open&per_page=100");
+        let prs: Vec<PrResponse> = get_json(agent, token, &path)?;
+        (prs.len() as u32, count_by_base(&prs))
     };
 
-    // 3) PRs awaiting *my* review. Best-effort: a failure here shouldn't sink the
-    //    whole repo, so fall back to 0 rather than propagating.
+    // 3) PRs awaiting *my* review — the one signal that still needs the search
+    //    API (there's no cheap REST equivalent). Strictly best-effort: ANY
+    //    failure, rate-limit included, degrades to 0, so it can never sink the
+    //    repo's enrichment or trip the fleet-wide backoff. Open PRs and CI come
+    //    from the regular REST budget above, so they're always populated.
     let prs_awaiting_review = {
         let q = format!("repo:{owner}/{repo} is:pr is:open review-requested:@me");
         let path = format!("/search/issues?q={}&per_page=1", encode_query(&q));
-        match get_json::<SearchResponse>(agent, token, &path) {
-            Ok(res) => res.total_count,
-            // A rate-limit here still aborts the round; other errors degrade to 0.
-            Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
-            Err(FetchError::Other(_)) => 0,
-        }
+        get_json::<SearchResponse>(agent, token, &path)
+            .map(|res| res.total_count)
+            .unwrap_or(0)
     };
 
     // 4) CI status of the default branch's latest commit, from the **Checks API**
@@ -247,18 +268,28 @@ fn fetch_remote(
     //    "pending" even when a repo posts zero statuses, which made Actions-only
     //    repos look perpetually pending (and produced stale/broken signals). The
     //    Checks API is the modern, accurate source.
-    let ci = {
-        let checks = match get_json::<CheckRunsResponse>(
-            agent,
-            token,
-            &format!("/repos/{owner}/{repo}/commits/{default_branch}/check-runs?per_page=100"),
-        ) {
-            Ok(c) => Some(c),
-            Err(FetchError::RateLimited) => return Err(FetchError::RateLimited),
-            Err(FetchError::Other(_)) => None,
-        };
-        combine_ci(checks.as_ref())
-    };
+    let ci = fetch_ci(agent, token, owner, repo, &default_branch)?;
+
+    // 5) Per-branch CI for a multi-branch repo, so each branch row shows its own
+    //    checks (CI is keyed by ref, not the worktree). The default branch is
+    //    already in hand from (4); fetch each *other* pushed branch, capped so a
+    //    very branchy repo can't blow the rate budget. Best-effort: a rate limit
+    //    mid-loop stops the extras but keeps the PRs + default CI already gathered
+    //    (the next repo's first call re-trips the limit and backs the fleet off).
+    let mut ci_by_branch = HashMap::from([(default_branch.clone(), ci)]);
+    for r#ref in ci_refs
+        .iter()
+        .filter(|r| **r != default_branch)
+        .take(CI_BRANCH_CAP)
+    {
+        match fetch_ci(agent, token, owner, repo, r#ref) {
+            Ok(status) => {
+                ci_by_branch.insert(r#ref.clone(), status);
+            }
+            Err(FetchError::RateLimited) => break,
+            Err(FetchError::Other(_)) => {}
+        }
+    }
 
     Ok(RemoteInfo {
         host: "github.com".to_string(),
@@ -266,8 +297,10 @@ fn fetch_remote(
         repo: repo.to_string(),
         default_branch,
         open_prs,
+        open_prs_by_base,
         prs_awaiting_review,
         ci,
+        ci_by_branch,
         description: repo_json.description.filter(|d| !d.trim().is_empty()),
         topics: repo_json.topics,
         stars: repo_json.stargazers_count,
@@ -275,6 +308,52 @@ fn fetch_remote(
         watchers: repo_json.subscribers_count,
     })
 }
+
+/// CI status of one ref's latest commit, from the **Checks API** (GitHub Actions
+/// and other Checks-API integrations). An `Other` failure — a 404 for a ref with
+/// no remote counterpart, a transient 5xx — folds to `None` ("no CI"), the same
+/// as a repo that posts no checks. A rate limit propagates so the caller can back
+/// the whole fleet off. See the note on the default-branch fetch for why the
+/// legacy commit Status API is deliberately avoided.
+fn fetch_ci(
+    agent: &ureq::Agent,
+    token: &str,
+    owner: &str,
+    repo: &str,
+    git_ref: &str,
+) -> Result<CiStatus, FetchError> {
+    match get_json::<CheckRunsResponse>(
+        agent,
+        token,
+        &format!("/repos/{owner}/{repo}/commits/{git_ref}/check-runs?per_page=100"),
+    ) {
+        Ok(checks) => Ok(combine_ci(Some(&checks))),
+        Err(FetchError::RateLimited) => Err(FetchError::RateLimited),
+        Err(FetchError::Other(_)) => Ok(CiStatus::None),
+    }
+}
+
+/// Which branches to fetch per-branch CI for, given a repo's local branches. Only
+/// when the repo has several (single-branch repos are covered by the default-branch
+/// `ci`), and only branches with an upstream — local-only branches have no remote
+/// checks, so they cost no request. The default branch may appear here; the fetch
+/// loop skips re-fetching it since (4) already has it.
+fn ci_refs_for(branches: &[BranchInfo]) -> Vec<String> {
+    if branches.len() > 1 {
+        branches
+            .iter()
+            .filter(|b| b.has_upstream)
+            .map(|b| b.name.clone())
+            .collect()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Most pushed branches we'll fetch per-branch CI for in one repo — a safety valve
+/// so a repo with dozens of pushed branches can't dominate the rate budget. Well
+/// above a typical repo's handful of active branches.
+const CI_BRANCH_CAP: usize = 10;
 
 /// Fetch the per-repo drill-in detail (open PRs + top contributors) for the
 /// detail pane. Best-effort: a section that fails (or has no data) is empty
@@ -589,6 +668,8 @@ struct PrResponse {
     draft: Option<bool>,
     user: Option<UserResponse>,
     head: Option<HeadResponse>,
+    /// The branch the PR targets (`base.ref`), so the count lands on that branch.
+    base: Option<BaseResponse>,
     #[serde(default)]
     requested_reviewers: Vec<UserResponse>,
 }
@@ -602,6 +683,26 @@ struct UserResponse {
 struct HeadResponse {
     #[serde(rename = "ref")]
     r#ref: String,
+}
+
+/// The PR's target branch (`base.ref`) — the branch it lands on, used to
+/// attribute the open-PR count to the right branch in the dashboard.
+#[derive(serde::Deserialize)]
+struct BaseResponse {
+    #[serde(rename = "ref")]
+    r#ref: String,
+}
+
+/// Tally open PRs by the branch they target (`base.ref`). A PR whose base wasn't
+/// captured is omitted from the map but still counted in the total elsewhere.
+fn count_by_base(prs: &[PrResponse]) -> HashMap<String, u32> {
+    let mut by_base: HashMap<String, u32> = HashMap::new();
+    for pr in prs {
+        if let Some(base) = &pr.base {
+            *by_base.entry(base.r#ref.clone()).or_default() += 1;
+        }
+    }
+    by_base
 }
 
 /// `GET /repos/{owner}/{repo}/contributors` — login + commit count. `login` is
@@ -752,6 +853,62 @@ mod tests {
             .map(|u| u.login.as_str())
             .collect();
         assert_eq!(logins, ["bob", "carol"]);
+    }
+
+    /// Open PRs tally by the branch they target: the total counts every PR while
+    /// the by-base map groups on `base.ref`, omitting a PR whose base is absent.
+    #[test]
+    fn open_prs_tally_by_base_branch() {
+        let json = r#"[
+            {"number":1,"title":"a","html_url":"u","base":{"ref":"main"}},
+            {"number":2,"title":"b","html_url":"u","base":{"ref":"main"}},
+            {"number":3,"title":"c","html_url":"u","base":{"ref":"develop"}},
+            {"number":4,"title":"d","html_url":"u"}
+        ]"#;
+        let prs: Vec<PrResponse> = serde_json::from_str(json).unwrap();
+        assert_eq!(prs.len(), 4, "total counts every PR");
+        let by_base = count_by_base(&prs);
+        assert_eq!(by_base.get("main"), Some(&2));
+        assert_eq!(by_base.get("develop"), Some(&1));
+        assert_eq!(by_base.len(), 2, "PR #4 (no base) is omitted from the map");
+    }
+
+    /// Per-branch CI is fetched only for multi-branch repos, and only for pushed
+    /// branches — a single-branch repo (covered by the default-branch `ci`) and any
+    /// local-only branch cost no extra request.
+    #[test]
+    fn ci_refs_selects_pushed_branches_of_multi_branch_repos() {
+        let branch = |name: &str, has_upstream: bool| BranchInfo {
+            name: name.into(),
+            ahead: 0,
+            behind: 0,
+            has_upstream,
+            is_current: false,
+            last_commit: None,
+        };
+
+        // Single-branch repo: nothing to fetch, even when that branch is pushed.
+        assert!(ci_refs_for(&[branch("main", true)]).is_empty());
+
+        // Multi-branch: only the pushed branches; the local-only one is skipped.
+        let refs = ci_refs_for(&[
+            branch("main", true),
+            branch("feat/x", true),
+            branch("scratch", false),
+        ]);
+        assert_eq!(refs, ["main", "feat/x"]);
+    }
+
+    /// Open PRs are counted from the pulls list (regular REST budget, not the
+    /// rate-limited search API) with `Vec<IgnoredAny>` — no per-PR allocation,
+    /// just the array length stored as `open_prs`.
+    #[test]
+    fn open_pr_count_is_the_pulls_array_length() {
+        let three: Vec<serde::de::IgnoredAny> =
+            serde_json::from_str(r#"[{"number":1},{"number":2},{"number":3}]"#).unwrap();
+        assert_eq!(three.len() as u32, 3);
+        let none: Vec<serde::de::IgnoredAny> = serde_json::from_str("[]").unwrap();
+        assert_eq!(none.len(), 0);
     }
 
     #[test]

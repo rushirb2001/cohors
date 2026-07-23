@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 34)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
-│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
-│ ▀▐▖▀█▀▗▌▀  (demo)                                 │  quiet · 12 weeks                            │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
+│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
+│ ▀▐▖▀█▀▗▌▀  (demo)                                                     │  quiet · 12 weeks        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (1 of 1 repositories) ─────────────────────────────────────────────────────────────────╮
 │ ████████████████████████████████████████████████████████████████████████████████████████████████ │
@@ -23,10 +23,10 @@ expression: "render_to_string(&app, 100, 34)"
 ├──────────────────────────────────────────────────────────────────────────────────────────────────┤
 │ load-tester  ·  main                                                          Enter: full detail │
 │                                                                                                  │
-│ Changes      clean                  │ Last commit  1w ago — chore: add load-test harnesses (mock │
-│ Stash        none                   │              origin, HTTP load driver, quota-RPC pgbench)  │
-│ Upstream     1 ahead  (origin/main) │              + ignore results and refresh the CI perf…     │
-│ Remote       no GitHub remote       │                                                            │
+│ Changes      clean                  │ Release      No Releases                                   │
+│ Stash        none                   │ Last commit  1w ago — chore: add load-test harnesses (mock │
+│ Upstream     1 ahead  (origin/main) │              origin, HTTP load driver, quota-RPC pgbench)  │
+│ Remote       no GitHub remote       │              + ignore results and refresh the CI perf…     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
 ╭─────────────────────────────────┬──────────────────────────────┬─────────────────────────────────╮

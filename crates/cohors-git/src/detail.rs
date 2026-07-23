@@ -174,28 +174,28 @@ fn recent_commits(repo: &git2::Repository) -> Vec<CommitMeta> {
         let Ok(commit) = repo.find_commit(oid) else {
             continue;
         };
+        out.push(commit_meta_of(&commit));
+    }
+    out
+}
 
-        let short_id = short_id_of(&commit);
-        // Author display name; `Some` only when the bytes are valid UTF-8.
-        let author = commit.author().name().unwrap_or_default().to_string();
-        let timestamp = commit.time().seconds();
-        // `summary()` is `Result<Option<&str>, _>` — the first line of the
-        // message; empty on a decode error or a missing summary.
-        let summary = commit
+/// Build the shared [`CommitMeta`] from a git2 commit — short id, author name,
+/// commit time, and the summary (first message line) — tolerating decode
+/// failures (empty strings rather than errors).
+#[cfg(feature = "git2-fallback")]
+pub(crate) fn commit_meta_of(commit: &git2::Commit<'_>) -> CommitMeta {
+    CommitMeta {
+        short_id: short_id_of(commit),
+        // `Some` only when the bytes are valid UTF-8.
+        author: commit.author().name().unwrap_or_default().to_string(),
+        timestamp: commit.time().seconds(),
+        summary: commit
             .summary()
             .ok()
             .flatten()
             .unwrap_or_default()
-            .to_string();
-
-        out.push(CommitMeta {
-            short_id,
-            author,
-            timestamp,
-            summary,
-        });
+            .to_string(),
     }
-    out
 }
 
 /// Working-tree changes (staged + modified + untracked), each tagged with a
@@ -293,7 +293,7 @@ const INDEX_FLAGS: git2::Status = git2::Status::INDEX_NEW
 /// branches yields an empty list. Each branch is compared against *its own*
 /// upstream (not HEAD's), so "which branch has unpushed work" reads directly.
 #[cfg(feature = "git2-fallback")]
-fn local_branches(repo: &git2::Repository, current: Option<&str>) -> Vec<BranchInfo> {
+pub(crate) fn local_branches(repo: &git2::Repository, current: Option<&str>) -> Vec<BranchInfo> {
     let Ok(branches) = repo.branches(Some(git2::BranchType::Local)) else {
         return Vec::new();
     };
@@ -302,12 +302,18 @@ fn local_branches(repo: &git2::Repository, current: Option<&str>) -> Vec<BranchI
         .filter_map(|b| b.ok())
         .filter_map(|(branch, _)| {
             let name = branch.name().ok().flatten()?.to_string();
+            let tip = branch.get().target();
             let mut info = BranchInfo {
                 is_current: Some(name.as_str()) == current,
                 name,
+                // The branch's own tip commit, so each branch shows its last
+                // activity — not HEAD's.
+                last_commit: tip
+                    .and_then(|oid| repo.find_commit(oid).ok())
+                    .map(|c| commit_meta_of(&c)),
                 ..BranchInfo::default()
             };
-            if let (Ok(upstream), Some(local_oid)) = (branch.upstream(), branch.get().target())
+            if let (Ok(upstream), Some(local_oid)) = (branch.upstream(), tip)
                 && let Some(upstream_oid) = upstream.get().target()
                 && let Ok((ahead, behind)) = repo.graph_ahead_behind(local_oid, upstream_oid)
             {

@@ -3,22 +3,22 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 72, 32)"
 ---
 ╭──────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z   │  Fleet activity                        │
-│ ▟██▌█▐██▙  ~/projects (+1)  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁              │
-│ ▀▐▖▀█▀▗▌▀                   │  quiet · 12 weeks                      │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                 │  Fleet activity          │
+│ ▟██▌█▐██▙  ~/projects (+1)                │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
+│ ▀▐▖▀█▀▗▌▀                                 │  quiet · 12 weeks        │
 ╰──────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────╮
 │ ████████████████████████████████████████████████████████████████████ │
 │ 1 at risk · 2 warning · 1 minor · 1 calm                             │
 ╰──────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────╮
-│    Repo                    Sync   CI  Last  Status                   │
-│▌   legacy-billing                           could not read .git (per…│
-│  ○ payments @main          ↑2     ■     2h  ↑2 unpushed              │
-│  ○ web-app @feat/checkout  ↓5     ■    20m  ↓5 behind — pull         │
-│  ○ infra @a1b2c3d          local  ■     1w  4 uncommitted changes    │
-│  ○ auth-service @main      local  ■     3d  up to date               │
-│                                                                      │
+│    Repo                     Sync   CI  Last  Status                  │
+│▌   legacy-billing                            could not read .git (pe…│
+│  ○ payments @main           ↑2     ■     2h  ↑2 unpushed             │
+│    ▷ @feat/checkout-rework  ↑5 ↓1  ■     1d  5 ahead · 1 behind      │
+│  ○ web-app @feat/checkout   ↓5     ■    20m  ↓5 behind — pull        │
+│  ○ infra @a1b2c3d           local  ■     1w  4 uncommitted changes   │
+│  ○ auth-service @main       local  ■     3d  up to date              │
 │                                                                      │
 │                                                                      │
 ├──────────────────────────────────────────────────────────────────────┤

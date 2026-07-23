@@ -32,14 +32,18 @@ pub(crate) fn spinner_frame(tick: usize) -> &'static str {
 /// truth (with ASCII fallback under `NO_COLOR`).
 pub(crate) struct Theme {
     color: bool,
+    /// Whether the terminal has a dark background, so the cards flip to a dark
+    /// wash (letting the native accent colours read) instead of a light one.
+    dark: bool,
     glyphs: Glyphs,
 }
 
 impl Theme {
-    fn from_env(icons: cohors_config::IconMode) -> Self {
+    fn from_env(icons: cohors_config::IconMode, dark: bool) -> Self {
         let color = std::env::var_os("NO_COLOR").is_none();
         Self {
             color,
+            dark,
             glyphs: Glyphs::resolve(icons, !color),
         }
     }
@@ -90,10 +94,49 @@ impl Theme {
     /// terminal theme (spans that pick their own fg still patch over it).
     /// Dropped entirely under NO_COLOR.
     fn dock_card(&self) -> Style {
-        if self.color {
+        if !self.color {
+            Style::new()
+        } else if self.dark {
+            // Dark terminal: a dark-grey card with a light base fg, so the native
+            // accent colours (green / yellow / cyan) read as they do off-card.
+            Style::new().bg(Color::Indexed(236)).fg(Color::Indexed(253))
+        } else {
             Style::new().bg(Color::Indexed(255)).fg(Color::Indexed(235))
+        }
+    }
+
+    /// The footer hint bar's card wash: the same idea as [`Self::dock_card`], but
+    /// nudged toward the brand — a faint purple (~6% `SPIDER_PURPLE` over white),
+    /// with the same dark base fg so keys/labels stay readable on any terminal
+    /// theme (accent spans patch their own colour over it). Dropped under NO_COLOR.
+    fn hint_card(&self) -> Style {
+        if !self.color {
+            Style::new()
+        } else if self.dark {
+            // Dark terminal: a dark purple wash + light base fg, so the native
+            // accent colours read while the brand tint stays present.
+            Style::new()
+                .bg(Color::Rgb(0x2E, 0x27, 0x3E))
+                .fg(Color::Indexed(253))
         } else {
             Style::new()
+                .bg(Color::Rgb(0xFA, 0xF5, 0xFF))
+                .fg(Color::Indexed(235))
+        }
+    }
+
+    /// The selected-row wash: a soft, dark-adaptive brand tint rather than a full
+    /// reverse — so a multi-line (multi-branch) row doesn't become a harsh block,
+    /// and dim cells (PRs, activity) stay legible on the highlight (reverse turns
+    /// dim text invisible). Under NO_COLOR it falls back to reverse, the only
+    /// structural way to mark a row.
+    fn selection(&self) -> Style {
+        if !self.color {
+            Style::new().add_modifier(Modifier::REVERSED)
+        } else if self.dark {
+            Style::new().bg(Color::Rgb(0x4A, 0x3D, 0x74))
+        } else {
+            Style::new().bg(Color::Rgb(0xC9, 0xB8, 0xF0))
         }
     }
 }
@@ -101,13 +144,13 @@ impl Theme {
 /// Render the whole dashboard for one frame. `now` (Unix seconds) is injected
 /// so relative commit ages are deterministic in tests.
 pub fn render(frame: &mut Frame, app: &App, now: i64) {
-    let theme = Theme::from_env(app.icons);
+    let theme = Theme::from_env(app.icons, app.dark);
     let area = frame.area();
 
     // Top-level layout: the branded header box, the body, and a boxed key-hint
     // footer — one labelled group per row, each wrapping if the terminal is
     // narrow, so no command is ever truncated.
-    let footer_h = footer_height(app, area.width, &theme);
+    let footer_h = footer_height(app, area.width);
     let [header_area, body_area, footer_area] = Layout::vertical([
         Constraint::Length(5),
         Constraint::Min(0),
@@ -124,27 +167,17 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
             render_empty(frame, body_area, app, &theme);
         }
     } else {
-        // A strip on top — the fuzzy input while filtering, otherwise the
-        // Attention panel — then the Repositories panel, which hosts the context
-        // pane inside its own box (bottom rows) when the terminal is tall enough.
-        // With vertical room the attention panel is its full-width card (severity
-        // bar + bucket counts, two body rows); on a short terminal it collapses
-        // to a single bucket line.
-        let strip_height = if app.mode == Mode::Filter {
-            1
-        } else if body_area.height >= 14 {
-            4
-        } else {
-            3
-        };
+        // The Attention panel on top, then the Repositories panel (which hosts the
+        // context pane, and the fuzzy filter input, inside its own box). With
+        // vertical room the attention panel is its full-width card (severity bar +
+        // bucket counts); on a short terminal it collapses to a single bucket line.
+        // The attention card stays put while filtering — only the filter input box
+        // appears (inside the repos panel), so `/` doesn't reshuffle the layout.
+        let strip_height = if body_area.height >= 14 { 4 } else { 3 };
         let [strip, rest] =
             Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
                 .areas(body_area);
-        if app.mode == Mode::Filter {
-            render_filter_input(frame, strip, app);
-        } else {
-            render_attention_panel(frame, strip, app, now, &theme);
-        }
+        render_attention_panel(frame, strip, app, now, &theme);
         render_repos_panel(frame, rest, app, now, &theme);
     }
 
@@ -159,6 +192,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
             | Mode::CommandRun
             | Mode::Confirm
             | Mode::OpenWith
+            | Mode::PushBranch
             | Mode::Detail
     );
     if overlay_open {
@@ -182,6 +216,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::OpenWith {
         render_open_with(frame, area, app, &theme);
+    }
+    if app.mode == Mode::PushBranch {
+        render_push_branch(frame, area, app, &theme);
     }
     if app.mode == Mode::Detail {
         render_detail(frame, area, app, now, &theme);

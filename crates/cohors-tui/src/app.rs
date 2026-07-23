@@ -32,6 +32,8 @@ pub enum Mode {
     Confirm,
     /// The "Open with…" picker (choose an editor / reveal / lazygit).
     OpenWith,
+    /// The "push which branch?" picker for a repo with several local branches.
+    PushBranch,
     /// The per-repo drill-in detail pane (commits / files / branches / stashes).
     Detail,
 }
@@ -76,6 +78,8 @@ pub enum Cmd {
     OpenWithAccept,
     /// Remember the picker's highlighted editor as the default.
     OpenWithSetDefault,
+    /// Push the branch highlighted in the multi-branch push picker.
+    PushBranchAccept,
     /// Adopt the auto-detected roots from the empty-state rescue prompt.
     UseSuggestedRoots,
 }
@@ -307,6 +311,8 @@ pub struct App {
     pub hints_hidden: bool,
     /// The "Open with…" picker (`Some` ⇒ `Mode::OpenWith`).
     pub open_with: Option<OpenWith>,
+    /// The "push which branch?" picker (`Some` ⇒ `Mode::PushBranch`).
+    pub push_pick: Option<PushPick>,
     /// The repo table's scroll offset, cached from the last render (interior
     /// mutability, like the overlay scroll states) so the panel can show a
     /// "… N more" affordance when the list overflows the window.
@@ -318,6 +324,9 @@ pub struct App {
     pub suggested_roots: Vec<String>,
     /// Configured glyph mode for the dashboard (auto / ascii / unicode / nerd).
     pub icons: cohors_config::IconMode,
+    /// Whether the terminal has a dark background (detected once at startup), so
+    /// the dock / hint cards can adapt their wash. Defaults to light.
+    pub dark: bool,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -374,6 +383,16 @@ pub struct OpenWith {
     pub default_command: Option<String>,
 }
 
+/// State for the "push which branch?" picker: the repo it targets, its local
+/// branches (current first), and the highlighted row. The repo's path and name are
+/// resolved from `App::repos` by `id` when the push actually runs.
+pub struct PushPick {
+    pub id: RepoId,
+    pub name: String,
+    pub branches: Vec<cohors_core::BranchInfo>,
+    pub cursor: usize,
+}
+
 impl OpenWith {
     pub fn new(openers: Vec<Opener>, default_command: Option<String>) -> Self {
         // Start the cursor on the current default editor when it's in the list.
@@ -418,10 +437,12 @@ impl App {
             confirm: None,
             hints_hidden: false,
             open_with: None,
+            push_pick: None,
             repos_scroll: std::cell::Cell::new(0),
             detail: None,
             suggested_roots: Vec::new(),
             icons: cohors_config::IconMode::default(),
+            dark: false,
         }
     }
 
@@ -556,6 +577,7 @@ impl App {
             Mode::CommandRun => self.on_key_command_run(key),
             Mode::Confirm => self.on_key_confirm(key),
             Mode::OpenWith => self.on_key_open_with(key),
+            Mode::PushBranch => self.on_key_push_branch(key),
             Mode::Detail => self.on_key_detail(key),
         }
     }
@@ -628,6 +650,31 @@ impl App {
         Cmd::None
     }
 
+    fn on_key_push_branch(&mut self, key: KeyEvent) -> Cmd {
+        let n = self.push_pick.as_ref().map_or(0, |p| p.branches.len());
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.mode = Mode::Normal;
+                self.push_pick = None;
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(p) = &mut self.push_pick {
+                    p.cursor = p.cursor.saturating_sub(1);
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(p) = &mut self.push_pick
+                    && p.cursor + 1 < n
+                {
+                    p.cursor += 1;
+                }
+            }
+            KeyCode::Enter => return Cmd::PushBranchAccept,
+            _ => {}
+        }
+        Cmd::None
+    }
+
     fn on_key_normal(&mut self, key: KeyEvent) -> Cmd {
         match key.code {
             KeyCode::Char('q') => return Cmd::Quit,
@@ -688,17 +735,23 @@ impl App {
 
     fn on_key_filter(&mut self, key: KeyEvent) -> Cmd {
         match key.code {
-            // Esc clears the filter and leaves filter mode.
+            // The list filters live as you type. Esc cancels (clears + closes).
             KeyCode::Esc => {
                 self.filter.clear();
                 self.selected = 0;
                 self.mode = Mode::Normal;
             }
-            // Enter confirms, keeping the filter active.
+            // Enter confirms: keep the filtered list, return to navigation.
             KeyCode::Enter => self.mode = Mode::Normal,
+            // Backspace deletes a char; backspacing past the empty query removes
+            // the leading `/` and closes the filter (nothing left to filter on).
             KeyCode::Backspace => {
-                self.filter.pop();
-                self.selected = 0;
+                if self.filter.is_empty() {
+                    self.mode = Mode::Normal;
+                } else {
+                    self.filter.pop();
+                    self.selected = 0;
+                }
             }
             // Arrows navigate the filtered list while typing.
             KeyCode::Down => self.move_down(),
@@ -1088,6 +1141,7 @@ mod tests {
             error: None,
             activity: Vec::new(),
             groups: Vec::new(),
+            branches: Vec::new(),
         }
     }
 
@@ -1353,6 +1407,31 @@ mod tests {
         assert_eq!(app.visible_len(), 2);
     }
 
+    /// Live filtering: typing narrows immediately, and backspacing past the
+    /// empty query removes the leading `/` and closes the filter.
+    #[test]
+    fn filter_backspace_past_empty_closes() {
+        let mut app = app_with(&[("payments", false), ("auth", false)]);
+        app.on_key(key('/'));
+        assert_eq!(app.mode, Mode::Filter);
+
+        // Typing narrows live — no Enter needed.
+        app.on_key(key('p'));
+        assert_eq!(app.filter, "p");
+        assert_eq!(app.visible_len(), 1);
+
+        // Backspace deletes the char but stays in filter mode (query now empty).
+        app.on_key(code(KeyCode::Backspace));
+        assert!(app.filter.is_empty());
+        assert_eq!(app.mode, Mode::Filter);
+        assert_eq!(app.visible_len(), 2);
+
+        // Backspacing again (past empty) closes the filter.
+        app.on_key(code(KeyCode::Backspace));
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.filter.is_empty());
+    }
+
     #[test]
     fn quit_on_q_and_ctrl_c() {
         let mut app = app_with(&[("a", false)]);
@@ -1367,6 +1446,34 @@ mod tests {
     fn refresh_key_requests_rescan() {
         let mut app = app_with(&[("a", false)]);
         assert_eq!(app.on_key(key('r')), Cmd::Refresh);
+    }
+
+    #[test]
+    fn push_branch_picker_navigates_accepts_and_cancels() {
+        let branch = |name: &str, is_current: bool| cohors_core::BranchInfo {
+            name: name.into(),
+            ahead: 0,
+            behind: 0,
+            has_upstream: true,
+            is_current,
+            last_commit: None,
+        };
+        let mut app = app_with(&[("a", false)]);
+        app.mode = Mode::PushBranch;
+        app.push_pick = Some(PushPick {
+            id: RepoId("a".into()),
+            name: "a".into(),
+            branches: vec![branch("main", true), branch("feat", false)],
+            cursor: 0,
+        });
+        // Down moves the highlight; Enter asks the loop to push the chosen branch.
+        assert_eq!(app.on_key(code(KeyCode::Down)), Cmd::None);
+        assert_eq!(app.push_pick.as_ref().unwrap().cursor, 1);
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::PushBranchAccept);
+        // Esc closes the picker.
+        app.on_key(code(KeyCode::Esc));
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.push_pick.is_none());
     }
 
     #[test]

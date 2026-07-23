@@ -67,6 +67,44 @@ fn help_flag_succeeds() {
 }
 
 #[test]
+fn help_opens_with_the_wordmark_and_closes_with_next_steps() {
+    // Help is the first thing many people ever see of cohors, so it carries the
+    // same masthead and "here is what to do next" footer as every other surface.
+    let cache = TempDir::new().unwrap();
+    let assert = cohors(cache.path()).arg("--help").assert().success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("cohors"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("every git repo you own, on one screen"),
+        "the masthead tagline should lead the help: {stdout}"
+    );
+    assert!(
+        stdout.contains("cohors demo"),
+        "the footer should offer a zero-setup first step: {stdout}"
+    );
+}
+
+#[test]
+fn mcp_at_a_terminal_explains_itself_instead_of_hanging() {
+    // An MCP client always pipes stdin. Here stdin is closed rather than a
+    // terminal, so this exercises the server path: it must not print the guide.
+    // The guide itself is covered by the terminal check inside `run_mcp`; what
+    // matters for a test is that the two paths stay distinct.
+    let cache = TempDir::new().unwrap();
+    let assert = cohors(cache.path())
+        .args(["mcp", "--help"])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("stdio"),
+        "mcp help should say a client spawns it over stdio: {stdout}"
+    );
+}
+
+#[test]
 fn scan_outputs_json_array_with_repo() {
     let cache = TempDir::new().unwrap();
     let root = TempDir::new().unwrap();
@@ -105,13 +143,25 @@ fn scan_empty_root_is_empty_json_array() {
 }
 
 #[test]
-fn action_requires_a_selector() {
-    // Bulk actions never silently hit the whole fleet — `--select` is required.
+fn action_without_a_selector_explains_itself() {
+    // Bulk actions still never silently hit the whole fleet, but a missing
+    // `--select` is a question, not a punishment: it prints the verb's guide and
+    // acts on nothing.
     let cache = TempDir::new().unwrap();
-    cohors(cache.path())
+    let assert = cohors(cache.path())
         .args(["fetch", "--config", MISSING_CONFIG])
         .assert()
-        .failure();
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("cohors fetch --select dirty"),
+        "the guide should offer the selector vocabulary: {stdout}"
+    );
+    assert!(
+        stdout.contains("--dry-run"),
+        "the guide should point at a safe first step: {stdout}"
+    );
 }
 
 #[test]
@@ -135,7 +185,11 @@ fn fetch_dry_run_lists_targets_without_acting() {
         .success();
 
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    assert!(stdout.contains("Would fetch"), "stdout: {stdout}");
+    assert!(stdout.contains("would fetch"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("nothing will change"),
+        "a dry run should say so plainly: {stdout}"
+    );
     assert!(stdout.contains("myrepo"), "stdout: {stdout}");
 }
 

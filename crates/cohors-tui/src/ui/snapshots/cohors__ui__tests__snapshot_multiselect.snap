@@ -3,15 +3,15 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 20)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
-│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
-│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                            │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
+│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
+│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
 │ 1 at risk · 2 warning · 1 minor · 1 calm                                                         │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo                    Sync   PRs    CI       Last  Activity      Status                     │
+│    Repo                     Sync   PRs    CI       Last  Activity      Status                    │
 │                                             ↓ 4 more                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────

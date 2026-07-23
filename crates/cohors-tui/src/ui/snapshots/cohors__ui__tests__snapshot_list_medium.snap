@@ -3,22 +3,22 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 88, 32)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                  │
-│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁        │
-│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                 │  Fleet activity          │
+│ ▟██▌█▐██▙  All your git repositories at a glance          │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
+│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                │  quiet · 12 weeks        │
 ╰──────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────╮
 │ ████████████████████████████████████████████████████████████████████████████████████ │
 │ 1 at risk · 2 warning · 1 minor · 1 calm                                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────╯
 ╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────╮
-│    Repo                    Sync   PRs    CI       Last  Status                       │
-│▌   legacy-billing                                       could not read .git (permiss…│
-│  ○ payments @main          ↑2     2      passing    2h  ↑2 unpushed                  │
-│  ○ web-app @feat/checkout  ↓5     0      failing   20m  ↓5 behind — pull             │
-│  ○ infra @a1b2c3d          local  local  local      1w  4 uncommitted changes        │
-│  ○ auth-service @main      local  1      pending    3d  up to date                   │
-│                                                                                      │
+│    Repo                     Sync   PRs    CI       Last  Status                      │
+│▌   legacy-billing                                        could not read .git (permis…│
+│  ○ payments @main           ↑2     2      passing    2h  ↑2 unpushed                 │
+│    ▷ @feat/checkout-rework  ↑5 ↓1  0      failing    1d  5 ahead · 1 behind          │
+│  ○ web-app @feat/checkout   ↓5     0      failing   20m  ↓5 behind — pull            │
+│  ○ infra @a1b2c3d           local  local  local      1w  4 uncommitted changes       │
+│  ○ auth-service @main       local  1      pending    3d  up to date                  │
 │                                                                                      │
 │                                                                                      │
 ├──────────────────────────────────────────────────────────────────────────────────────┤

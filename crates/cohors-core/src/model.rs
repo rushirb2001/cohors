@@ -5,8 +5,12 @@
 //! and filters; the git/GitHub adapters produce them and `cohors-core` arranges
 //! them.
 
+use std::collections::HashMap;
+
 use camino::Utf8PathBuf;
 use serde::{Deserialize, Serialize};
+
+use crate::detail::BranchInfo;
 
 /// Stable identity for a repo.
 ///
@@ -189,10 +193,22 @@ pub struct RemoteInfo {
     pub default_branch: String,
     /// Open pull requests on the repo.
     pub open_prs: u32,
+    /// Open PRs grouped by the branch they target (base `ref` → count), so the
+    /// dashboard can show each PR count on the branch it lands on. Sums to
+    /// `open_prs` for PRs whose base was captured.
+    #[serde(default)]
+    pub open_prs_by_base: HashMap<String, u32>,
     /// PRs requesting the current user's review.
     pub prs_awaiting_review: u32,
     /// CI/checks status of the default branch's latest commit.
     pub ci: CiStatus,
+    /// CI/checks status per local branch (branch name → status), populated only
+    /// for repos with several local branches so each branch row can show its own
+    /// checks. CI is keyed by ref, not the worktree, so this is a real per-branch
+    /// fetch. Empty for single-branch repos (their `ci` above suffices) and older
+    /// cached snapshots.
+    #[serde(default)]
+    pub ci_by_branch: HashMap<String, CiStatus>,
     /// The repo's GitHub description, if set — a human label for what it does.
     /// All identity/popularity fields below are parsed from the same `GET /repos`
     /// call the enrich pass already makes (zero extra requests) and default so
@@ -371,6 +387,12 @@ pub struct RepoSnapshot {
     /// names.
     #[serde(default)]
     pub groups: Vec<String>,
+    /// All local branches, current-first — so the dashboard can list each branch
+    /// (with its own sync + last commit) beneath the repo, not just HEAD. Empty
+    /// for remote-only repos and old caches; the checked-out branch is also
+    /// carried in `branch`, and its worktree state lives in `worktree`.
+    #[serde(default)]
+    pub branches: Vec<BranchInfo>,
 }
 
 impl RepoSnapshot {
@@ -402,6 +424,7 @@ impl RepoSnapshot {
             error: Some(error.into()),
             activity: Vec::new(),
             groups: Vec::new(),
+            branches: Vec::new(),
         }
     }
 
@@ -500,6 +523,7 @@ pub(crate) fn sample(
         error: None,
         activity: Vec::new(),
         groups: Vec::new(),
+        branches: Vec::new(),
     }
 }
 
@@ -586,6 +610,44 @@ mod tests {
         let json = serde_json::to_string(&s).expect("serialize");
         let back: RepoSnapshot = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(s, back);
+    }
+
+    #[test]
+    fn branch_fields_round_trip_and_stay_backward_compatible() {
+        let mut s = sample("r", "r", true, 0, 0, Some(1_700_000_000));
+        s.branches = vec![BranchInfo {
+            name: "main".to_string(),
+            ahead: 0,
+            behind: 2,
+            has_upstream: true,
+            is_current: true,
+            last_commit: None,
+        }];
+        s.remote = Some(RemoteInfo {
+            host: "github.com".to_string(),
+            owner: "o".to_string(),
+            repo: "r".to_string(),
+            default_branch: "main".to_string(),
+            open_prs: 5,
+            open_prs_by_base: HashMap::from([("main".to_string(), 5)]),
+            ci_by_branch: HashMap::new(),
+            prs_awaiting_review: 0,
+            ci: CiStatus::Passing,
+            description: None,
+            topics: Vec::new(),
+            stars: 0,
+            forks: 0,
+            watchers: 0,
+        });
+        let back: RepoSnapshot = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(s, back);
+
+        // An old cache written before these fields still deserializes: the new
+        // fields fall back to their empty defaults rather than erroring.
+        let legacy = r#"{"id":"r","name":"r","branch":{"kind":"named","value":"main"}}"#;
+        let old: RepoSnapshot = serde_json::from_str(legacy).expect("legacy cache loads");
+        assert!(old.branches.is_empty());
+        assert!(old.remote.is_none());
     }
 }
 

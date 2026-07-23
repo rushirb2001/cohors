@@ -19,6 +19,66 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-23
+
+A readability and onboarding release. Every repo row now carries its per-branch
+truth, every overlay shares one visual language, and every command surface
+introduces itself instead of erroring at you.
+
+### Added
+
+- **Per-branch CI and sync status.** Multi-branch repos expand into a row per
+  branch, each with its own checks, ahead/behind, and status. CI is keyed by ref
+  rather than the checked-out worktree, so this is a real per-branch fetch and not
+  an echo of the default branch. Capped at 10 branches per repo to stay inside the
+  GitHub rate budget; single-branch repos are unaffected.
+- **Open PR counts land on their base branch**, so a PR shows against the branch
+  it actually targets.
+- **`P` on a multi-branch repo asks which branch to push**, via a picker, instead
+  of assuming the current one. Bulk push now targets only repos that actually have
+  unpushed commits.
+- **A first-run launch screen**, in the plain terminal before the dashboard: the
+  super-fleet view lists every folder repos were detected under, and `--root` gets
+  its own scoped view naming the folder it will walk. Enter launches, `q` quits.
+  `--watch` skips both, so a live loop needs no keypress.
+- **`cohors scan` prints a human report** at a terminal: repos grouped by urgency,
+  the commands that clear each group, and how long the sweep took, with progress
+  announced on stderr while the disk walk runs. Piped, redirected, or with
+  `--json`, it emits the same raw JSON it always did.
+- **`cohors mcp` run by hand explains itself** rather than sitting silent waiting
+  for a client that will never speak: what the server is, the copy-pasteable
+  registration line for Claude Code *and* the JSON `mcpServers` block for every
+  other client (both with the absolute binary path, since agents spawn with a
+  stripped `PATH`), and which tools each `--allow-*` flag unlocks.
+
+### Changed
+
+- **Every overlay shares one framed-table language.** The standup, detail pane,
+  command palette, shell prompt, confirm dialog, open-with picker, and run output
+  were rebuilt as two divider-joined columns with no floating inner boxes. The run
+  output auto-collapses to its content when space is tight.
+- **The action commands teach instead of erroring.** A missing `--select`, `-m`,
+  or `<COMMAND>` now prints the verb's own guide: what it does, its safety
+  posture, the selector vocabulary, and a `--dry-run` first step, and exits 0
+  having touched nothing.
+- **`cohors --help` carries the masthead**, a brand-matched clap palette, and a
+  "start here" footer with the four shortest paths to seeing your own fleet.
+  `cohors web` gained the same masthead and section grammar.
+- **Readability pass on the dashboard:** every repo name is bold, branch rows are
+  italic and marked with a hollow triangle, and the selection is a soft wash
+  rather than a reverse-video block that swallowed dim cells.
+
+### Fixed
+
+- **GitHub enrichment applies refreshed data** even when a remote was already set,
+  so CI and PR counts stop going stale behind a warm cache. Stale cache entries are
+  now evicted on access as well as insert.
+- **Open PRs are counted via the REST `pulls` endpoint** (5000/hr) instead of the
+  search API (30/min), which was rate-limiting real fleets.
+- **The MCP server handles a client disconnect gracefully** instead of erroring on
+  a broken pipe, and `--allow-open` is actually wired to the `open` tool.
+- **Content search runs in parallel** across repos.
+
 ## [0.5.14] — 2026-07-05
 
 ### Added

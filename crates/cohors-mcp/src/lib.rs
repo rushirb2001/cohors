@@ -418,7 +418,14 @@ fn list_prs(args: &Value, ctx: &Ctx, now: i64) -> Value {
         .iter()
         .filter_map(|s| {
             s.remote.as_ref().map(|r| {
-                json!({ "repo": s.id.0, "open_prs": r.open_prs, "awaiting_review": r.prs_awaiting_review })
+                json!({
+                    "repo": s.id.0,
+                    "open_prs": r.open_prs,
+                    // Open PRs grouped by the branch they target, so an agent can
+                    // see which branch each PR lands on.
+                    "open_prs_by_base": r.open_prs_by_base,
+                    "awaiting_review": r.prs_awaiting_review,
+                })
             })
         })
         .collect();
@@ -433,9 +440,15 @@ fn ci_status(args: &Value, ctx: &Ctx, now: i64) -> Value {
     let repos: Vec<Value> = selected
         .iter()
         .filter_map(|s| {
-            s.remote
-                .as_ref()
-                .map(|r| json!({ "repo": s.id.0, "ci": r.ci }))
+            s.remote.as_ref().map(|r| {
+                let mut obj = json!({ "repo": s.id.0, "ci": r.ci });
+                // Per-branch checks, when the repo has several branches — so an
+                // agent sees which branch is green/red, not just the default.
+                if !r.ci_by_branch.is_empty() {
+                    obj["ci_by_branch"] = json!(r.ci_by_branch);
+                }
+                obj
+            })
         })
         .collect();
     let excluded = selected.len() - repos.len();

@@ -19,7 +19,7 @@ members = [
 # Shared package metadata. Each crate inherits these with `field.workspace = true`
 # so version/edition/license stay consistent across the workspace.
 [workspace.package]
-version = "0.5.14"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -70,6 +70,8 @@ clap = { version = "4", features = ["derive"] }
 ratatui = "0.30"
 # Clipboard for the "copy path" action.
 arboard = "3"
+# Detect the terminal's background (OSC 11) so the cards adapt to dark/light.
+termbg = "0.5"
 
 # Remote adapter (cohors-github): blocking HTTP client with rustls TLS + JSON.
 ureq = { version = "2", features = ["json"] }

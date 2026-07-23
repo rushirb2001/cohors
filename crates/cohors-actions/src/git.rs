@@ -79,6 +79,39 @@ pub fn push(path: &Utf8Path, name: &str) -> Result<String, String> {
     }
 }
 
+/// Push one specific local branch to `origin` (`git push [-u] origin <branch>`),
+/// used when the user picks a branch that isn't the checked-out one. `set_upstream`
+/// adds `-u` for a branch that was never pushed, so it starts tracking. Non-fast-
+/// forward pushes are still rejected by git (never `--force`), so remote history is
+/// safe. Assumes the remote is named `origin` (the near-universal default); any
+/// other name surfaces git's own error verbatim.
+pub fn push_branch(
+    path: &Utf8Path,
+    name: &str,
+    branch: &str,
+    set_upstream: bool,
+) -> Result<String, String> {
+    let mut args = vec!["push"];
+    if set_upstream {
+        args.push("-u");
+    }
+    args.extend_from_slice(&["origin", branch]);
+    let out = run_git(path, &args)?;
+    if out.status.success() {
+        Ok(format!("pushed {name} ({branch})"))
+    } else {
+        let msg = first_line(&out.stderr).to_lowercase();
+        if msg.contains("rejected") || msg.contains("non-fast-forward") {
+            Err(format!("push {name} ({branch}): rejected (pull first)"))
+        } else {
+            Err(format!(
+                "push {name} ({branch}): {}",
+                first_line(&out.stderr)
+            ))
+        }
+    }
+}
+
 /// Stage everything (`git add -A`) and commit it with `message`. Stages tracked
 /// *and* untracked changes (a fleet-wide "snapshot my WIP"). "Nothing to commit"
 /// is a no-op success, not a failure (like [`stash_push`]). Never amends and
@@ -325,6 +358,57 @@ mod tests {
 
         let res = push(&work, "work");
         assert_eq!(res, Ok("pushed work".to_string()));
+    }
+
+    /// `push_branch` pushes a branch that is *not* checked out, setting upstream on
+    /// a never-pushed branch. The bare remote gains the ref without a checkout.
+    #[test]
+    fn push_branch_pushes_a_non_current_branch() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8Path::from_path(tmp.path()).unwrap();
+        let bare = root.join("remote.git");
+        let work = root.join("work");
+        let git = |dir: &Utf8Path, args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(dir.as_str())
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {:?}", out);
+        };
+        Command::new("git")
+            .args(["init", "--bare", bare.as_str()])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["init", "-b", "main", work.as_str()])
+            .output()
+            .unwrap();
+        git(&work, &["config", "user.email", "t@example.com"]);
+        git(&work, &["config", "user.name", "Tester"]);
+        git(&work, &["remote", "add", "origin", bare.as_str()]);
+        std::fs::write(work.join("a.txt"), "1").unwrap();
+        git(&work, &["add", "."]);
+        git(&work, &["commit", "-m", "one"]);
+        git(&work, &["push", "-u", "origin", "main"]);
+        // A feature branch with its own commit, then back to main so it isn't current.
+        git(&work, &["checkout", "-b", "feat"]);
+        std::fs::write(work.join("b.txt"), "2").unwrap();
+        git(&work, &["add", "."]);
+        git(&work, &["commit", "-m", "feat work"]);
+        git(&work, &["checkout", "main"]);
+
+        let res = push_branch(&work, "work", "feat", true);
+        assert_eq!(res, Ok("pushed work (feat)".to_string()));
+        let refs = Command::new("git")
+            .arg("-C")
+            .arg(bare.as_str())
+            .args(["branch", "--list"])
+            .output()
+            .unwrap();
+        assert!(String::from_utf8_lossy(&refs.stdout).contains("feat"));
     }
 
     /// `commit` stages tracked + untracked and commits; a second call with a

@@ -9,7 +9,8 @@
 
 use camino::Utf8Path;
 use cohors_core::{
-    Branch, CommitMeta, RepoOperation, RepoRef, RepoSnapshot, TagInfo, Upstream, WorktreeStatus,
+    Branch, BranchInfo, CommitMeta, RepoOperation, RepoRef, RepoSnapshot, TagInfo, Upstream,
+    WorktreeStatus,
 };
 use gix::bstr::{BStr, ByteSlice};
 
@@ -72,6 +73,7 @@ pub fn snapshot_repo(repo_ref: &RepoRef, now: i64) -> RepoSnapshot {
         activity: extras.activity,
         // Stamped after the scan by the Scanner (it holds the config `[groups]`).
         groups: Vec::new(),
+        branches: extras.branches,
     }
 }
 
@@ -141,6 +143,7 @@ struct Extras {
     last_fetch: Option<i64>,
     latest_tag: Option<TagInfo>,
     activity: Vec<u8>,
+    branches: Vec<BranchInfo>,
 }
 
 /// The history inputs a [`HistoryMemo`] is keyed on. If none of these moved,
@@ -265,6 +268,16 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
     // for determinism) — a fork tracking only `upstream` still enriches and
     // still counts as backed-up for the attention layer.
     extras.remote_url = remote_url(&repo);
+
+    // Local branches with per-branch sync + tip commit, current-first. Computed
+    // fresh (not memoized): any branch's tip can move without HEAD's ref moving,
+    // which is all the history memo keys on.
+    let current = repo
+        .head()
+        .ok()
+        .filter(|h| h.is_branch())
+        .and_then(|h| h.shorthand().ok().map(String::from));
+    extras.branches = crate::detail::local_branches(&repo, current.as_deref());
 
     // `stash_foreach` needs `&mut`, so do it last after the shared borrows end.
     // Index 0 is the most recent stash; capture its oid to time it afterward.

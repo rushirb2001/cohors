@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 64)"
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                         │  Fleet activity                              │
-│ ▟██▌█▐██▙  All your git repositories at a glance  │  ▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁                    │
-│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                        │  quiet · 12 weeks                            │
+│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
+│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
+│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        │
 ╰──────────────╭────────────────────────────────────────────────────────────────────╮──────────────╯
 ╭ Attention (4 │                                                                    │──────────────╮
 │ █████████████│  Help                                                              │█████████████ │
@@ -13,12 +13,12 @@ expression: "render_to_string(&app, 100, 64)"
 ╰──────────────│  Legend — what each column shows                                   │──────────────╯
 ╭ Repositories │    ↑2              commits ahead of upstream                       │──────────────╮
 │    Repo      │    ↓5              commits behind upstream                         │              │
-│▌   legacy-bil│    ●               in sync with upstream                           │d .git (permi…│
+│▌   legacy-bil│    ●               in sync with upstream                           │ad .git (perm…│
 │  ○ payments @│    local           no upstream (local only)                        │              │
-│  ○ web-app @f│    ● ● ●           CI: pass / fail / pending                       │ull           │
-│  ○ infra @a1b│    2pr             open pull requests                              │ changes      │
-│  ○ auth-servi│    3               changed files, all staged                       │              │
-│              │    3               changed files, some unstaged                    │              │
+│    ▷ @feat/ch│    ● ● ●           CI: pass / fail / pending                       │behind        │
+│  ○ web-app @f│    2pr             open pull requests                              │pull          │
+│  ○ infra @a1b│    3               changed files, all staged                       │d changes     │
+│  ○ auth-servi│    3               changed files, some unstaged                    │              │
 │              │    s1              stash entries                                   │              │
 │              │    name            row: clean                                      │              │
 │              │    name            row: needs attention                            │              │

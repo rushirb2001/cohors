@@ -1,10 +1,47 @@
 //! Command-line interface (clap).
 
+use clap::builder::styling::{AnsiColor, Color, RgbColor, Style, Styles};
 use clap::{Parser, Subcommand};
+
+/// clap's own help/error palette, matched to the TUI: brand purple for headings,
+/// bold for anything you literally type, dim for placeholders. clap turns all of
+/// this off by itself when the output isn't a terminal, so piped help stays plain.
+const HELP_STYLES: Styles = Styles::styled()
+    .header(
+        Style::new()
+            .bold()
+            .fg_color(Some(Color::Rgb(RgbColor(168, 85, 247)))),
+    )
+    .usage(
+        Style::new()
+            .bold()
+            .fg_color(Some(Color::Rgb(RgbColor(168, 85, 247)))),
+    )
+    .literal(Style::new().bold())
+    .placeholder(Style::new().dimmed())
+    .error(
+        Style::new()
+            .bold()
+            .fg_color(Some(Color::Ansi(AnsiColor::Red))),
+    )
+    .invalid(
+        Style::new()
+            .bold()
+            .fg_color(Some(Color::Ansi(AnsiColor::Yellow))),
+    )
+    .valid(Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green))));
+
+/// The top-level help layout. Same as clap's default minus `{about-with-newline}`:
+/// the masthead `main` attaches already carries the tagline, so the plain about
+/// line would just repeat it.
+pub const HELP_TEMPLATE: &str = "\
+{before-help}{usage-heading} {usage}
+
+{all-args}{after-help}";
 
 /// A fast dashboard for all your git repos.
 #[derive(Debug, Parser)]
-#[command(name = "cohors", version, about, long_about = None)]
+#[command(name = "cohors", version, about, long_about = None, styles = HELP_STYLES)]
 pub struct Cli {
     /// Override the config file location.
     #[arg(long, value_name = "PATH", global = true)]
@@ -18,7 +55,7 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub no_cache: bool,
 
-    /// Keep the dashboard live: re-scan automatically every few seconds.
+    /// Keep the dashboard live: re-scan every few seconds (skips the launch screen).
     #[arg(long, global = true)]
     pub watch: bool,
 
@@ -34,33 +71,42 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Discover and snapshot all repos, printing JSON to stdout (no TUI).
+    /// Discover and snapshot every repo, then report what needs you (no TUI).
+    ///
+    /// At a terminal this prints a grouped report: what needs you now, what is
+    /// minor, what is calm, and the commands that clear it. Piped or redirected
+    /// (or with `--json`) it prints the raw JSON snapshots instead.
     Scan {
-        /// Only include repos matching a selector — JSON (`'{"behind":true}'`)
+        /// Only include repos matching a selector: JSON (`'{"behind":true}'`)
         /// or shorthand (`dirty`, `behind`, `ahead`, `attention`, `name:pay*`,
         /// `ci:failing`, comma-separated to AND them). Results print in
         /// dirty-first order. Omit to print the whole fleet.
         #[arg(long, value_name = "QUERY")]
         select: Option<String>,
+        /// Print raw JSON instead of the human report. JSON is already the
+        /// default whenever stdout is piped, so existing scripts keep working.
+        #[arg(long)]
+        json: bool,
     },
-    /// Launch the dashboard on a built-in sample fleet — no config, no scanning.
+    /// Launch the dashboard on a built-in sample fleet: no config, no scanning.
     ///
     /// A zero-setup way to try cohors: every column and view is populated with
     /// privacy-safe demo data. Actions are stubbed (nothing touches your disk).
     Demo,
     /// git fetch across the selected repos (non-destructive).
     Fetch(ActionArgs),
-    /// git pull --ff-only across the selected repos — never merges or loses work.
+    /// git pull --ff-only across the selected repos, never merging or losing work.
     Pull(ActionArgs),
-    /// git push across the selected repos — never force-pushes.
+    /// git push across the selected repos, never force-pushing.
     Push(ActionArgs),
     /// git add -A + commit across the selected repos (stages tracked + untracked).
     Commit {
         #[command(flatten)]
         action: ActionArgs,
-        /// Commit message (applied to every selected repo).
+        /// Commit message (applied to every selected repo). Omit it to see what
+        /// this command does and how to pick repos.
         #[arg(short, long, value_name = "MSG")]
-        message: String,
+        message: Option<String>,
     },
     /// git stash push (tracked changes) across the selected repos.
     Stash(ActionArgs),
@@ -68,9 +114,10 @@ pub enum Command {
     Run {
         #[command(flatten)]
         action: ActionArgs,
-        /// The shell command to run in each repo.
+        /// The shell command to run in each repo. Omit it to see what this
+        /// command does and how to pick repos.
         #[arg(value_name = "COMMAND")]
-        command: String,
+        command: Option<String>,
         /// Per-repo timeout in seconds.
         #[arg(long, default_value_t = 120)]
         timeout: u64,
@@ -80,8 +127,8 @@ pub enum Command {
     /// The same local scan as the TUI, in the browser: `cohors web --root ~/code`
     /// shows that folder's repos (local status + remote CI/PRs). With `--watch`
     /// the page re-scans live. One command starts everything: it finds the
-    /// `cohors-web` crate, makes sure Trunk (the WASM bundler) is installed —
-    /// installing it for you the first time unless `--no-install` — then runs the
+    /// `cohors-web` crate, makes sure Trunk (the WASM bundler) is installed
+    /// (installing it for you the first time unless `--no-install`), then runs the
     /// server and prints the URL. Run it from inside the cohors repository (it
     /// builds the web app from source). Ctrl-C to stop.
     Web {
@@ -104,8 +151,11 @@ pub enum Command {
         #[arg(long)]
         demo: bool,
     },
-    /// Run as a Model Context Protocol server over stdio, so a coding agent can
-    /// see and (opt-in) act on your fleet. Read-only by default.
+    /// Serve your fleet to a coding agent over MCP (read-only by default).
+    ///
+    /// Speaks Model Context Protocol as a stdio server, so a client spawns it
+    /// rather than you. Run it by hand and it prints how to register it and what
+    /// an agent would get. Reads are always on; writes are opt-in per flag.
     Mcp {
         /// Enable write tools (`fetch`, `pull`, `push`, `commit`, `stash`).
         #[arg(long)]
@@ -119,14 +169,17 @@ pub enum Command {
     },
 }
 
-/// Shared arguments for the bulk-action subcommands. A selector is required so an
-/// action never silently hits the whole fleet; pass `--select all` to opt into it.
+/// Shared arguments for the bulk-action subcommands. A selector is still required
+/// in practice so an action never silently hits the whole fleet (pass
+/// `--select all` to opt into it), but it is `Option` here so that omitting it
+/// prints the command's own guide instead of a bare clap error.
 #[derive(Debug, clap::Args)]
 pub struct ActionArgs {
-    /// Which repos to act on — same selector language as `scan --select`
+    /// Which repos to act on, in the same selector language as `scan --select`
     /// (`dirty`, `behind`, `name:pay*`, `'{"ahead":true}'`, `all`, …).
+    /// Omit it to see what this command does and how to pick repos.
     #[arg(long, value_name = "QUERY")]
-    pub select: String,
+    pub select: Option<String>,
     /// Preview the matching repos without acting.
     #[arg(long)]
     pub dry_run: bool,
