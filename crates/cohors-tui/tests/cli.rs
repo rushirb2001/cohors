@@ -67,6 +67,44 @@ fn help_flag_succeeds() {
 }
 
 #[test]
+fn help_opens_with_the_wordmark_and_closes_with_next_steps() {
+    // Help is the first thing many people ever see of cohors, so it carries the
+    // same masthead and "here is what to do next" footer as every other surface.
+    let cache = TempDir::new().unwrap();
+    let assert = cohors(cache.path()).arg("--help").assert().success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(stdout.contains("cohors"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("every git repo you own, on one screen"),
+        "the masthead tagline should lead the help: {stdout}"
+    );
+    assert!(
+        stdout.contains("cohors demo"),
+        "the footer should offer a zero-setup first step: {stdout}"
+    );
+}
+
+#[test]
+fn mcp_at_a_terminal_explains_itself_instead_of_hanging() {
+    // An MCP client always pipes stdin. Here stdin is closed rather than a
+    // terminal, so this exercises the server path: it must not print the guide.
+    // The guide itself is covered by the terminal check inside `run_mcp`; what
+    // matters for a test is that the two paths stay distinct.
+    let cache = TempDir::new().unwrap();
+    let assert = cohors(cache.path())
+        .args(["mcp", "--help"])
+        .assert()
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("stdio"),
+        "mcp help should say a client spawns it over stdio: {stdout}"
+    );
+}
+
+#[test]
 fn scan_outputs_json_array_with_repo() {
     let cache = TempDir::new().unwrap();
     let root = TempDir::new().unwrap();

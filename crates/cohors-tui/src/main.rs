@@ -16,12 +16,25 @@ mod scan;
 mod tui;
 mod ui;
 
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches};
 
 use cli::{Cli, Command};
 
+/// clap's derive `parse()`, plus the branded masthead and "start here" footer.
+/// Those are attached here rather than as `#[command(…)]` attributes because
+/// whether to paint them depends on the terminal, which only exists at runtime.
+fn parse_cli() -> Cli {
+    let (before, after) = commands::help_decorations();
+    let matches = Cli::command()
+        .before_help(before)
+        .after_help(after)
+        .help_template(cli::HELP_TEMPLATE)
+        .get_matches();
+    Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit())
+}
+
 fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    let cli = parse_cli();
     logging::init();
 
     match &cli.command {
