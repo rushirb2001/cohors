@@ -1526,7 +1526,8 @@ fn mcp_guide(exe: &str, caps: (bool, bool, bool), color: bool) -> String {
     let rows: Vec<(String, String)> = vec![
         (
             "reads".to_string(),
-            "list_repos, get_repo, fleet_summary, search, list_prs, ci_status".to_string(),
+            "list_repos, get_repo, fleet_summary, search, changes, repo_path, list_prs, ci_status"
+                .to_string(),
         ),
         (
             "--allow-writes".to_string(),
