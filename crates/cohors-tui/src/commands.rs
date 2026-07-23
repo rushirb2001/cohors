@@ -43,8 +43,33 @@ pub fn init(cli: &Cli, force: bool) -> Result<()> {
 /// using the same [`cohors_core::resolve`] the dashboard and (later) the MCP
 /// server use — so `scan --select behind` and `list_repos({behind:true})` agree.
 pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
+    // Decide the surface up front: only a human at a terminal gets the progress
+    // note and the styled report.
+    let human = !json && std::io::stdout().is_terminal();
+    let color = wants_color(human);
     let scanner = crate::scan::from_cli(cli)?;
+    let roots = scanner.roots();
+
+    // Discovery walks the disk, which on a large fleet is a beat or two of
+    // silence. Say what is happening on stderr (so a pipe stays clean), then wipe
+    // the line once the report is ready to take its place.
+    let announce = human && std::io::stderr().is_terminal();
+    if announce {
+        let where_at = roots
+            .iter()
+            .map(|r| crate::ui::abbrev_home(r))
+            .collect::<Vec<_>>()
+            .join(", ");
+        eprint!("  {} {where_at}…", dim(color, "scanning"));
+        let _ = std::io::stderr().flush();
+    }
+    let started = std::time::Instant::now();
     let mut snapshots = scanner.scan();
+    let took = started.elapsed();
+    if announce {
+        eprint!("\r\x1b[2K"); // carriage return, then erase the line
+        let _ = std::io::stderr().flush();
+    }
 
     // An empty fleet is cryptic on the scriptable surface. Keep stdout a clean
     // `[]` (the JSON contract), but nudge a human via stderr so they aren't left
@@ -52,7 +77,7 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
     if snapshots.is_empty() {
         eprintln!(
             "cohors: no git repositories found under {}.\n  Run `cohors init` to detect your repos, or pass --root <dir>.",
-            scanner.roots().join(", ")
+            roots.join(", ")
         );
     }
 
@@ -73,18 +98,27 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
     }
 
     // JSON stays the contract for scripts: forced by `--json`, and the default
-    // whenever stdout is not a terminal (piped into jq and friends). A human at a
-    // TTY gets the styled report instead.
-    if json || !std::io::stdout().is_terminal() {
+    // whenever stdout is not a terminal (piped into jq and friends).
+    if !human {
         let out = serde_json::to_string_pretty(&snapshots).context("serializing snapshots")?;
         println!("{out}");
         return Ok(());
     }
     print!(
         "{}",
-        scan_report(&snapshots, &scanner.roots(), now_secs(), wants_color(true))
+        scan_report(&snapshots, &roots, took, now_secs(), color)
     );
     Ok(())
+}
+
+/// How long the scan took, in the coarsest unit that still reads honestly.
+fn took_label(d: std::time::Duration) -> String {
+    let ms = d.as_millis();
+    if ms < 1000 {
+        format!("{ms}ms")
+    } else {
+        format!("{:.1}s", d.as_secs_f32())
+    }
 }
 
 /// Clip `s` to `max` columns, marking the cut with an ellipsis.
@@ -121,7 +155,7 @@ fn sync_label(s: &cohors_core::RepoSnapshot) -> String {
 
 /// The report's masthead: the mark beside the wordmark, mirroring the launch
 /// screen so both surfaces open the same way.
-fn scan_header(subtitle: &str, color: bool) -> String {
+fn scan_header(scanned: &str, where_at: &str, color: bool) -> String {
     let mut out = String::from("\n");
     if color {
         let m = &crate::ui::SPIDER_MARK;
@@ -133,12 +167,17 @@ fn scan_header(subtitle: &str, color: bool) -> String {
         out.push_str(&format!(
             "  {}   {}\n",
             brand(color, m[1]),
-            dim(color, subtitle)
+            dim(color, scanned)
         ));
-        out.push_str(&format!("  {}\n\n", brand(color, m[2])));
+        out.push_str(&format!(
+            "  {}   {}\n\n",
+            brand(color, m[2]),
+            dim(color, where_at)
+        ));
     } else {
         out.push_str("  cohors\n");
-        out.push_str(&format!("  {subtitle}\n\n"));
+        out.push_str(&format!("  {scanned}\n"));
+        out.push_str(&format!("  {where_at}\n\n"));
     }
     out
 }
@@ -202,6 +241,7 @@ fn scan_row(
 fn scan_report(
     snaps: &[cohors_core::RepoSnapshot],
     roots: &[String],
+    took: std::time::Duration,
     now: i64,
     color: bool,
 ) -> String {
@@ -212,10 +252,12 @@ fn scan_report(
         .join(", ");
     let mut out = scan_header(
         &format!(
-            "{} repo{} · {where_at}",
+            "scanned {} repo{} in {}",
             snaps.len(),
-            if snaps.len() == 1 { "" } else { "s" }
+            if snaps.len() == 1 { "" } else { "s" },
+            took_label(took)
         ),
+        &where_at,
         color,
     );
     if snaps.is_empty() {
@@ -1156,11 +1198,14 @@ mod tests {
     fn scan_report_sections_by_urgency_and_suggests_next_steps() {
         use cohors_core::Severity as S;
         let now = 1_700_000_000;
+        let took = std::time::Duration::from_millis(840);
         let snaps = cohors_core::demo::fleet(now);
         let roots = ["/home/me/projects".to_string()];
-        let r = scan_report(&snaps, &roots, now, false);
+        let r = scan_report(&snaps, &roots, took, now, false);
 
         assert!(r.contains("cohors")); // branded masthead
+        // The report says what it actually did, not just what it found.
+        assert!(r.contains(&format!("scanned {} repos in 840ms", snaps.len())));
         let mut calm = 0;
         for s in &snaps {
             let a = cohors_core::assess(s, now);
@@ -1190,13 +1235,14 @@ mod tests {
             "push suggestion should track the unpushed count"
         );
         assert!(!r.contains('\x1b')); // no ANSI when colour is off
-        assert!(scan_report(&snaps, &roots, now, true).contains('\x1b')); // …and some when it is
+        assert!(scan_report(&snaps, &roots, took, now, true).contains('\x1b')); // …and some when it is
     }
 
     #[test]
     fn scan_report_handles_an_empty_fleet() {
-        let r = scan_report(&[], &["/home/me/projects".to_string()], 0, false);
-        assert!(r.contains("0 repos"));
+        let took = std::time::Duration::from_millis(3);
+        let r = scan_report(&[], &["/home/me/projects".to_string()], took, 0, false);
+        assert!(r.contains("scanned 0 repos in 3ms"));
         assert!(r.contains("nothing to report"));
         assert!(!r.contains("needs you")); // no sections at all for an empty fleet
         assert!(!r.contains('\x1b'));

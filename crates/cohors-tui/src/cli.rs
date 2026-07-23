@@ -34,7 +34,11 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
-    /// Discover and snapshot all repos, printing JSON to stdout (no TUI).
+    /// Discover and snapshot every repo, then report what needs you (no TUI).
+    ///
+    /// At a terminal this prints a grouped report: what needs you now, what is
+    /// minor, what is calm, and the commands that clear it. Piped or redirected
+    /// (or with `--json`) it prints the raw JSON snapshots instead.
     Scan {
         /// Only include repos matching a selector — JSON (`'{"behind":true}'`)
         /// or shorthand (`dirty`, `behind`, `ahead`, `attention`, `name:pay*`,
