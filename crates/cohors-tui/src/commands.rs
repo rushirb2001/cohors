@@ -867,9 +867,16 @@ pub fn run_web(
 
     // If the requested port is busy (e.g. another `cohors web`), step to the next
     // free one rather than failing.
+    let color = wants_color(std::io::stdout().is_terminal());
     let chosen = pick_port(port);
     if chosen != port {
-        eprintln!("port {port} is in use — serving on {chosen} instead.");
+        eprintln!(
+            "  {}",
+            dim(
+                color,
+                &format!("port {port} is in use, serving on {chosen} instead")
+            )
+        );
     }
     let port = chosen;
 
@@ -877,7 +884,15 @@ pub fn run_web(
 
     // Build the WASM assets to dist/ and keep watching for rebuilds while we
     // serve. (Our own server — not `trunk serve` — so we can proxy GitHub.)
-    println!("Building the dashboard…");
+    // The masthead lands before Trunk's own logs so the brand opens the run.
+    print!(
+        "{}",
+        masthead(
+            "web · the dashboard in your browser",
+            "building the WASM bundle, this takes a moment",
+            color
+        )
+    );
     let mut watcher = std::process::Command::new("trunk")
         .arg("watch")
         .current_dir(&web_dir)
@@ -894,19 +909,48 @@ pub fn run_web(
     }
 
     let url = format!("http://{WEB_HOST}:{port}");
+    // What it is serving, and what that means, in the same two-column grammar the
+    // rest of the CLI uses.
     let source = if demo {
-        "serving the built-in demo fleet".to_string()
+        (
+            "the built-in demo fleet".to_string(),
+            "sample data, nothing on disk is read",
+        )
     } else {
-        format!("scanning {}", scanner.roots().join(", "))
+        (
+            scanner
+                .roots()
+                .iter()
+                .map(|r| crate::ui::abbrev_home(r))
+                .collect::<Vec<_>>()
+                .join(", "),
+            "scanning your fleet live",
+        )
     };
     let auth = if demo {
-        "sample data — nothing on disk is read"
+        ("no GitHub needed".to_string(), "the demo fleet is offline")
     } else if token.is_some() {
-        "remote CI/PRs enriched with your GitHub login"
+        (
+            "GitHub login found".to_string(),
+            "remote CI and PRs are enriched",
+        )
     } else {
-        "no GitHub login found — local status only (run `gh auth login` for CI/PRs)"
+        (
+            "no GitHub login".to_string(),
+            "local status only, run `gh auth login` for CI and PRs",
+        )
     };
-    println!("\n  cohors web is live → {url}\n  {source}\n  {auth}\n  Ctrl-C to stop.\n");
+    let rows: Vec<(String, &str)> = vec![source, auth, ("Ctrl-C".to_string(), "stop the server")];
+    let w = rows
+        .iter()
+        .map(|(c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    print!("{}", section("live", &url, color));
+    for (what, why) in &rows {
+        print!("{}", guide_row(what, why, w, color));
+    }
+    println!();
     if open {
         let url = url.clone();
         std::thread::spawn(move || {
