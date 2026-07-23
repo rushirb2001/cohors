@@ -470,6 +470,59 @@ fn guide_row(cmd: &str, why: &str, width: usize, color: bool) -> String {
     )
 }
 
+/// The masthead and footer clap wraps around `cohors --help`, so the help page
+/// opens and closes the same way the dashboard and the reports do.
+///
+/// These are built here rather than as `#[command(before_help = …)]` attributes
+/// because whether to paint them depends on the terminal, which is only knowable
+/// at runtime. `main` attaches them before parsing.
+pub fn help_decorations() -> (String, String) {
+    let color = wants_color(std::io::stdout().is_terminal());
+
+    // clap prints its own blank line after `{before-help}`, so trim ours.
+    let mut before = masthead(
+        "every git repo you own, on one screen",
+        "run it bare for the dashboard, or pick a command below",
+        color,
+    );
+    while before.ends_with('\n') {
+        before.pop();
+    }
+
+    // A flag list tells a new reader what exists, not what to do next. These four
+    // are the shortest paths to actually seeing their own fleet.
+    let rows = [
+        (
+            "cohors demo",
+            "the whole dashboard on sample data, no config, nothing touched",
+        ),
+        (
+            "cohors --root ~/code",
+            "skip the config and scan one folder right now",
+        ),
+        (
+            "cohors init",
+            "write a starter config, then just run `cohors`",
+        ),
+        ("cohors scan", "the same sweep as a one-shot report, no TUI"),
+    ];
+    let w = rows
+        .iter()
+        .map(|(c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    let mut after = String::new();
+    after.push_str(&section(
+        "start here",
+        "--root and --config work on every command, and nothing writes without a selector",
+        color,
+    ));
+    for (cmd, why) in rows {
+        after.push_str(&guide_row(cmd, why, w, color));
+    }
+    (before, after)
+}
+
 /// The selector vocabulary, shared by every action's guide.
 const SELECTORS: [(&str, &str); 6] = [
     ("dirty", "repos with uncommitted work"),
@@ -1404,7 +1457,94 @@ pub fn run_demo() -> Result<()> {
 /// `cohors mcp` — speak the Model Context Protocol over stdio. Read-only unless
 /// the matching `--allow-*` flags are passed (none have an effect yet — only the
 /// read tools are implemented).
+/// What `cohors mcp` prints when a human runs it at a terminal: what the server
+/// is, why nothing appeared to happen, and the copy-pasteable line that registers
+/// it. The absolute path matters — agents spawn with a stripped `PATH`, so a bare
+/// `cohors mcp` often fails to resolve and the agent silently ends up with no
+/// tools at all.
+fn mcp_guide(exe: &str, caps: (bool, bool, bool), color: bool) -> String {
+    let (writes, run, open) = caps;
+    let mut out = masthead(
+        "mcp · your fleet, exposed to a coding agent",
+        "it speaks JSON-RPC over stdio, so a client spawns it, not you",
+        color,
+    );
+
+    out.push_str(&section(
+        "nothing is broken",
+        "run by hand it just waits on a client that is never going to speak",
+        color,
+    ));
+    out.push('\n');
+
+    out.push_str(&section(
+        "wire it up",
+        "use the absolute path: agents spawn with a stripped PATH, so a bare `cohors` may not resolve",
+        color,
+    ));
+    let reg = format!("claude mcp add cohors -- {exe} mcp");
+    let reg_w = reg.chars().count();
+    out.push_str(&guide_row(
+        &reg,
+        "register it with Claude Code",
+        reg_w,
+        color,
+    ));
+    out.push('\n');
+
+    let state = |on: bool| if on { "on now" } else { "opt-in" };
+    let rows: Vec<(String, String)> = vec![
+        (
+            "reads".to_string(),
+            "list_repos, get_repo, fleet_summary, search, list_prs, ci_status".to_string(),
+        ),
+        (
+            "--allow-writes".to_string(),
+            format!("fetch, pull, push, commit, stash · {}", state(writes)),
+        ),
+        (
+            "--allow-run".to_string(),
+            format!("run shell commands across repos · {}", state(run)),
+        ),
+        (
+            "--allow-open".to_string(),
+            format!("the local-only open tool · {}", state(open)),
+        ),
+    ];
+    let w = rows
+        .iter()
+        .map(|(c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    out.push_str(&section(
+        "what an agent gets",
+        "reads are always on, anything that writes is opt-in",
+        color,
+    ));
+    for (what, why) in &rows {
+        out.push_str(&guide_row(what, why, w, color));
+    }
+    out.push('\n');
+    out
+}
+
 pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool) -> Result<()> {
+    // An MCP client always pipes stdin. A terminal on stdin therefore means a
+    // human ran this by hand, and would otherwise stare at a blank line forever
+    // waiting for a client that is never going to speak. Explain and leave.
+    if std::io::stdin().is_terminal() {
+        let color = wants_color(std::io::stdout().is_terminal());
+        let exe = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.to_str().map(str::to_string))
+            .unwrap_or_else(|| "cohors".to_string());
+        print!(
+            "{}",
+            mcp_guide(&exe, (allow_writes, allow_run, allow_open), color)
+        );
+        return Ok(());
+    }
+
     let scanner = crate::scan::from_cli(cli)?;
     let caps = cohors_mcp::Caps {
         allow_writes,
