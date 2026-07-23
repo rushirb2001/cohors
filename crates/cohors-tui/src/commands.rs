@@ -119,17 +119,80 @@ fn sync_label(s: &cohors_core::RepoSnapshot) -> String {
     }
 }
 
-/// Paint `s` in the dashboard's colour for `sev`, so the CLI and the TUI speak
-/// one colour language (calm green, info dim, notice cyan, warn amber, risk red).
-fn severity_paint(sev: cohors_core::Severity, color: bool, s: &str) -> String {
-    use cohors_core::Severity as S;
-    match sev {
-        S::Ok => sgr(color, "32", s),
-        S::Info => dim(color, s),
-        S::Notice => sgr(color, "36", s),
-        S::Warn => sgr(color, "33", s),
-        S::Risk => sgr(color, "31", s),
+/// The report's masthead: the mark beside the wordmark, mirroring the launch
+/// screen so both surfaces open the same way.
+fn scan_header(subtitle: &str, color: bool) -> String {
+    let mut out = String::from("\n");
+    if color {
+        let m = &crate::ui::SPIDER_MARK;
+        out.push_str(&format!(
+            "  {}   {}\n",
+            brand(color, m[0]),
+            brand(color, "cohors")
+        ));
+        out.push_str(&format!(
+            "  {}   {}\n",
+            brand(color, m[1]),
+            dim(color, subtitle)
+        ));
+        out.push_str(&format!("  {}\n\n", brand(color, m[2])));
+    } else {
+        out.push_str("  cohors\n");
+        out.push_str(&format!("  {subtitle}\n\n"));
     }
+    out
+}
+
+/// One report section, in the launch screen's grammar: a brand-purple heading
+/// over a dim one-line descriptor.
+fn scan_section(heading: &str, descriptor: &str, color: bool) -> String {
+    format!(
+        "  {}\n  {}\n",
+        brand(color, heading),
+        dim(color, descriptor)
+    )
+}
+
+/// One repo line: `▸ name  branch  sync  status`. Colour is spent only on what is
+/// genuinely urgent, so a long list of ordinary dirty repos reads calm instead of
+/// turning the screen into a wall of red.
+fn scan_row(
+    s: &cohors_core::RepoSnapshot,
+    a: &cohors_core::Assessment,
+    widths: (usize, usize, usize),
+    color: bool,
+) -> String {
+    use cohors_core::Severity as S;
+    let (name_w, branch_w, sync_w) = widths;
+    let status = a
+        .primary
+        .as_ref()
+        .map(|r| r.label())
+        .unwrap_or_else(|| "up to date".to_string());
+    let status = match a.severity {
+        S::Risk => sgr(color, "31", &status),
+        S::Warn => sgr(color, "33", &status),
+        S::Notice => status,
+        S::Ok | S::Info => dim(color, &status),
+    };
+    // Pad before painting: ANSI escapes have no width, so colouring first would
+    // throw the column alignment off.
+    let sync_cell = format!("{:<sync_w$}", sync_label(s));
+    let sync_cell = match &s.upstream {
+        Some(u) if u.ahead > 0 || u.behind > 0 => sgr(color, "36", &sync_cell),
+        _ => dim(color, &sync_cell),
+    };
+    format!(
+        "    {} {}  {}  {}  {}\n",
+        dim(color, "▸"),
+        bold(color, &format!("{:<name_w$}", clip(&s.name, name_w))),
+        dim(
+            color,
+            &format!("{:<branch_w$}", clip(&s.branch.label(), branch_w))
+        ),
+        sync_cell,
+        status,
+    )
 }
 
 /// The human-facing `cohors scan` report: a branded header, one line per repo in
@@ -147,46 +210,22 @@ fn scan_report(
         .map(|r| crate::ui::abbrev_home(r))
         .collect::<Vec<_>>()
         .join(", ");
-    let mut out = format!(
-        "\n  {}  {}\n\n",
-        brand(color, "cohors"),
-        dim(
-            color,
-            &format!(
-                "· {} repo{} · {where_at}",
-                snaps.len(),
-                if snaps.len() == 1 { "" } else { "s" }
-            )
+    let mut out = scan_header(
+        &format!(
+            "{} repo{} · {where_at}",
+            snaps.len(),
+            if snaps.len() == 1 { "" } else { "s" }
         ),
+        color,
     );
     if snaps.is_empty() {
         out.push_str(&format!("  {}\n\n", dim(color, "nothing to report")));
         return out;
     }
 
-    // Size the columns to their content (capped) so short fleets stay tight and a
-    // long branch name cannot push Status off the screen.
-    let name_w = snaps
-        .iter()
-        .map(|s| s.name.chars().count())
-        .max()
-        .unwrap_or(4)
-        .clamp(4, 28);
-    let branch_w = snaps
-        .iter()
-        .map(|s| s.branch.label().chars().count())
-        .max()
-        .unwrap_or(6)
-        .clamp(6, 22);
-    let sync_w = snaps
-        .iter()
-        .map(|s| sync_label(s).chars().count())
-        .max()
-        .unwrap_or(5)
-        .clamp(5, 8);
-
-    // Most urgent first, the same dirty-first instinct the dashboard opens with,
-    // then alphabetical so the order is stable run to run.
+    // Most urgent first, then alphabetical so the order is stable run to run.
+    // Sorted descending by severity, the three buckets are contiguous slices.
+    use cohors_core::Severity as S;
     let mut rows: Vec<(&cohors_core::RepoSnapshot, cohors_core::Assessment)> = snaps
         .iter()
         .map(|s| (s, cohors_core::assess(s, now)))
@@ -196,78 +235,75 @@ fn scan_report(
             .cmp(&a.1.severity)
             .then_with(|| a.0.name.cmp(&b.0.name))
     });
+    let n_risk = rows.iter().filter(|(_, a)| a.severity == S::Risk).count();
+    let n_urgent = rows.iter().filter(|(_, a)| a.severity >= S::Warn).count();
+    let n_minor = rows
+        .iter()
+        .filter(|(_, a)| matches!(a.severity, S::Notice | S::Info))
+        .count();
+    let n_calm = rows.len() - n_urgent - n_minor;
 
-    for (s, a) in &rows {
-        // A filled dot marks the repos that want you, so the list still reads
-        // when colour is off (NO_COLOR, or piped to a pager).
-        let marker = if a.needs_attention() {
-            severity_paint(a.severity, color, "●")
-        } else {
-            " ".to_string()
-        };
-        let status = a
-            .primary
-            .as_ref()
-            .map(|r| r.label())
-            .unwrap_or_else(|| "up to date".to_string());
-        let sync = sync_label(s);
-        // Pad before painting: ANSI escapes have no width, so colouring first
-        // would throw the column alignment off.
-        let sync_cell = format!("{:<sync_w$}", sync);
-        let sync_cell = match &s.upstream {
-            None => dim(color, &sync_cell),
-            Some(u) if u.ahead > 0 => sgr(color, "36", &sync_cell),
-            Some(u) if u.behind > 0 => sgr(color, "33", &sync_cell),
-            Some(_) => sgr(color, "32", &sync_cell),
-        };
-        out.push_str(&format!(
-            "  {} {}  {}  {}  {}\n",
-            marker,
-            bold(color, &format!("{:<name_w$}", clip(&s.name, name_w))),
-            dim(
-                color,
-                &format!("{:<branch_w$}", clip(&s.branch.label(), branch_w))
-            ),
-            sync_cell,
-            severity_paint(a.severity, color, &status),
-        ));
-    }
+    // Size the columns to the rows actually printed (capped), so a short fleet
+    // stays tight and one long branch name cannot push Status off the screen.
+    let listed = &rows[..n_urgent + n_minor];
+    let widths = (
+        listed
+            .iter()
+            .map(|(s, _)| s.name.chars().count())
+            .max()
+            .unwrap_or(4)
+            .clamp(4, 28),
+        listed
+            .iter()
+            .map(|(s, _)| s.branch.label().chars().count())
+            .max()
+            .unwrap_or(6)
+            .clamp(6, 22),
+        listed
+            .iter()
+            .map(|(s, _)| sync_label(s).chars().count())
+            .max()
+            .unwrap_or(5)
+            .clamp(5, 8),
+    );
 
-    // Headline: how much of the fleet wants you, split the same four ways the
-    // dashboard's attention bar splits it.
-    let sum = cohors_core::fleet_summary(snaps, now);
-    out.push_str(&format!(
-        "\n  {}  {}\n",
-        bold(
-            color,
-            &format!("{} of {} need attention", sum.needs_attention, sum.total)
-        ),
-        dim(
-            color,
-            &format!(
-                "· {} risk · {} warn · {} minor · {} calm",
-                sum.risk, sum.warn, sum.notice, sum.calm
-            )
-        ),
-    ));
-
-    // Only the non-zero counts, so a clean fleet does not read as a wall of zeros.
-    let mut bits: Vec<String> = Vec::new();
-    for (n, label) in [
-        (sum.dirty, "dirty"),
-        (sum.unpushed, "unpushed"),
-        (sum.behind, "behind"),
-        (sum.conflicted, "conflicted"),
-        (sum.stash, "with stashes"),
-        (sum.errors, "unreadable"),
-    ] {
-        if n > 0 {
-            bits.push(format!("{n} {label}"));
+    if n_urgent > 0 {
+        let mut what = Vec::new();
+        if n_risk > 0 {
+            what.push(format!("{n_risk} at risk"));
         }
+        if n_urgent - n_risk > 0 {
+            what.push(format!("{} warning", n_urgent - n_risk));
+        }
+        out.push_str(&scan_section("needs you", &what.join(" · "), color));
+        for (s, a) in &rows[..n_urgent] {
+            out.push_str(&scan_row(s, a, widths, color));
+        }
+        out.push('\n');
     }
-    if !bits.is_empty() {
-        out.push_str(&format!("  {}\n", dim(color, &bits.join(" · "))));
+    if n_minor > 0 {
+        out.push_str(&scan_section(
+            "minor",
+            &format!("{n_minor} with uncommitted work or small drift"),
+            color,
+        ));
+        for (s, a) in &rows[n_urgent..n_urgent + n_minor] {
+            out.push_str(&scan_row(s, a, widths, color));
+        }
+        out.push('\n');
     }
+    // The calm ones collapse to a count: listing a dozen "up to date" rows is the
+    // noise this report exists to remove.
+    if n_calm > 0 {
+        out.push_str(&scan_section(
+            "calm",
+            &format!("{n_calm} up to date, nothing to do"),
+            color,
+        ));
+        out.push('\n');
+    }
+
+    let sum = cohors_core::fleet_summary(snaps, now);
 
     // Turn the counts into the commands that clear them, listing only what is
     // actually true right now. Both are safe verbs (pull is fast-forward-only,
@@ -286,21 +322,22 @@ fn scan_report(
         ));
     }
     if !next.is_empty() {
+        out.push_str(&scan_section("next", "the commands that clear this", color));
         let cmd_w = next
             .iter()
             .map(|(c, _)| c.chars().count())
             .max()
             .unwrap_or(0);
-        out.push_str(&format!("\n  {}\n", dim(color, "next")));
         for (cmd, why) in next {
             out.push_str(&format!(
-                "    {}  {}\n",
+                "    {} {}  {}\n",
+                dim(color, "▸"),
                 bold(color, &format!("{cmd:<cmd_w$}")),
                 dim(color, &why),
             ));
         }
+        out.push('\n');
     }
-    out.push('\n');
     out
 }
 
@@ -1112,20 +1149,34 @@ mod tests {
         assert!(!w.contains('\x1b'));
     }
 
-    /// The human report lists every repo, carries the headline counts, and turns
-    /// the ones that are actionable into the command that clears them.
+    /// The report groups by urgency: anything wanting attention is listed by
+    /// name, calm repos collapse to a count, and actionable counts become the
+    /// command that clears them.
     #[test]
-    fn scan_report_lists_repos_with_counts_and_next_steps() {
+    fn scan_report_sections_by_urgency_and_suggests_next_steps() {
+        use cohors_core::Severity as S;
         let now = 1_700_000_000;
         let snaps = cohors_core::demo::fleet(now);
         let roots = ["/home/me/projects".to_string()];
         let r = scan_report(&snaps, &roots, now, false);
 
-        assert!(r.contains("cohors")); // branded header
-        assert!(r.contains("need attention")); // the headline
+        assert!(r.contains("cohors")); // branded masthead
+        let mut calm = 0;
         for s in &snaps {
-            assert!(r.contains(&s.name), "repo {} missing from report", s.name);
+            let a = cohors_core::assess(s, now);
+            if a.severity == S::Ok {
+                calm += 1;
+            } else {
+                assert!(
+                    r.contains(&s.name),
+                    "{} wants attention, should be listed",
+                    s.name
+                );
+            }
         }
+        // Calm repos collapse instead of repeating "up to date" a dozen times.
+        assert_eq!(r.contains("up to date, nothing to do"), calm > 0);
+
         // Next steps appear exactly when the fleet actually has that problem.
         let sum = cohors_core::fleet_summary(&snaps, now);
         assert_eq!(
@@ -1147,7 +1198,7 @@ mod tests {
         let r = scan_report(&[], &["/home/me/projects".to_string()], 0, false);
         assert!(r.contains("0 repos"));
         assert!(r.contains("nothing to report"));
-        assert!(!r.contains("need attention")); // no headline for an empty fleet
+        assert!(!r.contains("needs you")); // no sections at all for an empty fleet
         assert!(!r.contains('\x1b'));
     }
 
