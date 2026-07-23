@@ -1482,14 +1482,27 @@ fn mcp_guide(exe: &str, caps: (bool, bool, bool), color: bool) -> String {
         "use the absolute path: agents spawn with a stripped PATH, so a bare `cohors` may not resolve",
         color,
     ));
-    let reg = format!("claude mcp add cohors -- {exe} mcp");
-    let reg_w = reg.chars().count();
-    out.push_str(&guide_row(
-        &reg,
-        "register it with Claude Code",
-        reg_w,
-        color,
-    ));
+    // Claude Code has a registration CLI; every other stdio client (Claude
+    // Desktop, Cursor, Zed, Windsurf, …) takes the same command and args as a
+    // JSON block instead, so offer both rather than assuming one client.
+    let ways = [
+        (
+            format!("claude mcp add cohors -- {exe} mcp"),
+            "Claude Code, in your shell",
+        ),
+        (
+            format!("\"cohors\": {{ \"command\": \"{exe}\", \"args\": [\"mcp\"] }}"),
+            "any other client, in mcpServers",
+        ),
+    ];
+    let w = ways
+        .iter()
+        .map(|(c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    for (cmd, why) in &ways {
+        out.push_str(&guide_row(cmd, why, w, color));
+    }
     out.push('\n');
 
     let state = |on: bool| if on { "on now" } else { "opt-in" };
