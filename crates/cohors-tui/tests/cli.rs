@@ -105,13 +105,25 @@ fn scan_empty_root_is_empty_json_array() {
 }
 
 #[test]
-fn action_requires_a_selector() {
-    // Bulk actions never silently hit the whole fleet — `--select` is required.
+fn action_without_a_selector_explains_itself() {
+    // Bulk actions still never silently hit the whole fleet, but a missing
+    // `--select` is a question, not a punishment: it prints the verb's guide and
+    // acts on nothing.
     let cache = TempDir::new().unwrap();
-    cohors(cache.path())
+    let assert = cohors(cache.path())
         .args(["fetch", "--config", MISSING_CONFIG])
         .assert()
-        .failure();
+        .success();
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    assert!(
+        stdout.contains("cohors fetch --select dirty"),
+        "the guide should offer the selector vocabulary: {stdout}"
+    );
+    assert!(
+        stdout.contains("--dry-run"),
+        "the guide should point at a safe first step: {stdout}"
+    );
 }
 
 #[test]
@@ -135,7 +147,11 @@ fn fetch_dry_run_lists_targets_without_acting() {
         .success();
 
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
-    assert!(stdout.contains("Would fetch"), "stdout: {stdout}");
+    assert!(stdout.contains("would fetch"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("nothing will change"),
+        "a dry run should say so plainly: {stdout}"
+    );
     assert!(stdout.contains("myrepo"), "stdout: {stdout}");
 }
 

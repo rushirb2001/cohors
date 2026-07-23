@@ -127,14 +127,17 @@ pub enum Command {
     },
 }
 
-/// Shared arguments for the bulk-action subcommands. A selector is required so an
-/// action never silently hits the whole fleet; pass `--select all` to opt into it.
+/// Shared arguments for the bulk-action subcommands. A selector is still required
+/// in practice so an action never silently hits the whole fleet (pass
+/// `--select all` to opt into it), but it is `Option` here so that omitting it
+/// prints the command's own guide instead of a bare clap error.
 #[derive(Debug, clap::Args)]
 pub struct ActionArgs {
     /// Which repos to act on — same selector language as `scan --select`
     /// (`dirty`, `behind`, `name:pay*`, `'{"ahead":true}'`, `all`, …).
+    /// Omit it to see what this command does and how to pick repos.
     #[arg(long, value_name = "QUERY")]
-    pub select: String,
+    pub select: Option<String>,
     /// Preview the matching repos without acting.
     #[arg(long)]
     pub dry_run: bool,

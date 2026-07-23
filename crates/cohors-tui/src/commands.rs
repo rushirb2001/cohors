@@ -155,7 +155,7 @@ fn sync_label(s: &cohors_core::RepoSnapshot) -> String {
 
 /// The report's masthead: the mark beside the wordmark, mirroring the launch
 /// screen so both surfaces open the same way.
-fn scan_header(scanned: &str, where_at: &str, color: bool) -> String {
+fn masthead(scanned: &str, where_at: &str, color: bool) -> String {
     let mut out = String::from("\n");
     if color {
         let m = &crate::ui::SPIDER_MARK;
@@ -184,7 +184,7 @@ fn scan_header(scanned: &str, where_at: &str, color: bool) -> String {
 
 /// One report section, in the launch screen's grammar: a brand-purple heading
 /// over a dim one-line descriptor.
-fn scan_section(heading: &str, descriptor: &str, color: bool) -> String {
+fn section(heading: &str, descriptor: &str, color: bool) -> String {
     format!(
         "  {}\n  {}\n",
         brand(color, heading),
@@ -250,7 +250,7 @@ fn scan_report(
         .map(|r| crate::ui::abbrev_home(r))
         .collect::<Vec<_>>()
         .join(", ");
-    let mut out = scan_header(
+    let mut out = masthead(
         &format!(
             "scanned {} repo{} in {}",
             snaps.len(),
@@ -317,14 +317,14 @@ fn scan_report(
         if n_urgent - n_risk > 0 {
             what.push(format!("{} warning", n_urgent - n_risk));
         }
-        out.push_str(&scan_section("needs you", &what.join(" · "), color));
+        out.push_str(&section("needs you", &what.join(" · "), color));
         for (s, a) in &rows[..n_urgent] {
             out.push_str(&scan_row(s, a, widths, color));
         }
         out.push('\n');
     }
     if n_minor > 0 {
-        out.push_str(&scan_section(
+        out.push_str(&section(
             "minor",
             &format!("{n_minor} with uncommitted work or small drift"),
             color,
@@ -337,7 +337,7 @@ fn scan_report(
     // The calm ones collapse to a count: listing a dozen "up to date" rows is the
     // noise this report exists to remove.
     if n_calm > 0 {
-        out.push_str(&scan_section(
+        out.push_str(&section(
             "calm",
             &format!("{n_calm} up to date, nothing to do"),
             color,
@@ -364,7 +364,7 @@ fn scan_report(
         ));
     }
     if !next.is_empty() {
-        out.push_str(&scan_section("next", "the commands that clear this", color));
+        out.push_str(&section("next", "the commands that clear this", color));
         let cmd_w = next
             .iter()
             .map(|(c, _)| c.chars().count())
@@ -404,6 +404,115 @@ impl CliAction {
             CliAction::Stash => "stash",
         }
     }
+
+    /// Present participle, for the "doing it now" heading.
+    fn doing(&self) -> &'static str {
+        match self {
+            CliAction::Fetch => "fetching",
+            CliAction::Pull => "pulling",
+            CliAction::Push => "pushing",
+            CliAction::Commit(_) => "committing",
+            CliAction::Stash => "stashing",
+        }
+    }
+
+    /// What the verb does, and why it is safe to run. Shown in the command's own
+    /// guide and above every run, so the safety rule is never a surprise.
+    fn blurb(&self) -> (&'static str, &'static str) {
+        match self {
+            CliAction::Fetch => (
+                "git fetch across the repos you pick",
+                "safe anywhere: it never touches your working tree",
+            ),
+            CliAction::Pull => (
+                "git pull --ff-only across the repos you pick",
+                "fast-forward only, so it can never merge or lose work",
+            ),
+            CliAction::Push => (
+                "git push across the repos you pick",
+                "never force-pushes, so remote history stays safe",
+            ),
+            CliAction::Commit(_) => (
+                "git add -A and commit across the repos you pick",
+                "stages tracked and untracked files, and never amends",
+            ),
+            CliAction::Stash => (
+                "git stash push across the repos you pick",
+                "shelves your changes, nothing is thrown away",
+            ),
+        }
+    }
+}
+
+/// A guide row: `▸ command   what it does`, the launch screen's item grammar.
+fn guide_row(cmd: &str, why: &str, width: usize, color: bool) -> String {
+    format!(
+        "    {} {}  {}\n",
+        dim(color, "▸"),
+        bold(color, &format!("{cmd:<width$}")),
+        dim(color, why),
+    )
+}
+
+/// The selector vocabulary, shared by every action's guide.
+const SELECTORS: [(&str, &str); 6] = [
+    ("dirty", "repos with uncommitted work"),
+    ("behind", "repos behind their upstream"),
+    ("ahead", "repos with unpushed commits"),
+    ("attention", "anything that wants you"),
+    ("name:pay*", "by name, globs allowed"),
+    ("all", "the whole fleet, deliberately"),
+];
+
+/// What a bulk action prints when no selector was given: what the verb does, how
+/// to pick repos, and where to start if you are new. A selector is required so an
+/// action never silently hits every repo you own, and a missing one is a question
+/// to answer, not an error to punish.
+fn action_guide(verb: &str, does: &str, safety: &str, color: bool) -> String {
+    let mut out = masthead(&format!("{verb} · {does}"), safety, color);
+
+    let picks: Vec<(String, &str)> = SELECTORS
+        .iter()
+        .map(|(s, why)| (format!("cohors {verb} --select {s}"), *why))
+        .collect();
+    let starts: Vec<(String, &str)> = vec![
+        (
+            "cohors".to_string(),
+            "open the dashboard and act from there",
+        ),
+        (
+            "cohors scan".to_string(),
+            "see what is going on, changes nothing",
+        ),
+        (
+            format!("cohors {verb} --select dirty --dry-run"),
+            "preview the targets without acting",
+        ),
+    ];
+    // One width across both blocks so every description starts in the same column.
+    let w = picks
+        .iter()
+        .chain(starts.iter())
+        .map(|(c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+
+    out.push_str(&section(
+        "pick what to act on",
+        "cohors never touches the whole fleet unless you say so",
+        color,
+    ));
+    for (cmd, why) in &picks {
+        out.push_str(&guide_row(cmd, why, w, color));
+    }
+    out.push('\n');
+
+    out.push_str(&section("new here?", "look before you leap", color));
+    for (cmd, why) in &starts {
+        out.push_str(&guide_row(cmd, why, w, color));
+    }
+    out.push('\n');
+    out
 }
 
 /// Resolve a `--select` query to the actionable repos: the matching, readable
@@ -431,21 +540,50 @@ fn action_targets<'a>(
 /// `--dry-run` previews the targets without acting. Safety still holds in the
 /// action layer: pull is ff-only, push never force-pushes, stash/commit can't
 /// lose work.
-pub fn run_action(cli: &Cli, action: CliAction, select: &str, dry_run: bool) -> Result<()> {
+pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: bool) -> Result<()> {
+    let color = wants_color(std::io::stdout().is_terminal());
+    let verb = action.verb();
+    let (does, safety) = action.blurb();
+
+    // No selector is a question, not an error: say what this verb does and how to
+    // choose repos, rather than failing with a bare "required argument" message.
+    let Some(select) = select else {
+        print!("{}", action_guide(verb, does, safety, color));
+        return Ok(());
+    };
+
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
     let targets = action_targets(&snapshots, select)?;
-    let verb = action.verb();
+    print!("{}", masthead(&format!("{verb} · {does}"), safety, color));
 
     if targets.is_empty() {
-        eprintln!("cohors: no repos match `{select}`.");
+        out_nothing_matched(verb, select, color);
         return Ok(());
     }
+    let n = targets.len();
+    let plural = if n == 1 { "" } else { "s" };
     if dry_run {
-        println!("Would {verb} {} repo(s):", targets.len());
+        print!(
+            "{}",
+            section(
+                "dry run",
+                &format!("would {verb} {n} repo{plural}, nothing will change"),
+                color
+            )
+        );
+        let w = targets
+            .iter()
+            .map(|s| s.name.chars().count())
+            .max()
+            .unwrap_or(0);
         for s in &targets {
-            println!("  {}  {}", s.name, s.path.as_ref().unwrap());
+            print!(
+                "{}",
+                guide_row(&s.name, s.path.as_ref().unwrap().as_str(), w, color)
+            );
         }
+        println!();
         return Ok(());
     }
 
@@ -456,11 +594,17 @@ pub fn run_action(cli: &Cli, action: CliAction, select: &str, dry_run: bool) -> 
         action,
         CliAction::Pull | CliAction::Stash | CliAction::Commit(_)
     );
+    print!(
+        "{}",
+        section(action.doing(), &format!("{n} repo{plural}"), color)
+    );
     let mut ok = 0usize;
+    let mut skipped = 0usize;
     for s in &targets {
         let path = s.path.as_ref().unwrap();
         if guard_worktree && let Some(reason) = cohors_actions::worktree_block(s) {
-            println!("  - {}: {reason}", s.name);
+            skipped += 1;
+            println!("    {} {}: {reason}", dim(color, "·"), dim(color, &s.name));
             continue;
         }
         let result = match &action {
@@ -473,13 +617,53 @@ pub fn run_action(cli: &Cli, action: CliAction, select: &str, dry_run: bool) -> 
         match result {
             Ok(message) => {
                 ok += 1;
-                println!("  ✓ {message}");
+                println!("    {} {message}", sgr(color, "32", "✓"));
             }
-            Err(message) => println!("  ✗ {message}"),
+            Err(message) => println!("    {} {message}", sgr(color, "31", "✗")),
         }
     }
-    println!("{verb}: {ok}/{} ok", targets.len());
+    let mut tail = format!("{ok} of {n} ok");
+    if skipped > 0 {
+        tail.push_str(&format!(" · {skipped} skipped"));
+    }
+    println!("\n  {}\n", bold(color, &tail));
     Ok(())
+}
+
+/// The "your selector matched nothing" state: never a bare error, always a way
+/// forward. Shared by every bulk action and by `run`.
+fn out_nothing_matched(verb: &str, select: &str, color: bool) {
+    print!(
+        "{}",
+        section(
+            "nothing matched",
+            &format!("no repos match --select {select}"),
+            color
+        )
+    );
+    let rows: Vec<(String, &str)> = vec![
+        (
+            "cohors scan".to_string(),
+            "see the whole fleet and its state",
+        ),
+        (
+            format!("cohors {verb} --select all"),
+            "act on every repo, deliberately",
+        ),
+        (
+            format!("cohors {verb}"),
+            "the selector vocabulary for this command",
+        ),
+    ];
+    let w = rows
+        .iter()
+        .map(|(c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    for (cmd, why) in &rows {
+        print!("{}", guide_row(cmd, why, w, color));
+    }
+    println!();
 }
 
 /// `cohors run <command> --select <q>` — run a shell command in each matching
@@ -487,24 +671,53 @@ pub fn run_action(cli: &Cli, action: CliAction, select: &str, dry_run: bool) -> 
 /// a pass/fail summary. `--dry-run` previews the targets without running.
 pub fn run_command_action(
     cli: &Cli,
-    select: &str,
+    select: Option<&str>,
     command: &str,
     timeout: u64,
     dry_run: bool,
 ) -> Result<()> {
+    let color = wants_color(std::io::stdout().is_terminal());
+    let does = "run a shell command in each repo you pick";
+    let safety = "arbitrary shell, bounded by a per-repo timeout";
+
+    // No selector: explain the verb instead of failing with a clap error.
+    let Some(select) = select else {
+        print!("{}", action_guide("run", does, safety, color));
+        return Ok(());
+    };
+
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
     let targets = action_targets(&snapshots, select)?;
+    print!("{}", masthead(&format!("run · {does}"), safety, color));
 
     if targets.is_empty() {
-        eprintln!("cohors: no repos match `{select}`.");
+        out_nothing_matched("run", select, color);
         return Ok(());
     }
+    let n = targets.len();
+    let plural = if n == 1 { "" } else { "s" };
     if dry_run {
-        println!("Would run `{command}` in {} repo(s):", targets.len());
+        print!(
+            "{}",
+            section(
+                "dry run",
+                &format!("would run `{command}` in {n} repo{plural}, nothing will change"),
+                color
+            )
+        );
+        let w = targets
+            .iter()
+            .map(|s| s.name.chars().count())
+            .max()
+            .unwrap_or(0);
         for s in &targets {
-            println!("  {}  {}", s.name, s.path.as_ref().unwrap());
+            print!(
+                "{}",
+                guide_row(&s.name, s.path.as_ref().unwrap().as_str(), w, color)
+            );
         }
+        println!();
         return Ok(());
     }
 
@@ -518,14 +731,14 @@ pub fn run_command_action(
         if r.ok {
             ok += 1;
         }
-        let tag = if r.timed_out {
-            "timed out"
+        let (mark, tag) = if r.timed_out {
+            (sgr(color, "33", "!"), "timed out")
         } else if r.ok {
-            "ok"
+            (sgr(color, "32", "✓"), "ok")
         } else {
-            "fail"
+            (sgr(color, "31", "✗"), "failed")
         };
-        println!("── {} ({tag})", s.name);
+        println!("\n  {mark} {}  {}", bold(color, &s.name), dim(color, tag));
         if !r.stdout.trim().is_empty() {
             print!("{}", r.stdout);
         }
@@ -533,7 +746,7 @@ pub fn run_command_action(
             eprint!("{}", r.stderr);
         }
     }
-    println!("run: {ok}/{} ok", targets.len());
+    println!("\n  {}\n", bold(color, &format!("{ok} of {n} ok")));
     Ok(())
 }
 
@@ -1236,6 +1449,30 @@ mod tests {
         );
         assert!(!r.contains('\x1b')); // no ANSI when colour is off
         assert!(scan_report(&snaps, &roots, took, now, true).contains('\x1b')); // …and some when it is
+    }
+
+    /// A missing selector teaches instead of erroring: what the verb does, the
+    /// whole selector vocabulary wired to that verb, and a safe place to start.
+    #[test]
+    fn action_guide_explains_the_verb_and_how_to_select() {
+        let g = action_guide(
+            "fetch",
+            "git fetch across the repos you pick",
+            "safe anywhere: it never touches your working tree",
+            false,
+        );
+        assert!(g.contains("cohors")); // masthead
+        assert!(g.contains("fetch · git fetch across the repos you pick"));
+        assert!(g.contains("never touches your working tree")); // the safety note
+        for (sel, _) in SELECTORS {
+            assert!(
+                g.contains(&format!("cohors fetch --select {sel}")),
+                "selector `{sel}` should be offered for this verb"
+            );
+        }
+        assert!(g.contains("cohors scan")); // the read-only starting point
+        assert!(g.contains("--dry-run")); // look before you leap
+        assert!(!g.contains('\x1b'));
     }
 
     #[test]
