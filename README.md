@@ -80,10 +80,43 @@ actually exist.
 - **Detection first, config second.** An agent should not write down what the
   launchpad can already infer. An empty `flows` array is a valid answer.
 
+## MCP server
+
+`mcp/` is a real MCP server (stdio transport) giving any MCP-capable agent the
+same discovery, validation, and write capabilities the VS Code extension's
+buttons use: `list_repos`, `repo_status`, `read_contract`,
+`write_repo_contribution`, `read_board`, `write_board`, `record_activity`.
+Writes always validate against the contract first and reject with a specific
+error list rather than writing an invalid file. It ships wired into the
+Claude Code plugin (`.mcp.json`), so installing the plugin registers it
+automatically; any other MCP client can point at
+`node mcp/src/server.js` directly.
+
+## Installing
+
+```sh
+cd cli && npm install -g .
+principia status        # read-only: what would happen, and why not otherwise
+principia init           # do it
+```
+
+`init` detects your agent runners, registers the Claude Code plugin
+(marketplace + install, from this checkout), writes project-local skill files
+as a fallback that works even without the plugin, points other runners
+(Codex, Gemini CLI, agy) at the contract via `AGENTS.md`, sets up
+`~/.principia/`, offers the VS Code/Cursor extension as a dev symlink, and
+gitignores `.principia/local.json`. Every step checks its own prerequisites
+first and is skipped (not fatal) if unmet; re-running is safe; nothing
+outside `.principia/`, `.claude/`, `AGENTS.md`, and `.gitignore` in the target
+repo, plus `~/.principia/` and the plugin/extension registration, is ever
+touched.
+
 ## Status
 
-Early. The contract, validator, plugin, prompts and templates are in place. The
-VS Code extension is being built against this repo.
+Early. The contract, validator, plugin, MCP server, CLI, prompts and templates
+are in place and tested end to end (including a real stdio MCP handshake and
+a full `init` run against an isolated scratch environment). Not yet published
+anywhere; install locally per above.
 
 ## Related
 

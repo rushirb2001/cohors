@@ -1,0 +1,15 @@
+{
+  "name": "principia-mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing Principia's repo discovery, contract validation, and cross-repo board as tools for any MCP-capable agent.",
+  "license": "MIT",
+  "type": "commonjs",
+  "main": "src/server.js",
+  "bin": {
+    "principia-mcp": "./src/server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^3.23.0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "principia-cli",
+  "version": "0.1.0",
+  "description": "Installer for Principia: detects your agent runners, wires the Claude Code plugin and MCP server, and offers the VS Code extension.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": { "principia": "./bin/principia.js" },
+  "engines": { "node": ">=18" }
+}
