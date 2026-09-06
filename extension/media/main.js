@@ -180,6 +180,15 @@
     </section>`;
   }
 
+  // Every tab renders into an explicit main column, and only tabs with a
+  // genuinely short/bounded companion card (status, tips) get a rail. Nothing
+  // is ever paired by DOM-order luck (see main.css for why that broke).
+  const layout = (main, rail) =>
+    `<div class="content">
+      <div class="main">${main}</div>
+      ${rail ? `<div class="rail">${rail}</div>` : ""}
+    </div>`;
+
   const empty = (icon, title, lines, action = "") =>
     `<div class="empty">${ico(icon, "big")}<b>${esc(title)}</b>${lines.map((l) => `<p>${l}</p>`).join("")}${action}</div>`;
 
@@ -241,8 +250,15 @@
   }
 
   /* ───────── tabs ───────── */
+  const tToday = () => layout(tTodayInner());
+  const tTasks = () => layout(tTasksInner());
+  const tWorkflows = () => layout(tWorkflowsInner());
+  const tRepos = () => layout(tReposInner());
+  const tScripts = () => layout(tScriptsInner());
+  const tRecents = () => layout(tRecentsInner());
 
-  function tToday() {
+
+  function tTodayInner() {
     rows = [];
     if (!(D.repos || []).length) {
       return card("boot", "Nothing discovered yet", "compass",
@@ -301,7 +317,7 @@
     return out;
   }
 
-  function tTasks() {
+  function tTasksInner() {
     rows = [];
     const all = allTasks().filter((t) => hit(t.title) || hit(t.repo) || hit(t.notes));
     if (!allTasks().length) {
@@ -324,7 +340,7 @@
     }).join("");
   }
 
-  function tWorkflows() {
+  function tWorkflowsInner() {
     rows = [];
     const declared = (D.repos || []).filter((r) => r.flows.some((f) => f.source === "declared")).filter((r) => hit(r.name));
     if (!declared.length) {
@@ -343,7 +359,7 @@
     }).join("");
   }
 
-  function tRepos() {
+  function tReposInner() {
     rows = [];
     if (!(D.repos || []).length) {
       return card("r", "Repos", "repo",
@@ -363,8 +379,8 @@
 
   function tAgents() {
     rows = [];
-    let out = card("runners", "Runners", "server-process",
-      `<div class="rgrid">${(D.runners || []).map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
+    const rail = card("runners", "Runners", "server-process",
+      `<div class="rgrid one">${(D.runners || []).map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
         <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
         <div class="l2"><span class="mono dim">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span></div>
       </div>`).join("")}</div>`,
@@ -372,14 +388,14 @@
 
     const withAgents = (D.repos || []).filter((r) => r.agents.length).filter((r) => hit(r.name));
     if (!withAgents.length) {
-      out += card("a", "Repo agents", "sparkle",
+      const main = card("a", "Repo agents", "sparkle",
         empty("sparkle", "No repository ships an agent yet",
           [`A repo declares agents as prompt files in <code>.principia/agents/*.md</code>, committed alongside its code.`,
            `They are runner-agnostic: the same prompt runs under Claude Code, Codex, Gemini CLI or agy.`],
           `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
-      return out;
+      return layout(main, rail);
     }
-    out += withAgents.map((r) => card(`a-${r.dirName}`, r.name, "sparkle",
+    const main = withAgents.map((r) => card(`a-${r.dirName}`, r.name, "sparkle",
       r.agents.map((a) => `<div ${F(`data-root="${esc(r.root)}" data-agent="${esc(a.id)}"`)}>
         <span class="ic">${ico("sparkle")}</span>
         <div class="main"><div class="l1"><b>${esc(a.label || a.id)}</b></div>
@@ -388,10 +404,10 @@
         <div class="acts"><button class="btn" data-agent="${esc(a.id)}" data-root="${esc(r.root)}">${ico("play", "sm")} Run</button></div>
       </div>`).join("")
     )).join("");
-    return out;
+    return layout(main, rail);
   }
 
-  function tScripts() {
+  function tScriptsInner() {
     rows = [];
     const rs = (D.repos || []).filter((r) => r.flows.some((f) => f.source === "detected")).filter((r) => hit(r.name));
     if (!rs.length) {
@@ -406,7 +422,7 @@
       `<span class="cnt mono">${esc(r.branch)}</span>`)).join("");
   }
 
-  function tRecents() {
+  function tRecentsInner() {
     rows = [];
     const rs = (D.recents || []).filter((r) => hit(r.name));
     if (!rs.length) {
@@ -430,9 +446,8 @@
   function tDevices() {
     rows = [];
     const a = D.android || {}, i = D.ios || {};
-    let out = "";
 
-    out += card("android", "Android", "device-mobile",
+    const rail = card("android", "Android", "device-mobile",
       !a.available ? empty("circle-slash", "Android SDK not found", [esc(a.reason || "Install the Android SDK to boot an emulator from here.")])
       : `<div class="row"><span class="ic">${ico("device-mobile")}</span>
           <div class="main"><div class="l1"><b>${a.booted ? esc(a.device) : "No emulator running"}</b>${a.booted ? `<span class="chip ok">booted</span>` : ""}</div>
@@ -441,7 +456,7 @@
           <div class="acts">${a.avds && a.avds.length ? `<button class="btn" data-android="${a.booted ? "stop" : "boot"}">${ico(a.booted ? "debug-stop" : "play", "sm")} ${a.booted ? "Stop" : "Boot"}</button>` : ""}</div>
         </div>`);
 
-    out += card("ios", "iOS simulators", "device-mobile",
+    let main = card("ios", "iOS simulators", "device-mobile",
       !i.available ? empty("circle-slash", "Xcode tools not found", [esc(i.reason || "Install Xcode command line tools to use simulators.")])
       : !(i.all || []).length ? empty("device-mobile", "No simulators available", ["Create one in Xcode."])
       : i.all.slice(0, 8).map((d) => `<div class="row">
@@ -453,7 +468,7 @@
       i.available ? `<span class="cnt">${(i.booted || []).length} booted · ${(i.all || []).length} available</span>` : "");
 
     const ports = D.ports || [];
-    out += card("ports", "Listening ports", "radio-tower",
+    main += card("ports", "Listening ports", "radio-tower",
       ports.length ? ports.map((p) => `<div class="row">
           <span class="ic">${ico("radio-tower")}</span>
           <div class="main"><div class="l1"><b>${p.port}</b><span class="chip">${esc(p.cmd || "")}</span></div></div>
@@ -465,7 +480,7 @@
         </div>`).join("")
       : empty("radio-tower", "Nothing listening", ["Dev servers you start from here show up with a link to open them."]),
       ports.length ? `<span class="cnt">${ports.length}</span>` : "");
-    return out;
+    return layout(main, rail);
   }
 
   function tSetup() {
@@ -474,13 +489,9 @@
     const runners = D.runners || [];
     const runnable = runners.some((r) => r.available);
     const configuredCount = (D.repos || []).length - unset.length;
-    // The repo you touched most recently is the one worth suggesting first.
     const suggestion = unset[0];
 
-    let out = "";
-
-    // Lead with the next concrete action, not a status report.
-    out += `<section class="card wide" data-sec="quick">
+    let main = `<section class="card" data-sec="quick">
       <header>${ico("sparkle", "sm")}<h3>Ask your agent</h3></header>
       <div class="cbody"><div class="suggest">
         ${suggestion ? `<div class="sg">
@@ -498,23 +509,7 @@
       </div></div>
     </section>`;
 
-    if (!runnable) {
-      out += card("runners", "No agent runner found", "circle-slash",
-        `<div class="rgrid">${runners.map((r) => `<div class="rc no">
-          <div class="l1">${ico("circle-slash")}<b>${esc(r.label)}</b></div>
-          <div class="l2"><span class="mono dim">${esc(r.reason || "not installed")}</span></div>
-        </div>`).join("")}</div>`,
-        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
-    } else {
-      out += card("runners", "Runners", "server-process",
-        `<div class="rgrid">${runners.map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
-          <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
-          <div class="l2"><span class="mono dim">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span></div>
-        </div>`).join("")}</div>`,
-        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
-    }
-
-    out += card("todo", "Waiting on setup", "repo",
+    main += card("todo", "Waiting on setup", "repo",
       unset.length ? unset.map((r) => `<div ${F(`data-root="${esc(r.root)}"`)}>
           <span class="ic">${ico(r.icon || "repo")}</span>
           <div class="main"><div class="l1"><b>${esc(r.name)}</b></div>
@@ -529,13 +524,26 @@
         : empty("check", "Every repository has opted in", ["Nothing left to set up."]),
       unset.length ? `<span class="cnt">${configuredCount}/${(D.repos || []).length} set up</span>` : "");
 
-    out += card("how", "How this fills up", "lightbulb",
-      `<div class="empty">
-        <p>Launch pad ships empty on purpose. It reads the projects you recently opened, then asks each one what it offers.</p>
-        <p>A repository answers by committing a <code>.principia/</code> directory: its flows, the agents it ships, and its current work. You never fill this in by hand, you ask an agent to.</p>
-        <p>Scripts auto-detected from <code>package.json</code>, Cargo, Make and Gradle need no setup at all. Setting up a repo only adds what detection cannot infer.</p>
-      </div>`);
-    return out;
+    const rail = (runnable ? card("runners", "Runners", "server-process",
+        `<div class="rgrid one">${runners.map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
+          <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
+          <div class="l2"><span class="mono dim">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span></div>
+        </div>`).join("")}</div>`,
+        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`)
+      : card("runners", "No agent runner found", "circle-slash",
+        `<div class="rgrid one">${runners.map((r) => `<div class="rc no">
+          <div class="l1">${ico("circle-slash")}<b>${esc(r.label)}</b></div>
+          <div class="l2"><span class="mono dim">${esc(r.reason || "not installed")}</span></div>
+        </div>`).join("")}</div>`,
+        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`))
+      + card("how", "How this fills up", "lightbulb",
+        `<div class="empty">
+          <p>Launch pad ships empty on purpose. It reads the projects you recently opened, then asks each one what it offers.</p>
+          <p>A repository answers by committing a <code>.principia/</code> directory: its flows, the agents it ships, and its current work. You never fill this in by hand, you ask an agent to.</p>
+          <p>Scripts auto-detected from <code>package.json</code>, Cargo, Make and Gradle need no setup at all. Setting up a repo only adds what detection cannot infer.</p>
+        </div>`);
+
+    return layout(main, rail);
   }
 
   /* ───────── render ───────── */

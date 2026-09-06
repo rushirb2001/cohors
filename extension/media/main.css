@@ -77,15 +77,9 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .nav kbd { font-size: 9px; opacity: .35; border: 0; min-width: 8px; text-align: right; }
 
 /* ── the only scrolling region ── */
-#body { grid-row: 2; overflow-y: auto; overflow-x: hidden; padding: 14px 16px 24px;
-  display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; }
+#body { grid-row: 2; overflow-y: auto; overflow-x: hidden; padding: 14px 16px 24px; }
 #body.in { animation: up 180ms var(--ease) both; }
 @keyframes up { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-.hero { grid-column: 1 / -1; }
-@media (min-width: 1180px) {
-  #body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hero { grid-column: 1 / -1; }
-}
 
 .bot { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 7px 16px; border-top: 1px solid var(--line); background: var(--panel);
@@ -113,14 +107,18 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .bar i { display: block; height: 100%; border-radius: 3px;
   background: var(--vscode-charts-green, #3fb950); transition: width 450ms var(--ease); }
 
-/* ── cards: single column by default, two on wide screens ── */
-#body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
-#body.in { animation: up 180ms var(--ease) both; }
-@keyframes up { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
-.hero { grid-column: 1 / -1; }
-@media (min-width: 1000px) {
-  #body { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .card.wide, .hero { grid-column: 1 / -1; }
+/* ── layout: an explicit main column plus an optional rail.
+   NOT a 2-column auto-grid: DOM-order pairing put a 4-row card and a
+   16-row card in the same grid row, which forces the row to the tall
+   card's height and leaves the short card's column blank underneath
+   it. A named main/rail split means every card's height is its own;
+   nothing is ever paired by accident. ── */
+.content { display: flex; flex-direction: column; gap: 14px; max-width: 900px; margin: 0 auto; }
+.main, .rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+@media (min-width: 1150px) {
+  .content:has(.rail) { flex-direction: row; align-items: flex-start; max-width: 1300px; }
+  .content:has(.rail) > .main { flex: 1 1 auto; }
+  .content:has(.rail) > .rail { flex: 0 0 280px; }
 }
 
 .card { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); overflow: hidden;
@@ -206,7 +204,7 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 
 /* ── runner cards ── */
 .rgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; background: var(--line); }
-@media (min-width: 560px) { .rgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 560px) { .rgrid:not(.one) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .rc { padding: 10px 12px; background: var(--panel); }
 .rc .l1 b { font-weight: 500; }
 .rc .l2 { margin-top: 2px; }
