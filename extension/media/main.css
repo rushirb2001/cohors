@@ -157,29 +157,29 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
    relative box takes both out of flow, so the grid track is sized only by
    --side-w (small, fixed), never by whichever content happens to be widest.
    A row with no actions at all just omits .sa and gets a plain static box. ── */
-.side { position: relative; height: 20px; min-width: var(--side-w, 26px); align-self: center; }
-.side .sm, .side .sa {
+.rslot { position: relative; height: 20px; min-width: var(--side-w, 26px); align-self: center; }
+.rslot .sm, .rslot .sa {
   position: absolute; right: 0; top: 50%; white-space: nowrap;
   display: flex; align-items: center; gap: 4px;
   transition: opacity var(--t) var(--ease), transform var(--t) var(--ease);
 }
-.side .sm {
+.rslot .sm {
   font-size: 11.5px; color: var(--vscode-descriptionForeground);
   transform: translateY(-50%); opacity: 1;
 }
-.side .sa {
+.rslot .sa {
   transform: translateY(-50%) translateX(6px); opacity: 0; pointer-events: none;
 }
-.row:hover .side .sm, .row.on .side .sm { opacity: 0; transform: translateY(-50%) translateX(-6px); }
-.row:hover .side .sa, .row.on .side .sa, .side .sa:focus-within {
+.row:hover .rslot .sm, .row.on .rslot .sm { opacity: 0; transform: translateY(-50%) translateX(-6px); }
+.row:hover .rslot .sa, .row.on .rslot .sa, .rslot .sa:focus-within {
   opacity: 1; transform: translateY(-50%) translateX(0); pointer-events: auto;
 }
-.side.static { display: flex; align-items: center; gap: 6px; height: auto; min-width: 0; position: static; }
-.side.n1 { --side-w: 30px; }
-.side.n2 { --side-w: 60px; }
-.side.n3 { --side-w: 90px; }
-.side.n4 { --side-w: 120px; }
-.card .row .side .sa .btn { opacity: 1; }
+.rslot.static { display: flex; align-items: center; gap: 6px; height: auto; min-width: 0; position: static; }
+.rslot.n1 { --side-w: 30px; }
+.rslot.n2 { --side-w: 60px; }
+.rslot.n3 { --side-w: 90px; }
+.rslot.n4 { --side-w: 120px; }
+.card .row .rslot .sa .btn { opacity: 1; }
 
 /* ── icon morph: for the one list where the leading icon's slot doubles as
    the row's primary action (e.g. Setup: repo glyph -> "ask agent"). Optional;
