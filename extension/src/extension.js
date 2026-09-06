@@ -104,12 +104,27 @@ function openRepo(repo, newWindow) {
 
 // Writes the prompt to a temp file so every runner can be invoked the same way,
 // regardless of how it takes input.
+const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;   // the spec's kebab-case rule
+
 function promptFile(body, tag) {
   const dir = path.join(os.tmpdir(), "principia");
   fs.mkdirSync(dir, { recursive: true });
-  const p = path.join(dir, `${tag}-${Date.now()}.md`);
+  // Belt and braces: runners shell-quote, but repo-supplied text must never
+  // reach a filename in the first place.
+  const safe = String(tag).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 60) || "prompt";
+  const p = path.join(dir, `${safe}-${Date.now()}.md`);
   fs.writeFileSync(p, body);
   return p;
+}
+
+// An agent file is declared by a repo we may not have written. Keep it inside
+// that repo's .principia/ directory: `..` segments must not escape.
+function resolveAgentFile(root, rel) {
+  if (typeof rel !== "string" || !rel) return null;
+  const base = path.resolve(root, ".principia");
+  const target = path.resolve(root, rel);
+  if (target !== base && !target.startsWith(base + path.sep)) return null;
+  return target;
 }
 
 function substitute(body, repo) {
@@ -153,11 +168,25 @@ async function setupRepo(root, runnerId) {
 async function runRepoAgent(root, agentId, runnerId) {
   const repo = lastData && lastData.repos.find((r) => r.root === root);
   if (!repo) return;
+  if (!ID_RE.test(String(agentId || ""))) {
+    vscode.window.showErrorMessage(`Principia: refusing agent id "${agentId}" (must be kebab-case).`);
+    return;
+  }
   const agent = repo.agents.find((a) => a.id === agentId);
   if (!agent) { vscode.window.showErrorMessage(`Principia: no agent "${agentId}" in ${repo.name}`); return; }
 
-  const file = path.join(root, agent.file);
+  const file = resolveAgentFile(root, agent.file);
+  if (!file) {
+    vscode.window.showErrorMessage(`Principia: refusing agent file "${agent.file}" (must stay inside .principia/).`);
+    return;
+  }
   if (!D.exists(file)) { vscode.window.showErrorMessage(`Principia: agent file missing: ${agent.file}`); return; }
+
+  // Repo-declared commands are code from a repository. Honour Workspace Trust.
+  if (!vscode.workspace.isTrusted) {
+    vscode.window.showWarningMessage("Principia: this workspace is not trusted, so repo-declared agents are disabled.");
+    return;
+  }
 
   // Honour the repo's own declaration of which runners can execute this.
   const allowed = agent.supports && agent.supports.length ? agent.supports : null;
@@ -232,6 +261,10 @@ async function onMessage(m) {
       if (!repo) return;
       const flow = repo.flows.find((f) => f.id === m.id);
       if (!flow) return;
+      if (flow.source === "declared" && !vscode.workspace.isTrusted) {
+        vscode.window.showWarningMessage("Principia: this workspace is not trusted, so repo-declared flows are disabled.");
+        return;
+      }
       const cwd = flow.cwd ? path.join(repo.root, flow.cwd) : repo.root;
       return void terminal(cwd, flow.run, `${repo.name}: ${flow.label}`);
     }

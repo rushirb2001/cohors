@@ -99,6 +99,8 @@ function main() {
 
       if (!a || typeof a.file !== "string") { err(`${at}: file is required`); continue; }
       if (ABS_RE.test(a.file)) { err(`${at}: file must be relative to the repo root`); continue; }
+      if (a.file.split(/[\\/]/).includes("..")) { err(`${at}: file must not contain ".."; keep it inside .principia/`); continue; }
+      if (!/^\.principia[\\/]/.test(a.file)) { err(`${at}: file must live under .principia/`); continue; }
       const p = path.join(root, a.file);
       if (!fs.existsSync(p)) { err(`${at}: file not found: ${a.file}`); continue; }
       const body = fs.readFileSync(p, "utf8");

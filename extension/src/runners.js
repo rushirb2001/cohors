@@ -11,31 +11,40 @@ const cp = require("child_process");
 
 const HOME = os.homedir();
 
+// Single-quote for POSIX shells. Inside single quotes nothing expands, so this
+// is the only safe way to put a path we did not author into a shell string.
+// The path reaches us from a repository's committed repo.json, which on a cloned
+// repo is attacker-controlled.
+function shq(s) {
+  return "'" + String(s).replace(/'/g, "'\\''") + "'";
+}
+
 const RUNNERS = [
   {
     id: "claude-code",
     label: "Claude Code",
     bin: "claude",
-    // $PROMPT is substituted with a shell-quoted absolute path to the prompt file.
-    command: (p) => `claude --append-system-prompt "$(cat ${p})"`,
+    // The path is single-quoted; $(...) output is passed as one argument and is
+    // never re-expanded, so prompt content cannot break out either.
+    command: (p) => `claude --append-system-prompt "$(cat ${shq(p)})"`,
   },
   {
     id: "codex",
     label: "Codex",
     bin: "codex",
-    command: (p) => `codex --prompt-file ${p}`,
+    command: (p) => `codex --prompt-file ${shq(p)}`,
   },
   {
     id: "gemini-cli",
     label: "Gemini CLI",
     bin: "gemini",
-    command: (p) => `gemini -p "$(cat ${p})"`,
+    command: (p) => `gemini -p "$(cat ${shq(p)})"`,
   },
   {
     id: "agy",
     label: "agy",
     bin: "agy",
-    command: (p) => `agy run --prompt ${p}`,
+    command: (p) => `agy run --prompt ${shq(p)}`,
   },
 ];
 
@@ -78,7 +87,8 @@ function byId(id) { return RUNNERS.find((r) => r.id === id); }
 function commandFor(runnerId, promptFile) {
   const r = byId(runnerId);
   if (!r) return null;
-  return r.command(JSON.stringify(promptFile));
+  // JSON.stringify is NOT shell quoting. Each runner shell-quotes via shq().
+  return r.command(promptFile);
 }
 
 // One shape for every runner, so a cross-runner timeline is possible at all.
@@ -100,4 +110,4 @@ function recordLaunch({ runner, repo, branch, agent }) {
   } catch { /* history is best-effort; never block a launch */ }
 }
 
-module.exports = { RUNNERS, detect, resetDetection, commandFor, recordLaunch };
+module.exports = { RUNNERS, detect, resetDetection, commandFor, recordLaunch, shq };
