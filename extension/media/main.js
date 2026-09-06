@@ -87,6 +87,7 @@
     return (a.booted ? 1 : 0) + ((i.booted || []).length);
   }
   function unconfiguredRepos() { return (D.repos || []).filter((r) => !r.configured).length; }
+  function firstUnconfigured() { return (D.repos || []).find((r) => !r.configured); }
 
   function counts() {
     const c = (D && D.counts) || {};
@@ -289,11 +290,13 @@
       <div class="bar"><i style="width:${pct}%"></i></div>
     </section>`;
 
+    const anyRunner = (D.runners || []).some((x) => x.available);
     out += card("focus", "Focus today", "target",
       today.length ? today.map(taskRow).join("")
-        : empty("target", "No focus set for today",
-            [`Focus comes from two places: a repo's own <code>.principia/repo.json</code> tasks, and the cross-repo board at <code>~/.principia/board.json</code>.`,
-             `Ask any agent: <em>plan my focus across repos using the Principia plan-day prompt</em>.`]),
+        : empty("target", "Nothing set for today",
+            [`Focus comes from a repo's own <code>.principia/repo.json</code> tasks, plus the cross-repo board at <code>~/.principia/board.json</code>.`,
+             `An agent looks at uncommitted work, unpushed branches and repo tasks, then decides what is worth your attention today.`],
+            `<button class="btn p" data-plan="1" ${anyRunner ? "" : "disabled"} title="${anyRunner ? "" : "No agent runner is installed"}">${ico("sparkle", "sm")} Ask agent to plan my day</button>`),
       `<button class="ib" data-act="openSpec" title="Open the contract">${ico("book")}</button>`);
 
     if (blocked.length) out += card("blocked", "Blocked", "circle-slash", blocked.sort(byPri).map(taskRow).join(""));
@@ -312,8 +315,9 @@
           <div class="rslot n1"><span class="sa">${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</span></div>
         </div>`).join("")
         : empty("history", "No agent sessions recorded yet",
-            [`Runs launched from here are logged to <code>~/.principia/history/</code>.`,
-             `Install the Principia Claude Code plugin and its <code>SessionStart</code> hook records sessions you start anywhere.`]));
+            [`Runs launched from Launch pad are logged to <code>~/.principia/history/</code>.`,
+             `Install the Principia Claude Code plugin and its <code>SessionStart</code> hook records sessions you start anywhere, not only ones launched from here.`],
+            `<button class="btn" data-tab-go="setup">${ico("gear", "sm")} Go to Setup</button>`));
     return out;
   }
 
@@ -321,12 +325,13 @@
     rows = [];
     const all = allTasks().filter((t) => hit(t.title) || hit(t.repo) || hit(t.notes));
     if (!allTasks().length) {
+      const anyRunner = (D.runners || []).some((x) => x.available);
       return card("t", "Tasks", "checklist",
         empty("checklist", "No tasks yet",
-          [`A repository declares its own short-lived work in <code>.principia/repo.json</code> under <code>tasks</code>.`,
-           `Cross-repo focus lives in <code>~/.principia/board.json</code>.`,
-           `Both are written by an agent, not by hand.`],
-          `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
+          [`A repository declares its own short-lived work in <code>.principia/repo.json</code> under <code>tasks</code>. Cross-repo focus lives in <code>~/.principia/board.json</code>.`,
+           `Neither is written by hand. Ask an agent for whichever you need.`],
+          `<button class="btn p" data-plan="1" ${anyRunner ? "" : "disabled"}>${ico("sparkle", "sm")} Ask agent to plan my day</button>
+           <button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
     }
     if (!all.length) return card("t", "Tasks", "checklist", empty("search", "Nothing matches", ["Try a different filter."]));
 
@@ -344,12 +349,14 @@
     rows = [];
     const declared = (D.repos || []).filter((r) => r.flows.some((f) => f.source === "declared")).filter((r) => hit(r.name));
     if (!declared.length) {
+      const anyRunner = (D.runners || []).some((x) => x.available);
+      const s0 = firstUnconfigured();
       return card("w", "Workflows", "rocket",
         empty("rocket", "No repository has declared its flows yet",
-          [`A <b>workflow</b> is a flow a repo declares on purpose: a real label, a port, an ordering, a composite command.`,
-           `Anything auto-detected from <code>package.json</code>, Cargo, Make or Gradle shows under <b>Scripts</b> instead.`,
-           `Run <b>Set up</b> on a repo and an agent writes them.`],
-          `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
+          [`A <b>workflow</b> is a flow a repo declares on purpose: a real label, a port, an ordering, a composite command. Anything auto-detected from <code>package.json</code>, Cargo, Make or Gradle shows under <b>Scripts</b> instead, with no setup at all.`,
+           s0 ? `Ask an agent to look at <b>${esc(s0.name)}</b> and decide what is worth declaring.` : `Ask an agent, in any repo, to declare what it offers.`],
+          s0 ? `<button class="btn p" data-setup="${esc(s0.root)}" ${anyRunner ? "" : "disabled"}>${ico("sparkle", "sm")} Ask agent to set up ${esc(s0.name)}</button>`
+             : `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
     }
     const groups = [...new Set(declared.map((r) => r.group || ""))];
     return groups.map((g) => {
@@ -364,7 +371,8 @@
     if (!(D.repos || []).length) {
       return card("r", "Repos", "repo",
         empty("repo", "No repositories discovered",
-          ["Open a git repository in this editor once and it shows up here, ranked by how recently you used it."]));
+          ["Open a git repository in this editor once and it shows up here, ranked by how recently you used it."],
+          `<button class="btn" data-cmd="workbench.action.files.openFolder">${ico("folder-opened", "sm")} Open a folder</button>`));
     }
     const rs = (D.repos || []).filter((r) => hit(r.name) || hit(r.summary) || hit(r.group));
     if (!rs.length) return card("r", "Repos", "repo", empty("search", "Nothing matches", ["Try a different filter."]));
@@ -388,11 +396,14 @@
 
     const withAgents = (D.repos || []).filter((r) => r.agents.length).filter((r) => hit(r.name));
     if (!withAgents.length) {
+      const anyRunner = (D.runners || []).some((x) => x.available);
+      const s0 = firstUnconfigured();
       const main = card("a", "Repo agents", "sparkle",
         empty("sparkle", "No repository ships an agent yet",
-          [`A repo declares agents as prompt files in <code>.principia/agents/*.md</code>, committed alongside its code.`,
-           `They are runner-agnostic: the same prompt runs under Claude Code, Codex, Gemini CLI or agy.`],
-          `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
+          [`A repo declares agents as prompt files in <code>.principia/agents/*.md</code>, committed alongside its code. They are runner-agnostic: the same prompt runs under Claude Code, Codex, Gemini CLI or agy.`,
+           s0 ? `Ask an agent to look at <b>${esc(s0.name)}</b> and decide whether it needs one.` : `Ask an agent, in any repo, whether it needs one.`],
+          s0 ? `<button class="btn p" data-setup="${esc(s0.root)}" ${anyRunner ? "" : "disabled"}>${ico("sparkle", "sm")} Ask agent to set up ${esc(s0.name)}</button>`
+             : `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
       return layout(main, rail);
     }
     const main = withAgents.map((r) => card(`a-${r.dirName}`, r.name, "sparkle",
@@ -427,7 +438,8 @@
     if (!rs.length) {
       return card("re", "Recents", "history",
         empty("history", "No recent projects",
-          ["This mirrors your editor's own recently-opened list, filtered to git repositories."]));
+          ["This mirrors your editor's own recently-opened list, filtered to git repositories."],
+          `<button class="btn" data-cmd="workbench.action.files.openFolder">${ico("folder-opened", "sm")} Open a folder</button>`));
     }
     return card("re", "Recently opened", "history",
       rs.map((r) => `<div ${F(`data-root="${esc(r.root)}"`)}>
@@ -609,7 +621,7 @@
       const b = ev.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab);
     });
     app.addEventListener("click", (ev) => {
-      const el = ev.target.closest("[data-act],[data-open],[data-setup],[data-plan],[data-flow],[data-agent],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go]");
+      const el = ev.target.closest("[data-act],[data-open],[data-setup],[data-plan],[data-flow],[data-agent],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go],[data-cmd]");
       if (!el || el.disabled) return;
       ev.stopPropagation();
       const d = el.dataset;
@@ -618,6 +630,7 @@
       if (d.act) return send({ type: d.act });
       if (d.setup) return send({ type: "setup", root: d.setup });
       if (d.plan) return send({ type: "plan" });
+      if (d.cmd) return send({ type: "command", id: d.cmd });
       if (d.flow) return send({ type: "flow", root: d.root, id: d.flow });
       if (d.agent && d.root) return send({ type: "agent", root: d.root, id: d.agent });
       if (d.term) return send({ type: "terminal", root: d.term });

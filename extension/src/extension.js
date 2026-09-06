@@ -358,6 +358,8 @@ async function onMessage(m) {
     }
     case "copy":
       return vscode.env.clipboard.writeText(m.text);
+    case "command":
+      return void vscode.commands.executeCommand(m.id);
     case "redetect":
       R.resetDetection();
       return refresh(true);
