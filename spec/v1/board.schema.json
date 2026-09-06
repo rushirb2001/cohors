@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://principia.dev/spec/v1/board.schema.json",
+  "title": "Principia cross-repo board",
+  "type": "object",
+  "required": ["specVersion"],
+  "additionalProperties": true,
+  "properties": {
+    "specVersion": { "type": "integer", "enum": [1] },
+    "updated": { "type": "string", "format": "date-time" },
+    "focus": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "title": { "type": "string", "maxLength": 120 },
+          "repo": { "type": "string", "maxLength": 64 },
+          "ref": { "type": "string", "maxLength": 40 },
+          "status": { "type": "string", "enum": ["todo", "doing", "blocked", "done"] },
+          "agent": { "type": "string", "maxLength": 40 },
+          "thread": { "type": "string", "maxLength": 64 }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://principia.dev/spec/v1/repo.schema.json",
+  "title": "Principia repo contribution",
+  "type": "object",
+  "required": ["specVersion", "name"],
+  "additionalProperties": true,
+  "properties": {
+    "specVersion": { "type": "integer", "enum": [1] },
+    "name": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "summary": { "type": "string", "maxLength": 80 },
+    "group": { "type": "string", "maxLength": 40 },
+    "icon": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "updated": { "type": "string", "format": "date-time" },
+    "generatedFrom": { "type": "string", "pattern": "^[0-9a-f]{7,40}$" },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["label", "url"],
+        "properties": {
+          "label": { "type": "string", "maxLength": 40 },
+          "url": { "type": "string", "format": "uri" }
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "run"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string", "maxLength": 48 },
+          "run": { "$ref": "#/$defs/relCommand" },
+          "cwd": { "$ref": "#/$defs/relPath" },
+          "kind": { "type": "string", "enum": ["server", "task", "test", "build", "tool"] },
+          "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "background": { "type": "boolean" },
+          "primary": { "type": "boolean" }
+        }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "label", "file"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string", "maxLength": 48 },
+          "file": { "$ref": "#/$defs/relPath" },
+          "supports": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["claude-code", "codex", "gemini-cli", "agy"] }
+          }
+        }
+      }
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "title": { "type": "string", "maxLength": 120 },
+          "status": { "type": "string", "enum": ["todo", "doing", "blocked", "done"] },
+          "priority": { "type": "string", "enum": ["high", "normal", "low"] },
+          "notes": { "type": "string", "maxLength": 400 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 40 },
+    "relPath": { "type": "string", "not": { "pattern": "^(/|~|[A-Za-z]:)" } },
+    "relCommand": { "type": "string", "minLength": 1, "maxLength": 300 }
+  }
+}

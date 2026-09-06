@@ -1,0 +1,7 @@
+node_modules/
+out/
+dist/
+*.vsix
+.DS_Store
+# machine-local, never committed (see spec/v1/SPEC.md)
+.principia/local.json
