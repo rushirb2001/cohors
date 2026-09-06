@@ -20,15 +20,17 @@
   let built = false;
   const painted = new Map();
 
+  // Flat order for keyboard 1-9; `under` nests an item in the sidebar.
   const TABS = [
     ["today", "Today", "home"],
     ["tasks", "Tasks", "checklist"],
-    ["workflows", "Workflows", "rocket"],
-    ["repos", "Repos", "repo"],
-    ["agents", "Agents", "sparkle"],
-    ["scripts", "Scripts", "play"],
     ["recents", "Recents", "history"],
-    ["devices", "Devices", "device-mobile"],
+    ["repos", "Repos", "folder"],
+    ["workflows", "Workflows", "rocket"],
+    ["agents", "Agents", "sparkle", "workflows"],
+    ["scripts", "Scripts", "play", "workflows"],
+    ["devices", "Devices", "device-mobile", "workflows"],
+    ["setup", "Setup", "gear"],
   ];
 
   const send = (m) => vscode.postMessage(m);
@@ -46,31 +48,34 @@
 
   function buildShell() {
     app.innerHTML = `
-      <header class="head">
+      <header class="top">
+        <span class="mark">${ico("compass")}</span>
         <h1>Launch pad</h1>
         <span class="sub" id="where"></span>
         <span class="grow"></span>
+        <label class="find">${ico("search", "sm")}<input id="q" placeholder="Filter" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
         <span class="stat" id="mem"></span>
         <span class="stat" id="load"></span>
         <button class="ib" data-act="refresh" title="Refresh (r)">${ico("refresh")}</button>
-        <button class="ib" data-act="openSpec" title="Open the contract">${ico("json")}</button>
       </header>
 
-      <nav class="tabs" id="tabs">
-        ${TABS.map(([id, label, icon], i) =>
-          `<button class="tab" data-tab="${id}">${ico(icon, "sm")}<span class="lb">${label}</span><b class="n" data-n="${id}"></b><kbd>${i + 1}</kbd></button>`
-        ).join("")}
-      </nav>
+      <aside class="side">
+        <div class="ov" id="ov"></div>
+        <nav id="tabs">
+          ${TABS.map(([id, label, icon, under], i) =>
+            `<button class="nav${under ? " sub" : ""}" data-tab="${id}">${ico(icon, "sm")}<span class="lb">${label}</span><span class="grow"></span><b class="n" data-n="${id}"></b><kbd>${i + 1}</kbd></button>`
+          ).join("")}
+        </nav>
+      </aside>
 
-      <label class="find">${ico("search", "sm")}<input id="q" placeholder="Filter" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
-      <div class="note" id="note" hidden></div>
       <main id="body"></main>
 
-      <footer class="foot">
+      <footer class="bot">
         <span id="runners"></span>
         <span class="grow"></span>
-        <span class="keys"><kbd>↑↓</kbd> move <kbd>⏎</kbd> open <kbd>1-8</kbd> tabs <kbd>r</kbd> refresh</span>
-      </footer>`;
+        <span class="keys"><kbd>↑↓</kbd> move <kbd>⏎</kbd> open <kbd>/</kbd> filter <kbd>1-9</kbd> nav</span>
+      </footer>
+      <div class="note" id="note" hidden></div>`;
     document.getElementById("q").value = q;
     wire();
     built = true;
@@ -87,6 +92,7 @@
       scripts: (D.repos || []).reduce((n, r) => n + r.flows.filter((f) => f.source === "detected").length, 0),
       recents: (D.recents || []).length,
       devices: c.devices || 0,
+      setup: (D.repos || []).filter((r) => !r.configured).length,
     };
   }
 
@@ -109,7 +115,12 @@
       if (b.textContent !== v) b.textContent = v;
       b.hidden = !v;
     }
-    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === tab));
+    document.querySelectorAll(".nav").forEach((t) => t.classList.toggle("on", t.dataset.tab === tab));
+    set("ov", `<div class="ovg">
+        <div class="ovi"><b>${c.repos}</b><span>repos</span></div>
+        <div class="ovi ${(D.repos || []).filter((r) => r.dirty > 0).length ? "warn" : ""}"><b>${(D.repos || []).filter((r) => r.dirty > 0).length}</b><span>dirty</span></div>
+        <div class="ovi"><b>${(D.runners || []).filter((r) => r.available).length}</b><span>runners</span></div>
+      </div>`);
     document.getElementById("q").placeholder = `Filter ${tab}`;
 
     set("runners", (D.runners || []).map((r) =>
@@ -444,9 +455,44 @@
     return out;
   }
 
+  function tSetup() {
+    rows = [];
+    const unset = (D.repos || []).filter((r) => !r.configured);
+    const runners = D.runners || [];
+    const ok = runners.filter((r) => r.available);
+
+    let out = card("state", "Status", "checklist",
+      `<div class="row"><span class="ic">${ico(D.contract ? "pass-filled" : "circle-slash")}</span>
+        <div class="main"><div class="l1"><b>The contract</b></div>
+        <div class="l2"><span class="nt">${D.contract ? "Found. Agents can read the spec and run the validator." : "Not on disk. Point <code>principia.specPath</code> at a checkout of the Principia repo."}</span></div></div>
+        <div class="meta"></div><div class="acts"><button class="ib" data-act="openSpec" title="Open SPEC.md">${ico("book")}</button></div></div>
+      <div class="row"><span class="ic">${ico(ok.length ? "pass-filled" : "circle-slash")}</span>
+        <div class="main"><div class="l1"><b>Agent runners</b></div>
+        <div class="l2">${runners.map((r) => `<span class="chip ${r.available ? "ok" : ""}">${esc(r.label)}</span>`).join("")}</div></div>
+        <div class="meta"></div><div class="acts"><button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button></div></div>
+      <div class="row"><span class="ic">${ico(unset.length ? "circle-large-outline" : "pass-filled")}</span>
+        <div class="main"><div class="l1"><b>Repositories opted in</b></div>
+        <div class="l2"><span class="nt">${(D.repos || []).length - unset.length} of ${(D.repos || []).length} have a <code>.principia/</code> directory.</span></div></div>
+        <div class="meta"></div><div class="acts"></div></div>`);
+
+    out += card("how", "How this fills up", "lightbulb",
+      `<div class="empty">
+        <b>Repositories describe themselves</b>
+        <p>Launch pad ships empty on purpose. It reads the projects you have recently opened, then asks each one what it offers.</p>
+        <p>A repository answers by committing a <code>.principia/</code> directory: its flows, the agents it ships, and its current work. An agent writes that file for it, so there is nothing to fill in by hand.</p>
+        <p>Everything below is auto-detected and needs no setup at all. Setting a repo up only adds what detection cannot infer.</p>
+      </div>`);
+
+    out += card("todo", "Not set up yet", "repo",
+      unset.length ? unset.map((r) => repoRow(r)).join("")
+        : empty("check", "Every repository has opted in", ["Nothing left to set up."]),
+      unset.length ? `<span class="cnt">${unset.length}</span>` : "");
+    return out;
+  }
+
   /* ───────── render ───────── */
 
-  const RENDER = { today: tToday, tasks: tTasks, workflows: tWorkflows, repos: tRepos, agents: tAgents, scripts: tScripts, recents: tRecents, devices: tDevices };
+  const RENDER = { today: tToday, tasks: tTasks, workflows: tWorkflows, repos: tRepos, agents: tAgents, scripts: tScripts, recents: tRecents, devices: tDevices, setup: tSetup };
 
   function paintBody(animate) {
     const body = document.getElementById("body");
@@ -463,12 +509,12 @@
     const currentIds = [...body.querySelectorAll("[data-sec]")].map((n) => n.dataset.sec);
 
     if (animate || currentIds.join("|") !== incoming.map((n) => n.dataset.sec).join("|")) {
-      const y = window.scrollY;
+      const y = body.scrollTop;
       body.innerHTML = html;
       painted.clear();
       for (const n of incoming) painted.set(n.dataset.sec, n.outerHTML);
       if (animate) { body.classList.remove("in"); void body.offsetWidth; body.classList.add("in"); }
-      else window.scrollTo(0, y);
+      else body.scrollTop = y;
     } else {
       for (const n of incoming) {
         const id = n.dataset.sec;
@@ -491,7 +537,7 @@
     if (id === tab) return;
     tab = id; focus = -1; persist();
     paintChrome(); paintBody(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    document.getElementById("body").scrollTo({ top: 0, behavior: "smooth" });
   }
 
   /* ───────── interaction ───────── */
@@ -546,7 +592,7 @@
 
   document.addEventListener("keydown", (ev) => {
     const inInput = ["INPUT", "TEXTAREA", "SELECT"].includes(ev.target.tagName);
-    if (!inInput && ev.key >= "1" && ev.key <= "8") return setTab(TABS[+ev.key - 1][0]);
+    if (!inInput && ev.key >= "1" && ev.key <= "9") return setTab(TABS[+ev.key - 1][0]);
     if (ev.key === "/" && !inInput) { ev.preventDefault(); return document.getElementById("q").focus(); }
     if (ev.key === "Escape") {
       const qi = document.getElementById("q");
