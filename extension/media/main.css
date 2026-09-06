@@ -132,12 +132,12 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .cbody { padding: 4px; }
 
 /* ── rows ── */
-.row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; gap: 10px;
-  align-items: start; padding: 8px 10px; border-radius: 6px;
+.row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px;
+  align-items: center; padding: 8px 10px; border-radius: 6px;
   transition: background var(--t) var(--ease); }
 .row:hover { background: var(--vscode-list-hoverBackground); }
 .row.on { background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground)); }
-.row .ic { color: var(--vscode-icon-foreground); padding-top: 1px; }
+.row .ic { color: var(--vscode-icon-foreground); align-self: start; margin-top: 1px; }
 .row:hover .ic, .row.on .ic { color: var(--vscode-textLink-foreground); }
 .row[data-st="done"] { opacity: .45; }
 .row[data-st="done"] .l1 b { text-decoration: line-through; }
@@ -148,18 +148,52 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .l1 b { font-weight: 500; }
 .l2 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 4px; }
 .nt { font-size: 11.5px; color: var(--vscode-descriptionForeground); }
-.meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end;
-  font-size: 11.5px; color: var(--vscode-descriptionForeground); }
 .g.d { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
 .g.a { color: var(--vscode-gitDecoration-addedResourceForeground); }
 .g.b { color: var(--vscode-gitDecoration-deletedResourceForeground); }
 
-/* actions appear on hover, but never reflow the row */
-.acts { display: flex; align-items: center; gap: 2px; justify-content: flex-end;
-  opacity: 0; transform: translateX(4px);
-  transition: opacity var(--t) var(--ease), transform var(--t) var(--ease); }
-.row:hover .acts, .row.on .acts, .acts:focus-within { opacity: 1; transform: none; }
-.card .row .acts .btn { opacity: 1; }
+/* ── the side slot: meta and actions occupy the SAME space and crossfade,
+   instead of each reserving its own column. Absolute positioning inside a
+   relative box takes both out of flow, so the grid track is sized only by
+   --side-w (small, fixed), never by whichever content happens to be widest.
+   A row with no actions at all just omits .sa and gets a plain static box. ── */
+.side { position: relative; height: 20px; min-width: var(--side-w, 26px); align-self: center; }
+.side .sm, .side .sa {
+  position: absolute; right: 0; top: 50%; white-space: nowrap;
+  display: flex; align-items: center; gap: 4px;
+  transition: opacity var(--t) var(--ease), transform var(--t) var(--ease);
+}
+.side .sm {
+  font-size: 11.5px; color: var(--vscode-descriptionForeground);
+  transform: translateY(-50%); opacity: 1;
+}
+.side .sa {
+  transform: translateY(-50%) translateX(6px); opacity: 0; pointer-events: none;
+}
+.row:hover .side .sm, .row.on .side .sm { opacity: 0; transform: translateY(-50%) translateX(-6px); }
+.row:hover .side .sa, .row.on .side .sa, .side .sa:focus-within {
+  opacity: 1; transform: translateY(-50%) translateX(0); pointer-events: auto;
+}
+.side.static { display: flex; align-items: center; gap: 6px; height: auto; min-width: 0; position: static; }
+.side.n1 { --side-w: 30px; }
+.side.n2 { --side-w: 60px; }
+.side.n3 { --side-w: 90px; }
+.side.n4 { --side-w: 120px; }
+.card .row .side .sa .btn { opacity: 1; }
+
+/* ── icon morph: for the one list where the leading icon's slot doubles as
+   the row's primary action (e.g. Setup: repo glyph -> "ask agent"). Optional;
+   most rows just render a plain static icon with no .morph wrapper. ── */
+.ic.morph { position: relative; width: 16px; height: 16px; }
+.ic.morph .ir, .ic.morph .ih {
+  position: absolute; inset: 0; display: flex;
+  transition: opacity var(--t) var(--ease), transform var(--t) var(--ease);
+}
+.ic.morph .ir { opacity: 1; transform: scale(1); }
+.ic.morph .ih { opacity: 0; transform: scale(.6); pointer-events: none; }
+.row:hover .ic.morph .ir, .row.on .ic.morph .ir { opacity: 0; transform: scale(.6); }
+.row:hover .ic.morph .ih, .row.on .ic.morph .ih { opacity: 1; transform: scale(1); pointer-events: auto; }
+.ic.morph .ih button { all: unset; display: flex; cursor: pointer; color: var(--vscode-textLink-foreground); }
 
 /* ── chips ── */
 .chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
@@ -199,7 +233,7 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .btn.p:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
 .ib { border: 0; background: transparent; color: var(--vscode-icon-foreground); padding: 4px 5px; }
 .ib:hover { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
-.btn:focus-visible, .ib:focus-visible, .chip.act:focus-visible, .tab:focus-visible {
+.btn:focus-visible, .ib:focus-visible, .chip.act:focus-visible, .tab:focus-visible, .ic.morph .ih button:focus-visible {
   outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 
 /* ── runner cards ── */

@@ -221,13 +221,12 @@
           ${t.notes ? `<span class="nt">${esc(t.notes)}</span>` : ""}
         </div>
       </div>
-      <div class="meta"></div>
-      <div class="acts">
+      <div class="side n4"><span class="sa">
         ${t.agent && t.root ? `<button class="ib" data-agent="${esc(t.agent)}" data-root="${esc(t.root)}" title="Run agent">${ico("sparkle")}</button>` : ""}
         ${t.root ? `<button class="ib" data-term="${esc(t.root)}" title="Terminal here">${ico("terminal")}</button>` : ""}
         ${t.root ? `<button class="ib" data-open="${esc(t.root)}" title="Open">${ico("folder-opened")}</button>` : ""}
         ${t.root ? `<button class="ib" data-open="${esc(t.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>` : ""}
-      </div>
+      </span></div>
     </div>`;
   }
 
@@ -244,8 +243,10 @@
         ${opts.flows && r.flows.length ? `<div class="chips">${r.flows.slice(0, 8).map((f) =>
           `<button class="chip act" data-flow="${esc(f.id)}" data-root="${esc(r.root)}" title="${esc(f.run)}">${ico(f.kind === "server" ? "play" : f.kind === "test" ? "beaker" : "tools", "sm")}${esc(f.label)}</button>`).join("")}</div>` : ""}
       </div>
-      <div class="meta">${gitBits(r)}${r.lastCommit ? `<span class="dim">${esc(r.lastCommit)}</span>` : ""}</div>
-      <div class="acts">${repoActions(r)}</div>
+      <div class="side n4">
+        <span class="sm">${gitBits(r)}${r.lastCommit ? `<span class="dim">${esc(r.lastCommit)}</span>` : ""}</span>
+        <span class="sa">${repoActions(r)}</span>
+      </div>
     </div>`;
   }
 
@@ -308,8 +309,7 @@
           <span class="ic">${ico("comment-discussion")}</span>
           <div class="main"><div class="l1"><b>${esc(e.runner || "agent")}</b>${e.agent ? `<span class="chip">${esc(e.agent)}</span>` : ""}</div>
           <div class="l2"><span class="mono dim">${esc(base(e.repo))}</span><span class="dim">${esc(String(e.ts || "").replace("T", " ").replace("Z", ""))}</span></div></div>
-          <div class="meta"></div>
-          <div class="acts">${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</div>
+          <div class="side n1"><span class="sa">${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</span></div>
         </div>`).join("")
         : empty("history", "No agent sessions recorded yet",
             [`Runs launched from here are logged to <code>~/.principia/history/</code>.`,
@@ -400,8 +400,7 @@
         <span class="ic">${ico("sparkle")}</span>
         <div class="main"><div class="l1"><b>${esc(a.label || a.id)}</b></div>
           <div class="l2"><span class="mono dim">${esc(a.file)}</span>${(a.supports || []).map((s) => `<span class="chip">${esc(s)}</span>`).join("")}</div></div>
-        <div class="meta"></div>
-        <div class="acts"><button class="btn" data-agent="${esc(a.id)}" data-root="${esc(r.root)}">${ico("play", "sm")} Run</button></div>
+        <div class="side n2"><span class="sa"><button class="btn" data-agent="${esc(a.id)}" data-root="${esc(r.root)}">${ico("play", "sm")} Run</button></span></div>
       </div>`).join("")
     )).join("");
     return layout(main, rail);
@@ -434,11 +433,13 @@
       rs.map((r) => `<div ${F(`data-root="${esc(r.root)}"`)}>
         <span class="ic">${ico("repo")}</span>
         <div class="main"><div class="l1"><b>${esc(r.name)}</b>${r.ws ? `<span class="chip">workspace</span>` : ""}</div></div>
-        <div class="meta"><span class="mono dim">${esc(r.branch || "")}</span>${r.dirty ? `<span class="g d">●${r.dirty}</span>` : ""}</div>
-        <div class="acts">
-          <button class="ib" data-term="${esc(r.root)}" title="Terminal here">${ico("terminal")}</button>
-          <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
-          <button class="ib" data-open="${esc(r.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>
+        <div class="side n3">
+          <span class="sm"><span class="mono dim">${esc(r.branch || "")}</span>${r.dirty ? `<span class="g d">●${r.dirty}</span>` : ""}</span>
+          <span class="sa">
+            <button class="ib" data-term="${esc(r.root)}" title="Terminal here">${ico("terminal")}</button>
+            <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
+            <button class="ib" data-open="${esc(r.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>
+          </span>
         </div>
       </div>`).join(""), `<span class="cnt">${rs.length}</span>`);
   }
@@ -452,8 +453,7 @@
       : `<div class="row"><span class="ic">${ico("device-mobile")}</span>
           <div class="main"><div class="l1"><b>${a.booted ? esc(a.device) : "No emulator running"}</b>${a.booted ? `<span class="chip ok">booted</span>` : ""}</div>
           <div class="l2"><span class="dim">${a.avds && a.avds.length ? esc(a.avds.join(", ")) : "no AVDs configured"}</span></div></div>
-          <div class="meta"></div>
-          <div class="acts">${a.avds && a.avds.length ? `<button class="btn" data-android="${a.booted ? "stop" : "boot"}">${ico(a.booted ? "debug-stop" : "play", "sm")} ${a.booted ? "Stop" : "Boot"}</button>` : ""}</div>
+          <div class="side static">${a.avds && a.avds.length ? `<button class="btn" data-android="${a.booted ? "stop" : "boot"}">${ico(a.booted ? "debug-stop" : "play", "sm")} ${a.booted ? "Stop" : "Boot"}</button>` : ""}</div>
         </div>`);
 
     let main = card("ios", "iOS simulators", "device-mobile",
@@ -462,8 +462,7 @@
       : i.all.slice(0, 8).map((d) => `<div class="row">
           <span class="ic">${ico("device-mobile")}</span>
           <div class="main"><div class="l1"><b>${esc(d.name)}</b>${d.state === "Booted" ? `<span class="chip ok">booted</span>` : ""}</div></div>
-          <div class="meta"></div>
-          <div class="acts"><button class="btn" data-ios="${d.state === "Booted" ? "shutdown" : "boot"}" data-udid="${esc(d.udid)}">${d.state === "Booted" ? "Shutdown" : "Boot"}</button></div>
+          <div class="side static"><button class="btn" data-ios="${d.state === "Booted" ? "shutdown" : "boot"}" data-udid="${esc(d.udid)}">${d.state === "Booted" ? "Shutdown" : "Boot"}</button></div>
         </div>`).join(""),
       i.available ? `<span class="cnt">${(i.booted || []).length} booted · ${(i.all || []).length} available</span>` : "");
 
@@ -472,8 +471,7 @@
       ports.length ? ports.map((p) => `<div class="row">
           <span class="ic">${ico("radio-tower")}</span>
           <div class="main"><div class="l1"><b>${p.port}</b><span class="chip">${esc(p.cmd || "")}</span></div></div>
-          <div class="meta"></div>
-          <div class="acts">
+          <div class="side static">
             <button class="ib" data-browser="http://localhost:${p.port}" title="Simple Browser">${ico("globe")}</button>
             <button class="ib" data-external="http://localhost:${p.port}" title="External browser">${ico("link-external")}</button>
           </div>
@@ -511,14 +509,16 @@
 
     main += card("todo", "Waiting on setup", "repo",
       unset.length ? unset.map((r) => `<div ${F(`data-root="${esc(r.root)}"`)}>
-          <span class="ic">${ico(r.icon || "repo")}</span>
+          <span class="ic morph">
+            <b class="ir">${ico(r.icon || "repo")}</b>
+            <b class="ih">${runnable ? `<button data-setup="${esc(r.root)}" title="Ask agent to set this up">${ico("sparkle")}</button>` : ico(r.icon || "repo")}</b>
+          </span>
           <div class="main"><div class="l1"><b>${esc(r.name)}</b></div>
             ${r.summary ? `<div class="l2"><span class="nt">${esc(r.summary)}</span></div>` : ""}
           </div>
-          <div class="meta">${gitBits(r)}</div>
-          <div class="acts">
-            <button class="btn" data-setup="${esc(r.root)}" ${runnable ? "" : "disabled"}>${ico("sparkle", "sm")} Ask agent</button>
-            <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
+          <div class="side n2">
+            <span class="sm">${gitBits(r) || `<span class="dim">not set up</span>`}</span>
+            <span class="sa"><button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button></span>
           </div>
         </div>`).join("")
         : empty("check", "Every repository has opted in", ["Nothing left to set up."]),
