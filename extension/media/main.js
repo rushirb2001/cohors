@@ -21,16 +21,17 @@
   const painted = new Map();
 
   // Flat order for keyboard 1-9; `under` nests an item in the sidebar.
+  // `hint` explains what the badge number counts, shown on hover.
   const TABS = [
-    ["today", "Today", "home"],
-    ["tasks", "Tasks", "checklist"],
-    ["recents", "Recents", "history"],
-    ["repos", "Repos", "folder"],
-    ["workflows", "Workflows", "rocket"],
-    ["agents", "Agents", "sparkle", "workflows"],
-    ["scripts", "Scripts", "play", "workflows"],
-    ["devices", "Devices", "device-mobile", "workflows"],
-    ["setup", "Setup", "gear"],
+    ["today", "Today", "home", null, "what needs attention right now"],
+    ["tasks", "Tasks", "checklist", null, "open tasks across all repos"],
+    ["recents", "Recents", "history", null, "your editor's recently-opened list"],
+    ["repos", "Repos", "folder", null, "repositories discovered from Recents"],
+    ["workflows", "Workflows", "rocket", null, "flows a repo declared on purpose"],
+    ["agents", "Agents", "sparkle", "workflows", "prompts a repo ships, plus runner status"],
+    ["scripts", "Scripts", "play", "workflows", "commands auto-detected with zero config"],
+    ["devices", "Devices", "device-mobile", "workflows", "booted simulators/emulators right now"],
+    ["setup", "Setup", "gear", null, "repos with no .principia/ yet — needs an agent"],
   ];
 
   const send = (m) => vscode.postMessage(m);
@@ -62,8 +63,8 @@
       <aside class="side">
         <div class="ov" id="ov"></div>
         <nav id="tabs">
-          ${TABS.map(([id, label, icon, under], i) =>
-            `<button class="nav${under ? " sub" : ""}" data-tab="${id}">${ico(icon, "sm")}<span class="lb">${label}</span><span class="grow"></span><b class="n" data-n="${id}"></b><kbd>${i + 1}</kbd></button>`
+          ${TABS.map(([id, label, icon, under, hint], i) =>
+            `<button class="nav${under ? " sub" : ""}" data-tab="${id}" title="${esc(hint || label)}">${ico(icon, "sm")}<span class="lb">${label}</span><span class="grow"></span><b class="n${id === "setup" ? " warn" : ""}" data-n="${id}"></b><kbd>${i + 1}</kbd></button>`
           ).join("")}
         </nav>
       </aside>
@@ -81,18 +82,26 @@
     built = true;
   }
 
+  function bootedDevices() {
+    const a = D.android || {}, i = D.ios || {};
+    return (a.booted ? 1 : 0) + ((i.booted || []).length);
+  }
+  function unconfiguredRepos() { return (D.repos || []).filter((r) => !r.configured).length; }
+
   function counts() {
     const c = (D && D.counts) || {};
     return {
       today: openTasks().filter((t) => t.today || t.status === "doing").length,
       tasks: c.tasks || 0,
-      workflows: (D.repos || []).reduce((n, r) => n + r.flows.filter((f) => f.source === "declared").length, 0),
+      // Recents restates the repo list; a count adds nothing, so no badge.
+      recents: 0,
       repos: c.repos || 0,
+      workflows: (D.repos || []).reduce((n, r) => n + r.flows.filter((f) => f.source === "declared").length, 0),
       agents: c.agents || 0,
       scripts: (D.repos || []).reduce((n, r) => n + r.flows.filter((f) => f.source === "detected").length, 0),
-      recents: (D.recents || []).length,
-      devices: c.devices || 0,
-      setup: (D.repos || []).filter((r) => !r.configured).length,
+      // A real device booted, not the count of background dev-server ports.
+      devices: bootedDevices(),
+      setup: unconfiguredRepos(),
     };
   }
 
@@ -116,11 +125,15 @@
       b.hidden = !v;
     }
     document.querySelectorAll(".nav").forEach((t) => t.classList.toggle("on", t.dataset.tab === tab));
-    set("ov", `<div class="ovg">
+    {
+      const dirty = (D.repos || []).filter((r) => r.dirty > 0).length;
+      const configured = c.repos - unconfiguredRepos();
+      set("ov", `<div class="ovg">
         <div class="ovi"><b>${c.repos}</b><span>repos</span></div>
-        <div class="ovi ${(D.repos || []).filter((r) => r.dirty > 0).length ? "warn" : ""}"><b>${(D.repos || []).filter((r) => r.dirty > 0).length}</b><span>dirty</span></div>
-        <div class="ovi"><b>${(D.runners || []).filter((r) => r.available).length}</b><span>runners</span></div>
+        <div class="ovi ${dirty ? "warn" : ""}" title="repos with uncommitted changes"><b>${dirty}</b><span>dirty</span></div>
+        <div class="ovi ${configured ? "ok" : ""}" title="repos with a .principia/ contribution"><b>${configured}/${c.repos}</b><span>set up</span></div>
       </div>`);
+    }
     document.getElementById("q").placeholder = `Filter ${tab}`;
 
     set("runners", (D.runners || []).map((r) =>
