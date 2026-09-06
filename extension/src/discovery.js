@@ -173,16 +173,19 @@ function readContribution(root) {
 /* ───────── 4. git, only for repos we are actually showing ───────── */
 
 async function gitInfo(root) {
-  const [branch, status, ab] = await Promise.all([
+  const [branch, status, ab, log] = await Promise.all([
     run("git", ["-C", root, "rev-parse", "--abbrev-ref", "HEAD"]),
     run("git", ["-C", root, "status", "--porcelain"]),
     run("git", ["-C", root, "rev-list", "--left-right", "--count", "HEAD...@{upstream}"]),
+    run("git", ["-C", root, "log", "-1", "--format=%cr%n%s"]),
   ]);
+  const [when, subject] = log.split("\n");
   const [ahead, behind] = ab.trim().split(/\s+/).map((n) => parseInt(n, 10) || 0);
   return {
     branch: branch.trim() || "",
     dirty: status ? status.split("\n").filter(Boolean).length : 0,
     ahead: ahead || 0, behind: behind || 0,
+    lastCommit: (when || "").trim(), lastSubject: (subject || "").trim(),
   };
 }
 
@@ -269,7 +272,61 @@ function readHistory(days = 7) {
   return out.sort((a, b) => String(b.ts).localeCompare(String(a.ts))).slice(0, 200);
 }
 
+
+/* ───────── 7. devices and dev servers (all optional, all best-effort) ───────── */
+
+const SDK = path.join(HOME, "Library/Android/sdk");
+const ADB = path.join(SDK, "platform-tools/adb");
+const EMU = path.join(SDK, "emulator/emulator");
+
+async function listeningPorts() {
+  const out = await run("lsof", ["-iTCP", "-sTCP:LISTEN", "-P", "-n", "-Fpcn"]);
+  if (!out) return [];
+  const found = [];
+  let pid = null, cmd = null;
+  for (const line of out.split("\n")) {
+    if (line[0] === "p") pid = parseInt(line.slice(1), 10);
+    else if (line[0] === "c") cmd = line.slice(1);
+    else if (line[0] === "n") {
+      const m = line.match(/:(\d+)$/);
+      if (m) found.push({ port: parseInt(m[1], 10), pid, cmd });
+    }
+  }
+  const seen = new Map();
+  for (const r of found) if (r.port >= 1024 && !seen.has(r.port)) seen.set(r.port, r);
+  return [...seen.values()].sort((a, b) => a.port - b.port).slice(0, 40);
+}
+
+async function androidState() {
+  if (!exists(EMU)) return { available: false, reason: "Android SDK not found", booted: false, avds: [] };
+  const [dev, avd] = await Promise.all([run(ADB, ["devices"]), run(EMU, ["-list-avds"])]);
+  const m = dev.match(/(emulator-\d+)\s+device/);
+  return {
+    available: true, reason: null,
+    booted: !!m, device: m ? m[1] : null,
+    avds: avd.split("\n").map((x) => x.trim()).filter(Boolean),
+  };
+}
+
+async function iosState() {
+  const out = await run("xcrun", ["simctl", "list", "devices", "available", "-j"], { timeout: 6000 });
+  if (!out) return { available: false, reason: "Xcode command line tools not found", booted: [], all: [] };
+  let j; try { j = JSON.parse(out); } catch { return { available: false, reason: "could not read simctl output", booted: [], all: [] }; }
+  const all = [];
+  for (const [rt, devs] of Object.entries(j.devices || {})) {
+    if (!/iOS/.test(rt)) continue;
+    for (const d of devs) all.push({ name: d.name, udid: d.udid, state: d.state });
+  }
+  all.sort((a, b) => ((b.state === "Booted") - (a.state === "Booted")) || a.name.localeCompare(b.name));
+  return { available: true, reason: null, booted: all.filter((d) => d.state === "Booted"), all: all.slice(0, 30) };
+}
+
+async function devices() {
+  const [ports, android, ios] = await Promise.all([listeningPorts(), androidState(), iosState()]);
+  return { ports, android, ios };
+}
+
 module.exports = {
   PRINCIPIA_HOME, exists, run,
-  collectRepos, readBoard, readHistory, recentlyOpened,
+  collectRepos, readBoard, readHistory, recentlyOpened, devices, ADB, EMU,
 };

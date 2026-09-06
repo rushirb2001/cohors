@@ -1,12 +1,12 @@
-// Principia UI.
+// Launch pad UI (package: principia).
 //
-// Two rules this file exists to enforce:
-//
-// 1. The shell is built once. Only section bodies are patched, and only the
-//    sections whose HTML actually changed. A background poll must not destroy
-//    scroll position, hover, keyboard focus, or the caret in the filter box.
-// 2. Nothing may cause horizontal scroll. Every flex/grid child gets min-width:0
-//    and long strings wrap. The page scrolls one way: down.
+// Rules this file enforces:
+//  1. The shell is built once. Only sections whose HTML actually changed get
+//     replaced. A background refresh must not destroy scroll, hover, keyboard
+//     focus, or the caret in the filter box.
+//  2. No horizontal scroll. Rows are grids with minmax(0,1fr); long text wraps.
+//  3. Every tab has a real empty state. This ships empty, so the empty state IS
+//     the product for the first ten minutes.
 
 (function () {
   const vscode = acquireVsCodeApi();
@@ -14,66 +14,81 @@
   const saved = vscode.getState() || {};
 
   let D = saved.D || null;
-  let view = saved.view || "focus";
+  let tab = saved.tab || "today";
   let q = saved.q || "";
   let focus = -1;
   let built = false;
-  const painted = new Map();   // section id -> last html
+  const painted = new Map();
 
-  const VIEWS = [
-    ["focus", "Focus", "target"],
+  const TABS = [
+    ["today", "Today", "home"],
+    ["tasks", "Tasks", "checklist"],
+    ["workflows", "Workflows", "rocket"],
     ["repos", "Repos", "repo"],
     ["agents", "Agents", "sparkle"],
-    ["activity", "Activity", "history"],
+    ["scripts", "Scripts", "play"],
+    ["recents", "Recents", "history"],
+    ["devices", "Devices", "device-mobile"],
   ];
 
   const send = (m) => vscode.postMessage(m);
-  const persist = () => vscode.setState({ D, view, q });
+  const persist = () => vscode.setState({ D, tab, q });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  // `n` can come from a repo's committed repo.json, so constrain it to the
-  // characters codicon names actually use rather than trusting the file.
   const ico = (n, cls = "") => {
     const safe = String(n || "").replace(/[^a-z0-9-]/g, "");
     return `<span class="ci codicon codicon-${safe} ${cls}"></span>`;
   };
   const hit = (s) => !q || String(s || "").toLowerCase().includes(q);
+  const base = (p) => String(p || "").split("/").filter(Boolean).pop() || "";
 
   /* ───────── shell ───────── */
 
   function buildShell() {
     app.innerHTML = `
-      <header class="bar">
-        <div class="brand">${ico("compass")}<span>Principia</span></div>
-        <div class="where" id="where"></div>
-        <div class="spring"></div>
-        <div class="tally" id="tally"></div>
+      <header class="head">
+        <h1>Launch pad</h1>
+        <span class="sub" id="where"></span>
+        <span class="grow"></span>
+        <span class="stat" id="mem"></span>
+        <span class="stat" id="load"></span>
         <button class="ib" data-act="refresh" title="Refresh (r)">${ico("refresh")}</button>
-        <button class="ib" data-act="openSpec" title="Open the contract">${ico("book")}</button>
+        <button class="ib" data-act="openSpec" title="Open the contract">${ico("json")}</button>
       </header>
 
-      <nav class="nav" id="nav">
-        ${VIEWS.map(([id, label, icon], i) =>
-          `<button class="nb" data-view="${id}">${ico(icon, "sm")}<span>${label}</span><b class="cnt" data-cnt="${id}"></b><kbd>${i + 1}</kbd></button>`
+      <nav class="tabs" id="tabs">
+        ${TABS.map(([id, label, icon], i) =>
+          `<button class="tab" data-tab="${id}">${ico(icon, "sm")}<span class="lb">${label}</span><b class="n" data-n="${id}"></b><kbd>${i + 1}</kbd></button>`
         ).join("")}
       </nav>
 
       <label class="find">${ico("search", "sm")}<input id="q" placeholder="Filter" autocomplete="off" spellcheck="false"><kbd>/</kbd></label>
-
-      <div class="warn" id="warn" hidden></div>
+      <div class="note" id="note" hidden></div>
       <main id="body"></main>
 
       <footer class="foot">
         <span id="runners"></span>
-        <div class="spring"></div>
-        <span class="keys"><kbd>↑↓</kbd> move <kbd>⏎</kbd> open <kbd>1-4</kbd> views <kbd>r</kbd> refresh</span>
+        <span class="grow"></span>
+        <span class="keys"><kbd>↑↓</kbd> move <kbd>⏎</kbd> open <kbd>1-8</kbd> tabs <kbd>r</kbd> refresh</span>
       </footer>`;
     document.getElementById("q").value = q;
     wire();
     built = true;
   }
 
-  /* ───────── chrome, patched in place ───────── */
+  function counts() {
+    const c = (D && D.counts) || {};
+    return {
+      today: openTasks().filter((t) => t.today || t.status === "doing").length,
+      tasks: c.tasks || 0,
+      workflows: (D.repos || []).reduce((n, r) => n + r.flows.filter((f) => f.source === "declared").length, 0),
+      repos: c.repos || 0,
+      agents: c.agents || 0,
+      scripts: (D.repos || []).reduce((n, r) => n + r.flows.filter((f) => f.source === "detected").length, 0),
+      recents: (D.recents || []).length,
+      devices: c.devices || 0,
+    };
+  }
 
   function paintChrome() {
     if (!D) return;
@@ -81,68 +96,373 @@
       const e = document.getElementById(id);
       if (e && e.innerHTML !== html) e.innerHTML = html;
     };
-    const c = D.counts || {};
-    set("where", D.here ? esc(D.here.split("/").pop()) : "no folder open");
-    set("tally", [
-      `<b>${c.repos || 0}</b> repos`,
-      `<b>${c.configured || 0}</b> configured`,
-      c.dirty ? `<b class="hot">${c.dirty}</b> dirty` : "",
-    ].filter(Boolean).join("<i>·</i>"));
+    const m = D.machine || {};
+    set("where", D.here ? esc(base(D.here)) : "no folder open");
+    set("mem", m.free == null ? "" : `free <b class="${m.free < 2 ? "hot" : ""}">${m.free} GB</b>`);
+    set("load", m.load == null ? "" : `load <b>${esc(m.load)}</b>`);
 
-    const counts = {
-      focus: (D.board || []).length,
-      repos: (D.repos || []).length,
-      agents: c.agents || 0,
-      activity: (D.history || []).length,
-    };
-    for (const [id] of VIEWS) {
-      const b = document.querySelector(`[data-cnt="${id}"]`);
+    const c = counts();
+    for (const [id] of TABS) {
+      const b = document.querySelector(`[data-n="${id}"]`);
       if (!b) continue;
-      const v = counts[id] ? String(counts[id]) : "";
+      const v = c[id] ? String(c[id]) : "";
       if (b.textContent !== v) b.textContent = v;
       b.hidden = !v;
     }
-    document.querySelectorAll(".nb").forEach((n) => n.classList.toggle("on", n.dataset.view === view));
+    document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === tab));
+    document.getElementById("q").placeholder = `Filter ${tab}`;
 
-    const rs = (D.runners || []).map((r) =>
+    set("runners", (D.runners || []).map((r) =>
       `<span class="rn ${r.available ? "ok" : "no"}" title="${esc(r.reason || r.pathTo || "")}">${ico(r.available ? "pass" : "circle-slash", "sm")}${esc(r.label)}</span>`
-    ).join("");
-    set("runners", rs || "");
+    ).join(""));
 
-    const w = document.getElementById("warn");
-    if (w) {
+    const n = document.getElementById("note");
+    if (n) {
       const msg = D.error ? esc(D.error)
-        : !D.contract ? `The contract is not on disk, so agent setup is unavailable. Set <code>principia.specPath</code> to a checkout of the Principia repo.`
+        : !D.contract ? `The contract is not on disk, so agent setup is unavailable. Point <code>principia.specPath</code> at a checkout of the Principia repo.`
         : "";
-      w.hidden = !msg;
-      if (msg && w.innerHTML !== msg) w.innerHTML = msg;
+      n.hidden = !msg;
+      if (msg && n.innerHTML !== msg) n.innerHTML = msg;
     }
   }
 
-  /* ───────── body: per-section diffing ───────── */
+  /* ───────── task model: repo tasks + the cross-repo board ───────── */
 
-  function section(id, title, inner, aside = "") {
-    return `<section class="sec" data-sec="${esc(id)}">
-      <h2>${esc(title)}<div class="spring"></div>${aside}</h2>
-      <div class="secbody">${inner}</div>
+  function allTasks() {
+    const out = [];
+    for (const r of D.repos || []) {
+      for (const t of r.tasks || []) out.push({ ...t, repo: r.name, root: r.root, group: r.group || "" });
+    }
+    for (const f of D.board || []) {
+      const r = (D.repos || []).find((x) => x.name === f.repo);
+      out.push({ id: f.id, title: f.title, status: f.status || "todo", priority: "normal",
+        repo: f.repo || "", root: r ? r.root : null, group: r ? r.group : "", today: true, agent: f.agent });
+    }
+    return out;
+  }
+  const openTasks = () => allTasks().filter((t) => t.status !== "done");
+  const PRI = { high: 3, normal: 2, low: 1 };
+  const byPri = (a, b) => (PRI[b.priority] || 2) - (PRI[a.priority] || 2);
+
+  /* ───────── building blocks ───────── */
+
+  let rows = [];
+  const F = (attrs) => { rows.push(attrs); return `class="row focusable" ${attrs}`; };
+
+  function card(id, title, icon, inner, aside = "") {
+    return `<section class="card" data-sec="${esc(id)}">
+      <header>${ico(icon, "sm")}<h3>${esc(title)}</h3><span class="grow"></span>${aside}</header>
+      <div class="cbody">${inner}</div>
     </section>`;
   }
+
+  const empty = (icon, title, lines, action = "") =>
+    `<div class="empty">${ico(icon, "big")}<b>${esc(title)}</b>${lines.map((l) => `<p>${l}</p>`).join("")}${action}</div>`;
+
+  const gitBits = (r) => [
+    r.branch ? `<span class="mono dim">${esc(r.branch)}</span>` : "",
+    r.dirty ? `<span class="g d">●${r.dirty}</span>` : "",
+    r.ahead ? `<span class="g a">↑${r.ahead}</span>` : "",
+    r.behind ? `<span class="g b">↓${r.behind}</span>` : "",
+  ].filter(Boolean).join(" ");
+
+  function repoActions(r) {
+    return `${r.configured ? "" : `<button class="ib" data-setup="${esc(r.root)}" title="Set up with an agent">${ico("sparkle")}</button>`}
+      <button class="ib" data-term="${esc(r.root)}" title="Terminal here">${ico("terminal")}</button>
+      <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
+      <button class="ib" data-open="${esc(r.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>`;
+  }
+
+  function taskRow(t) {
+    const box = t.status === "done" ? "pass-filled" : t.status === "blocked" ? "circle-slash" : "circle-large-outline";
+    return `<div ${F(`data-root="${esc(t.root || "")}"`)} data-st="${esc(t.status)}">
+      <span class="ic">${ico(box)}</span>
+      <div class="main">
+        <div class="l1"><b>${esc(t.title)}</b></div>
+        <div class="l2">
+          ${t.group ? `<span class="chip">${esc(t.group)}</span>` : ""}
+          ${t.repo ? `<span class="chip">${ico("repo", "sm")}${esc(t.repo)}</span>` : ""}
+          ${t.priority === "high" ? `<span class="chip hi">high</span>` : ""}
+          ${t.status === "doing" ? `<span class="chip go">in progress</span>` : ""}
+          ${t.status === "blocked" ? `<span class="chip bad">blocked</span>` : ""}
+          ${t.notes ? `<span class="nt">${esc(t.notes)}</span>` : ""}
+        </div>
+      </div>
+      <div class="meta"></div>
+      <div class="acts">
+        ${t.agent && t.root ? `<button class="ib" data-agent="${esc(t.agent)}" data-root="${esc(t.root)}" title="Run agent">${ico("sparkle")}</button>` : ""}
+        ${t.root ? `<button class="ib" data-term="${esc(t.root)}" title="Terminal here">${ico("terminal")}</button>` : ""}
+        ${t.root ? `<button class="ib" data-open="${esc(t.root)}" title="Open">${ico("folder-opened")}</button>` : ""}
+        ${t.root ? `<button class="ib" data-open="${esc(t.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>` : ""}
+      </div>
+    </div>`;
+  }
+
+  function repoRow(r, opts = {}) {
+    return `<div ${F(`data-root="${esc(r.root)}"`)}>
+      <span class="ic">${ico(r.icon || "repo")}</span>
+      <div class="main">
+        <div class="l1"><b>${esc(r.name)}</b>
+          ${r.configured ? `<span class="chip ok">configured</span>` : `<span class="chip">not set up</span>`}
+          ${r.invalid ? `<span class="chip bad">${esc(r.invalid)}</span>` : ""}
+          ${r.staleBy ? `<span class="chip hi">${r.staleBy} commits since setup</span>` : ""}
+        </div>
+        ${r.summary ? `<div class="l2"><span class="nt">${esc(r.summary)}</span></div>` : ""}
+        ${opts.flows && r.flows.length ? `<div class="chips">${r.flows.slice(0, 8).map((f) =>
+          `<button class="chip act" data-flow="${esc(f.id)}" data-root="${esc(r.root)}" title="${esc(f.run)}">${ico(f.kind === "server" ? "play" : f.kind === "test" ? "beaker" : "tools", "sm")}${esc(f.label)}</button>`).join("")}</div>` : ""}
+      </div>
+      <div class="meta">${gitBits(r)}${r.lastCommit ? `<span class="dim">${esc(r.lastCommit)}</span>` : ""}</div>
+      <div class="acts">${repoActions(r)}</div>
+    </div>`;
+  }
+
+  /* ───────── tabs ───────── */
+
+  function tToday() {
+    rows = [];
+    if (!(D.repos || []).length) {
+      return card("boot", "Nothing discovered yet", "compass",
+        empty("telescope", "Open a repository and it will appear here",
+          ["Launch pad reads the projects you have recently opened in this editor, so there is nothing to configure.",
+           "Your filesystem is never scanned and nothing about you is stored in the extension."]));
+    }
+
+    const today = openTasks().filter((t) => t.today || t.status === "doing").sort(byPri);
+    const blocked = openTasks().filter((t) => t.status === "blocked");
+    const dirty = (D.repos || []).filter((r) => r.dirty > 0).sort((a, b) => b.dirty - a.dirty);
+    const done = allTasks().filter((t) => t.status === "done").length;
+    const total = allTasks().length || 1;
+    const pct = Math.round((done / total) * 100);
+    const date = new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+    const h = new Date().getHours();
+    const greet = h < 5 ? "Still up" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : h < 22 ? "Good evening" : "Late night";
+
+    let out = `<section class="hero" data-sec="hero">
+      <div class="hl"><h2>${greet}</h2><div class="hd">${esc(date)}</div></div>
+      <div class="hr">
+        <div class="hs"><b>${today.length}</b><span>for today</span></div>
+        <div class="hs"><b>${openTasks().length}</b><span>open</span></div>
+        <div class="hs ${blocked.length ? "bad" : ""}"><b>${blocked.length}</b><span>blocked</span></div>
+        <div class="hs ${dirty.length ? "warn" : ""}"><b>${dirty.length}</b><span>dirty repos</span></div>
+      </div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+    </section>`;
+
+    out += card("focus", "Focus today", "target",
+      today.length ? today.map(taskRow).join("")
+        : empty("target", "No focus set for today",
+            [`Focus comes from two places: a repo's own <code>.principia/repo.json</code> tasks, and the cross-repo board at <code>~/.principia/board.json</code>.`,
+             `Ask any agent: <em>plan my focus across repos using the Principia plan-day prompt</em>.`]),
+      `<button class="ib" data-act="openSpec" title="Open the contract">${ico("book")}</button>`);
+
+    if (blocked.length) out += card("blocked", "Blocked", "circle-slash", blocked.sort(byPri).map(taskRow).join(""));
+
+    out += card("dirty", "Uncommitted work", "source-control",
+      dirty.length ? dirty.slice(0, 8).map((r) => repoRow(r)).join("")
+        : empty("check", "Everything is committed", ["No tracked repository has uncommitted changes."]),
+      dirty.length ? `<span class="cnt">${dirty.reduce((n, r) => n + r.dirty, 0)} files</span>` : "");
+
+    const hist = (D.history || []).slice(0, 5);
+    out += card("resume", "Pick up where you left off", "sparkle",
+      hist.length ? hist.map((e) => `<div ${F(`data-root="${esc(e.repo || "")}"`)}>
+          <span class="ic">${ico("comment-discussion")}</span>
+          <div class="main"><div class="l1"><b>${esc(e.runner || "agent")}</b>${e.agent ? `<span class="chip">${esc(e.agent)}</span>` : ""}</div>
+          <div class="l2"><span class="mono dim">${esc(base(e.repo))}</span><span class="dim">${esc(String(e.ts || "").replace("T", " ").replace("Z", ""))}</span></div></div>
+          <div class="meta"></div>
+          <div class="acts">${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</div>
+        </div>`).join("")
+        : empty("history", "No agent sessions recorded yet",
+            [`Runs launched from here are logged to <code>~/.principia/history/</code>.`,
+             `Install the Principia Claude Code plugin and its <code>SessionStart</code> hook records sessions you start anywhere.`]));
+    return out;
+  }
+
+  function tTasks() {
+    rows = [];
+    const all = allTasks().filter((t) => hit(t.title) || hit(t.repo) || hit(t.notes));
+    if (!allTasks().length) {
+      return card("t", "Tasks", "checklist",
+        empty("checklist", "No tasks yet",
+          [`A repository declares its own short-lived work in <code>.principia/repo.json</code> under <code>tasks</code>.`,
+           `Cross-repo focus lives in <code>~/.principia/board.json</code>.`,
+           `Both are written by an agent, not by hand.`],
+          `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
+    }
+    if (!all.length) return card("t", "Tasks", "checklist", empty("search", "Nothing matches", ["Try a different filter."]));
+
+    const groups = [...new Set(all.map((t) => t.group || ""))];
+    return groups.map((g) => {
+      const ts = all.filter((t) => (t.group || "") === g)
+        .sort((a, b) => (a.status === "done") - (b.status === "done") || byPri(a, b));
+      const open = ts.filter((t) => t.status !== "done").length;
+      return card(`t-${g || "none"}`, g || "Ungrouped", "checklist", ts.map(taskRow).join(""),
+        `<span class="cnt">${open} open · ${ts.length} total</span>`);
+    }).join("");
+  }
+
+  function tWorkflows() {
+    rows = [];
+    const declared = (D.repos || []).filter((r) => r.flows.some((f) => f.source === "declared")).filter((r) => hit(r.name));
+    if (!declared.length) {
+      return card("w", "Workflows", "rocket",
+        empty("rocket", "No repository has declared its flows yet",
+          [`A <b>workflow</b> is a flow a repo declares on purpose: a real label, a port, an ordering, a composite command.`,
+           `Anything auto-detected from <code>package.json</code>, Cargo, Make or Gradle shows under <b>Scripts</b> instead.`,
+           `Run <b>Set up</b> on a repo and an agent writes them.`],
+          `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
+    }
+    const groups = [...new Set(declared.map((r) => r.group || ""))];
+    return groups.map((g) => {
+      const rs = declared.filter((r) => (r.group || "") === g);
+      return card(`w-${g || "none"}`, g || "Ungrouped", "rocket",
+        rs.map((r) => repoRow(r, { flows: true })).join(""), `<span class="cnt">${rs.length}</span>`);
+    }).join("");
+  }
+
+  function tRepos() {
+    rows = [];
+    if (!(D.repos || []).length) {
+      return card("r", "Repos", "repo",
+        empty("repo", "No repositories discovered",
+          ["Open a git repository in this editor once and it shows up here, ranked by how recently you used it."]));
+    }
+    const rs = (D.repos || []).filter((r) => hit(r.name) || hit(r.summary) || hit(r.group));
+    if (!rs.length) return card("r", "Repos", "repo", empty("search", "Nothing matches", ["Try a different filter."]));
+    const groups = [...new Set(rs.map((r) => r.group || ""))];
+    return groups.map((g) => {
+      const list = rs.filter((r) => (r.group || "") === g);
+      const unset = list.filter((r) => !r.configured).length;
+      return card(`r-${g || "none"}`, g || "Ungrouped", "repo", list.map((r) => repoRow(r)).join(""),
+        `<span class="cnt">${list.length}${unset ? ` · ${unset} not set up` : ""}</span>`);
+    }).join("");
+  }
+
+  function tAgents() {
+    rows = [];
+    let out = card("runners", "Runners", "server-process",
+      `<div class="rgrid">${(D.runners || []).map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
+        <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
+        <div class="l2"><span class="mono dim">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span></div>
+      </div>`).join("")}</div>`,
+      `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
+
+    const withAgents = (D.repos || []).filter((r) => r.agents.length).filter((r) => hit(r.name));
+    if (!withAgents.length) {
+      out += card("a", "Repo agents", "sparkle",
+        empty("sparkle", "No repository ships an agent yet",
+          [`A repo declares agents as prompt files in <code>.principia/agents/*.md</code>, committed alongside its code.`,
+           `They are runner-agnostic: the same prompt runs under Claude Code, Codex, Gemini CLI or agy.`],
+          `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
+      return out;
+    }
+    out += withAgents.map((r) => card(`a-${r.dirName}`, r.name, "sparkle",
+      r.agents.map((a) => `<div ${F(`data-root="${esc(r.root)}" data-agent="${esc(a.id)}"`)}>
+        <span class="ic">${ico("sparkle")}</span>
+        <div class="main"><div class="l1"><b>${esc(a.label || a.id)}</b></div>
+          <div class="l2"><span class="mono dim">${esc(a.file)}</span>${(a.supports || []).map((s) => `<span class="chip">${esc(s)}</span>`).join("")}</div></div>
+        <div class="meta"></div>
+        <div class="acts"><button class="btn" data-agent="${esc(a.id)}" data-root="${esc(r.root)}">${ico("play", "sm")} Run</button></div>
+      </div>`).join("")
+    )).join("");
+    return out;
+  }
+
+  function tScripts() {
+    rows = [];
+    const rs = (D.repos || []).filter((r) => r.flows.some((f) => f.source === "detected")).filter((r) => hit(r.name));
+    if (!rs.length) {
+      return card("s", "Scripts", "play",
+        empty("play", "Nothing auto-detected",
+          [`Scripts are found with zero config from <code>package.json</code>, <code>Cargo.toml</code>, <code>pyproject.toml</code>, <code>Makefile</code> and Gradle.`,
+           `None of your recent repositories expose any.`]));
+    }
+    return rs.map((r) => card(`s-${r.dirName}`, r.name, "play",
+      `<div class="chips pad">${r.flows.filter((f) => f.source === "detected").map((f) =>
+        `<button class="chip act" data-flow="${esc(f.id)}" data-root="${esc(r.root)}" title="${esc(f.run)}">${ico(f.kind === "server" ? "play" : f.kind === "test" ? "beaker" : "tools", "sm")}${esc(f.label)}</button>`).join("")}</div>`,
+      `<span class="cnt mono">${esc(r.branch)}</span>`)).join("");
+  }
+
+  function tRecents() {
+    rows = [];
+    const rs = (D.recents || []).filter((r) => hit(r.name));
+    if (!rs.length) {
+      return card("re", "Recents", "history",
+        empty("history", "No recent projects",
+          ["This mirrors your editor's own recently-opened list, filtered to git repositories."]));
+    }
+    return card("re", "Recently opened", "history",
+      rs.map((r) => `<div ${F(`data-root="${esc(r.root)}"`)}>
+        <span class="ic">${ico("repo")}</span>
+        <div class="main"><div class="l1"><b>${esc(r.name)}</b>${r.ws ? `<span class="chip">workspace</span>` : ""}</div></div>
+        <div class="meta"><span class="mono dim">${esc(r.branch || "")}</span>${r.dirty ? `<span class="g d">●${r.dirty}</span>` : ""}</div>
+        <div class="acts">
+          <button class="ib" data-term="${esc(r.root)}" title="Terminal here">${ico("terminal")}</button>
+          <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
+          <button class="ib" data-open="${esc(r.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>
+        </div>
+      </div>`).join(""), `<span class="cnt">${rs.length}</span>`);
+  }
+
+  function tDevices() {
+    rows = [];
+    const a = D.android || {}, i = D.ios || {};
+    let out = "";
+
+    out += card("android", "Android", "device-mobile",
+      !a.available ? empty("circle-slash", "Android SDK not found", [esc(a.reason || "Install the Android SDK to boot an emulator from here.")])
+      : `<div class="row"><span class="ic">${ico("device-mobile")}</span>
+          <div class="main"><div class="l1"><b>${a.booted ? esc(a.device) : "No emulator running"}</b>${a.booted ? `<span class="chip ok">booted</span>` : ""}</div>
+          <div class="l2"><span class="dim">${a.avds && a.avds.length ? esc(a.avds.join(", ")) : "no AVDs configured"}</span></div></div>
+          <div class="meta"></div>
+          <div class="acts">${a.avds && a.avds.length ? `<button class="btn" data-android="${a.booted ? "stop" : "boot"}">${ico(a.booted ? "debug-stop" : "play", "sm")} ${a.booted ? "Stop" : "Boot"}</button>` : ""}</div>
+        </div>`);
+
+    out += card("ios", "iOS simulators", "device-mobile",
+      !i.available ? empty("circle-slash", "Xcode tools not found", [esc(i.reason || "Install Xcode command line tools to use simulators.")])
+      : !(i.all || []).length ? empty("device-mobile", "No simulators available", ["Create one in Xcode."])
+      : i.all.slice(0, 8).map((d) => `<div class="row">
+          <span class="ic">${ico("device-mobile")}</span>
+          <div class="main"><div class="l1"><b>${esc(d.name)}</b>${d.state === "Booted" ? `<span class="chip ok">booted</span>` : ""}</div></div>
+          <div class="meta"></div>
+          <div class="acts"><button class="btn" data-ios="${d.state === "Booted" ? "shutdown" : "boot"}" data-udid="${esc(d.udid)}">${d.state === "Booted" ? "Shutdown" : "Boot"}</button></div>
+        </div>`).join(""),
+      i.available ? `<span class="cnt">${(i.booted || []).length} booted · ${(i.all || []).length} available</span>` : "");
+
+    const ports = D.ports || [];
+    out += card("ports", "Listening ports", "radio-tower",
+      ports.length ? ports.map((p) => `<div class="row">
+          <span class="ic">${ico("radio-tower")}</span>
+          <div class="main"><div class="l1"><b>${p.port}</b><span class="chip">${esc(p.cmd || "")}</span></div></div>
+          <div class="meta"></div>
+          <div class="acts">
+            <button class="ib" data-browser="http://localhost:${p.port}" title="Simple Browser">${ico("globe")}</button>
+            <button class="ib" data-external="http://localhost:${p.port}" title="External browser">${ico("link-external")}</button>
+          </div>
+        </div>`).join("")
+      : empty("radio-tower", "Nothing listening", ["Dev servers you start from here show up with a link to open them."]),
+      ports.length ? `<span class="cnt">${ports.length}</span>` : "");
+    return out;
+  }
+
+  /* ───────── render ───────── */
+
+  const RENDER = { today: tToday, tasks: tTasks, workflows: tWorkflows, repos: tRepos, agents: tAgents, scripts: tScripts, recents: tRecents, devices: tDevices };
 
   function paintBody(animate) {
     const body = document.getElementById("body");
     if (!body) return;
-    if (!D) { body.innerHTML = `<div class="blank">${ico("loading", "spin")} Reading your recent projects…</div>`; return; }
+    if (!D) { body.innerHTML = `<div class="empty">${ico("loading", "spin big")}<b>Reading your recent projects…</b></div>`; return; }
 
-    const html = ({ focus: vFocus, repos: vRepos, agents: vAgents, activity: vActivity }[view] || vFocus)();
+    let html;
+    try { html = (RENDER[tab] || tToday)(); }
+    catch (e) { html = `<div class="empty">${ico("error", "big")}<b>Render failed</b><p>${esc(e.message)}</p></div>`; }
 
-    // Diff at the section level: a poll that changes nothing touches no DOM.
     const next = document.createElement("div");
     next.innerHTML = html;
     const incoming = [...next.querySelectorAll("[data-sec]")];
     const currentIds = [...body.querySelectorAll("[data-sec]")].map((n) => n.dataset.sec);
-    const nextIds = incoming.map((n) => n.dataset.sec);
 
-    if (animate || currentIds.join("|") !== nextIds.join("|")) {
+    if (animate || currentIds.join("|") !== incoming.map((n) => n.dataset.sec).join("|")) {
       const y = window.scrollY;
       body.innerHTML = html;
       painted.clear();
@@ -152,7 +472,7 @@
     } else {
       for (const n of incoming) {
         const id = n.dataset.sec;
-        if (painted.get(id) === n.outerHTML) continue;      // unchanged: leave the DOM alone
+        if (painted.get(id) === n.outerHTML) continue;
         const live = body.querySelector(`[data-sec="${CSS.escape(id)}"]`);
         if (live) live.replaceWith(n.cloneNode(true));
         painted.set(id, n.outerHTML);
@@ -167,168 +487,11 @@
     paintBody(animate);
   }
 
-  function setView(id) {
-    if (id === view) return;
-    view = id; focus = -1; persist();
+  function setTab(id) {
+    if (id === tab) return;
+    tab = id; focus = -1; persist();
     paintChrome(); paintBody(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  /* ───────── rows ───────── */
-
-  let rows = [];
-  const F = (attrs) => { rows.push(attrs); return `class="row focusable" data-i="${rows.length - 1}" ${attrs}`; };
-
-  const gitBits = (r) => [
-    r.branch ? `<span class="mono">${esc(r.branch)}</span>` : "",
-    r.dirty ? `<span class="g d">${r.dirty} changed</span>` : "",
-    r.ahead ? `<span class="g a">↑${r.ahead}</span>` : "",
-    r.behind ? `<span class="g b">↓${r.behind}</span>` : "",
-  ].filter(Boolean).join("");
-
-  function repoRow(r) {
-    const runnable = (D.runners || []).some((x) => x.available);
-    return `<div ${F(`data-root="${esc(r.root)}"`)}>
-      <span class="ic">${ico(r.icon || "repo")}</span>
-      <div class="body">
-        <div class="line1">
-          <b>${esc(r.name)}</b>
-          ${r.configured ? `<span class="pill ok">configured</span>` : `<span class="pill">not set up</span>`}
-          ${r.invalid ? `<span class="pill bad">${esc(r.invalid)}</span>` : ""}
-          ${r.staleBy ? `<span class="pill warn">${r.staleBy} commits since setup</span>` : ""}
-        </div>
-        ${r.summary ? `<div class="line2">${esc(r.summary)}</div>` : ""}
-        <div class="meta">${gitBits(r)}${r.flows.length ? `<span>${r.flows.length} flow${r.flows.length > 1 ? "s" : ""}${r.configured ? "" : " detected"}</span>` : ""}${r.agents.length ? `<span>${r.agents.length} agent${r.agents.length > 1 ? "s" : ""}</span>` : ""}</div>
-        ${r.flows.length ? `<div class="chips">${r.flows.slice(0, 6).map((f) =>
-          `<button class="chip" data-flow="${esc(f.id)}" data-root="${esc(r.root)}" title="${esc(f.run)}">${ico(f.kind === "server" ? "play" : f.kind === "test" ? "beaker" : "tools", "sm")}${esc(f.label)}</button>`
-        ).join("")}</div>` : ""}
-        ${r.agents.length ? `<div class="chips">${r.agents.map((a) =>
-          `<button class="chip ag" data-agent="${esc(a.id)}" data-root="${esc(r.root)}" title="${esc((a.supports || []).join(", "))}">${ico("sparkle", "sm")}${esc(a.label || a.id)}</button>`
-        ).join("")}</div>` : ""}
-      </div>
-      <div class="acts">
-        ${!r.configured ? `<button class="btn" data-setup="${esc(r.root)}" ${runnable ? "" : "disabled"} title="${runnable ? "Ask an agent to write .principia/repo.json" : "No agent runner installed"}">${ico("sparkle", "sm")} Set up</button>` : ""}
-        <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
-        <button class="ib" data-open="${esc(r.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>
-      </div>
-    </div>`;
-  }
-
-  /* ───────── views ───────── */
-
-  function vFocus() {
-    rows = [];
-    let out = "";
-
-    if (!D.repos.length) {
-      return section("empty", "Nothing discovered yet",
-        `<div class="blank">
-          <p>Principia reads the projects you have recently opened in this editor. Open a git repository once and it will appear here.</p>
-          <p class="dim">Nothing is scanned from your filesystem and nothing is stored in the extension.</p>
-        </div>`);
-    }
-
-    if (D.board && D.board.length) {
-      const items = D.board.filter((f) => hit(f.title) || hit(f.repo));
-      out += section("board", "Focus",
-        items.map((f) => {
-          const r = D.repos.find((x) => x.name === f.repo);
-          return `<div ${F(r ? `data-root="${esc(r.root)}"` : "")}>
-            <span class="ic">${ico(f.status === "blocked" ? "circle-slash" : f.status === "doing" ? "debug-start" : "circle-large-outline")}</span>
-            <div class="body">
-              <div class="line1"><b>${esc(f.title)}</b>${f.repo ? `<span class="pill">${esc(f.repo)}</span>` : ""}</div>
-              ${f.agent && r ? `<div class="chips"><button class="chip ag" data-agent="${esc(f.agent)}" data-root="${esc(r.root)}">${ico("sparkle", "sm")}${esc(f.agent)}</button></div>` : ""}
-            </div>
-            <div class="acts">${r ? `<button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>` : ""}</div>
-          </div>`;
-        }).join("") || `<div class="blank sm">Nothing matches.</div>`,
-        D.boardUpdated ? `<span class="age">updated ${esc(String(D.boardUpdated).slice(0, 10))}</span>` : "");
-    } else {
-      out += section("board", "Focus",
-        `<div class="blank sm">
-          <p>No cross-repo board yet. It lives at <code>~/.principia/board.json</code> and is written by an agent.</p>
-          <p class="dim">Ask any agent: <em>plan my focus across repos, following the Principia plan-day prompt.</em></p>
-        </div>`);
-    }
-
-    const dirty = D.repos.filter((r) => r.dirty > 0).filter((r) => hit(r.name));
-    if (dirty.length) {
-      out += section("dirty", "Uncommitted work",
-        dirty.slice(0, 8).map(repoRow).join(""),
-        `<span class="age">${dirty.reduce((n, r) => n + r.dirty, 0)} files</span>`);
-    }
-
-    const unset = D.repos.filter((r) => !r.configured).filter((r) => hit(r.name));
-    if (unset.length) {
-      out += section("unset", "Not set up yet",
-        unset.slice(0, 8).map(repoRow).join(""),
-        `<span class="age">${unset.length} of ${D.repos.length}</span>`);
-    }
-    return out;
-  }
-
-  function vRepos() {
-    rows = [];
-    const groups = (D.groups || []).map((g) => ({
-      name: g.name, repos: g.repos.filter((r) => hit(r.name) || hit(r.summary) || hit(r.group)),
-    })).filter((g) => g.repos.length);
-    if (!groups.length) return section("none", "Repos", `<div class="blank sm">Nothing matches.</div>`);
-    return groups.map((g, i) =>
-      section(`g-${i}`, g.name || "Ungrouped", g.repos.map(repoRow).join(""), `<span class="age">${g.repos.length}</span>`)
-    ).join("");
-  }
-
-  function vAgents() {
-    rows = [];
-    const withAgents = D.repos.filter((r) => r.agents.length);
-    let out = section("runners", "Runners",
-      `<div class="rgrid">${(D.runners || []).map((r) =>
-        `<div class="rcard ${r.available ? "ok" : "no"}">
-          <div class="line1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
-          <div class="line2">${r.available ? `<span class="mono">${esc(r.pathTo || r.bin)}</span>` : esc(r.reason || "not installed")}</div>
-        </div>`).join("")}</div>`,
-      `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
-
-    if (!withAgents.length) {
-      out += section("noagents", "Repo agents",
-        `<div class="blank sm">
-          <p>No repository ships an agent yet.</p>
-          <p class="dim">A repo declares agents in <code>.principia/agents/*.md</code>. Use <b>Set up</b> on a repo and ask for one.</p>
-        </div>`);
-      return out;
-    }
-    out += withAgents.filter((r) => hit(r.name)).map((r) =>
-      section(`a-${r.dirName}`, r.name,
-        r.agents.map((a) => `<div ${F(`data-root="${esc(r.root)}" data-agent="${esc(a.id)}"`)}>
-          <span class="ic">${ico("sparkle")}</span>
-          <div class="body">
-            <div class="line1"><b>${esc(a.label || a.id)}</b></div>
-            <div class="meta"><span class="mono">${esc(a.file)}</span>${(a.supports || []).map((s) => `<span class="pill">${esc(s)}</span>`).join("")}</div>
-          </div>
-          <div class="acts"><button class="btn" data-agent="${esc(a.id)}" data-root="${esc(r.root)}">${ico("play", "sm")} Run</button></div>
-        </div>`).join("")
-      )).join("");
-    return out;
-  }
-
-  function vActivity() {
-    rows = [];
-    const h = (D.history || []).filter((e) => hit(e.repo) || hit(e.runner) || hit(e.agent));
-    if (!h.length) {
-      return section("noact", "Activity",
-        `<div class="blank sm">
-          <p>No agent sessions recorded yet.</p>
-          <p class="dim">Runs launched from Principia are logged to <code>~/.principia/history/</code>. Claude Code also logs automatically once the Principia plugin is installed.</p>
-        </div>`);
-    }
-    return section("act", "Recent agent activity",
-      h.slice(0, 60).map((e) => `<div class="row">
-        <span class="ic">${ico(e.phase === "launch" ? "rocket" : e.phase === "start" ? "debug-start" : "debug-stop")}</span>
-        <div class="body">
-          <div class="line1"><b>${esc(e.runner || "?")}</b>${e.agent ? `<span class="pill">${esc(e.agent)}</span>` : ""}<span class="pill">${esc(e.phase)}</span></div>
-          <div class="meta"><span class="mono">${esc((e.repo || "").split("/").pop())}</span>${e.branch ? `<span class="mono">${esc(e.branch)}</span>` : ""}<span class="dim">${esc(String(e.ts || "").replace("T", " ").replace("Z", ""))}</span></div>
-        </div>
-      </div>`).join(""));
   }
 
   /* ───────── interaction ───────── */
@@ -340,24 +503,27 @@
       clearTimeout(t);
       t = setTimeout(() => { q = qi.value.trim().toLowerCase(); focus = -1; persist(); paintBody(false); }, 70);
     });
-
-    document.getElementById("nav").addEventListener("click", (ev) => {
-      const b = ev.target.closest("[data-view]"); if (b) setView(b.dataset.view);
+    document.getElementById("tabs").addEventListener("click", (ev) => {
+      const b = ev.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab);
     });
-
     app.addEventListener("click", (ev) => {
-      const el = ev.target.closest("[data-act],[data-open],[data-setup],[data-flow],[data-agent]");
+      const el = ev.target.closest("[data-act],[data-open],[data-setup],[data-flow],[data-agent],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go]");
       if (!el || el.disabled) return;
       ev.stopPropagation();
       const d = el.dataset;
+      if (d.tabGo) return setTab(d.tabGo);
       if (d.act === "refresh") { spin(); return send({ type: "refresh" }); }
-      if (d.act) return send({ type: d.act === "redetect" ? "redetect" : d.act });
+      if (d.act) return send({ type: d.act });
       if (d.setup) return send({ type: "setup", root: d.setup });
       if (d.flow) return send({ type: "flow", root: d.root, id: d.flow });
       if (d.agent && d.root) return send({ type: "agent", root: d.root, id: d.agent });
+      if (d.term) return send({ type: "terminal", root: d.term });
+      if (d.android) return send({ type: "android", action: d.android });
+      if (d.ios) return send({ type: "ios", action: d.ios, udid: d.udid });
+      if (d.browser) return send({ type: "browser", url: d.browser });
+      if (d.external) return send({ type: "external", url: d.external });
       if (d.open) return send({ type: "open", root: d.open, newWindow: d.new === "1" });
     });
-
     app.addEventListener("mousemove", (ev) => {
       const r = ev.target.closest(".row.focusable"); if (!r) return;
       const it = items(), i = it.indexOf(r);
@@ -380,7 +546,7 @@
 
   document.addEventListener("keydown", (ev) => {
     const inInput = ["INPUT", "TEXTAREA", "SELECT"].includes(ev.target.tagName);
-    if (!inInput && ev.key >= "1" && ev.key <= "4") return setView(VIEWS[+ev.key - 1][0]);
+    if (!inInput && ev.key >= "1" && ev.key <= "8") return setTab(TABS[+ev.key - 1][0]);
     if (ev.key === "/" && !inInput) { ev.preventDefault(); return document.getElementById("q").focus(); }
     if (ev.key === "Escape") {
       const qi = document.getElementById("q");
@@ -400,7 +566,7 @@
     const m = ev.data;
     if (m.type === "data") { D = m; D.error = null; persist(); render(false); }
     if (m.type === "error") {
-      D = D || { repos: [], groups: [], runners: [], board: [], history: [], counts: {} };
+      D = D || { repos: [], runners: [], board: [], history: [], recents: [], ports: [], android: {}, ios: {}, counts: {}, machine: {} };
       D.error = m.message; render(false);
     }
   });

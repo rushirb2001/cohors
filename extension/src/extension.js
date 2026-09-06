@@ -7,6 +7,7 @@
 const vscode = require("vscode");
 const fs = require("fs");
 const os = require("os");
+const cp = require("child_process");
 const path = require("path");
 
 const D = require("./discovery");
@@ -40,6 +41,7 @@ async function collect() {
   const board = D.readBoard();
   const history = D.readHistory();
   const runners = R.detect();
+  const dev = await D.devices();
 
   // Group repos by their declared group; ungrouped fall into one bucket at the end.
   const groups = [];
@@ -59,13 +61,23 @@ async function collect() {
     repos, groups, runners,
     board: board.focus, boardPresent: board.present, boardUpdated: board.updated,
     history,
+    ports: dev.ports, android: dev.android, ios: dev.ios,
+    recents: repos.map((r) => ({ name: r.name, root: r.root, ws: r.ws, rank: r.rank, branch: r.branch, dirty: r.dirty })),
     here,
     contract: !!contractRoot(),
+    machine: {
+      free: Math.round((os.freemem() / 1e9) * 10) / 10,
+      total: Math.round(os.totalmem() / 1e9),
+      load: os.loadavg()[0].toFixed(1),
+    },
     counts: {
       repos: repos.length,
       configured: repos.filter((r) => r.configured).length,
       dirty: repos.filter((r) => r.dirty > 0).length,
       agents: repos.reduce((n, r) => n + r.agents.length, 0),
+      tasks: repos.reduce((n, r) => n + r.tasks.length, 0) + board.focus.length,
+      flows: repos.reduce((n, r) => n + r.flows.length, 0),
+      devices: (dev.android.booted ? 1 : 0) + dev.ios.booted.length + dev.ports.length,
     },
   };
   return lastData;
@@ -274,6 +286,25 @@ async function onMessage(m) {
       return setupRepo(m.root, m.runner);
     case "agent":
       return runRepoAgent(m.root, m.id, m.runner);
+    case "android": {
+      const st = await D.devices().then((d) => d.android);
+      if (!st.available) return void vscode.window.showErrorMessage(`Launch pad: ${st.reason}`);
+      if (m.action === "stop") { await D.run(D.ADB, ["emu", "kill"]); return void setTimeout(() => refresh(true), 2500); }
+      if (!st.avds.length) return void vscode.window.showErrorMessage("Launch pad: no AVDs configured.");
+      if (st.booted) return void vscode.window.showInformationMessage(`Launch pad: ${st.device} is already running.`);
+      // Headless on purpose: the point is to see it inside the editor, not in a
+      // second native window. Capped memory for laptops.
+      cp.spawn(D.EMU, ["-avd", st.avds[0], "-no-window", "-no-audio", "-no-boot-anim", "-memory", "2048", "-no-snapshot-save"],
+        { detached: true, stdio: "ignore" }).unref();
+      vscode.window.showInformationMessage(`Launch pad: booting ${st.avds[0]} headless.`);
+      return void setTimeout(() => refresh(true), 15000);
+    }
+    case "ios": {
+      if (!/^[0-9A-Fa-f-]{8,64}$/.test(String(m.udid || ""))) return;
+      if (m.action === "boot") { await D.run("xcrun", ["simctl", "boot", m.udid], { timeout: 20000 }); await D.run("open", ["-a", "Simulator"]); }
+      if (m.action === "shutdown") await D.run("xcrun", ["simctl", "shutdown", m.udid], { timeout: 20000 });
+      return void setTimeout(() => refresh(true), 3000);
+    }
     case "browser":
       return vscode.commands.executeCommand("simpleBrowser.show", m.url);
     case "external":
