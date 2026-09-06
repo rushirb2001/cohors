@@ -472,34 +472,69 @@
     rows = [];
     const unset = (D.repos || []).filter((r) => !r.configured);
     const runners = D.runners || [];
-    const ok = runners.filter((r) => r.available);
+    const runnable = runners.some((r) => r.available);
+    const configuredCount = (D.repos || []).length - unset.length;
+    // The repo you touched most recently is the one worth suggesting first.
+    const suggestion = unset[0];
 
-    let out = card("state", "Status", "checklist",
-      `<div class="row"><span class="ic">${ico(D.contract ? "pass-filled" : "circle-slash")}</span>
-        <div class="main"><div class="l1"><b>The contract</b></div>
-        <div class="l2"><span class="nt">${D.contract ? "Found. Agents can read the spec and run the validator." : "Not on disk. Point <code>principia.specPath</code> at a checkout of the Principia repo."}</span></div></div>
-        <div class="meta"></div><div class="acts"><button class="ib" data-act="openSpec" title="Open SPEC.md">${ico("book")}</button></div></div>
-      <div class="row"><span class="ic">${ico(ok.length ? "pass-filled" : "circle-slash")}</span>
-        <div class="main"><div class="l1"><b>Agent runners</b></div>
-        <div class="l2">${runners.map((r) => `<span class="chip ${r.available ? "ok" : ""}">${esc(r.label)}</span>`).join("")}</div></div>
-        <div class="meta"></div><div class="acts"><button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button></div></div>
-      <div class="row"><span class="ic">${ico(unset.length ? "circle-large-outline" : "pass-filled")}</span>
-        <div class="main"><div class="l1"><b>Repositories opted in</b></div>
-        <div class="l2"><span class="nt">${(D.repos || []).length - unset.length} of ${(D.repos || []).length} have a <code>.principia/</code> directory.</span></div></div>
-        <div class="meta"></div><div class="acts"></div></div>`);
+    let out = "";
+
+    // Lead with the next concrete action, not a status report.
+    out += `<section class="card wide" data-sec="quick">
+      <header>${ico("sparkle", "sm")}<h3>Ask your agent</h3></header>
+      <div class="cbody"><div class="suggest">
+        ${suggestion ? `<div class="sg">
+          <div class="sgt"><b>Set up ${esc(suggestion.name)}</b><span class="nt">Reads the repo and writes its <code>.principia/</code> contribution. Nothing is guessed by us; an agent decides what is worth declaring.</span></div>
+          <button class="btn p" data-setup="${esc(suggestion.root)}" ${runnable ? "" : "disabled"} title="${runnable ? "" : "No agent runner is installed"}">${ico("sparkle", "sm")} Ask agent to set this up</button>
+        </div>` : ""}
+        <div class="sg">
+          <div class="sgt"><b>Plan today's focus</b><span class="nt">Looks at uncommitted work, unpushed branches and repo tasks across everything Principia knows about, then writes <code>~/.principia/board.json</code>.</span></div>
+          <button class="btn" data-plan="1" ${runnable ? "" : "disabled"} title="${runnable ? "" : "No agent runner is installed"}">${ico("sparkle", "sm")} Ask agent to plan my day</button>
+        </div>
+        <div class="sg">
+          <div class="sgt"><b>Something else</b><span class="nt">Any agent can follow the contract directly, in any repo.</span></div>
+          <button class="btn" data-act="openSpec">${ico("book", "sm")} Open the contract</button>
+        </div>
+      </div></div>
+    </section>`;
+
+    if (!runnable) {
+      out += card("runners", "No agent runner found", "circle-slash",
+        `<div class="rgrid">${runners.map((r) => `<div class="rc no">
+          <div class="l1">${ico("circle-slash")}<b>${esc(r.label)}</b></div>
+          <div class="l2"><span class="mono dim">${esc(r.reason || "not installed")}</span></div>
+        </div>`).join("")}</div>`,
+        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
+    } else {
+      out += card("runners", "Runners", "server-process",
+        `<div class="rgrid">${runners.map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
+          <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
+          <div class="l2"><span class="mono dim">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span></div>
+        </div>`).join("")}</div>`,
+        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
+    }
+
+    out += card("todo", "Waiting on setup", "repo",
+      unset.length ? unset.map((r) => `<div ${F(`data-root="${esc(r.root)}"`)}>
+          <span class="ic">${ico(r.icon || "repo")}</span>
+          <div class="main"><div class="l1"><b>${esc(r.name)}</b></div>
+            ${r.summary ? `<div class="l2"><span class="nt">${esc(r.summary)}</span></div>` : ""}
+          </div>
+          <div class="meta">${gitBits(r)}</div>
+          <div class="acts">
+            <button class="btn" data-setup="${esc(r.root)}" ${runnable ? "" : "disabled"}>${ico("sparkle", "sm")} Ask agent</button>
+            <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
+          </div>
+        </div>`).join("")
+        : empty("check", "Every repository has opted in", ["Nothing left to set up."]),
+      unset.length ? `<span class="cnt">${configuredCount}/${(D.repos || []).length} set up</span>` : "");
 
     out += card("how", "How this fills up", "lightbulb",
       `<div class="empty">
-        <b>Repositories describe themselves</b>
-        <p>Launch pad ships empty on purpose. It reads the projects you have recently opened, then asks each one what it offers.</p>
-        <p>A repository answers by committing a <code>.principia/</code> directory: its flows, the agents it ships, and its current work. An agent writes that file for it, so there is nothing to fill in by hand.</p>
-        <p>Everything below is auto-detected and needs no setup at all. Setting a repo up only adds what detection cannot infer.</p>
+        <p>Launch pad ships empty on purpose. It reads the projects you recently opened, then asks each one what it offers.</p>
+        <p>A repository answers by committing a <code>.principia/</code> directory: its flows, the agents it ships, and its current work. You never fill this in by hand, you ask an agent to.</p>
+        <p>Scripts auto-detected from <code>package.json</code>, Cargo, Make and Gradle need no setup at all. Setting up a repo only adds what detection cannot infer.</p>
       </div>`);
-
-    out += card("todo", "Not set up yet", "repo",
-      unset.length ? unset.map((r) => repoRow(r)).join("")
-        : empty("check", "Every repository has opted in", ["Nothing left to set up."]),
-      unset.length ? `<span class="cnt">${unset.length}</span>` : "");
     return out;
   }
 
@@ -566,7 +601,7 @@
       const b = ev.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab);
     });
     app.addEventListener("click", (ev) => {
-      const el = ev.target.closest("[data-act],[data-open],[data-setup],[data-flow],[data-agent],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go]");
+      const el = ev.target.closest("[data-act],[data-open],[data-setup],[data-plan],[data-flow],[data-agent],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go]");
       if (!el || el.disabled) return;
       ev.stopPropagation();
       const d = el.dataset;
@@ -574,6 +609,7 @@
       if (d.act === "refresh") { spin(); return send({ type: "refresh" }); }
       if (d.act) return send({ type: d.act });
       if (d.setup) return send({ type: "setup", root: d.setup });
+      if (d.plan) return send({ type: "plan" });
       if (d.flow) return send({ type: "flow", root: d.root, id: d.flow });
       if (d.agent && d.root) return send({ type: "agent", root: d.root, id: d.agent });
       if (d.term) return send({ type: "terminal", root: d.term });

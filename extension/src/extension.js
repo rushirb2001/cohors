@@ -177,6 +177,42 @@ async function setupRepo(root, runnerId) {
   terminal(repo.root, cmd, `${runner.label}: setup`);
 }
 
+async function planBoard(runnerId) {
+  const cr = contractRoot();
+  if (!cr) {
+    vscode.window.showErrorMessage(
+      "Principia: cannot find the contract. Set `principia.specPath` to a checkout of the Principia repo."
+    );
+    return;
+  }
+  const src = path.join(cr, "prompts", "plan-day.md");
+  if (!D.exists(src)) { vscode.window.showErrorMessage(`Principia: missing ${src}`); return; }
+
+  const runner = pickRunner(runnerId);
+  if (!runner) return;
+
+  const root = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0])
+    ? vscode.workspace.workspaceFolders[0].uri.fsPath
+    : os.homedir();
+  const repoNames = ((lastData && lastData.repos) || []).map((r) => `${r.name}  (${r.root})`).join("\n");
+
+  const body = [
+    fs.readFileSync(src, "utf8"),
+    "",
+    "---",
+    "",
+    "Repositories Principia currently knows about:",
+    repoNames || "(none discovered yet)",
+    "",
+    `The Principia contract is checked out at: ${cr}`,
+    `Write the board to: ${path.join(os.homedir(), ".principia", "board.json")}`,
+  ].join("\n");
+
+  const file = promptFile(body, "plan-day");
+  R.recordLaunch({ runner: runner.id, repo: root, branch: "", agent: "plan-day" });
+  terminal(root, R.commandFor(runner.id, file), `${runner.label}: plan focus`);
+}
+
 async function runRepoAgent(root, agentId, runnerId) {
   const repo = lastData && lastData.repos.find((r) => r.root === root);
   if (!repo) return;
@@ -284,6 +320,8 @@ async function onMessage(m) {
       return void terminal(m.root, m.cmd || "", m.name);
     case "setup":
       return setupRepo(m.root, m.runner);
+    case "plan":
+      return planBoard(m.runner);
     case "agent":
       return runRepoAgent(m.root, m.id, m.runner);
     case "android": {

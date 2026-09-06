@@ -137,8 +137,8 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; gap: 10px;
   align-items: start; padding: 8px 10px; border-radius: 6px;
   transition: background var(--t) var(--ease); }
-.row:hover, .row.on { background: var(--vscode-list-hoverBackground); }
-.row.on { box-shadow: inset 2px 0 0 var(--vscode-focusBorder); }
+.row:hover { background: var(--vscode-list-hoverBackground); }
+.row.on { background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground)); }
 .row .ic { color: var(--vscode-icon-foreground); padding-top: 1px; }
 .row:hover .ic, .row.on .ic { color: var(--vscode-textLink-foreground); }
 .row[data-st="done"] { opacity: .45; }
@@ -180,6 +180,14 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
 .chips.pad { padding: 8px 10px; margin: 0; }
 
+/* ── suggestive actions: "ask your agent to..." ── */
+.suggest { display: flex; flex-direction: column; gap: 1px; background: var(--line); }
+.sg { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 11px 14px; background: var(--vscode-editor-background); flex-wrap: wrap; }
+.sgt { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
+.sgt b { font-size: 12.5px; font-weight: 500; }
+.sgt .nt { font-size: 11.5px; color: var(--vscode-descriptionForeground); line-height: 1.5; }
+
 /* ── buttons ── */
 .btn, .ib { font: inherit; cursor: pointer; border-radius: 4px;
   transition: background var(--t) var(--ease), color var(--t) var(--ease), transform var(--t) var(--ease); }
@@ -189,6 +197,8 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .btn:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
 .btn:active { transform: scale(.97); }
 .btn:disabled { opacity: .45; cursor: default; }
+.btn.p { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
+.btn.p:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
 .ib { border: 0; background: transparent; color: var(--vscode-icon-foreground); padding: 4px 5px; }
 .ib:hover { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
 .btn:focus-visible, .ib:focus-visible, .chip.act:focus-visible, .tab:focus-visible {
