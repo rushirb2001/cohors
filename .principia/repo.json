@@ -3,7 +3,7 @@
   "name": "principia",
   "summary": "The launchpad your repositories write for themselves",
   "group": "solo-projects",
-  "updated": "2026-09-07T09:31:38Z",
+  "updated": "2026-09-07T09:41:14Z",
   "generatedFrom": "049872a",
   "links": [
     {
@@ -124,6 +124,13 @@
       "status": "done",
       "priority": "high",
       "notes": "Server-level instructions carry the workflow and the judgement calls (detection first, empty flows is valid, never done without evidence, writes replace) for agents that never see prompts/. Also closed a real gap: tasks[].agent, links[] and generatedFrom existed in the schema and validator but not in the MCP input schema, so an MCP agent could not set them at all."
+    },
+    {
+      "id": "launch-and-resume",
+      "title": "One action: open the workspace and pick up the last session",
+      "status": "done",
+      "priority": "high",
+      "notes": "Replaces open-in-new-window. Prefers a .code-workspace (now detected on disk, not only when recents happened to record one), opens it, then opens a terminal and resumes the repo latest session. The new window has its own extension host, so the intent is handed over via a one-shot, TTL-bounded ~/.principia/pending.json. Repo rows show a session count; activity rows with a session id resume it."
     },
     {
       "id": "dedupe-runner-table",

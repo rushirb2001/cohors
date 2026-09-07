@@ -134,6 +134,17 @@ function detectFlows(root, kind) {
   return flows;
 }
 
+// A repo may ship a .code-workspace that is the intended way to open it (folder
+// layout, settings, multi-root). Recents only records `ws` when you happened to
+// open the workspace file last time, so the file is found here too — otherwise
+// opening a repo you last opened as a plain folder silently ignores it.
+function workspaceFile(root) {
+  try {
+    const hit = fs.readdirSync(root).find((n) => n.endsWith(".code-workspace"));
+    return hit ? path.join(root, hit) : null;
+  } catch { return null; }
+}
+
 function repoKind(root) {
   if (exists(path.join(root, "Cargo.toml"))) return "rust";
   if (exists(path.join(root, "package.json"))) return "node";
@@ -335,7 +346,8 @@ async function collectRepos(max) {
     const detected = detectFlows(root, kind);
     out.push({
       root,
-      ws,
+      // Prefer what recents recorded; fall back to a workspace file on disk.
+      ws: ws || workspaceFile(root),
       dirName: path.basename(root),
       name: contribution.name || path.basename(root),
       summary: contribution.summary || "",

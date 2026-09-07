@@ -119,9 +119,72 @@ function terminal(cwd, cmd, name) {
   return t;
 }
 
+// A repo's workspace file is the intended way in when it has one: it carries
+// the folder layout and settings that opening the bare folder throws away.
+function openTarget(repo) {
+  return repo.ws && D.exists(repo.ws) ? repo.ws : repo.root;
+}
+
 function openRepo(repo, newWindow) {
-  const target = repo.ws && D.exists(repo.ws) ? repo.ws : repo.root;
-  return vscode.commands.executeCommand("vscode.openFolder", vscode.Uri.file(target), { forceNewWindow: !!newWindow });
+  return vscode.commands.executeCommand(
+    "vscode.openFolder", vscode.Uri.file(openTarget(repo)), { forceNewWindow: !!newWindow });
+}
+
+/* ───────── "open it and start working" ─────────
+ *
+ * Opening a folder creates a WINDOW, and that window gets its own extension
+ * host — this one cannot reach into it to open a terminal afterwards. So the
+ * intent is left on disk and the next window to activate in that folder claims
+ * it. One-shot and short-lived: a stale intent must never fire days later.
+ */
+const PENDING = () => path.join(D.PRINCIPIA_HOME, "pending.json");
+const PENDING_TTL_MS = 120000;
+
+function queuePending(root, action) {
+  try {
+    fs.mkdirSync(D.PRINCIPIA_HOME, { recursive: true });
+    fs.writeFileSync(PENDING(), JSON.stringify({ root, action, at: Date.now() }, null, 2) + "\n");
+  } catch (e) { console.error("principia: could not queue the pending action", e); }
+}
+
+// Claim it exactly once, whether or not it turns out to be ours.
+function takePending(here) {
+  let p;
+  try { p = JSON.parse(fs.readFileSync(PENDING(), "utf8")); } catch { return null; }
+  try { fs.unlinkSync(PENDING()); } catch { /* already gone */ }
+  if (!p || !p.root || !here) return null;
+  if (Date.now() - (p.at || 0) > PENDING_TTL_MS) return null;
+  const same = here === p.root || here.startsWith(p.root + path.sep) || p.root.startsWith(here + path.sep);
+  return same ? p.action : null;
+}
+
+// Terminal in the repo, then a session — resuming the most recent one rather
+// than starting cold, which is the whole point of coming back to a project.
+function startWorking(repo, runnerId) {
+  const runner = pickRunner(runnerId);
+  if (!runner) return;
+  const latest = (repo.sessions && repo.sessions[0]) || null;
+  const resume = latest ? R.resumeCommand(runner.id, latest.id) : null;
+  R.recordLaunch({ runner: runner.id, repo: repo.root, branch: repo.branch, agent: resume ? "resume-latest" : "new-session" });
+  terminal(repo.root, resume || runner.bin, `${runner.label}: ${repo.name || path.basename(repo.root)}`);
+  if (latest && !resume) {
+    vscode.window.showInformationMessage(
+      `Principia: ${runner.label} cannot reopen a session by id, so this is a fresh one.`);
+  }
+}
+
+async function launchRepo(root, runnerId) {
+  const repo = (lastData && lastData.repos.find((r) => r.root === root))
+    || { root, name: path.basename(root) };
+  const here = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0])
+    ? vscode.workspace.workspaceFolders[0].uri.fsPath : null;
+
+  // Already open here: skip straight to working, no pointless second window.
+  if (here && (here === repo.root || here.startsWith(repo.root + path.sep))) {
+    return void startWorking(repo, runnerId);
+  }
+  queuePending(repo.root, { kind: "start-working", runner: runnerId || null });
+  await openRepo(repo, true);
 }
 
 // Writes the prompt to a temp file so every runner can be invoked the same way,
@@ -439,6 +502,8 @@ async function onMessage(m) {
       return void resumeSession(m.root, m.id);
     case "newSession":
       return void newSession(m.root);
+    case "launch":
+      return launchRepo(m.root, m.runner);
     case "android": {
       const st = await D.devices().then((d) => d.android);
       if (!st.available) return void vscode.window.showErrorMessage(`Launch pad: ${st.reason}`);
@@ -524,6 +589,23 @@ function activate(context) {
   // index. Both change what every tab shows about a repo.
   for (const f of vscode.workspace.workspaceFolders || []) {
     watch(new vscode.RelativePattern(f, ".git/{HEAD,index}"), `${f.name} git state`);
+  }
+
+  // Did another window ask us to start working here? Claim it before anything
+  // else can, then act once discovery knows about this repo.
+  {
+    const here = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0])
+      ? vscode.workspace.workspaceFolders[0].uri.fsPath : null;
+    const pending = takePending(here);
+    if (pending && pending.kind === "start-working") {
+      collect()
+        .then(() => {
+          const repo = (lastData.repos || []).find((r) => r.root === here)
+            || { root: here, name: path.basename(here) };
+          startWorking(repo, pending.runner);
+        })
+        .catch((e) => console.error("principia: pending action failed", e));
+    }
   }
 
   const mode = cfg().get("openOnStartup", "emptyWindow");

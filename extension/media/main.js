@@ -244,7 +244,7 @@
       <span class="ic">${ico(e.phase === "launch" ? "sparkle" : "comment-discussion")}</span>
       <div class="main"><div class="l1"><b>${esc(e.runner || "agent")}</b>${e.agent ? `<span class="chip">${esc(e.agent)}</span>` : ""}${e.phase && e.phase !== "launch" ? `<span class="chip">${esc(e.phase)}</span>` : ""}</div>
       <div class="l2"><span class="mono dim">${esc(base(e.repo))}</span><span class="dim">${esc(String(e.ts || "").replace("T", " ").replace("Z", ""))}</span></div></div>
-      <div class="rslot n1"><span class="sa">${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</span></div>
+      <div class="rslot n2"><span class="sa">${e.session && e.repo ? `<button class="ib" data-resume="${esc(e.session)}" data-root="${esc(e.repo)}" title="Resume this session">${ico("debug-restart")}</button>` : ""}${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</span></div>
     </div>`;
   }
 
@@ -261,7 +261,7 @@
     return `${r.configured ? "" : `<button class="ib" data-setup="${esc(r.root)}" title="Set up with an agent">${ico("sparkle")}</button>`}
       <button class="ib" data-term="${esc(r.root)}" title="Terminal here">${ico("terminal")}</button>
       <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
-      <button class="ib" data-open="${esc(r.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>`;
+      <button class="ib" data-launch="${esc(r.root)}" title="Open the workspace and pick up the last session">${ico("rocket")}</button>`;
   }
 
   function taskRow(t) {
@@ -285,7 +285,7 @@
           : `<button class="ib" data-task="${esc(t.id)}" data-root="${esc(t.root)}" title="${t.agent ? `Run ${esc(t.agent)} agent` : "Work on this now"}">${ico("sparkle")}</button>`) : ""}
         ${t.root ? `<button class="ib" data-term="${esc(t.root)}" title="Terminal here">${ico("terminal")}</button>` : ""}
         ${t.root ? `<button class="ib" data-open="${esc(t.root)}" title="Open">${ico("folder-opened")}</button>` : ""}
-        ${t.root ? `<button class="ib" data-open="${esc(t.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>` : ""}
+        ${t.root ? `<button class="ib" data-launch="${esc(t.root)}" title="Open the workspace and pick up the last session">${ico("rocket")}</button>` : ""}
       </span></div>
     </div>`;
   }
@@ -303,7 +303,7 @@
         ${r.summary ? `<div class="l2"><span class="nt">${esc(r.summary)}</span></div>` : ""}
       </div>
       <div class="rslot n4">
-        <span class="sm">${gitBits(r)}${r.lastCommit ? `<span class="dim">${esc(r.lastCommit)}</span>` : ""}</span>
+        <span class="sm">${gitBits(r)}${r.lastCommit ? `<span class="dim">${esc(r.lastCommit)}</span>` : ""}${(r.sessions || []).length ? `<span class="gb" title="${r.sessions.length} recorded session(s); the launch action resumes the most recent">${ico("comment-discussion")}${r.sessions.length}</span>` : ""}</span>
         <span class="sa">${repoActions(r)}</span>
       </div>
     </div>`;
@@ -537,7 +537,7 @@
           <span class="sa">
             <button class="ib" data-term="${esc(r.root)}" title="Terminal here">${ico("terminal")}</button>
             <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
-            <button class="ib" data-open="${esc(r.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>
+            <button class="ib" data-launch="${esc(r.root)}" title="Open the workspace and pick up the last session">${ico("rocket")}</button>
           </span>
         </div>
       </div>`).join(""), `<span class="cnt">${rs.length}</span>`);
@@ -835,7 +835,7 @@
       const b = ev.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab);
     });
     app.addEventListener("click", (ev) => {
-      const el = ev.target.closest("[data-act],[data-open],[data-open-file],[data-setup],[data-plan],[data-prompt],[data-flow],[data-agent],[data-task],[data-resume],[data-reveal],[data-copy],[data-new-session],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go],[data-cmd]");
+      const el = ev.target.closest("[data-act],[data-open],[data-open-file],[data-launch],[data-setup],[data-plan],[data-prompt],[data-flow],[data-agent],[data-task],[data-resume],[data-reveal],[data-copy],[data-new-session],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go],[data-cmd]");
       if (!el || el.disabled) return;
       ev.stopPropagation();
       const d = el.dataset;
@@ -854,6 +854,7 @@
       if (d.reveal) return send({ type: "reveal", path: d.reveal });
       if (d.copy) return send({ type: "copy", text: d.copy });
       if (d.newSession) return send({ type: "newSession", root: d.newSession });
+      if (d.launch) return send({ type: "launch", root: d.launch });
       if (d.term) return send({ type: "terminal", root: d.term });
       if (d.android) return send({ type: "android", action: d.android });
       if (d.ios) return send({ type: "ios", action: d.ios, udid: d.udid });
