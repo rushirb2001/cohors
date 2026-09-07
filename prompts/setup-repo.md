@@ -11,7 +11,7 @@ optionally `.principia/agents/*.md`) so the launchpad can show it properly.
 
 ## Before you write anything
 
-1. **Read the contract.** `spec/v1/SPEC.md` in the Principia repo is
+1. **Read the contract.** `{{SPEC}}` is
    authoritative. If this file and the spec disagree, the spec wins.
 2. **Look at the repo, do not guess.** Read in this order, whichever exist:
    `README.md`, `package.json`, `Cargo.toml`, `pyproject.toml`, `Makefile`,
@@ -115,13 +115,22 @@ cannot name something concrete, leave `tasks` empty rather than inventing filler
 Never set `"status": "done"` without evidence: a commit, a merged PR, or the
 user saying so.
 
+## Prefer the MCP server when it is connected
+
+If the `principia` MCP server is available, check your tools for
+`write_repo_contribution` and use it instead of writing the JSON by hand: it
+validates against the contract **before** writing, so an invalid file never
+reaches disk. `list_repos` and `repo_status` tell you what is already
+configured. Fall back to Write/Edit plus `{{VALIDATE}}` only when it is not
+connected.
+
 ## Finish
 
 1. Ensure `.gitignore` contains `.principia/local.json`.
 2. Validate:
 
    ```sh
-   node <principia>/scripts/validate.js .
+   {{VALIDATE}}
    ```
 
 3. Fix every `ERROR`. Warnings are advisory.

@@ -1,6 +1,6 @@
 # Plan focus across repositories
 
-Runner-agnostic. Writes `~/.principia/board.json` per `spec/v1/SPEC.md` §6.
+Runner-agnostic. Writes `~/.principia/board.json` per `{{SPEC}}` §6.
 
 ## Gather evidence first
 
@@ -23,6 +23,14 @@ Do not plan from memory. Look at:
   running it.
 - Where a prior session exists for the same work, set `thread` so the item
   resumes rather than starting cold.
+
+## Prefer the MCP server when it is connected
+
+If the `principia` MCP server is available, use `list_repos` and `repo_status`
+to gather state and `write_board` to save the result: it validates the board
+before writing. `read_board` gives you the current one so you can report what
+changed. Fall back to reading and writing the file directly only when it is not
+connected.
 
 ## Rules
 

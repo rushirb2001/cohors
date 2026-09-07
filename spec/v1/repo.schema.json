@@ -67,7 +67,8 @@
           "title": { "type": "string", "maxLength": 120 },
           "status": { "type": "string", "enum": ["todo", "doing", "blocked", "done"] },
           "priority": { "type": "string", "enum": ["high", "normal", "low"] },
-          "notes": { "type": "string", "maxLength": 400 }
+          "notes": { "type": "string", "maxLength": 400 },
+          "agent": { "$ref": "#/$defs/id" }
         }
       }
     }

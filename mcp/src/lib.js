@@ -155,6 +155,10 @@ function validateRepoDoc(doc, root) {
     if (!t || typeof t.title !== "string" || !t.title.trim()) errors.push(`${at}: title is required`);
     if (t && t.status && !STATUS.includes(t.status)) errors.push(`${at}: status must be one of ${STATUS.join(", ")}`);
     if (t && t.priority && !PRIORITY.includes(t.priority)) errors.push(`${at}: priority must be one of ${PRIORITY.join(", ")}`);
+    if (t && t.agent) {
+      if (!ID_RE.test(t.agent)) errors.push(`${at}: agent "${t.agent}" must be kebab-case`);
+      else if (!agents.some((a) => a && a.id === t.agent)) warnings.push(`${at}: agent "${t.agent}" does not match any declared agents[] id`);
+    }
   }
 
   if (!doc.updated) warnings.push("no updated timestamp");

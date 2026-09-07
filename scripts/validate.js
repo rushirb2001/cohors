@@ -118,6 +118,10 @@ function main() {
       if (!t || typeof t.title !== "string" || !t.title.trim()) err(`${at}: title is required`);
       if (t && t.status && !STATUS.includes(t.status)) err(`${at}: status must be one of ${STATUS.join(", ")}`);
       if (t && t.priority && !PRIORITY.includes(t.priority)) err(`${at}: priority must be one of ${PRIORITY.join(", ")}`);
+      if (t && t.agent) {
+        if (!ID_RE.test(t.agent)) err(`${at}: agent "${t.agent}" must be kebab-case`);
+        else if (!agents.some((a) => a && a.id === t.agent)) warn(`${at}: agent "${t.agent}" does not match any declared agents[] id`);
+      }
     }
   }
 

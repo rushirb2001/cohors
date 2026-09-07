@@ -100,11 +100,22 @@ Full shape:
       "title": "Wire billing webhook retries",
       "status": "todo",              // todo | doing | blocked | done
       "priority": "normal",          // high | normal | low
-      "notes": "Optional context."
+      "notes": "Optional context.",
+      "agent": "triage"              // optional: id of one of this repo's agents[]
     }
   ]
 }
 ```
+
+**Task actions**
+
+Every task the dashboard shows — repo-declared or from the cross-repo board —
+gets a "work on this now" action, with no extra config required. If `agent`
+names one of this repo's `agents[].id`, that agent's prompt runs with
+`{{TASK_TITLE}}` filled in and the task's `notes` appended. Otherwise a
+generic prompt runs, built from the task's `title` and `notes` alone. A task
+never has to declare an agent to be actionable; declaring one is only for
+tasks that recur often enough to warrant tailored instructions.
 
 **Rules**
 
@@ -140,16 +151,38 @@ Read `git status --porcelain` and `git diff`, then propose a commit plan...
 ```
 
 Placeholders the launchpad substitutes before invoking a runner:
-`{{REPO_NAME}}`, `{{REPO_ROOT}}`, `{{BRANCH}}`, `{{TASK_TITLE}}`.
+
+| Placeholder | Becomes |
+| --- | --- |
+| `{{REPO_NAME}}` | the repo's display name |
+| `{{REPO_ROOT}}` | absolute path of the repo the runner is launched in |
+| `{{BRANCH}}` | current branch |
+| `{{TASK_TITLE}}` | the task's title, when a task triggered the run |
+| `{{CONTRACT_ROOT}}` | absolute path of the Principia checkout |
+| `{{SPEC}}` | absolute path of this file |
+| `{{VALIDATE}}` | the full validate command, ready to run |
+
+These exist so that a **committed** prompt never contains a machine-specific
+path. The placeholder is what lives in git; the resolved value only ever appears
+in the throwaway copy handed to the runner.
 
 ### Runner mapping
 
+Every invocation must do two things: **submit the prompt as the first user
+turn**, and **leave the user in an interactive session**. A mapping that only
+submits gives a headless run that prints and exits; a mapping that only opens a
+session drops the user into an idle agent that was never asked anything.
+
 | Runner | Invocation |
 | --- | --- |
-| `claude-code` | `claude --append-system-prompt "$(cat <file>)"` in the repo, or a plugin agent when Principia's plugin is installed |
-| `codex` | `codex --prompt-file <file>` |
-| `gemini-cli` | `gemini -p "$(cat <file>)"` |
-| `agy` | `agy run --prompt <file>` |
+| `claude-code` | `claude "$(cat <file>)"` in the repo, or a plugin agent when Principia's plugin is installed |
+| `codex` | `codex "$(cat <file>)"` |
+| `gemini-cli` | `gemini -i "$(cat <file>)"` |
+| `agy` | `agy --prompt-interactive "$(cat <file>)"` |
+
+The prompt is always passed as a positional/interactive prompt, never as a
+system-prompt append and never through a headless flag (`claude -p`,
+`gemini -p`, `agy --print`), which would defeat one half of the requirement.
 
 A runner listed in `supports` but not installed is shown disabled with a reason,
 never hidden. The user should never wonder why an action vanished.
@@ -203,6 +236,36 @@ Cross-repo focus. Optional; the dashboard works without it.
 
 `repo` is matched by **name**, never by absolute path, so a board syncs across
 machines where checkouts live in different places.
+
+---
+
+## 6b. `<repo>/.principia/local.json`
+
+Machine-local, gitignored, written by the extension. Never commit it.
+
+```jsonc
+{
+  "specVersion": 1,
+  "updated": "2026-09-07T12:00:00Z",
+  "threads": {
+    "billing-retries": "00000000-0000-0000-0000-000000000000"
+  }
+}
+```
+
+`threads` maps a task id to the agent session that task is being worked in, so
+the task's action reopens that conversation instead of starting a cold one. It
+lives here and **not** in `repo.json` for a specific reason: a session id names
+a transcript on one machine. Committed, it would hand a teammate a pointer to a
+conversation that does not exist for them.
+
+The cross-repo board carries the same idea in its own `thread` field (§6);
+that file is user-level and never committed, so it needs no separate home.
+
+A launchpad links a thread by choosing the session id **before** launching,
+where the runner allows it (`claude --session-id`, `gemini --session-id`). A
+runner without that flag simply starts unlinked — the id is never guessed by
+matching transcripts after the fact.
 
 ---
 
