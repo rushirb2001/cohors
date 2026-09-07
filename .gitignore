@@ -5,3 +5,6 @@ dist/
 .DS_Store
 # machine-local, never committed (see spec/v1/SPEC.md)
 .principia/local.json
+.claude/settings.local.json
+# `principia init` copies this repo's own skills/ here; regenerated, never edited
+.claude/skills/

@@ -1,0 +1,173 @@
+{
+  "specVersion": 1,
+  "name": "principia",
+  "summary": "The launchpad your repositories write for themselves",
+  "group": "solo-projects",
+  "updated": "2026-09-07T09:31:38Z",
+  "generatedFrom": "049872a",
+  "links": [
+    {
+      "label": "GitHub",
+      "url": "https://github.com/rushirb2001/principia"
+    }
+  ],
+  "flows": [
+    {
+      "id": "validate-self",
+      "label": "Validate contract (self-check)",
+      "run": "node scripts/validate.js .",
+      "kind": "tool",
+      "primary": true
+    },
+    {
+      "id": "mcp-server",
+      "label": "MCP server (stdio)",
+      "run": "node mcp/src/server.js",
+      "kind": "server",
+      "background": true
+    }
+  ],
+  "agents": [
+    {
+      "id": "check-validator-drift",
+      "label": "Check validator drift",
+      "file": ".principia/agents/check-validator-drift.md",
+      "supports": [
+        "claude-code",
+        "codex",
+        "gemini-cli",
+        "agy"
+      ]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task-actions",
+      "title": "Add per-task \"work on this\" actions (repo tasks + board focus)",
+      "status": "done",
+      "priority": "high",
+      "notes": "tasks[].agent + {{TASK_TITLE}} substitution + a generic fallback prompt, so every task is immediately actionable from the launchpad."
+    },
+    {
+      "id": "agents-tab-sessions",
+      "title": "Show real Claude Code session history in the Agents tab",
+      "status": "done",
+      "priority": "high",
+      "notes": "Reads ~/.claude/projects/<repo>/*.jsonl directly (title, turns, branch). Gated to repos with a committed .principia/repo.json. Per-row reveal/copy/Resume, per-repo continue-latest/new. Also fixed: data-task/data-resume clicks were dead (missing from the click selector)."
+    },
+    {
+      "id": "density-pass",
+      "title": "Density pass: compact rows everywhere, no hover-only actions",
+      "status": "done",
+      "priority": "high",
+      "notes": "Row actions used to crossfade in on hover, so every action was invisible until moused over and the slot read as dead space. Now meta and actions sit side by side, always visible, across every tab. Paddings/line-heights tightened globally. Dropped the hover-only icon-morph in Setup for a real button."
+    },
+    {
+      "id": "fix-runner-invocations",
+      "title": "Fix runner invocations: submit the prompt and stay interactive",
+      "status": "done",
+      "priority": "high",
+      "notes": "All four were wrong. claude used --append-system-prompt (opens an idle session, never submits). codex --prompt-file does not exist. gemini -p and agy --prompt are headless. agy has no run subcommand. Now positional/-i/--prompt-interactive everywhere."
+    },
+    {
+      "id": "step-prompts",
+      "title": "Give every walkthrough step an agent prompt",
+      "status": "done",
+      "priority": "high",
+      "notes": "New focused prompts declare-flows/add-agent/track-tasks in prompts/, run through one allowlisted runPrompt() (the webview names an id, never a path). setupRepo and planBoard were near-identical copies of that and now delegate to it. Added {{CONTRACT_ROOT}}/{{SPEC}}/{{VALIDATE}} so committed prompts carry no machine paths."
+    },
+    {
+      "id": "mcp-in-setup",
+      "title": "Wire the MCP server into setup for every runner",
+      "status": "done",
+      "priority": "high",
+      "notes": "principia init now installs mcp/ deps, proves the server starts with a real JSON-RPC handshake, then registers it with claude/codex/gemini using each CLI's own syntax. All five prompts now tell agents to prefer write_repo_contribution/write_board over hand-editing. Also disabled the project-scoped .mcp.json copy, which could never start (CLAUDE_PLUGIN_ROOT is plugin-only)."
+    },
+    {
+      "id": "workflows-flow-strip",
+      "title": "Give declared flows the full card width",
+      "status": "done",
+      "priority": "normal",
+      "notes": "Flow chips were inside the row's middle column, competing with git meta and actions, so they stacked one per line and wrapped mid-label while half the row sat empty. Now a full-width strip below the row, one line per chip, with the primary flow marked and ports shown."
+    },
+    {
+      "id": "cli-presentation",
+      "title": "Give the CLI real terminal presentation",
+      "status": "done",
+      "priority": "normal",
+      "notes": "New zero-dependency cli/src/ui.js: colour, wrapped labels and details with hanging indents, aligned help, a copyable quote block, elapsed time. Degrades correctly under NO_COLOR, a pipe and TERM=dumb, where the glyph and words still carry the meaning."
+    },
+    {
+      "id": "task-threads",
+      "title": "Link tasks to the conversation they started in",
+      "status": "done",
+      "priority": "high",
+      "notes": "Principia picks the session id before launching (claude/gemini --session-id), so the link is certain rather than guessed from whichever transcript appeared after. Resuming reopens it. Ids are machine-specific, so they live in the gitignored .principia/local.json — its first real use — never in committed repo.json."
+    },
+    {
+      "id": "live-updates",
+      "title": "Stop tabs going stale until a forced refresh",
+      "status": "done",
+      "priority": "high",
+      "notes": "The board was never watched at all: a bare **/ glob only covers open workspace folders, so ~/.principia/board.json changed unnoticed. Added absolute watchers for it and for .git/HEAD and index, coalesced at 250ms. Poll cut 120s->15s, affordable because session transcripts are now cached by mtime (7.7MB, 30ms -> free) and device probes have a 10s TTL."
+    },
+    {
+      "id": "repo-last-commit",
+      "title": "Show the last commit subject on repo rows",
+      "status": "done",
+      "priority": "normal",
+      "notes": "git log -1 already fetched the subject and discovery.js kept it, but no view ever rendered it — collected and thrown away every refresh. Now shown beside the repo name, shrinking to an ellipsis so a long message never pushes the chips onto a second line."
+    },
+    {
+      "id": "mcp-agent-instructions",
+      "title": "Give MCP agents the full contract, not just the schema",
+      "status": "done",
+      "priority": "high",
+      "notes": "Server-level instructions carry the workflow and the judgement calls (detection first, empty flows is valid, never done without evidence, writes replace) for agents that never see prompts/. Also closed a real gap: tasks[].agent, links[] and generatedFrom existed in the schema and validator but not in the MCP input schema, so an MCP agent could not set them at all."
+    },
+    {
+      "id": "dedupe-runner-table",
+      "title": "De-duplicate the runner table shared by the extension and the CLI",
+      "status": "todo",
+      "priority": "normal",
+      "notes": "extension/src/runners.js and cli/src/runners.js are byte-identical copies kept in sync by hand — the same trap as mcp/src/lib.js vs scripts/validate.js. A wrong invocation had to be fixed in both.",
+      "agent": "check-validator-drift"
+    },
+    {
+      "id": "getting-started-walkthrough",
+      "title": "Ordered getting-started walkthrough on the Setup tab",
+      "status": "done",
+      "priority": "high",
+      "notes": "Six steps in the order the product works: runner, repo opts in, declares flows, ships an agent, tracks tasks, plans across repos. Completion is derived from live data, never stored, so it un-completes if a contribution is deleted. Nothing auto-collapses — that was the rejected design."
+    },
+    {
+      "id": "legible-git-state",
+      "title": "Label git state instead of glyphs",
+      "status": "done",
+      "priority": "normal",
+      "notes": "\"main ●17 ↑8\" is unreadable without knowing the convention. Now \"17 uncommitted\" / \"8 unpushed\" / \"3 behind\" with a branch icon and tooltips, shared by Repos, Recents and Setup."
+    },
+    {
+      "id": "cli-npm-publish",
+      "title": "Make principia-cli publishable to npm standalone",
+      "status": "todo",
+      "priority": "normal",
+      "notes": "cli/ depends on spec/, prompts/, scripts/validate.js living in the parent checkout. Needs bundling at pack time or a separate principia-contract package."
+    },
+    {
+      "id": "sync-mcp-validator",
+      "title": "De-duplicate MCP server validation from scripts/validate.js",
+      "status": "todo",
+      "priority": "low",
+      "notes": "mcp/src/lib.js hand-keeps a copy of the contract validation rules. A future schema change has to be applied in both places.",
+      "agent": "check-validator-drift"
+    },
+    {
+      "id": "test-second-machine-install",
+      "title": "Test the extension's zero-state install on a second machine",
+      "status": "todo",
+      "priority": "normal",
+      "notes": "Only ever tested against the dev machine's real 16 discovered repos, never a genuinely empty install with zero prior Principia state."
+    }
+  ]
+}
