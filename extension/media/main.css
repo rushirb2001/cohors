@@ -116,11 +116,46 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
    it. A named main/rail split means every card's height is its own;
    nothing is ever paired by accident. ── */
 .content { display: flex; flex-direction: column; gap: 10px; max-width: 900px; margin: 0 auto; }
-.main, .rail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* `.content >` matters: every ROW also nests a <div class="main">, so an
+   unscoped .main rule gave each row a 10px flex gap between its title and
+   its meta line — height that no amount of padding tuning could explain. */
+.content > .main, .rail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 @media (min-width: 1150px) {
   .content:has(.rail) { flex-direction: row; align-items: flex-start; max-width: 1300px; }
   .content:has(.rail) > .main { flex: 1 1 auto; }
   .content:has(.rail) > .rail { flex: 0 0 280px; }
+}
+
+/* ── two columns when there is room, one when there is not ──
+   CSS columns, still NOT a grid, for exactly the reason above: columns have no
+   rows, so a short card next to a tall one cannot be stretched to a row height
+   it does not need. Each card keeps its own height and the flow simply
+   continues down the next column.
+   Below the breakpoint every rule here is inert and the flex column stands. */
+@media (min-width: 1000px) {
+  .content:not(:has(.rail)) { max-width: 1300px; }
+  .content:not(:has(.rail)) > .main { display: block; column-count: 2; column-gap: 10px; }
+}
+/* A tab with a rail has already given 280px away, so it needs more room before
+   splitting what is left. */
+@media (min-width: 1550px) {
+  .content:has(.rail) { max-width: 1700px; }
+  .content:has(.rail) > .main { display: block; column-count: 2; column-gap: 10px; }
+}
+/* Cards are never cut in half across a column break, and carry their own
+   spacing because `gap` does nothing once the parent stops being a flex box. */
+.content > .main > * { break-inside: avoid; }
+@media (min-width: 1000px) {
+  .content:not(:has(.rail)) > .main > * { margin-bottom: 10px; }
+  /* Banners span the full width: a hero or a filter strip squeezed into one
+     column reads as a card, which is not what either of them is. */
+  .content:not(:has(.rail)) > .main > .hero,
+  .content:not(:has(.rail)) > .main > .tbar { column-span: all; margin-bottom: 10px; }
+}
+@media (min-width: 1550px) {
+  .content:has(.rail) > .main > * { margin-bottom: 10px; }
+  .content:has(.rail) > .main > .hero,
+  .content:has(.rail) > .main > .tbar { column-span: all; margin-bottom: 10px; }
 }
 
 .card { border: 1px solid var(--line); border-radius: 7px; background: var(--panel); overflow: hidden;

@@ -17,6 +17,7 @@
   let tab = saved.tab || "today";
   let q = saved.q || "";
   let hideDone = saved.hideDone === true;
+  let hideNotes = saved.hideNotes === true;
   let focus = -1;
   let built = false;
   const painted = new Map();
@@ -36,7 +37,7 @@
   ];
 
   const send = (m) => vscode.postMessage(m);
-  const persist = () => vscode.setState({ D, tab, q, hideDone });
+  const persist = () => vscode.setState({ D, tab, q, hideDone, hideNotes });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ico = (n, cls = "") => {
@@ -277,7 +278,7 @@
           ${t.priority === "high" ? `<span class="chip hi">high</span>` : ""}
           ${t.status === "doing" ? `<span class="chip go">in progress</span>` : ""}
           ${t.status === "blocked" ? `<span class="chip bad">blocked</span>` : ""}
-          ${t.notes ? `<span class="nt">${esc(t.notes)}</span>` : ""}
+          ${t.notes && !hideNotes ? `<span class="nt">${esc(t.notes)}</span>` : ""}
         </div>
       </div>
       <div class="rslot ${t.thread ? "n5" : "n4"}"><span class="sa">
@@ -408,13 +409,17 @@
 
     // Its own [data-sec] so the patching renderer actually replaces it; a bare
     // element outside a section would keep a stale icon after every toggle.
-    const bar = doneCount ? `<section class="tbar" data-sec="taskbar">
-      <span class="cnt">${all.length - doneCount} open · ${doneCount} done</span>
+    const noteCount = all.filter((t) => t.notes).length;
+    const bar = `<section class="tbar" data-sec="taskbar">
+      <span class="cnt">${all.length - doneCount} open${doneCount ? ` · ${doneCount} done` : ""}</span>
       <span class="grow"></span>
-      <button class="btn" data-ui="hide-done" title="${hideDone ? "Show finished tasks again" : "Hide tasks that are already done"}">
+      ${doneCount ? `<button class="btn" data-ui="hide-done" title="${hideDone ? "Show finished tasks again" : "Hide tasks that are already done"}">
         ${ico(hideDone ? "eye-closed" : "eye", "sm")} ${hideDone ? `Finished hidden (${doneCount})` : "Hide finished"}
-      </button>
-    </section>` : "";
+      </button>` : ""}
+      ${noteCount ? `<button class="btn" data-ui="hide-notes" title="${hideNotes ? "Show task descriptions again" : "Collapse every task to its title"}">
+        ${ico(hideNotes ? "unfold" : "fold", "sm")} ${hideNotes ? "Descriptions hidden" : "Hide descriptions"}
+      </button>` : ""}
+    </section>`;
 
     if (hideDone && !shown.length) {
       return bar + card("t", "Tasks", "checklist",
@@ -862,6 +867,7 @@
       const d = el.dataset;
       if (d.tabGo) return setTab(d.tabGo);
       if (d.ui === "hide-done") { hideDone = !hideDone; persist(); return paintBody(false); }
+      if (d.ui === "hide-notes") { hideNotes = !hideNotes; persist(); return paintBody(false); }
       if (d.act === "refresh") { spin(); return send({ type: "refresh" }); }
       if (d.act) return send({ type: d.act });
       if (d.setup) return send({ type: "setup", root: d.setup });

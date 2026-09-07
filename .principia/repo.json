@@ -3,7 +3,7 @@
   "name": "principia",
   "summary": "The launchpad your repositories write for themselves",
   "group": "solo-projects",
-  "updated": "2026-09-07T09:49:18Z",
+  "updated": "2026-09-07T09:55:36Z",
   "generatedFrom": "049872a",
   "links": [
     {
@@ -159,6 +159,27 @@
       "status": "done",
       "priority": "normal",
       "notes": "A filter strip on the Tasks tab, remembered across reloads in webview state alongside the tab and search filter. It carries its own data-sec so the patching renderer replaces it — without that the button would keep a stale icon after each toggle. Hiding everything falls back to a real empty state rather than a blank tab."
+    },
+    {
+      "id": "hide-descriptions-toggle",
+      "title": "Toggle to hide task descriptions",
+      "status": "done",
+      "priority": "normal",
+      "notes": "Collapses every task to its title, remembered across reloads. The filter strip is no longer gated on there being finished tasks, or this second button would have been unreachable whenever nothing was done yet."
+    },
+    {
+      "id": "two-column-layout",
+      "title": "Two columns when there is room, one when there is not",
+      "status": "done",
+      "priority": "normal",
+      "notes": "CSS columns rather than a grid: a grid row is as tall as its tallest member, which is why the earlier 2-column card grid was rejected. Columns have no rows, so each card keeps its own height. Rail-less tabs split at 1000px, tabs with a rail at 1550px since 280px is already spoken for; hero and filter strips span both columns."
+    },
+    {
+      "id": "row-main-gap-leak",
+      "title": "Stop the layout rule inflating every row",
+      "status": "done",
+      "priority": "normal",
+      "notes": ".main, .rail { gap: 10px } also matched the <div class=\"main\"> nested inside every row, adding 10px between each title and its meta line. That was real height no amount of padding tuning could explain. Scoped to .content > .main."
     },
     {
       "id": "cli-npm-publish",
