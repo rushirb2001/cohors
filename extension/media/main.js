@@ -16,6 +16,7 @@
   let D = saved.D || null;
   let tab = saved.tab || "today";
   let q = saved.q || "";
+  let hideDone = saved.hideDone === true;
   let focus = -1;
   let built = false;
   const painted = new Map();
@@ -35,7 +36,7 @@
   ];
 
   const send = (m) => vscode.postMessage(m);
-  const persist = () => vscode.setState({ D, tab, q });
+  const persist = () => vscode.setState({ D, tab, q, hideDone });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ico = (n, cls = "") => {
@@ -402,13 +403,33 @@
     }
     if (!all.length) return card("t", "Tasks", "checklist", empty("search", "Nothing matches", ["Try a different filter."]));
 
-    const groups = [...new Set(all.map((t) => t.group || ""))];
-    return groups.map((g) => {
-      const ts = all.filter((t) => (t.group || "") === g)
+    const doneCount = all.filter((t) => t.status === "done").length;
+    const shown = hideDone ? all.filter((t) => t.status !== "done") : all;
+
+    // Its own [data-sec] so the patching renderer actually replaces it; a bare
+    // element outside a section would keep a stale icon after every toggle.
+    const bar = doneCount ? `<section class="tbar" data-sec="taskbar">
+      <span class="cnt">${all.length - doneCount} open · ${doneCount} done</span>
+      <span class="grow"></span>
+      <button class="btn" data-ui="hide-done" title="${hideDone ? "Show finished tasks again" : "Hide tasks that are already done"}">
+        ${ico(hideDone ? "eye-closed" : "eye", "sm")} ${hideDone ? `Finished hidden (${doneCount})` : "Hide finished"}
+      </button>
+    </section>` : "";
+
+    if (hideDone && !shown.length) {
+      return bar + card("t", "Tasks", "checklist",
+        empty("check", "Everything here is finished",
+          [`All ${doneCount} task(s) are done. Show them again to review what was completed.`]));
+    }
+
+    const groups = [...new Set(shown.map((t) => t.group || ""))];
+    return bar + groups.map((g) => {
+      const ts = shown.filter((t) => (t.group || "") === g)
         .sort((a, b) => (a.status === "done") - (b.status === "done") || byPri(a, b));
       const open = ts.filter((t) => t.status !== "done").length;
+      const done = ts.length - open;
       return card(`t-${g || "none"}`, g || "Ungrouped", "checklist", ts.map(taskRow).join(""),
-        `<span class="cnt">${open} open · ${ts.length} total</span>`);
+        `<span class="cnt">${open} open${done ? ` · ${done} done` : ""}</span>`);
     }).join("");
   }
 
@@ -835,11 +856,12 @@
       const b = ev.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab);
     });
     app.addEventListener("click", (ev) => {
-      const el = ev.target.closest("[data-act],[data-open],[data-open-file],[data-launch],[data-setup],[data-plan],[data-prompt],[data-flow],[data-agent],[data-task],[data-resume],[data-reveal],[data-copy],[data-new-session],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go],[data-cmd]");
+      const el = ev.target.closest("[data-act],[data-ui],[data-open],[data-open-file],[data-launch],[data-setup],[data-plan],[data-prompt],[data-flow],[data-agent],[data-task],[data-resume],[data-reveal],[data-copy],[data-new-session],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go],[data-cmd]");
       if (!el || el.disabled) return;
       ev.stopPropagation();
       const d = el.dataset;
       if (d.tabGo) return setTab(d.tabGo);
+      if (d.ui === "hide-done") { hideDone = !hideDone; persist(); return paintBody(false); }
       if (d.act === "refresh") { spin(); return send({ type: "refresh" }); }
       if (d.act) return send({ type: d.act });
       if (d.setup) return send({ type: "setup", root: d.setup });

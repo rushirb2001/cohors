@@ -3,7 +3,7 @@
   "name": "principia",
   "summary": "The launchpad your repositories write for themselves",
   "group": "solo-projects",
-  "updated": "2026-09-07T09:45:11Z",
+  "updated": "2026-09-07T09:49:18Z",
   "generatedFrom": "049872a",
   "links": [
     {
@@ -152,6 +152,13 @@
       "status": "done",
       "priority": "normal",
       "notes": "\"main ●17 ↑8\" is unreadable without knowing the convention. Now \"17 uncommitted\" / \"8 unpushed\" / \"3 behind\" with a branch icon and tooltips, shared by Repos, Recents and Setup."
+    },
+    {
+      "id": "hide-finished-toggle",
+      "title": "Toggle to hide finished tasks",
+      "status": "done",
+      "priority": "normal",
+      "notes": "A filter strip on the Tasks tab, remembered across reloads in webview state alongside the tab and search filter. It carries its own data-sec so the patching renderer replaces it — without that the button would keep a stale icon after each toggle. Hiding everything falls back to a real empty state rather than a blank tab."
     },
     {
       "id": "cli-npm-publish",

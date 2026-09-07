@@ -255,6 +255,11 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .rc.no { opacity: .6; }
 .rc.ok .l1 .codicon { color: var(--vscode-charts-green, #3fb950); }
 
+/* ── a tab's own filter strip: view state, not content, so it sits outside the
+   cards it acts on rather than being repeated in each card header. ── */
+.tbar { display: flex; align-items: center; gap: 8px; padding: 2px 2px 0; }
+.tbar .cnt { font-size: 11px; color: var(--vscode-descriptionForeground); }
+
 /* ── walkthrough: an ordered getting-started flow. Steps never collapse or
    disappear as they complete — a done step dims, keeps its evidence and keeps
    its action, so you can always see what you did and repeat it. ── */
