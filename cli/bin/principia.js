@@ -6,6 +6,7 @@
 
 const path = require("path");
 const { buildSteps, findContractRoot } = require("../src/steps");
+const ui = require("../src/ui");
 
 function parseArgs(argv) {
   const out = { yes: false, contract: null, cmd: argv[0] || "help" };
@@ -17,17 +18,30 @@ function parseArgs(argv) {
 }
 
 function printHelp() {
-  console.log(`
-principia - install and wire up the Principia launchpad
-
-Usage:
-  principia init [--yes] [--contract <path>]   Run every setup step
-  principia status                             Show what is already in place, change nothing
-  principia help                               This message
-
---yes        Skip Claude Code's own confirmation prompts (for scripted runs)
---contract   Path to a Principia checkout, if not found automatically
-`.trim());
+  const { c, sym, line } = ui;
+  line();
+  line(`  ${c.bold("principia")} ${c.dim(sym.dot)} install and wire up the Principia launchpad`);
+  line();
+  line(`  ${c.bold("Usage")}`);
+  line();
+  const cmds = [
+    ["init [options]", "Run every setup step"],
+    ["status", "Show what is already in place, change nothing"],
+    ["help", "This message"],
+  ];
+  for (const [cmd, desc] of cmds) line(`    ${c.cyan(cmd.padEnd(18))} ${c.dim(desc)}`);
+  line();
+  line(`  ${c.bold("Options")}`);
+  line();
+  const opts = [
+    ["--yes, -y", "Skip a runner's own confirmation prompts (for scripted runs)"],
+    ["--contract <path>", "Path to a Principia checkout, if not found automatically"],
+  ];
+  for (const [flag, desc] of opts) line(`    ${c.cyan(flag.padEnd(18))} ${c.dim(desc)}`);
+  line();
+  line(`  ${c.dim("Every step checks its own prerequisites and is skipped, not fatal,")}`);
+  line(`  ${c.dim("if they are unmet. Re-running is safe.")}`);
+  line();
 }
 
 async function run() {
@@ -35,10 +49,12 @@ async function run() {
   if (args.cmd === "help" || args.cmd === "--help" || args.cmd === "-h") return printHelp();
 
   const cwd = process.cwd();
+  const statusOnly = args.cmd === "status";
   const contractRoot = findContractRoot(args.contract);
   const steps = buildSteps({ cwd, contractRoot, yes: args.yes });
+  const started = Date.now();
 
-  console.log(`Principia ${args.cmd === "status" ? "status" : "init"} — running in ${cwd}\n`);
+  ui.header(statusOnly ? "status" : "init", cwd);
 
   const results = [];
   for (const step of steps) {
@@ -47,52 +63,69 @@ async function run() {
     catch (e) { check = { ok: false, reason: `check threw: ${e.message}` }; }
 
     if (!check.ok) {
-      console.log(`  –  ${step.label}`);
-      console.log(`     skipped: ${check.reason}`);
+      ui.step("skip", step.label, `skipped: ${check.reason}`);
       results.push({ id: step.id, status: "skipped", reason: check.reason });
       continue;
     }
 
-    if (args.cmd === "status" && !step.readonly) {
-      console.log(`  ✔  ${step.label} (prerequisites met)`);
+    if (statusOnly && !step.readonly) {
+      ui.step("ok", step.label, null, "ready");
       results.push({ id: step.id, status: "ready" });
       continue;
     }
 
-    try {
-      const r = step.run();
-      if (r.ok) {
-        console.log(`  ✔  ${step.label}`);
-        if (r.detail) console.log(`     ${r.detail}`);
-        results.push({ id: step.id, status: args.cmd === "status" ? "checked" : "done", detail: r.detail });
-      } else {
-        console.log(`  ✖  ${step.label}`);
-        if (r.detail) console.log(`     ${r.detail}`);
-        results.push({ id: step.id, status: "failed", detail: r.detail });
-      }
-    } catch (e) {
-      console.log(`  ✖  ${step.label}`);
-      console.log(`     error: ${e.message}`);
-      results.push({ id: step.id, status: "failed", reason: e.message });
+    // A real terminal gets live feedback while a slow step (npm install, a
+    // plugin install) runs; a pipe gets nothing extra and stays clean.
+    const clear = ui.transient(`  ${ui.c.dim(ui.sym.work)}  ${ui.c.dim(step.label)}`);
+    let r;
+    try { r = step.run(); }
+    catch (e) { r = { ok: false, detail: `error: ${e.message}` }; }
+    clear();
+
+    ui.step(r.ok ? "ok" : "fail", step.label, r.detail);
+    results.push({
+      id: step.id,
+      status: r.ok ? (statusOnly ? "checked" : "done") : "failed",
+      detail: r.detail,
+    });
+  }
+
+  if (statusOnly) {
+    const ready = results.filter((r) => r.status === "ready" || r.status === "checked").length;
+    const blocked = results.filter((r) => r.status === "skipped").length;
+    ui.summary({ done: ready, skipped: blocked }, Date.now() - started,
+      { done: "ready", skipped: "blocked" });
+    ui.note(blocked
+      ? `${blocked} step(s) cannot run yet, each with its reason above. Run \`principia init\` to do the rest.`
+      : `Everything is in place. Run \`principia init\` to re-apply it safely.`);
+    ui.line();
+    return;
+  }
+
+  const counts = {
+    done: results.filter((r) => r.status === "done").length,
+    skipped: results.filter((r) => r.status === "skipped").length,
+    failed: results.filter((r) => r.status === "failed").length,
+  };
+  ui.summary(counts, Date.now() - started);
+
+  if (counts.done > 0) {
+    ui.section("Next", "Paste this into a fresh agent session in this repository:");
+    ui.quote("Set up this repo for the Principia launchpad, then plan my focus across every repo you can see.");
+    if (contractRoot) {
+      ui.note(`The contract it follows: ${path.join(contractRoot, "spec/v1/SPEC.md")}`);
     }
   }
-
-  if (args.cmd === "status") return;
-
-  const done = results.filter((r) => r.status === "done").length;
-  const skipped = results.filter((r) => r.status === "skipped").length;
-  const failed = results.filter((r) => r.status === "failed").length;
-  console.log(`\n${done} done, ${skipped} skipped, ${failed} failed.`);
-
-  if (done > 0) {
-    console.log(`
-Paste this into a fresh Claude Code session in this repo to get started:
-
-  Set up this repo for the Principia launchpad, then plan my focus across
-  every repo you can see. Follow the Principia contract at
-  ${path.join(contractRoot || "<contract>", "spec/v1/SPEC.md")}.
-`);
+  if (counts.failed > 0) {
+    ui.note(`${counts.failed} step(s) failed. Each is independent, so the rest still applied; re-run after fixing the cause.`);
   }
+  ui.line();
 }
 
-run().catch((e) => { console.error("principia init failed:", e.message); process.exit(1); });
+run().catch((e) => {
+  ui.line();
+  ui.line(`  ${ui.c.red(ui.sym.fail)}  ${ui.c.bold("principia failed")}`);
+  for (const l of ui.wrapText(e.message, 5)) ui.line(ui.c.dim(l));
+  ui.line();
+  process.exit(1);
+});

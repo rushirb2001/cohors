@@ -87,10 +87,15 @@ same discovery, validation, and write capabilities the VS Code extension's
 buttons use: `list_repos`, `repo_status`, `read_contract`,
 `write_repo_contribution`, `read_board`, `write_board`, `record_activity`.
 Writes always validate against the contract first and reject with a specific
-error list rather than writing an invalid file. It ships wired into the
-Claude Code plugin (`.mcp.json`), so installing the plugin registers it
-automatically; any other MCP client can point at
-`node mcp/src/server.js` directly.
+error list rather than writing an invalid file — which is why every prompt in
+`prompts/` tells an agent to prefer these tools over hand-editing JSON.
+
+`principia init` registers it with each runner that supports MCP, using that
+runner's own syntax (`claude mcp add`, `codex mcp add`, `gemini mcp add`); agy
+has no MCP subcommand and is skipped with a stated reason. Installing the Claude
+Code plugin also registers it via `.mcp.json`, and init detects that rather than
+adding a duplicate. Any other MCP client can point at `node mcp/src/server.js`
+directly.
 
 ## Installing
 
@@ -101,9 +106,11 @@ principia init           # do it
 ```
 
 `init` detects your agent runners, registers the Claude Code plugin
-(marketplace + install, from this checkout), writes project-local skill files
-as a fallback that works even without the plugin, points other runners
-(Codex, Gemini CLI, agy) at the contract via `AGENTS.md`, sets up
+(marketplace + install, from this checkout), **wires the MCP server into every
+runner that supports it** (installing its dependencies and proving it starts
+with a real JSON-RPC handshake before registering it), writes project-local
+skill files as a fallback that works even without the plugin, points other
+runners (Codex, Gemini CLI, agy) at the contract via `AGENTS.md`, sets up
 `~/.principia/`, offers the VS Code/Cursor extension as a dev symlink, and
 gitignores `.principia/local.json`. Every step checks its own prerequisites
 first and is skipped (not fatal) if unmet; re-running is safe; nothing

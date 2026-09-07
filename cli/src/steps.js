@@ -14,11 +14,46 @@ const exists = (p) => { try { fs.accessSync(p); return true; } catch { return fa
 
 function sh(cmd, args, opts = {}) {
   try {
-    const out = cp.execFileSync(cmd, args, { encoding: "utf8", timeout: opts.timeout || 15000, stdio: ["ignore", "pipe", "pipe"] });
+    const out = cp.execFileSync(cmd, args, {
+      encoding: "utf8", timeout: opts.timeout || 15000, cwd: opts.cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     return { ok: true, out };
   } catch (e) {
     return { ok: false, out: (e.stdout || "") + (e.stderr || ""), error: e };
   }
+}
+
+// Some CLIs print `mcp list` to stderr (gemini does), so a stdout-only read
+// sees nothing and concludes "not registered" every time. Probe both streams.
+function shOut(cmd, args, opts = {}) {
+  const r = cp.spawnSync(cmd, args, { encoding: "utf8", timeout: opts.timeout || 15000 });
+  return { ok: r.status === 0, out: (r.stdout || "") + (r.stderr || "") };
+}
+
+// Start the server for real and speak JSON-RPC to it. Registering a server that
+// cannot start is worse than not registering one: the failure only surfaces
+// later, inside someone's agent session, as "connection closed".
+function probeMcp(serverPath) {
+  const req = [
+    { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "principia-init", version: "1" } } },
+    { jsonrpc: "2.0", method: "notifications/initialized" },
+    { jsonrpc: "2.0", id: 2, method: "tools/list" },
+  ].map((m) => JSON.stringify(m)).join("\n") + "\n";
+
+  const r = cp.spawnSync("node", [serverPath], { input: req, encoding: "utf8", timeout: 20000 });
+  const out = r.stdout || "";
+  for (const line of out.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const msg = JSON.parse(line);
+      if (msg.id === 2 && msg.result && Array.isArray(msg.result.tools)) {
+        return { ok: true, tools: msg.result.tools.map((t) => t.name) };
+      }
+    } catch { /* not a JSON line: keep looking */ }
+  }
+  const why = (r.stderr || "").trim().split("\n")[0] || "no JSON-RPC response";
+  return { ok: false, reason: why };
 }
 
 // Interactive by default (lets Claude Code show its own confirmation prompt,
@@ -110,6 +145,65 @@ function buildSteps({ cwd, contractRoot, yes }) {
         if (yes) args.push("-y");
         const install = shInherit(bin, args);
         return install.ok ? { ok: true, detail: "installed" } : { ok: false, detail: "install failed or was declined" };
+      },
+    },
+
+    {
+      id: "mcp",
+      label: "Wire the MCP server into every runner that supports it",
+      check: () => {
+        if (!state.contract) return { ok: false, reason: "the contract was not located" };
+        const server = path.join(state.contract, "mcp", "src", "server.js");
+        if (!exists(server)) return { ok: false, reason: `mcp/src/server.js not found in ${state.contract}` };
+        state.mcpServer = server;
+        return { ok: true };
+      },
+      run: () => {
+        const dir = path.join(state.contract, "mcp");
+        const notes = [];
+
+        // The server has real dependencies (@modelcontextprotocol/sdk, zod).
+        // A fresh clone has none, so registering without this installs a
+        // server that dies on its first require.
+        if (!exists(path.join(dir, "node_modules"))) {
+          const inst = sh("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: dir, timeout: 180000 });
+          if (!inst.ok) return { ok: false, detail: "npm install failed in mcp/; the server cannot start without its dependencies" };
+          notes.push("installed deps");
+        }
+
+        const probe = probeMcp(state.mcpServer);
+        if (!probe.ok) return { ok: false, detail: `server did not start: ${probe.reason}` };
+        notes.push(`${probe.tools.length} tools`);
+
+        // One registration per runner, using each CLI's own documented syntax.
+        // agy has no `mcp` subcommand, so it is skipped with a reason rather
+        // than silently ignored.
+        //
+        // ALWAYS user scope. This server manages ~/.principia and every repo,
+        // so it is a property of the machine, not of one project. It matters
+        // concretely: `gemini mcp add` defaults to project scope and writes
+        // .gemini/settings.json *inside the repo*, containing the absolute path
+        // of this checkout — a machine-specific value in a committable file,
+        // which the contract forbids. `claude mcp add` defaults to "local" for
+        // the same reason.
+        const targets = [
+          { id: "claude-code", list: ["mcp", "list"], add: (p) => ["mcp", "add", "--scope", "user", "principia", "--", "node", p] },
+          { id: "codex", list: ["mcp", "list"], add: (p) => ["mcp", "add", "principia", "--", "node", p] },
+          { id: "gemini-cli", list: ["mcp", "list"], add: (p) => ["mcp", "add", "--scope", "user", "principia", "node", p] },
+        ];
+
+        for (const t of targets) {
+          const runner = (state.runners || []).find((r) => r.id === t.id && r.available);
+          if (!runner) { notes.push(`${t.id}: not installed`); continue; }
+          const listed = shOut(runner.pathTo, t.list, { timeout: 30000 });
+          if (listed.ok && /principia/.test(listed.out)) { notes.push(`${t.id}: already registered`); continue; }
+          const added = sh(runner.pathTo, t.add(state.mcpServer), { timeout: 30000 });
+          notes.push(`${t.id}: ${added.ok ? "registered" : "could not register"}`);
+        }
+        if (!(state.runners || []).some((r) => r.id === "agy" && r.available)) notes.push("agy: not installed");
+        else notes.push("agy: no mcp subcommand");
+
+        return { ok: true, detail: notes.join(" · ") };
       },
     },
 
