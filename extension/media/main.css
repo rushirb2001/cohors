@@ -4,7 +4,7 @@
 * { box-sizing: border-box; min-width: 0; }
 html, body { margin: 0; padding: 0; }
 html { overflow-x: hidden; scrollbar-gutter: stable; }
-body { font-family: var(--vscode-font-family); font-size: 13px; line-height: 1.45;
+body { font-family: var(--vscode-font-family); font-size: 13px; line-height: 1.35;
   color: var(--vscode-foreground); background: var(--vscode-editor-background); overflow-x: hidden; }
 
 b, span, div, p, code, em { overflow-wrap: anywhere; }
@@ -16,7 +16,7 @@ code { font-family: var(--vscode-editor-font-family); font-size: 11.5px;
   background: var(--vscode-textCodeBlock-background); padding: 1px 5px; border-radius: 3px; }
 .codicon { font: normal normal normal 16px/1 codicon; display: inline-block; }
 .codicon.sm { font-size: 13px; }
-.codicon.big { font-size: 26px; }
+.codicon.big { font-size: 20px; }
 .ci { vertical-align: text-bottom; }
 
 :root { --ease: cubic-bezier(.2,0,0,1); --t: 120ms;
@@ -30,7 +30,7 @@ html, body { height: 100%; overflow: hidden; }
   grid-template-rows: auto minmax(0, 1fr) auto; }
 
 .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
-  height: 36px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  height: 30px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .top .mark { color: var(--vscode-textLink-foreground); font-size: 14px; flex: none; }
 .top h1 { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: -.01em; flex: none; }
 .top .sub { font-size: 11px; color: var(--vscode-descriptionForeground); flex: none;
@@ -50,8 +50,8 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 
 /* ── left rail ── */
 .side { grid-row: 2; border-right: 1px solid var(--line); background: var(--panel);
-  overflow-y: auto; overflow-x: hidden; padding: 8px 0 10px; display: flex; flex-direction: column; }
-.ov { padding: 2px 12px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+  overflow-y: auto; overflow-x: hidden; padding: 5px 0 6px; display: flex; flex-direction: column; }
+.ov { padding: 2px 12px 5px; margin-bottom: 3px; border-bottom: 1px solid var(--line); }
 .ovg { display: flex; gap: 12px; }
 .ovi { display: flex; flex-direction: column; }
 .ovi b { font-size: 14px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
@@ -60,8 +60,8 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .ovi.ok b { color: var(--vscode-charts-green, #3fb950); }
 
 .nav { display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 4px 12px; border: 0; border-left: 2px solid transparent; background: transparent;
-  cursor: pointer; font: inherit; font-size: 12px; text-align: left; line-height: 20px;
+  padding: 2px 12px; border: 0; border-left: 2px solid transparent; background: transparent;
+  cursor: pointer; font: inherit; font-size: 12px; text-align: left; line-height: 18px;
   color: var(--vscode-descriptionForeground);
   transition: color var(--t) var(--ease), background var(--t) var(--ease); }
 .nav:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
@@ -78,12 +78,12 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .nav kbd { font-size: 9px; opacity: .35; border: 0; min-width: 8px; text-align: right; }
 
 /* ── the only scrolling region ── */
-#body { grid-row: 2; overflow-y: auto; overflow-x: hidden; padding: 14px 16px 24px; }
+#body { grid-row: 2; overflow-y: auto; overflow-x: hidden; padding: 10px 12px 16px; }
 #body.in { animation: up 180ms var(--ease) both; }
 @keyframes up { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
 .bot { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  padding: 7px 16px; border-top: 1px solid var(--line); background: var(--panel);
+  padding: 4px 12px; border-top: 1px solid var(--line); background: var(--panel);
   font-size: 11px; color: var(--vscode-descriptionForeground); }
 
 .note { position: absolute; left: 210px; right: 18px; top: 52px; z-index: 5; padding: 9px 12px; border-radius: 5px; font-size: 12px;
@@ -92,16 +92,16 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .note[hidden] { display: none; }
 
 /* ── hero: flat, no gradient ── */
-.hero { border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
-  padding: 20px 22px 16px;
-  display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-start; }
+.hero { border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+  padding: 11px 14px 9px;
+  display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: flex-start; }
 .hero .hl { flex: 1 1 160px; min-width: 0; }
-.hero .hl h2 { margin: 0; font-size: 24px; font-weight: 400; letter-spacing: -.02em; }
-.hero .hd { margin-top: 3px; font-size: 13px; color: var(--vscode-descriptionForeground); }
-.hero .hr { display: flex; gap: 28px; flex-wrap: wrap; }
+.hero .hl h2 { margin: 0; font-size: 18px; font-weight: 400; letter-spacing: -.02em; }
+.hero .hd { margin-top: 1px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+.hero .hr { display: flex; gap: 18px; flex-wrap: wrap; }
 .hs { display: flex; flex-direction: column; align-items: flex-end; }
-.hs b { font-size: 24px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.hs span { margin-top: 2px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+.hs b { font-size: 18px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.hs span { margin-top: 1px; font-size: 9px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--vscode-descriptionForeground); }
 .hs.bad b { color: var(--vscode-errorForeground); }
 .hs.warn b { color: var(--vscode-charts-yellow, #cca700); }
@@ -115,27 +115,27 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
    card's height and leaves the short card's column blank underneath
    it. A named main/rail split means every card's height is its own;
    nothing is ever paired by accident. ── */
-.content { display: flex; flex-direction: column; gap: 14px; max-width: 900px; margin: 0 auto; }
-.main, .rail { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.content { display: flex; flex-direction: column; gap: 10px; max-width: 900px; margin: 0 auto; }
+.main, .rail { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 @media (min-width: 1150px) {
   .content:has(.rail) { flex-direction: row; align-items: flex-start; max-width: 1300px; }
   .content:has(.rail) > .main { flex: 1 1 auto; }
   .content:has(.rail) > .rail { flex: 0 0 280px; }
 }
 
-.card { border: 1px solid var(--line); border-radius: 9px; background: var(--panel); overflow: hidden;
+.card { border: 1px solid var(--line); border-radius: 7px; background: var(--panel); overflow: hidden;
   transition: border-color var(--t) var(--ease); }
 .card:hover { border-color: var(--vscode-focusBorder); }
-.card > header { display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+.card > header { display: flex; align-items: center; gap: 7px; padding: 5px 10px;
   border-bottom: 1px solid var(--line); color: var(--vscode-descriptionForeground); }
-.card > header h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .07em;
+.card > header h3 { margin: 0; font-size: 10.5px; font-weight: 600; letter-spacing: .07em;
   text-transform: uppercase; color: var(--vscode-foreground); }
-.card > header .cnt { font-size: 11px; }
-.cbody { padding: 4px; }
+.card > header .cnt { font-size: 10.5px; }
+.cbody { padding: 3px; }
 
 /* ── rows ── */
-.row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px;
-  align-items: center; padding: 8px 10px; border-radius: 6px;
+.row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 8px;
+  align-items: center; padding: 3px 8px; border-radius: 4px;
   transition: background var(--t) var(--ease); }
 .row:hover { background: var(--vscode-list-hoverBackground); }
 .row.on { background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground)); }
@@ -145,87 +145,91 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .row[data-st="done"] .l1 b { text-decoration: line-through; }
 .row[data-st="doing"] .ic { color: var(--vscode-charts-green, #3fb950); }
 .row[data-st="blocked"] .ic { color: var(--vscode-errorForeground); }
+
+/* ── compact: a list meant to hold many short items (e.g. session history),
+   where even the default row's breathing room is more than it needs. ── */
+.row.compact { padding: 2px 8px; grid-template-columns: 16px minmax(0, 1fr) auto; }
+.row.compact .ic { margin-top: 0; align-self: center; }
+.row.compact .l1 b { font-weight: 400; font-size: 12.5px; }
+.row.compact .l2 { font-size: 11px; }
+.row.compact.latest {
+  background: var(--vscode-list-inactiveSelectionBackground, rgba(255,255,255,.04));
+  border-left: 2px solid var(--vscode-textLink-foreground); padding-left: 6px;
+}
+.row.compact.latest:hover { background: var(--vscode-list-hoverBackground); }
 .main { min-width: 0; }
-.l1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.l1 b { font-weight: 500; }
-.l2 { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 4px; }
+.l1 { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+/* min-width:0 is load-bearing. A flex item defaults to min-width:auto and will
+   not shrink below its content, so a long title ignored the column and ran
+   underneath the action buttons instead of wrapping. overflow-wrap only helps
+   once the item is actually constrained. */
+.l1 b { font-weight: 500; min-width: 0; }
+/* Last commit subject, beside the repo name. It shrinks and ellipsises rather
+   than wrapping, so a long message never pushes the chips onto a second line.
+   min-width:0 is what allows that: flex items default to min-width:auto and
+   refuse to shrink below their content, which is also why the name beside it
+   keeps its full width without needing a rule of its own. */
+.subj { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; font-size: 11.5px; color: var(--vscode-descriptionForeground); }
+.l2 { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 0; }
 .nt { font-size: 11.5px; color: var(--vscode-descriptionForeground); }
-.g.d { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
-.g.a { color: var(--vscode-gitDecoration-addedResourceForeground); }
-.g.b { color: var(--vscode-gitDecoration-deletedResourceForeground); }
 
-/* ── the side slot: meta and actions occupy the SAME space and crossfade,
-   instead of each reserving its own column. Absolute positioning inside a
-   relative box takes both out of flow, so the grid track is sized only by
-   --side-w (small, fixed), never by whichever content happens to be widest.
-   A row with no actions at all just omits .sa and gets a plain static box. ── */
-.rslot { position: relative; height: 20px; min-width: var(--side-w, 26px); align-self: center; }
-.rslot .sm, .rslot .sa {
-  position: absolute; right: 0; top: 50%; white-space: nowrap;
-  display: flex; align-items: center; gap: 4px;
-  transition: opacity var(--t) var(--ease), transform var(--t) var(--ease);
-}
-.rslot .sm {
-  font-size: 11.5px; color: var(--vscode-descriptionForeground);
-  transform: translateY(-50%); opacity: 1;
-}
-.rslot .sa {
-  transform: translateY(-50%) translateX(6px); opacity: 0; pointer-events: none;
-}
-.row:hover .rslot .sm, .row.on .rslot .sm { opacity: 0; transform: translateY(-50%) translateX(-6px); }
-.row:hover .rslot .sa, .row.on .rslot .sa, .rslot .sa:focus-within {
-  opacity: 1; transform: translateY(-50%) translateX(0); pointer-events: auto;
-}
-.rslot.static { display: flex; align-items: center; gap: 6px; height: auto; min-width: 0; position: static; }
-.rslot.n1 { --side-w: 30px; }
-.rslot.n2 { --side-w: 60px; }
-.rslot.n3 { --side-w: 90px; }
-.rslot.n4 { --side-w: 120px; }
-.card .row .rslot .sa .btn { opacity: 1; }
+/* ── git state: labelled, not glyph soup. "●17 ↑8" reads as noise unless you
+   already know the convention, so each number carries the word it means. ── */
+.gb { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap;
+  font-size: 11px; color: var(--vscode-descriptionForeground); }
+.gb .mono { font-size: 11px; }
+.gb .codicon { font-size: 11px; opacity: .8; }
+.gb.d { color: var(--vscode-gitDecoration-modifiedResourceForeground); }
+.gb.a { color: var(--vscode-gitDecoration-addedResourceForeground); }
+.gb.b { color: var(--vscode-gitDecoration-deletedResourceForeground); }
 
-/* ── icon morph: for the one list where the leading icon's slot doubles as
-   the row's primary action (e.g. Setup: repo glyph -> "ask agent"). Optional;
-   most rows just render a plain static icon with no .morph wrapper. ── */
-.ic.morph { position: relative; width: 16px; height: 16px; }
-.ic.morph .ir, .ic.morph .ih {
-  position: absolute; inset: 0; display: flex;
-  transition: opacity var(--t) var(--ease), transform var(--t) var(--ease);
-}
-.ic.morph .ir { opacity: 1; transform: scale(1); }
-.ic.morph .ih { opacity: 0; transform: scale(.6); pointer-events: none; }
-.row:hover .ic.morph .ir, .row.on .ic.morph .ir { opacity: 0; transform: scale(.6); }
-.row:hover .ic.morph .ih, .row.on .ic.morph .ih { opacity: 1; transform: scale(1); pointer-events: auto; }
-.ic.morph .ih button { all: unset; display: flex; cursor: pointer; color: var(--vscode-textLink-foreground); }
+/* ── the side slot: meta and actions sit side by side and are ALWAYS visible.
+   They used to occupy the same space and crossfade on hover, so every row
+   action was invisible until you found it with a mouse, and the slot read as
+   dead space until then. There is room for both, so show both: no action in
+   this UI is discoverable only by hovering. ── */
+/* Aligned to the first line, not the row's vertical middle: on a two-line row
+   (title + chips) centring left the buttons floating in the gap between them,
+   attached to neither. */
+.rslot { display: flex; align-items: center; justify-content: flex-end; gap: 6px;
+  flex-wrap: wrap; min-width: var(--side-w, 0); align-self: start; }
+.rslot .sm, .rslot .sa { display: flex; align-items: center; gap: 3px; white-space: nowrap; }
+.rslot .sm { gap: 9px; font-size: 11px; color: var(--vscode-descriptionForeground); }
+.rslot.static { min-width: 0; }
+.rslot.n1 { --side-w: 24px; }
+.rslot.n2 { --side-w: 48px; }
+.rslot.n3 { --side-w: 72px; }
+.rslot.n4 { --side-w: 96px; }
+.rslot.n5 { --side-w: 132px; }   /* a labelled button needs more than four icons */
 
 /* ── chips ── */
-.chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
-  font-size: 10.5px; line-height: 17px; padding: 0 8px; border-radius: 10px;
+.chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  font-size: 10px; line-height: 15px; padding: 0 6px; border-radius: 8px;
   border: 1px solid var(--line); color: var(--vscode-descriptionForeground);
   background: transparent; white-space: normal; text-align: left; }
 .chip.ok { color: var(--vscode-charts-green, #3fb950); border-color: currentColor; }
 .chip.hi { color: var(--vscode-charts-yellow, #cca700); border-color: currentColor; }
 .chip.go { color: var(--vscode-charts-green, #3fb950); border-color: currentColor; }
 .chip.bad { color: var(--vscode-errorForeground); border-color: currentColor; }
-.chip.act { cursor: pointer; font: inherit; font-size: 11px; line-height: 19px; padding: 1px 10px;
-  color: var(--vscode-foreground);
+/* A runnable flow. One line each: a label that wraps inside its own pill makes
+   a tall ragged stack that is harder to scan than the same labels in a row. */
+.chip.act { cursor: pointer; font: inherit; font-size: 10.5px; line-height: 18px; padding: 0 8px;
+  color: var(--vscode-foreground); white-space: nowrap; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis;
   transition: background var(--t) var(--ease), border-color var(--t) var(--ease); }
 .chip.act:hover { background: var(--vscode-list-hoverBackground); border-color: var(--vscode-focusBorder); }
 .chip.act:active { transform: scale(.97); }
-.chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-.chips.pad { padding: 8px 10px; margin: 0; }
-
-/* ── suggestive actions: "ask your agent to..." ── */
-.suggest { display: flex; flex-direction: column; gap: 1px; background: var(--line); }
-.sg { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  padding: 11px 14px; background: var(--vscode-editor-background); flex-wrap: wrap; }
-.sgt { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 260px; }
-.sgt b { font-size: 12.5px; font-weight: 500; }
-.sgt .nt { font-size: 11.5px; color: var(--vscode-descriptionForeground); line-height: 1.5; }
+/* The one flow the repo declared as primary — the thing you start first. */
+.chip.act.pri { border-color: var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
+.chip .port { font-family: var(--vscode-editor-font-family); font-size: 9.5px; opacity: .75; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.chips.pad { padding: 5px 8px; margin: 0; }
 
 /* ── buttons ── */
 .btn, .ib { font: inherit; cursor: pointer; border-radius: 4px;
   transition: background var(--t) var(--ease), color var(--t) var(--ease), transform var(--t) var(--ease); }
-.btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 11px;
+.btn { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; padding: 2px 8px;
   border: 1px solid var(--vscode-button-border, transparent);
   background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
 .btn:hover:not(:disabled) { background: var(--vscode-button-secondaryHoverBackground); }
@@ -233,31 +237,60 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 .btn:disabled { opacity: .45; cursor: default; }
 .btn.p { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
 .btn.p:hover:not(:disabled) { background: var(--vscode-button-hoverBackground); }
-.ib { border: 0; background: transparent; color: var(--vscode-icon-foreground); padding: 4px 5px; }
+.ib { border: 0; background: transparent; color: var(--vscode-icon-foreground); padding: 2px 4px; }
 .ib:hover { background: var(--vscode-toolbar-hoverBackground); color: var(--vscode-foreground); }
-.btn:focus-visible, .ib:focus-visible, .chip.act:focus-visible, .tab:focus-visible, .ic.morph .ih button:focus-visible {
+.btn:focus-visible, .ib:focus-visible, .chip.act:focus-visible, .tab:focus-visible {
   outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 
 /* ── runner cards ── */
 .rgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; background: var(--line); }
 @media (min-width: 560px) { .rgrid:not(.one) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.rc { padding: 10px 12px; background: var(--panel); }
-.rc .l1 b { font-weight: 500; }
-.rc .l2 { margin-top: 2px; }
+/* One line per runner: name and path share the row, path truncates rather
+   than claiming a second line of its own. */
+.rc { padding: 3px 10px; background: var(--panel); }
+.rc .l1 { flex-wrap: nowrap; gap: 6px; }
+.rc .l1 b { font-weight: 500; white-space: nowrap; }
+.rc .rcp { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  direction: rtl; text-align: right; }
 .rc.no { opacity: .6; }
 .rc.ok .l1 .codicon { color: var(--vscode-charts-green, #3fb950); }
 
+/* ── walkthrough: an ordered getting-started flow. Steps never collapse or
+   disappear as they complete — a done step dims, keeps its evidence and keeps
+   its action, so you can always see what you did and repeat it. ── */
+.wt { list-style: none; margin: 0; padding: 0; }
+.wtstep { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 9px;
+  align-items: start; padding: 7px 8px; border-radius: 4px; }
+.wtstep + .wtstep { border-top: 1px solid var(--line); }
+.wtn { display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; margin-top: 1px;
+  font-size: 10.5px; font-variant-numeric: tabular-nums;
+  border: 1px solid var(--line); color: var(--vscode-descriptionForeground); }
+.wtstep.done .wtn { border-color: transparent; color: var(--vscode-charts-green, #3fb950); }
+.wtstep.done .wtn .codicon { font-size: 14px; }
+.wtstep.next { background: var(--vscode-list-inactiveSelectionBackground, rgba(255,255,255,.04)); }
+.wtstep.next .wtn { border-color: var(--vscode-textLink-foreground); color: var(--vscode-textLink-foreground); }
+.wtstep.done .wtb { opacity: .6; }
+.wtb { min-width: 0; }
+.wth { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.wth b { font-weight: 500; }
+.wtb p { margin: 1px 0 0; font-size: 11.5px; line-height: 1.4; max-width: 74ch; }
+.wte { display: flex; align-items: center; gap: 4px; margin-top: 2px; font-size: 11px; }
+.wte .codicon { color: var(--vscode-charts-green, #3fb950); }
+.wta { display: flex; align-items: center; gap: 5px; }
+.card > .bar { border-radius: 0; height: 2px; }
+
 /* ── empty states: the product's first impression ── */
-.empty { padding: 26px 20px; text-align: left; color: var(--vscode-descriptionForeground); }
-.empty .codicon { color: var(--vscode-descriptionForeground); opacity: .5; display: block; margin-bottom: 10px; }
-.empty b { display: block; font-size: 14px; font-weight: 500; color: var(--vscode-foreground); margin-bottom: 8px; }
-.empty p { margin: 0 0 7px; max-width: 60ch; font-size: 12px; line-height: 1.6; }
+.empty { padding: 14px 12px; text-align: left; color: var(--vscode-descriptionForeground); }
+.empty .codicon { color: var(--vscode-descriptionForeground); opacity: .5; display: block; margin-bottom: 6px; }
+.empty b { display: block; font-size: 12.5px; font-weight: 500; color: var(--vscode-foreground); margin-bottom: 4px; }
+.empty p { margin: 0 0 4px; max-width: 72ch; font-size: 11.5px; line-height: 1.45; }
 .empty p:last-of-type { margin-bottom: 0; }
-.empty .btn { margin-top: 12px; }
+.empty .btn { margin-top: 8px; }
 
 /* ── footer ── */
-.foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 26px;
-  padding-top: 10px; border-top: 1px solid var(--line);
+.foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px;
+  padding-top: 8px; border-top: 1px solid var(--line);
   font-size: 11.5px; color: var(--vscode-descriptionForeground); }
 .rn { display: inline-flex; align-items: center; gap: 4px; margin-right: 12px; }
 .rn.ok { color: var(--vscode-charts-green, #3fb950); }

@@ -156,12 +156,14 @@
   function allTasks() {
     const out = [];
     for (const r of D.repos || []) {
-      for (const t of r.tasks || []) out.push({ ...t, repo: r.name, root: r.root, group: r.group || "" });
+      for (const t of r.tasks || []) out.push({ ...t, repo: r.name, root: r.root, group: r.group || "",
+        thread: (r.threads || {})[t.id] || null });
     }
     for (const f of D.board || []) {
       const r = (D.repos || []).find((x) => x.name === f.repo);
       out.push({ id: f.id, title: f.title, status: f.status || "todo", priority: "normal",
-        repo: f.repo || "", root: r ? r.root : null, group: r ? r.group : "", today: true, agent: f.agent });
+        repo: f.repo || "", root: r ? r.root : null, group: r ? r.group : "", today: true,
+        agent: f.agent, thread: f.thread || null, ref: f.ref || null });
     }
     return out;
   }
@@ -172,7 +174,7 @@
   /* ───────── building blocks ───────── */
 
   let rows = [];
-  const F = (attrs) => { rows.push(attrs); return `class="row focusable" ${attrs}`; };
+  const F = (attrs, cls = "") => { rows.push(attrs); return `class="row focusable${cls}" ${attrs}`; };
 
   function card(id, title, icon, inner, aside = "") {
     return `<section class="card" data-sec="${esc(id)}">
@@ -193,12 +195,67 @@
   const empty = (icon, title, lines, action = "") =>
     `<div class="empty">${ico(icon, "big")}<b>${esc(title)}</b>${lines.map((l) => `<p>${l}</p>`).join("")}${action}</div>`;
 
+  // One row for a `~/.principia/history/*.jsonl` entry. Shared by Today's
+  // "pick up where you left off" and the Agents tab's activity feed — same
+  // data, same shape, two different framings.
+  // One runner card, used by both the Agents and Setup rails. It used to be
+  // pasted in three places, which is how three copies drift.
+  function runnerCard(runners, title) {
+    const list = runners || [];
+    return card("runners", title || "Runners", "server-process",
+      `<div class="rgrid one">${list.map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
+        <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b>
+          <span class="grow"></span>
+          <span class="mono dim rcp" title="${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span>
+        </div>
+      </div>`).join("")}</div>`,
+      `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
+  }
+
+  function relTime(iso) {
+    if (!iso) return "";
+    const ms = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(ms / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
+
+  // One row for a real Claude Code session, read from ~/.claude/projects/ for
+  // a repo that has opted in (see discovery.js: gated at the read, not here).
+  function sessionRow(r, s, latest) {
+    const cmd = `claude --resume ${s.id}`;
+    return `<div ${F(`data-root="${esc(r.root)}"`, ` compact${latest ? " latest" : ""}`)}>
+      <span class="ic">${ico("sparkle", "sm")}</span>
+      <div class="main"><div class="l1"><b>${esc(s.title || "(untitled)")}</b></div>
+        <div class="l2"><span class="dim">${esc(relTime(s.ts))}</span><span class="mono dim">${s.turns} turns</span>${s.branch ? `<span class="mono dim">${esc(s.branch)}</span>` : ""}<span class="mono dim">${esc(s.id.slice(0, 8))}</span></div></div>
+      <div class="rslot n4"><span class="sa">
+        ${s.path ? `<button class="ib" data-reveal="${esc(s.path)}" title="Reveal transcript in Finder">${ico("go-to-file")}</button>` : ""}
+        <button class="ib" data-copy="${esc(cmd)}" title="Copy resume command">${ico("copy")}</button>
+        <button class="btn" data-resume="${esc(s.id)}" data-root="${esc(r.root)}">${ico("debug-restart", "sm")} Resume</button>
+      </span></div>
+    </div>`;
+  }
+
+  function historyRow(e) {
+    return `<div ${F(`data-root="${esc(e.repo || "")}"`)}>
+      <span class="ic">${ico(e.phase === "launch" ? "sparkle" : "comment-discussion")}</span>
+      <div class="main"><div class="l1"><b>${esc(e.runner || "agent")}</b>${e.agent ? `<span class="chip">${esc(e.agent)}</span>` : ""}${e.phase && e.phase !== "launch" ? `<span class="chip">${esc(e.phase)}</span>` : ""}</div>
+      <div class="l2"><span class="mono dim">${esc(base(e.repo))}</span><span class="dim">${esc(String(e.ts || "").replace("T", " ").replace("Z", ""))}</span></div></div>
+      <div class="rslot n1"><span class="sa">${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</span></div>
+    </div>`;
+  }
+
+  // Say what the numbers mean. "●17 ↑8" assumes the reader already knows the
+  // convention; the words cost a few pixels and remove the guessing.
   const gitBits = (r) => [
-    r.branch ? `<span class="mono dim">${esc(r.branch)}</span>` : "",
-    r.dirty ? `<span class="g d">●${r.dirty}</span>` : "",
-    r.ahead ? `<span class="g a">↑${r.ahead}</span>` : "",
-    r.behind ? `<span class="g b">↓${r.behind}</span>` : "",
-  ].filter(Boolean).join(" ");
+    r.branch ? `<span class="gb" title="Current branch">${ico("git-branch")}<span class="mono">${esc(r.branch)}</span></span>` : "",
+    r.dirty ? `<span class="gb d" title="${r.dirty} file(s) changed but not committed">${r.dirty} uncommitted</span>` : "",
+    r.ahead ? `<span class="gb a" title="${r.ahead} commit(s) not pushed to the upstream branch">${r.ahead} unpushed</span>` : "",
+    r.behind ? `<span class="gb b" title="${r.behind} commit(s) on the upstream branch you do not have locally">${r.behind} behind</span>` : "",
+  ].filter(Boolean).join("");
 
   function repoActions(r) {
     return `${r.configured ? "" : `<button class="ib" data-setup="${esc(r.root)}" title="Set up with an agent">${ico("sparkle")}</button>`}
@@ -222,8 +279,10 @@
           ${t.notes ? `<span class="nt">${esc(t.notes)}</span>` : ""}
         </div>
       </div>
-      <div class="rslot n4"><span class="sa">
-        ${t.agent && t.root ? `<button class="ib" data-agent="${esc(t.agent)}" data-root="${esc(t.root)}" title="Run agent">${ico("sparkle")}</button>` : ""}
+      <div class="rslot ${t.thread ? "n5" : "n4"}"><span class="sa">
+        ${t.root && t.status !== "done" ? (t.thread
+          ? `<button class="btn" data-task="${esc(t.id)}" data-root="${esc(t.root)}" title="Reopen session ${esc(String(t.thread).slice(0, 8))}, where this task was started">${ico("debug-restart", "sm")} Resume</button>`
+          : `<button class="ib" data-task="${esc(t.id)}" data-root="${esc(t.root)}" title="${t.agent ? `Run ${esc(t.agent)} agent` : "Work on this now"}">${ico("sparkle")}</button>`) : ""}
         ${t.root ? `<button class="ib" data-term="${esc(t.root)}" title="Terminal here">${ico("terminal")}</button>` : ""}
         ${t.root ? `<button class="ib" data-open="${esc(t.root)}" title="Open">${ico("folder-opened")}</button>` : ""}
         ${t.root ? `<button class="ib" data-open="${esc(t.root)}" data-new="1" title="Open in new window">${ico("empty-window")}</button>` : ""}
@@ -231,24 +290,37 @@
     </div>`;
   }
 
-  function repoRow(r, opts = {}) {
+  function repoRow(r) {
     return `<div ${F(`data-root="${esc(r.root)}"`)}>
       <span class="ic">${ico(r.icon || "repo")}</span>
       <div class="main">
         <div class="l1"><b>${esc(r.name)}</b>
+          ${r.lastSubject ? `<span class="subj" title="${esc(r.lastSubject)}">${esc(r.lastSubject)}</span>` : ""}
           ${r.configured ? `<span class="chip ok">configured</span>` : `<span class="chip">not set up</span>`}
           ${r.invalid ? `<span class="chip bad">${esc(r.invalid)}</span>` : ""}
           ${r.staleBy ? `<span class="chip hi">${r.staleBy} commits since setup</span>` : ""}
         </div>
         ${r.summary ? `<div class="l2"><span class="nt">${esc(r.summary)}</span></div>` : ""}
-        ${opts.flows && r.flows.length ? `<div class="chips">${r.flows.slice(0, 8).map((f) =>
-          `<button class="chip act" data-flow="${esc(f.id)}" data-root="${esc(r.root)}" title="${esc(f.run)}">${ico(f.kind === "server" ? "play" : f.kind === "test" ? "beaker" : "tools", "sm")}${esc(f.label)}</button>`).join("")}</div>` : ""}
       </div>
       <div class="rslot n4">
         <span class="sm">${gitBits(r)}${r.lastCommit ? `<span class="dim">${esc(r.lastCommit)}</span>` : ""}</span>
         <span class="sa">${repoActions(r)}</span>
       </div>
     </div>`;
+  }
+
+  const flowIcon = (f) => f.kind === "server" ? "play" : f.kind === "test" ? "beaker" : f.kind === "build" ? "package" : "tools";
+
+  // Flows get the card's full width as their own strip, instead of competing
+  // for the row's middle column with the git meta and actions. Squeezed into
+  // that column they stacked one-per-line and wrapped mid-label, while most of
+  // the row sat empty.
+  function flowStrip(r, flows) {
+    if (!flows.length) return "";
+    return `<div class="chips pad">${flows.map((f) => {
+      const meta = [f.run, f.port ? `port ${f.port}` : "", f.cwd && f.cwd !== "." ? `in ${f.cwd}` : ""].filter(Boolean).join(" · ");
+      return `<button class="chip act${f.primary ? " pri" : ""}" data-flow="${esc(f.id)}" data-root="${esc(r.root)}" title="${esc(meta)}">${ico(flowIcon(f), "sm")}${esc(f.label)}${f.port ? `<span class="port">:${f.port}</span>` : ""}</button>`;
+    }).join("")}</div>`;
   }
 
   /* ───────── tabs ───────── */
@@ -308,12 +380,7 @@
 
     const hist = (D.history || []).slice(0, 5);
     out += card("resume", "Pick up where you left off", "sparkle",
-      hist.length ? hist.map((e) => `<div ${F(`data-root="${esc(e.repo || "")}"`)}>
-          <span class="ic">${ico("comment-discussion")}</span>
-          <div class="main"><div class="l1"><b>${esc(e.runner || "agent")}</b>${e.agent ? `<span class="chip">${esc(e.agent)}</span>` : ""}</div>
-          <div class="l2"><span class="mono dim">${esc(base(e.repo))}</span><span class="dim">${esc(String(e.ts || "").replace("T", " ").replace("Z", ""))}</span></div></div>
-          <div class="rslot n1"><span class="sa">${e.repo ? `<button class="ib" data-open="${esc(e.repo)}" title="Open">${ico("folder-opened")}</button>` : ""}</span></div>
-        </div>`).join("")
+      hist.length ? hist.map(historyRow).join("")
         : empty("history", "No agent sessions recorded yet",
             [`Runs launched from Launch pad are logged to <code>~/.principia/history/</code>.`,
              `Install the Principia Claude Code plugin and its <code>SessionStart</code> hook records sessions you start anywhere, not only ones launched from here.`],
@@ -361,8 +428,10 @@
     const groups = [...new Set(declared.map((r) => r.group || ""))];
     return groups.map((g) => {
       const rs = declared.filter((r) => (r.group || "") === g);
+      const n = rs.reduce((t, r) => t + r.flows.filter((f) => f.source === "declared").length, 0);
       return card(`w-${g || "none"}`, g || "Ungrouped", "rocket",
-        rs.map((r) => repoRow(r, { flows: true })).join(""), `<span class="cnt">${rs.length}</span>`);
+        rs.map((r) => repoRow(r) + flowStrip(r, r.flows.filter((f) => f.source === "declared"))).join(""),
+        `<span class="cnt">${n} flow${n === 1 ? "" : "s"} · ${rs.length} repo${rs.length === 1 ? "" : "s"}</span>`);
     }).join("");
   }
 
@@ -387,12 +456,27 @@
 
   function tAgents() {
     rows = [];
-    const rail = card("runners", "Runners", "server-process",
-      `<div class="rgrid one">${(D.runners || []).map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
-        <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
-        <div class="l2"><span class="mono dim">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span></div>
-      </div>`).join("")}</div>`,
-      `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`);
+    const rail = runnerCard(D.runners);
+
+    const hist = (D.history || []).slice(0, 8);
+    const activity = card("activity", "Recent activity", "history",
+      hist.length ? hist.map(historyRow).join("")
+        : empty("history", "No sessions recorded yet",
+            [`Agent runs launched from here, and any Claude Code session once the plugin's <code>SessionStart</code>/<code>SessionEnd</code> hooks are installed, log to <code>~/.principia/history/</code>.`,
+             `Hooks only cover sessions that start after the plugin is installed — a session already running when you install it will not appear retroactively.`]));
+
+    const configuredRepos = (D.repos || []).filter((r) => r.configured).filter((r) => hit(r.name));
+    const withSessions = configuredRepos.filter((r) => r.sessions && r.sessions.length);
+    const sessionsMain = withSessions.length
+      ? withSessions.map((r) => card(`s-${r.dirName}`, `${r.name} sessions`, "comment-discussion",
+          r.sessions.map((s, i) => sessionRow(r, s, i === 0)).join(""),
+          `<button class="ib" data-resume="${esc(r.sessions[0].id)}" data-root="${esc(r.root)}" title="Continue latest session">${ico("play")}</button>
+           <button class="ib" data-new-session="${esc(r.root)}" title="Start a new session here">${ico("add")}</button>
+           <span class="cnt">${r.sessions.length}</span>`)).join("")
+      : card("s", "Claude Code sessions", "comment-discussion",
+          empty("comment-discussion", "No sessions to show",
+            [`Real session history is read from <code>~/.claude/projects/</code>, but only for a repo that has opted in by committing <code>.principia/repo.json</code> — that is the permission gate, enforced before the transcript is ever read, not just before it is shown.`,
+             configuredRepos.length ? `${configuredRepos.length} repo(s) here are configured but none has a recorded session yet.` : `No repository here is configured yet.`]));
 
     const withAgents = (D.repos || []).filter((r) => r.agents.length).filter((r) => hit(r.name));
     if (!withAgents.length) {
@@ -404,17 +488,20 @@
            s0 ? `Ask an agent to look at <b>${esc(s0.name)}</b> and decide whether it needs one.` : `Ask an agent, in any repo, whether it needs one.`],
           s0 ? `<button class="btn p" data-setup="${esc(s0.root)}" ${anyRunner ? "" : "disabled"}>${ico("sparkle", "sm")} Ask agent to set up ${esc(s0.name)}</button>`
              : `<button class="btn" data-tab-go="repos">${ico("repo", "sm")} Go to Repos</button>`));
-      return layout(main, rail);
+      return layout(sessionsMain + main, rail + activity);
     }
     const main = withAgents.map((r) => card(`a-${r.dirName}`, r.name, "sparkle",
       r.agents.map((a) => `<div ${F(`data-root="${esc(r.root)}" data-agent="${esc(a.id)}"`)}>
         <span class="ic">${ico("sparkle")}</span>
         <div class="main"><div class="l1"><b>${esc(a.label || a.id)}</b></div>
           <div class="l2"><span class="mono dim">${esc(a.file)}</span>${(a.supports || []).map((s) => `<span class="chip">${esc(s)}</span>`).join("")}</div></div>
-        <div class="rslot n2"><span class="sa"><button class="btn" data-agent="${esc(a.id)}" data-root="${esc(r.root)}">${ico("play", "sm")} Run</button></span></div>
+        <div class="rslot n3"><span class="sa">
+          <button class="ib" data-open-file="${esc(r.root)}/${esc(a.file)}" title="Open the prompt file">${ico("go-to-file")}</button>
+          <button class="btn" data-agent="${esc(a.id)}" data-root="${esc(r.root)}">${ico("play", "sm")} Run</button>
+        </span></div>
       </div>`).join("")
     )).join("");
-    return layout(main, rail);
+    return layout(sessionsMain + main, rail + activity);
   }
 
   function tScriptsInner() {
@@ -446,7 +533,7 @@
         <span class="ic">${ico("repo")}</span>
         <div class="main"><div class="l1"><b>${esc(r.name)}</b>${r.ws ? `<span class="chip">workspace</span>` : ""}</div></div>
         <div class="rslot n3">
-          <span class="sm"><span class="mono dim">${esc(r.branch || "")}</span>${r.dirty ? `<span class="g d">●${r.dirty}</span>` : ""}</span>
+          <span class="sm">${gitBits(r)}</span>
           <span class="sa">
             <button class="ib" data-term="${esc(r.root)}" title="Terminal here">${ico("terminal")}</button>
             <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
@@ -493,61 +580,188 @@
     return layout(main, rail);
   }
 
+  // The getting-started flow, in the order the product actually works:
+  // runner -> a repo opts in -> it declares flows -> it ships an agent ->
+  // it tracks tasks -> one agent plans across all of them.
+  //
+  // Two rules here, both deliberate:
+  //  1. Every step's "done" is DERIVED from data already on screen, never
+  //     stored. There is no checkbox state to go stale, and a step that stops
+  //     being true (a repo's contribution is deleted) correctly un-completes.
+  //  2. Nothing auto-collapses. An earlier version of this hid each step as it
+  //     completed, which left you unable to see what you had done or repeat it.
+  //     Done steps dim and keep their action; they never disappear.
+  // Which repo the walkthrough is about: the folder actually open, not the
+  // fleet. Aggregating across every repo ever opened reported "6 of 6, all
+  // done" while the project in front of you had no .principia/ at all — the
+  // checklist has to answer "is THIS project wired up", or it answers nothing.
+  function hereRepo() {
+    const here = D.here;
+    if (!here) return null;
+    const repos = D.repos || [];
+    return repos.find((r) => r.root === here)
+      || repos.find((r) => here.startsWith(r.root + "/"))
+      // Open folder that discovery has not listed yet: still offer to set it up.
+      || { root: here, name: base(here), configured: false, flows: [], agents: [], tasks: [], unlisted: true };
+  }
+
+  function walkthroughSteps() {
+    const runners = D.runners || [];
+    const avail = runners.filter((r) => r.available);
+    const runnable = avail.length > 0;
+    const board = D.board || [];
+    const repo = hereRepo();
+
+    // Machine-level and cross-repo steps stay global; they are not properties
+    // of one folder and pretending otherwise would be a lie.
+    const runnerStep = {
+      id: "runner",
+      title: "Install an agent runner",
+      why: `Every file Principia shows is written by an agent, never by you. No runner is privileged: Claude Code, Codex, Gemini CLI and agy all read the same prompts.`,
+      done: runnable,
+      evidence: runnable ? avail.map((r) => esc(r.label)).join(", ") : "none found on PATH",
+      action: `<button class="btn" data-act="redetect">${ico("refresh", "sm")} Re-detect</button>`,
+      global: true,
+    };
+    const boardStep = {
+      id: "board",
+      title: "Plan focus across every repo",
+      why: `One agent looks at everything Principia knows about — uncommitted work, unpushed branches, open tasks — and writes the cross-repo board at <code>~/.principia/board.json</code>.`,
+      done: board.length > 0,
+      evidence: board.length ? `${board.length} item(s) on the board` : "board is empty",
+      action: `<button class="btn" data-plan="1" ${runnable ? "" : "disabled"} title="${runnable ? "" : "No agent runner is installed"}">${ico("sparkle", "sm")} Plan my day</button>`,
+      global: true,
+    };
+
+    // No folder open: the repo steps have no subject, so say that plainly
+    // rather than quietly grading them against some other repo.
+    if (!repo) {
+      const openFolder = `<button class="btn" data-cmd="workbench.action.files.openFolder">${ico("folder-opened", "sm")} Open a folder</button>`;
+      const blank = (id, title, why) => ({ id, title, why, done: false, evidence: "no folder open", action: openFolder });
+      return [
+        runnerStep,
+        blank("opt-in", "Let this repository describe itself", `Open a project and an agent can read it and commit its <code>.principia/repo.json</code>.`),
+        blank("flows", "Declare a workflow worth launching", `A declared flow adds what detection cannot infer: a real label, a port, which one is primary.`),
+        blank("agents", "Ship an agent with the repo", `A prompt committed at <code>.principia/agents/*.md</code> becomes a one-click action for anyone who clones it.`),
+        blank("tasks", "Track work as tasks", `Tasks in <code>repo.json</code> get a "work on this" action that hands them straight to a runner.`),
+        boardStep,
+      ];
+    }
+
+    const name = esc(repo.name);
+    const flows = (repo.flows || []).filter((f) => f.source === "declared");
+    const agents = repo.agents || [];
+    const tasks = repo.tasks || [];
+    const ask = (label, primary) =>
+      `<button class="btn${primary ? " p" : ""}" data-setup="${esc(repo.root)}" ${runnable ? "" : "disabled"} title="${runnable ? `Ask an agent to work on ${name}` : "No agent runner is installed"}">${ico("sparkle", "sm")} ${label}</button>`;
+    // Every step is something you can hand to an agent, not just a link to a
+    // tab. The prompt lives in prompts/<id>.md so all runners get the same
+    // instruction; the tab button stays as a secondary way to go look.
+    const askPrompt = (id, label, primary) =>
+      `<button class="btn${primary ? " p" : ""}" data-prompt="${id}" data-root="${esc(repo.root)}" ${runnable ? "" : "disabled"} title="${runnable ? `Ask an agent, in ${name}` : "No agent runner is installed"}">${ico("sparkle", "sm")} ${label}</button>`;
+    const goTab = (tab, icon, title) =>
+      `<button class="ib" data-tab-go="${tab}" title="${title}">${ico(icon)}</button>`;
+
+    return [
+      runnerStep,
+      {
+        id: "opt-in",
+        title: `Let ${name} describe itself`,
+        why: `An agent reads this repo and commits <code>.principia/repo.json</code>. It travels with the clone, so your other machine and your teammates get it for free — and it is what unlocks session history for this repo.`,
+        done: !!repo.configured,
+        evidence: repo.configured
+          ? `${name} is configured`
+          : (repo.unlisted ? `${name} has no .principia/ yet` : `${name} has not opted in yet`),
+        action: ask(repo.configured ? "Re-run setup" : `Set up ${name}`, !repo.configured),
+      },
+      {
+        id: "flows",
+        title: "Declare a workflow worth launching",
+        why: `Scripts from <code>package.json</code>, Cargo, Make and Gradle are already detected with zero config. A declared flow adds only what detection cannot infer: a real label, a port, a composite command, which one is primary.`,
+        done: flows.length > 0,
+        evidence: flows.length ? `${flows.length} declared in ${name}` : `${name} declares none yet`,
+        action: askPrompt("declare-flows", "Declare flows", !flows.length) + goTab("workflows", "rocket", "Go to Workflows"),
+      },
+      {
+        id: "agents",
+        title: "Ship an agent with the repo",
+        why: `A prompt committed at <code>.principia/agents/*.md</code> becomes a one-click action for anyone who clones this repo, under whichever runner they happen to have.`,
+        done: agents.length > 0,
+        evidence: agents.length ? `${agents.length} in ${name}` : `${name} ships none yet`,
+        action: askPrompt("add-agent", "Add an agent", !agents.length) + goTab("agents", "sparkle", "Go to Agents"),
+      },
+      {
+        id: "tasks",
+        title: "Track work as tasks",
+        why: `Tasks in <code>repo.json</code> show up here with a "work on this" action that hands the task, and any agent it names, straight to a runner.`,
+        done: tasks.length > 0,
+        evidence: tasks.length
+          ? `${tasks.filter((t) => t.status !== "done").length} open of ${tasks.length} in ${name}`
+          : `${name} tracks none yet`,
+        action: askPrompt("track-tasks", "Find tasks", !tasks.length) + goTab("tasks", "checklist", "Go to Tasks"),
+      },
+      boardStep,
+    ];
+  }
+
+  function walkthrough() {
+    const steps = walkthroughSteps();
+    const repo = hereRepo();
+    const done = steps.filter((s) => s.done).length;
+    const nextId = (steps.find((s) => !s.done) || {}).id;
+    const pct = Math.round((done / steps.length) * 100);
+
+    return `<section class="card" data-sec="walk">
+      <header>${ico("rocket", "sm")}<h3>Getting started</h3>
+        ${repo ? `<span class="chip">${ico("repo", "sm")}${esc(repo.name)}</span>`
+               : `<span class="chip">no folder open</span>`}
+        <span class="grow"></span>
+        <span class="cnt">${done} of ${steps.length}</span></header>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="cbody"><ol class="wt">
+        ${steps.map((s, i) => `<li class="wtstep${s.done ? " done" : ""}${s.id === nextId ? " next" : ""}">
+          <span class="wtn">${s.done ? ico("pass-filled") : i + 1}</span>
+          <div class="wtb">
+            <div class="wth"><b>${s.title}</b>
+              ${s.id === nextId ? `<span class="chip hi">next</span>` : ""}
+              ${s.global ? `<span class="chip" title="Applies to this machine, not just the open folder">all repos</span>` : ""}
+            </div>
+            <p class="nt">${s.why}</p>
+            <div class="wte">${s.done ? ico("check", "sm") : ""}<span class="dim">${s.evidence}</span></div>
+          </div>
+          <div class="wta">${s.action}</div>
+        </li>`).join("")}
+      </ol></div>
+    </section>`;
+  }
+
   function tSetup() {
     rows = [];
     const unset = (D.repos || []).filter((r) => !r.configured);
     const runners = D.runners || [];
     const runnable = runners.some((r) => r.available);
     const configuredCount = (D.repos || []).length - unset.length;
-    const suggestion = unset[0];
 
-    let main = `<section class="card" data-sec="quick">
-      <header>${ico("sparkle", "sm")}<h3>Ask your agent</h3></header>
-      <div class="cbody"><div class="suggest">
-        ${suggestion ? `<div class="sg">
-          <div class="sgt"><b>Set up ${esc(suggestion.name)}</b><span class="nt">Reads the repo and writes its <code>.principia/</code> contribution. Nothing is guessed by us; an agent decides what is worth declaring.</span></div>
-          <button class="btn p" data-setup="${esc(suggestion.root)}" ${runnable ? "" : "disabled"} title="${runnable ? "" : "No agent runner is installed"}">${ico("sparkle", "sm")} Ask agent to set this up</button>
-        </div>` : ""}
-        <div class="sg">
-          <div class="sgt"><b>Plan today's focus</b><span class="nt">Looks at uncommitted work, unpushed branches and repo tasks across everything Principia knows about, then writes <code>~/.principia/board.json</code>.</span></div>
-          <button class="btn" data-plan="1" ${runnable ? "" : "disabled"} title="${runnable ? "" : "No agent runner is installed"}">${ico("sparkle", "sm")} Ask agent to plan my day</button>
-        </div>
-        <div class="sg">
-          <div class="sgt"><b>Something else</b><span class="nt">Any agent can follow the contract directly, in any repo.</span></div>
-          <button class="btn" data-act="openSpec">${ico("book", "sm")} Open the contract</button>
-        </div>
-      </div></div>
-    </section>`;
+    let main = walkthrough();
 
     main += card("todo", "Waiting on setup", "repo",
       unset.length ? unset.map((r) => `<div ${F(`data-root="${esc(r.root)}"`)}>
-          <span class="ic morph">
-            <b class="ir">${ico(r.icon || "repo")}</b>
-            <b class="ih">${runnable ? `<button data-setup="${esc(r.root)}" title="Ask agent to set this up">${ico("sparkle")}</button>` : ico(r.icon || "repo")}</b>
-          </span>
+          <span class="ic">${ico(r.icon || "repo")}</span>
           <div class="main"><div class="l1"><b>${esc(r.name)}</b></div>
             ${r.summary ? `<div class="l2"><span class="nt">${esc(r.summary)}</span></div>` : ""}
           </div>
-          <div class="rslot n2">
+          <div class="rslot n3">
             <span class="sm">${gitBits(r) || `<span class="dim">not set up</span>`}</span>
-            <span class="sa"><button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button></span>
+            <span class="sa">
+              ${runnable ? `<button class="btn" data-setup="${esc(r.root)}" title="Ask agent to set this up">${ico("sparkle", "sm")} Set up</button>` : ""}
+              <button class="ib" data-open="${esc(r.root)}" title="Open">${ico("folder-opened")}</button>
+            </span>
           </div>
         </div>`).join("")
         : empty("check", "Every repository has opted in", ["Nothing left to set up."]),
       unset.length ? `<span class="cnt">${configuredCount}/${(D.repos || []).length} set up</span>` : "");
 
-    const rail = (runnable ? card("runners", "Runners", "server-process",
-        `<div class="rgrid one">${runners.map((r) => `<div class="rc ${r.available ? "ok" : "no"}">
-          <div class="l1">${ico(r.available ? "pass-filled" : "circle-slash")}<b>${esc(r.label)}</b></div>
-          <div class="l2"><span class="mono dim">${esc(r.available ? (r.pathTo || r.bin) : (r.reason || "not installed"))}</span></div>
-        </div>`).join("")}</div>`,
-        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`)
-      : card("runners", "No agent runner found", "circle-slash",
-        `<div class="rgrid one">${runners.map((r) => `<div class="rc no">
-          <div class="l1">${ico("circle-slash")}<b>${esc(r.label)}</b></div>
-          <div class="l2"><span class="mono dim">${esc(r.reason || "not installed")}</span></div>
-        </div>`).join("")}</div>`,
-        `<button class="ib" data-act="redetect" title="Re-detect">${ico("refresh")}</button>`))
+    const rail = runnerCard(runners, runnable ? "Runners" : "No agent runner found")
       + card("how", "How this fills up", "lightbulb",
         `<div class="empty">
           <p>Launch pad ships empty on purpose. It reads the projects you recently opened, then asks each one what it offers.</p>
@@ -621,7 +835,7 @@
       const b = ev.target.closest("[data-tab]"); if (b) setTab(b.dataset.tab);
     });
     app.addEventListener("click", (ev) => {
-      const el = ev.target.closest("[data-act],[data-open],[data-setup],[data-plan],[data-flow],[data-agent],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go],[data-cmd]");
+      const el = ev.target.closest("[data-act],[data-open],[data-open-file],[data-setup],[data-plan],[data-prompt],[data-flow],[data-agent],[data-task],[data-resume],[data-reveal],[data-copy],[data-new-session],[data-term],[data-android],[data-ios],[data-browser],[data-external],[data-tab-go],[data-cmd]");
       if (!el || el.disabled) return;
       ev.stopPropagation();
       const d = el.dataset;
@@ -630,9 +844,16 @@
       if (d.act) return send({ type: d.act });
       if (d.setup) return send({ type: "setup", root: d.setup });
       if (d.plan) return send({ type: "plan" });
+      if (d.prompt) return send({ type: "prompt", id: d.prompt, root: d.root });
       if (d.cmd) return send({ type: "command", id: d.cmd });
       if (d.flow) return send({ type: "flow", root: d.root, id: d.flow });
       if (d.agent && d.root) return send({ type: "agent", root: d.root, id: d.agent });
+      if (d.task && d.root) return send({ type: "task", root: d.root, id: d.task });
+      if (d.resume && d.root) return send({ type: "resume", root: d.root, id: d.resume });
+      if (d.openFile) return send({ type: "openFile", path: d.openFile });
+      if (d.reveal) return send({ type: "reveal", path: d.reveal });
+      if (d.copy) return send({ type: "copy", text: d.copy });
+      if (d.newSession) return send({ type: "newSession", root: d.newSession });
       if (d.term) return send({ type: "terminal", root: d.term });
       if (d.android) return send({ type: "android", action: d.android });
       if (d.ios) return send({ type: "ios", action: d.ios, udid: d.udid });
