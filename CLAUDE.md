@@ -42,6 +42,7 @@ Plus a Claude Code plugin (`.claude-plugin/`, `skills/`, `agents/`, `hooks/`).
 node --check scripts/validate.js
 node scripts/validate.js .              # self-check
 node scripts/validate.js <some-repo>    # against a real repo
+node scripts/check-runners.js           # every runner list still agrees
 ```
 
 Every JSON file must parse. Every schema must be valid JSON Schema 2020-12.

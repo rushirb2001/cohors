@@ -3,7 +3,7 @@
   "name": "principia",
   "summary": "The launchpad your repositories write for themselves",
   "group": "solo-projects",
-  "updated": "2026-09-07T09:41:14Z",
+  "updated": "2026-09-07T09:45:11Z",
   "generatedFrom": "049872a",
   "links": [
     {
@@ -135,10 +135,9 @@
     {
       "id": "dedupe-runner-table",
       "title": "De-duplicate the runner table shared by the extension and the CLI",
-      "status": "todo",
+      "status": "done",
       "priority": "normal",
-      "notes": "extension/src/runners.js and cli/src/runners.js are byte-identical copies kept in sync by hand — the same trap as mcp/src/lib.js vs scripts/validate.js. A wrong invocation had to be fixed in both.",
-      "agent": "check-validator-drift"
+      "notes": "shared/runners.js is now the only copy; extension/ and cli/ re-export it. The CLI only ever used detect(), so ~110 of the 165 duplicated lines were dead weight there. The roster is still spelled out in the schema, validator and MCP server on purpose (a schema cannot import code; those tools are dependency-free), so scripts/check-runners.js fails if the six lists disagree — verified by injecting drift."
     },
     {
       "id": "getting-started-walkthrough",
@@ -175,6 +174,13 @@
       "status": "todo",
       "priority": "normal",
       "notes": "Only ever tested against the dev machine's real 16 discovered repos, never a genuinely empty install with zero prior Principia state."
+    },
+    {
+      "id": "bundle-shared-for-packaging",
+      "title": "Bundle shared/ when packaging the extension and CLI",
+      "status": "todo",
+      "priority": "normal",
+      "notes": "extension/ and cli/ now require ../../shared/runners, which resolves fine from a checkout and from the dev symlink. A .vsix built from extension/ alone, or a standalone npm publish of cli/, would not include it — the same packaging gap as cli-npm-publish."
     }
   ]
 }

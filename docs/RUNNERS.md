@@ -48,12 +48,19 @@ handed to the runner.
 
 ## Adding a runner
 
-1. Add its id to the `supports` enum in `spec/v1/repo.schema.json`.
-2. Add its id to `RUNNERS` in `scripts/validate.js`.
-3. Add a row above with its detection binary and invocation.
-4. Add the mapping to the runner registry — which currently exists as two
-   identical copies, `extension/src/runners.js` and `cli/src/runners.js`. Change
-   both, or the CLI and the extension will disagree.
+The implementation lives once, in `shared/runners.js`; `extension/src/runners.js`
+and `cli/src/runners.js` are one-line re-exports of it. The other places below
+name the runner set again on purpose — a JSON Schema cannot import code, and the
+validator and MCP server are deliberately dependency-free.
+
+1. Add the row to `RUNNERS` in `shared/runners.js`, with its `command`, and
+   `startWith`/`resume` if the CLI genuinely supports them (`null` if not).
+2. Add its id to the `supports` enum in `spec/v1/repo.schema.json`.
+3. Add its id to `RUNNERS` in `scripts/validate.js` and in `mcp/src/lib.js`,
+   and to the `z.enum` lists in `mcp/src/server.js`.
+4. Add a row to the table above.
+5. Run `node scripts/check-runners.js` — it fails if any of those lists
+   disagree, which is the mistake this sequence invites.
 
 No prompt changes. If a new runner needs different instructions, that is a signal
 the prompt has drifted toward one runner's idioms and should be generalised.
