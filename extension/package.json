@@ -5,35 +5,70 @@
   "version": "0.1.0",
   "publisher": "rushirb2001",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/rushirb2001/principia" },
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Other"],
-  "keywords": ["launchpad", "dashboard", "multi-repo", "agents", "workspace"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rushirb2001/principia"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "launchpad",
+    "dashboard",
+    "multi-repo",
+    "agents",
+    "workspace"
+  ],
   "main": "./src/extension.js",
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
-      { "command": "principia.show", "title": "Principia: Open launchpad" },
-      { "command": "principia.refresh", "title": "Principia: Refresh" },
-      { "command": "principia.setupRepo", "title": "Principia: Set up this repo with an agent" },
-      { "command": "principia.openSpec", "title": "Principia: Open the contract (SPEC.md)" }
+      {
+        "command": "principia.show",
+        "title": "Principia: Open launchpad"
+      },
+      {
+        "command": "principia.refresh",
+        "title": "Principia: Refresh"
+      },
+      {
+        "command": "principia.setupRepo",
+        "title": "Principia: Set up this repo with an agent"
+      },
+      {
+        "command": "principia.openSpec",
+        "title": "Principia: Open the contract (SPEC.md)"
+      }
     ],
     "keybindings": [
-      { "command": "principia.show", "key": "ctrl+alt+l", "mac": "cmd+alt+l" }
+      {
+        "command": "principia.show",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l"
+      }
     ],
     "configuration": {
       "title": "Principia",
       "properties": {
         "principia.openOnStartup": {
           "type": "string",
-          "enum": ["never", "emptyWindow", "always"],
+          "enum": [
+            "never",
+            "emptyWindow",
+            "always"
+          ],
           "default": "emptyWindow",
           "description": "When to open the launchpad automatically."
         },
         "principia.refreshSeconds": {
           "type": "number",
-          "default": 120,
-          "description": "Seconds between background refreshes. Only ticks while the tab is focused. 0 disables polling."
+          "default": 15,
+          "description": "Seconds between background refreshes. Only ticks while the tab is focused, and file watchers update the panel immediately regardless, so this is a backstop rather than the main mechanism. 0 disables polling."
         },
         "principia.maxRepos": {
           "type": "number",

@@ -197,6 +197,120 @@ async function stalenessOf(root, contribution) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/* ───────── 4a. machine-local state: .principia/local.json ─────────
+ *
+ * A session id names a transcript in ~/.claude/projects on THIS machine. Put it
+ * in the committed repo.json and a teammate clones a pointer to a conversation
+ * that does not exist for them, which is exactly what SPEC §2 forbids. So the
+ * task->conversation links live here, in the gitignored local file the spec
+ * already reserved for machine-local values.
+ *
+ *   { "specVersion": 1, "threads": { "<task-id>": "<session-id>" } }
+ */
+
+function localPath(root) { return path.join(root, ".principia", "local.json"); }
+
+function readLocal(root) {
+  const d = readJson(localPath(root));
+  if (!d || d.specVersion !== 1) return { threads: {} };
+  return { threads: d.threads || {} };
+}
+
+function writeThread(root, taskId, sessionId) {
+  const file = localPath(root);
+  const current = readJson(file) || {};
+  const next = {
+    ...current,
+    specVersion: 1,
+    threads: { ...(current.threads || {}), [taskId]: sessionId },
+    updated: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(next, null, 2) + "\n");
+  return next;
+}
+
+/* ───────── 4b. real Claude Code session history, gated by opt-in ─────────
+ *
+ * Claude Code writes every session's full transcript to
+ * ~/.claude/projects/<cwd with "/" as "-">/<session-id>.jsonl, no hook
+ * required. That is much richer than anything this extension could log
+ * itself, but it is also real conversation content, not a structural fact
+ * like a branch name or an npm script. So unlike everything else in this
+ * file, it is never read for a repo that has not opted in by committing
+ * .principia/repo.json: `configured` is the explicit, per-repo permission
+ * gate, and the caller in collectRepos() enforces it before this is ever
+ * invoked, not just before it is displayed.
+ */
+
+const CLAUDE_PROJECTS = path.join(HOME, ".claude", "projects");
+
+function projectSessionsDir(root) {
+  return path.join(CLAUDE_PROJECTS, root.replace(/[\\/]/g, "-"));
+}
+
+// Transcripts run to megabytes, so parsing one on every refresh is what forced
+// the old two-minute poll. A session file is append-only: if its mtime has not
+// moved, the parse cannot have changed, so keep the last result. This is what
+// makes a short refresh interval affordable.
+const sessionCache = new Map();   // path -> { mtime, parsed }
+
+function parseSession(file, mtime) {
+  const hit = sessionCache.get(file);
+  if (hit && hit.mtime === mtime) return hit.parsed;
+
+  let firstMsg = "", customTitle = "", branch = "", turns = 0;
+  try {
+    const lines = fs.readFileSync(file, "utf8").split("\n");
+    for (const line of lines) {
+      if (!line) continue;
+      let o;
+      try { o = JSON.parse(line); } catch { continue; }
+      if (o.type === "user" && !o.isSidechain) {
+        turns++;
+        if (!firstMsg) {
+          const c = o.message && o.message.content;
+          firstMsg = typeof c === "string" ? c
+            : Array.isArray(c) ? ((c.find((x) => x.type === "text") || {}).text || "")
+            : "";
+        }
+        if (!branch && o.gitBranch) branch = o.gitBranch;
+      } else if (o.type === "custom-title" && o.customTitle) {
+        customTitle = o.customTitle; // a later rename in the same file wins
+      }
+    }
+  } catch { /* unreadable session: caller still has id and timestamp */ }
+
+  const parsed = {
+    title: (customTitle || firstMsg || "(untitled)").replace(/\s+/g, " ").trim().slice(0, 140),
+    turns,
+    branch,
+  };
+  sessionCache.set(file, { mtime, parsed });
+  return parsed;
+}
+
+function claudeSessions(root, max = 5) {
+  const dir = projectSessionsDir(root);
+  if (!exists(dir)) return [];
+  let files;
+  try { files = fs.readdirSync(dir).filter((f) => f.endsWith(".jsonl")); } catch { return []; }
+
+  const stated = files.map((f) => {
+    const p = path.join(dir, f);
+    let mtime = 0;
+    try { mtime = fs.statSync(p).mtimeMs; } catch { /* skip */ }
+    return { id: f.replace(/\.jsonl$/, ""), path: p, mtime };
+  }).sort((a, b) => b.mtime - a.mtime).slice(0, max);
+
+  return stated.map((s) => ({
+    id: s.id,
+    ...parseSession(s.path, s.mtime),
+    ts: s.mtime ? new Date(s.mtime).toISOString() : null,
+    path: s.path,
+  }));
+}
+
 /* ───────── 5. put it together ───────── */
 
 async function collectRepos(max) {
@@ -238,6 +352,11 @@ async function collectRepos(max) {
       agents: contribution.agents || [],
       tasks: contribution.tasks || [],
       links: contribution.links || [],
+      // Gated at the read, not just the render: an unconfigured repo's
+      // transcripts are never touched, regardless of what the UI does.
+      sessions: contribution.configured ? claudeSessions(root, 5) : [],
+      // task id -> session id, machine-local (never committed)
+      threads: readLocal(root).threads,
       rank: i,
       ...gits[i],
     });
@@ -321,12 +440,25 @@ async function iosState() {
   return { available: true, reason: null, booted: all.filter((d) => d.state === "Booted"), all: all.slice(0, 30) };
 }
 
-async function devices() {
+// Each of these shells out (lsof, adb, simctl). Simulators and listening ports
+// do not change on a one-second timescale, so a short TTL keeps a fast refresh
+// interval from turning into three subprocess spawns per tick.
+let deviceCache = { at: 0, value: null };
+const DEVICE_TTL_MS = 10000;
+
+async function devices(force) {
+  if (!force && deviceCache.value && Date.now() - deviceCache.at < DEVICE_TTL_MS) {
+    return deviceCache.value;
+  }
   const [ports, android, ios] = await Promise.all([listeningPorts(), androidState(), iosState()]);
-  return { ports, android, ios };
+  deviceCache = { at: Date.now(), value: { ports, android, ios } };
+  return deviceCache.value;
 }
+
+function resetDeviceCache() { deviceCache = { at: 0, value: null }; }
 
 module.exports = {
   PRINCIPIA_HOME, exists, run,
   collectRepos, readBoard, readHistory, recentlyOpened, devices, ADB, EMU,
+  readLocal, writeThread, resetDeviceCache,
 };

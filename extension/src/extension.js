@@ -8,6 +8,7 @@ const vscode = require("vscode");
 const fs = require("fs");
 const os = require("os");
 const cp = require("child_process");
+const crypto = require("crypto");
 const path = require("path");
 
 const D = require("./discovery");
@@ -95,9 +96,18 @@ async function refresh(force) {
 
 function armTimer() {
   clearInterval(timer);
-  const s = cfg().get("refreshSeconds", 120);
+  const s = cfg().get("refreshSeconds", 15);
   // `active`, not `visible`: a tab in a split you are not looking at costs nothing.
   if (s > 0) timer = setInterval(() => { if (panel && panel.active) refresh(); }, s * 1000);
+}
+
+// A single write can fire several watcher events, and a git operation touches
+// HEAD and the index together. Coalesce them into one refresh instead of one
+// per event.
+let nudgeTimer = null;
+function nudge() {
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => refresh(true), 250);
 }
 
 /* ───────── actions ───────── */
@@ -139,81 +149,90 @@ function resolveAgentFile(root, rel) {
   return target;
 }
 
-function substitute(body, repo) {
+// Committed prompt files must not contain machine-specific paths, so they carry
+// placeholders and the real values are only ever resolved into the throwaway
+// temp copy handed to the runner.
+function substitute(body, repo, taskTitle) {
+  const cr = contractRoot();
   return body
-    .replace(/\{\{REPO_NAME\}\}/g, repo.name || "")
-    .replace(/\{\{REPO_ROOT\}\}/g, repo.root || "")
-    .replace(/\{\{BRANCH\}\}/g, repo.branch || "");
+    .replace(/\{\{REPO_NAME\}\}/g, (repo && repo.name) || "")
+    .replace(/\{\{REPO_ROOT\}\}/g, (repo && repo.root) || "")
+    .replace(/\{\{BRANCH\}\}/g, (repo && repo.branch) || "")
+    .replace(/\{\{TASK_TITLE\}\}/g, taskTitle || "")
+    .replace(/\{\{CONTRACT_ROOT\}\}/g, cr || "the Principia checkout")
+    .replace(/\{\{SPEC\}\}/g, cr ? path.join(cr, "spec/v1/SPEC.md") : "spec/v1/SPEC.md")
+    .replace(/\{\{VALIDATE\}\}/g, cr ? `node ${path.join(cr, "scripts/validate.js")} .` : "node scripts/validate.js .");
 }
 
-async function setupRepo(root, runnerId) {
-  const repo = (lastData && lastData.repos.find((r) => r.root === root)) || { root, name: path.basename(root) };
+// The prompts the launchpad itself can run, keyed by id. This is an allowlist,
+// not a path: the webview names an id and never a file, so no message can point
+// the runner at an arbitrary file on disk.
+const PROMPTS = {
+  "setup-repo":    { file: "setup-repo.md",    label: "setup",      scope: "repo" },
+  "declare-flows": { file: "declare-flows.md", label: "flows",      scope: "repo" },
+  "add-agent":     { file: "add-agent.md",     label: "agent",      scope: "repo" },
+  "track-tasks":   { file: "track-tasks.md",   label: "tasks",      scope: "repo" },
+  "plan-day":      { file: "plan-day.md",      label: "plan focus", scope: "board" },
+};
+
+function noContract() {
+  vscode.window.showErrorMessage(
+    "Principia: cannot find the contract. Set `principia.specPath` to a checkout of the Principia repo."
+  );
+}
+
+// One path for every launchpad-run prompt. setupRepo and planBoard were
+// near-identical copies of this before, which is how the two drifted apart on
+// whether they substituted placeholders at all.
+async function runPrompt(id, root, runnerId) {
+  const spec = PROMPTS[id];
+  if (!spec) { vscode.window.showErrorMessage(`Principia: unknown prompt "${id}".`); return; }
+
   const cr = contractRoot();
-  if (!cr) {
-    vscode.window.showErrorMessage(
-      "Principia: cannot find the contract. Set `principia.specPath` to a checkout of the Principia repo."
-    );
-    return;
-  }
-  const src = path.join(cr, "prompts", "setup-repo.md");
+  if (!cr) return void noContract();
+  const src = path.join(cr, "prompts", spec.file);
   if (!D.exists(src)) { vscode.window.showErrorMessage(`Principia: missing ${src}`); return; }
 
   const runner = pickRunner(runnerId);
   if (!runner) return;
 
-  const body = [
-    substitute(fs.readFileSync(src, "utf8"), repo),
-    "",
-    "---",
-    "",
-    `The Principia contract is checked out at: ${cr}`,
-    `Read ${path.join(cr, "spec/v1/SPEC.md")} if you need the authoritative rules.`,
-    `Validate with: node ${path.join(cr, "scripts/validate.js")} .`,
-  ].join("\n");
-
-  const file = promptFile(body, "setup");
-  const cmd = R.commandFor(runner.id, file);
-  R.recordLaunch({ runner: runner.id, repo: repo.root, branch: repo.branch, agent: "setup-repo" });
-  terminal(repo.root, cmd, `${runner.label}: setup`);
-}
-
-async function planBoard(runnerId) {
-  const cr = contractRoot();
-  if (!cr) {
-    vscode.window.showErrorMessage(
-      "Principia: cannot find the contract. Set `principia.specPath` to a checkout of the Principia repo."
-    );
-    return;
-  }
-  const src = path.join(cr, "prompts", "plan-day.md");
-  if (!D.exists(src)) { vscode.window.showErrorMessage(`Principia: missing ${src}`); return; }
-
-  const runner = pickRunner(runnerId);
-  if (!runner) return;
-
-  const root = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0])
+  const here = (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders[0])
     ? vscode.workspace.workspaceFolders[0].uri.fsPath
-    : os.homedir();
-  const repoNames = ((lastData && lastData.repos) || []).map((r) => `${r.name}  (${r.root})`).join("\n");
+    : null;
+
+  const repo = spec.scope === "repo"
+    ? ((lastData && lastData.repos.find((r) => r.root === root)) || (root ? { root, name: path.basename(root) } : null))
+    : null;
+
+  const cwd = (repo && repo.root) || here || os.homedir();
+  const tail = spec.scope === "board"
+    ? [
+        "Repositories Principia currently knows about:",
+        ((lastData && lastData.repos) || []).map((r) => `${r.name}  (${r.root})`).join("\n") || "(none discovered yet)",
+        "",
+        `Write the board to: ${path.join(os.homedir(), ".principia", "board.json")}`,
+      ]
+    : [`You are working in the repository at: ${cwd}`];
 
   const body = [
-    fs.readFileSync(src, "utf8"),
+    substitute(fs.readFileSync(src, "utf8"), repo || {}),
     "",
     "---",
     "",
-    "Repositories Principia currently knows about:",
-    repoNames || "(none discovered yet)",
+    ...tail,
     "",
     `The Principia contract is checked out at: ${cr}`,
-    `Write the board to: ${path.join(os.homedir(), ".principia", "board.json")}`,
   ].join("\n");
 
-  const file = promptFile(body, "plan-day");
-  R.recordLaunch({ runner: runner.id, repo: root, branch: "", agent: "plan-day" });
-  terminal(root, R.commandFor(runner.id, file), `${runner.label}: plan focus`);
+  const file = promptFile(body, id);
+  R.recordLaunch({ runner: runner.id, repo: cwd, branch: (repo && repo.branch) || "", agent: id });
+  terminal(cwd, R.commandFor(runner.id, file), `${runner.label}: ${spec.label}`);
 }
 
-async function runRepoAgent(root, agentId, runnerId) {
+const setupRepo = (root, runnerId) => runPrompt("setup-repo", root, runnerId);
+const planBoard = (runnerId) => runPrompt("plan-day", null, runnerId);
+
+async function runRepoAgent(root, agentId, runnerId, task) {
   const repo = lastData && lastData.repos.find((r) => r.root === root);
   if (!repo) return;
   if (!ID_RE.test(String(agentId || ""))) {
@@ -241,10 +260,98 @@ async function runRepoAgent(root, agentId, runnerId) {
   const runner = pickRunner(runnerId, allowed);
   if (!runner) return;
 
-  const body = substitute(fs.readFileSync(file, "utf8"), repo);
-  const p = promptFile(body, `agent-${agentId}`);
-  R.recordLaunch({ runner: runner.id, repo: repo.root, branch: repo.branch, agent: agentId });
-  terminal(repo.root, R.commandFor(runner.id, p), `${runner.label}: ${agent.label || agentId}`);
+  let body = substitute(fs.readFileSync(file, "utf8"), repo, task && task.title);
+  if (task) body += `\n\n---\n\nSpecific task: ${task.title}${task.notes ? `\n\n${task.notes}` : ""}`;
+  const tag = task ? `task-${task.id}` : `agent-${agentId}`;
+  const p = promptFile(body, tag);
+  R.recordLaunch({ runner: runner.id, repo: repo.root, branch: repo.branch, agent: task ? `task:${task.id}` : agentId });
+  terminal(repo.root, R.commandFor(runner.id, p), `${runner.label}: ${task ? task.title : (agent.label || agentId)}`);
+}
+
+// A task is either declared by the repo itself (`.principia/repo.json` tasks[])
+// or a cross-repo focus item (`~/.principia/board.json`). Either way it now gets
+// a real action: delegate to a declared agent when `task.agent` names one this
+// repo actually ships, otherwise run a generic prompt built from the task itself.
+async function runTask(root, taskId, runnerId) {
+  if (!ID_RE.test(String(taskId || ""))) {
+    vscode.window.showErrorMessage(`Principia: refusing task id "${taskId}" (must be kebab-case).`);
+    return;
+  }
+  const repo = lastData && lastData.repos.find((r) => r.root === root);
+  if (!repo) { vscode.window.showErrorMessage("Principia: cannot find this task's repo."); return; }
+
+  const task = repo.tasks.find((t) => t.id === taskId) || ((lastData.board || []).find((f) => f.id === taskId));
+  if (!task) { vscode.window.showErrorMessage(`Principia: no task "${taskId}" found.`); return; }
+
+  if (task.agent && repo.agents.some((a) => a.id === task.agent)) {
+    return runRepoAgent(root, task.agent, runnerId, task);
+  }
+
+  if (!vscode.workspace.isTrusted) {
+    vscode.window.showWarningMessage("Principia: this workspace is not trusted, so repo-declared tasks are disabled.");
+    return;
+  }
+  const runner = pickRunner(runnerId);
+  if (!runner) return;
+
+  // Already linked to a conversation? Go back to it instead of starting a cold
+  // one that has none of the context the first run built up.
+  const existing = threadFor(repo, task);
+  if (existing) {
+    const cmd = R.resumeCommand(runner.id, existing);
+    if (cmd) {
+      R.recordLaunch({ runner: runner.id, repo: repo.root, branch: repo.branch, agent: `task:${taskId}` });
+      return void terminal(repo.root, cmd, `${runner.label}: ${task.title}`);
+    }
+    vscode.window.showInformationMessage(
+      `Principia: ${runner.label} cannot reopen a session by id, so this starts a fresh one.`);
+  }
+
+  const cr = contractRoot();
+  const body = [
+    `You are working in ${repo.name} at ${repo.root}${repo.branch ? ` on branch ${repo.branch}` : ""}.`,
+    "",
+    `Task: ${task.title}`,
+    task.notes ? `Notes: ${task.notes}` : "",
+    "",
+    `Work on this task. Only mark it "done" in .principia/repo.json with real evidence (a commit, a merged PR, or the user confirming) — never invent completion.`,
+    cr ? `The Principia contract is checked out at: ${cr}.` : "",
+    cr ? `Validate any repo.json edits with: node ${path.join(cr, "scripts/validate.js")} .` : "",
+  ].filter(Boolean).join("\n");
+
+  const file = promptFile(body, `task-${taskId}`);
+  // Choose the session id up front where the runner allows it, so the task and
+  // the conversation it starts are linked with certainty rather than by
+  // guessing which transcript appeared afterwards.
+  const sessionId = crypto.randomUUID();
+  const started = R.startWithSession(runner.id, file, sessionId);
+  if (started.linked) {
+    try { D.writeThread(repo.root, taskId, sessionId); }
+    catch (e) { console.error("principia: could not record thread", e); }
+  }
+  R.recordLaunch({ runner: runner.id, repo: repo.root, branch: repo.branch, agent: `task:${taskId}` });
+  terminal(repo.root, started.cmd, `${runner.label}: ${task.title}`);
+}
+
+// A task's conversation: the board carries `thread` itself (it is user-level and
+// never committed), while a repo task's link lives in the gitignored
+// .principia/local.json, because a session id is machine-specific.
+function threadFor(repo, task) {
+  if (task.thread) return task.thread;
+  return (repo.threads || {})[task.id] || null;
+}
+
+// Resuming reads the user's own local session history, not repo-declared
+// content, so this needs no workspace-trust or repo-agent gating — only that
+// the id looks like a session id at all.
+function resumeSession(root, sessionId) {
+  if (!/^[0-9a-fA-F-]{8,64}$/.test(String(sessionId || ""))) return;
+  terminal(root, `claude --resume ${R.shq(sessionId)}`, "Claude Code: resume");
+}
+
+function newSession(root) {
+  if (!root) return;
+  terminal(root, "claude", "Claude Code: new");
 }
 
 function pickRunner(runnerId, allowed) {
@@ -322,8 +429,16 @@ async function onMessage(m) {
       return setupRepo(m.root, m.runner);
     case "plan":
       return planBoard(m.runner);
+    case "prompt":
+      return runPrompt(m.id, m.root, m.runner);
     case "agent":
       return runRepoAgent(m.root, m.id, m.runner);
+    case "task":
+      return runTask(m.root, m.id, m.runner);
+    case "resume":
+      return void resumeSession(m.root, m.id);
+    case "newSession":
+      return void newSession(m.root);
     case "android": {
       const st = await D.devices().then((d) => d.android);
       if (!st.available) return void vscode.window.showErrorMessage(`Launch pad: ${st.reason}`);
@@ -383,12 +498,33 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((e) => { if (e.affectsConfiguration("principia")) armTimer(); }),
   );
 
-  // A repo's contribution is a file in that repo; watch for it appearing.
-  const watcher = vscode.workspace.createFileSystemWatcher("**/.principia/*.json");
-  watcher.onDidCreate(() => refresh(true));
-  watcher.onDidChange(() => refresh(true));
-  watcher.onDidDelete(() => refresh(true));
-  context.subscriptions.push(watcher);
+  // Watchers, so the panel reflects reality without waiting for a poll.
+  //
+  // A bare "**/…" glob only covers the OPEN workspace folders, which is why the
+  // board never updated: ~/.principia/board.json lives outside every workspace,
+  // so "plan my day" wrote it and nothing noticed. Anything outside the
+  // workspace needs an absolute RelativePattern base.
+  const watch = (pattern, label) => {
+    try {
+      const w = vscode.workspace.createFileSystemWatcher(pattern);
+      w.onDidCreate(nudge);
+      w.onDidChange(nudge);
+      w.onDidDelete(nudge);
+      context.subscriptions.push(w);
+    } catch (e) {
+      console.error(`principia: could not watch ${label}`, e);
+    }
+  };
+
+  // A repo's contribution, in any open workspace folder.
+  watch("**/.principia/*.json", "workspace .principia");
+  // The cross-repo board and the machine-local files, which live in $HOME.
+  watch(new vscode.RelativePattern(vscode.Uri.file(D.PRINCIPIA_HOME), "*.json"), "~/.principia");
+  // Branch switches and commits move HEAD; staging and committing move the
+  // index. Both change what every tab shows about a repo.
+  for (const f of vscode.workspace.workspaceFolders || []) {
+    watch(new vscode.RelativePattern(f, ".git/{HEAD,index}"), `${f.name} git state`);
+  }
 
   const mode = cfg().get("openOnStartup", "emptyWindow");
   const empty = !(vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length);
