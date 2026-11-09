@@ -1,0 +1,28 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.rushirb2001/cohors",
+  "title": "cohors",
+  "description": "Every git repo you own as one fleet: status, search, tasks, and gated bulk actions.",
+  "version": "0.7.0",
+  "repository": {
+    "url": "https://github.com/rushirb2001/cohors",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "cohors",
+      "version": "0.7.0",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp"
+        }
+      ]
+    }
+  ]
+}

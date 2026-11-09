@@ -98,10 +98,9 @@ cohors-fleet = { path = "crates/cohors-fleet" }
 cohors-mcp = { path = "crates/cohors-mcp" }
 cohors-web = { path = "crates/cohors-web" }
 
-# Release config for cargo-dist (the `dist` tool). This is a starting point —
-# run `dist init` to (re)generate the matching `.github/workflows/release.yml`
-# with installers; until then the hand-written release workflow ships binaries
-# on tag. `publish-jobs = []` means we do NOT publish to any registry.
+# Release config for cargo-dist (the `dist` tool). After changing anything here,
+# run `cargo dist generate` to regenerate `.github/workflows/release.yml`; its
+# own CI check fails the release if the two drift apart.
 [workspace.metadata.dist]
 cargo-dist-version = "0.28.0"
 ci = "github"
@@ -113,6 +112,8 @@ targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
     "x86_64-unknown-linux-gnu",
+    # ARM Linux: Graviton/Ampere servers, Raspberry Pi, and Linux on Apple Silicon.
+    "aarch64-unknown-linux-gnu",
 ]
 # Push the generated Homebrew formula to the tap on every release.
 publish-jobs = ["homebrew"]
@@ -131,6 +132,8 @@ install-path = "CARGO_HOME"
 [workspace.metadata.dist.github-custom-runners]
 global = "ubuntu-latest"
 x86_64-unknown-linux-gnu = "ubuntu-22.04"
+# GitHub's native ARM runner, so the ARM binary is built (not cross-compiled).
+aarch64-unknown-linux-gnu = "ubuntu-22.04-arm"
 aarch64-apple-darwin = "macos-15"
 x86_64-apple-darwin = "macos-15"
 

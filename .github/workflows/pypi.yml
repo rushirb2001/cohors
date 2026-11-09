@@ -28,8 +28,12 @@ jobs:
             plat: macosx_11_0_arm64
           - target: x86_64-apple-darwin
             plat: macosx_10_12_x86_64
+          # The Linux binaries are built on ubuntu-22.04 (glibc 2.35), so the
+          # wheel must not claim to run on anything older than that.
           - target: x86_64-unknown-linux-gnu
-            plat: manylinux_2_31_x86_64
+            plat: manylinux_2_35_x86_64
+          - target: aarch64-unknown-linux-gnu
+            plat: manylinux_2_35_aarch64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
