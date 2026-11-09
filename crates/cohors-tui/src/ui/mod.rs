@@ -194,6 +194,7 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
             | Mode::OpenWith
             | Mode::PushBranch
             | Mode::Detail
+            | Mode::Launchpad
     );
     if overlay_open {
         dim_area(frame.buffer_mut(), area);
@@ -222,6 +223,9 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
     }
     if app.mode == Mode::Detail {
         render_detail(frame, area, app, now, &theme);
+    }
+    if app.mode == Mode::Launchpad {
+        render_launchpad(frame, area, app, &theme);
     }
 }
 
@@ -275,11 +279,13 @@ pub(crate) const SPIDER_PURPLE_RGB: (u8, u8, u8) = (0xA8, 0x55, 0xF7);
 // dock), and `modals` (detail, help, standup, confirm, run output). Items are
 // pub(crate) and re-exported here so the split stays invisible to callers.
 mod chrome;
+mod launchpad;
 mod modals;
 mod rows;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use chrome::*;
+pub(crate) use launchpad::render_launchpad;
 pub(crate) use modals::*;
 pub(crate) use rows::*;

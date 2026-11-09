@@ -729,6 +729,23 @@ fn snapshot_standup_narrow_stacked() {
 }
 
 #[test]
+fn snapshot_launchpad() {
+    let mut app = demo_app();
+    app.mode = Mode::Launchpad;
+    let (entries, board) = cohors_core::launchpad::demo();
+    app.launchpad = Some(crate::app::LaunchpadView::new(entries, board));
+    insta::assert_snapshot!(render_to_string(&app, 110, 34));
+}
+
+#[test]
+fn snapshot_launchpad_loading() {
+    let mut app = demo_app();
+    app.mode = Mode::Launchpad;
+    app.launchpad = None;
+    insta::assert_snapshot!(render_to_string(&app, 100, 18));
+}
+
+#[test]
 fn snapshot_standup_collecting() {
     let mut app = demo_app();
     app.mode = Mode::Standup;

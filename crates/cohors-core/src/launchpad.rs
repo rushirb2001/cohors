@@ -621,6 +621,117 @@ pub fn detect_flows(m: &Manifests) -> Vec<Flow> {
     flows
 }
 
+/// A built-in sample launchpad for `cohors demo` and for snapshot tests:
+/// privacy-safe, and matching the repo names of the demo fleet.
+pub fn demo() -> (Vec<LaunchpadEntry>, Board) {
+    let task = |id: &str, title: &str, status: &str, priority: &str| Task {
+        id: id.to_string(),
+        title: title.to_string(),
+        status: Some(status.to_string()),
+        priority: Some(priority.to_string()),
+        ..Task::default()
+    };
+    let flow = |id: &str, label: &str, run: &str| Flow {
+        id: id.to_string(),
+        label: label.to_string(),
+        run: run.to_string(),
+        primary: true,
+        ..Flow::default()
+    };
+    let entry = |name: &str, summary: &str, flows: Vec<Flow>, tasks: Vec<Task>| LaunchpadEntry {
+        id: name.to_string(),
+        name: name.to_string(),
+        configured: true,
+        contribution: Some(Contribution {
+            spec_version: SPEC_VERSION,
+            name: name.to_string(),
+            summary: summary.to_string(),
+            flows,
+            tasks,
+            ..Contribution::default()
+        }),
+        ..LaunchpadEntry::default()
+    };
+    let entries = vec![
+        entry(
+            "payments",
+            "Card and bank payments service",
+            vec![flow(
+                "dev",
+                "API + worker",
+                "docker compose up -d && cargo run",
+            )],
+            vec![
+                task(
+                    "idempotency-keys",
+                    "Idempotency keys on charge retries",
+                    "doing",
+                    "high",
+                ),
+                task(
+                    "webhook-backoff",
+                    "Back off webhook redelivery",
+                    "todo",
+                    "normal",
+                ),
+            ],
+        ),
+        entry(
+            "web-app",
+            "Customer-facing storefront",
+            vec![flow("storefront", "Storefront (SSR)", "pnpm dev")],
+            vec![
+                task(
+                    "checkout-a11y",
+                    "Checkout form fails keyboard-only pass",
+                    "blocked",
+                    "high",
+                ),
+                task(
+                    "drop-legacy-cart",
+                    "Remove the legacy cart endpoint",
+                    "todo",
+                    "low",
+                ),
+            ],
+        ),
+        entry(
+            "data-pipeline",
+            "Nightly ingest and reporting jobs",
+            Vec::new(),
+            vec![task(
+                "fix-ci",
+                "Nightly ingest job is red on main",
+                "todo",
+                "high",
+            )],
+        ),
+        LaunchpadEntry {
+            id: "mobile-app".to_string(),
+            name: "mobile-app".to_string(),
+            ..LaunchpadEntry::default()
+        },
+        LaunchpadEntry {
+            id: "infra".to_string(),
+            name: "infra".to_string(),
+            ..LaunchpadEntry::default()
+        },
+    ];
+    let board = Board {
+        spec_version: SPEC_VERSION,
+        updated: None,
+        focus: vec![FocusItem {
+            id: "f-1".to_string(),
+            title: "Ship idempotent charge retries".to_string(),
+            repo: Some("payments".to_string()),
+            reference: Some("idempotency-keys".to_string()),
+            status: Some("doing".to_string()),
+            ..FocusItem::default()
+        }],
+    };
+    (entries, board)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -74,6 +74,8 @@ enum BgMsg {
     RemoteEnriched(Vec<RepoSnapshot>),
     /// The user's commits for the current standup window (grouped in the view).
     StandupReady(Vec<StandupCommit>),
+    /// Every repo's launchpad entry plus the focus board.
+    LaunchpadReady(Box<crate::app::LaunchpadView>),
     /// The drill-in detail for a repo finished loading (matched by id).
     DetailReady {
         id: RepoId,
@@ -170,6 +172,11 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
                         app.standup = Some(StandupView::new(cohors_core::demo::standup(now)));
                     }
                     Cmd::CopyStandup => copy_standup(&mut app),
+                    // The launchpad is seeded from sample data, like the standup.
+                    Cmd::OpenLaunchpad => {
+                        let (entries, board) = cohors_core::launchpad::demo();
+                        app.launchpad = Some(crate::app::LaunchpadView::new(entries, board));
+                    }
                     // The command runner is simulated so its UI can be shown off.
                     Cmd::RunCommand => simulate_demo_run(&mut app),
                     Cmd::CopyRunOutput => copy_run_output(&mut app),
@@ -330,6 +337,7 @@ fn run_loop(
                         spawn_standup(&mut app, &scanner, &tx)
                     }
                     Cmd::CopyStandup => copy_standup(&mut app),
+                    Cmd::OpenLaunchpad => spawn_launchpad(&app, &tx),
                     Cmd::RunCommand => start_command_run(&mut app, &tx, &mut run_seq),
                     Cmd::CopyRunOutput => copy_run_output(&mut app),
                     Cmd::UseSuggestedRoots => use_suggested_roots(&mut app, &mut scanner, cli, &tx),
@@ -490,6 +498,12 @@ fn drain_background(
             }
             BgMsg::StandupReady(commits) => {
                 app.standup = Some(StandupView::new(commits));
+            }
+            BgMsg::LaunchpadReady(view) => {
+                // Ignore a late result if the user already closed the view.
+                if app.mode == Mode::Launchpad {
+                    app.launchpad = Some(*view);
+                }
             }
             BgMsg::DetailReady { id, detail } => {
                 // Only apply if it's still the repo the pane is showing.
@@ -1044,6 +1058,30 @@ fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
             commits.extend(cohors_fleet::collect_commits(path, &email, since, until));
         }
         let _ = tx.send(BgMsg::StandupReady(commits));
+    });
+}
+
+/// Read every repo's launchpad contribution and the focus board on a worker
+/// thread (a few small file reads per repo), then deliver the view.
+fn spawn_launchpad(app: &App, tx: &Sender<BgMsg>) {
+    let repos: Vec<(String, String, Utf8PathBuf)> = app
+        .repos
+        .iter()
+        .filter_map(|r| Some((r.id.0.clone(), r.name.clone(), r.path.clone()?)))
+        .collect();
+    let tx = tx.clone();
+    std::thread::spawn(move || {
+        use cohors_fleet::launchpad as lp;
+        let mut entries: Vec<_> = repos
+            .iter()
+            .map(|(id, name, path)| lp::entry(id, name, path.as_std_path()))
+            .collect();
+        entries.sort_by(|a, b| a.name.cmp(&b.name));
+        let board = lp::launchpad_home()
+            .map(|home| lp::read_board(&home))
+            .unwrap_or_default();
+        let view = crate::app::LaunchpadView::new(entries, board);
+        let _ = tx.send(BgMsg::LaunchpadReady(Box::new(view)));
     });
 }
 

@@ -17,6 +17,8 @@ pub enum Command {
     Commit(String),
     Refresh,
     Standup,
+    /// Open the launchpad view (`:launchpad` / `:tasks`).
+    Launchpad,
     Help,
     Quit,
     DirtyOnly,
@@ -67,6 +69,7 @@ pub fn parse(input: &str) -> Option<Command> {
         "commit" | "ci" => (!arg.is_empty()).then(|| Command::Commit(arg.to_string())),
         "refresh" | "r" => Some(Command::Refresh),
         "standup" | "st" => Some(Command::Standup),
+        "launchpad" | "tasks" | "lp" => Some(Command::Launchpad),
         "help" | "h" | "?" => Some(Command::Help),
         "quit" | "q" => Some(Command::Quit),
         "dirty" => Some(Command::DirtyOnly),
@@ -108,6 +111,7 @@ mod tests {
             parse(":!git status"),
             Some(Command::Run("git status".into()))
         );
+        assert_eq!(parse(":tasks"), Some(Command::Launchpad));
         assert_eq!(parse("   "), None);
         assert_eq!(parse("sort sideways"), None);
     }

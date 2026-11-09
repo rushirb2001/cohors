@@ -73,6 +73,7 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
         row(key("d"), "toggle needs-attention"),
         row(key("s"), "cycle sort mode"),
         row(key("Tab"), "weekly standup"),
+        row(key("t"), "launchpad: tasks + flows"),
         Line::from(""),
         head("Act — on the marked repos, else the current one"),
         row(key("⏎"), "inspect repo — commits, changes, branches"),

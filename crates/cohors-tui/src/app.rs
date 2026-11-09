@@ -36,6 +36,8 @@ pub enum Mode {
     PushBranch,
     /// The per-repo drill-in detail pane (commits / files / branches / stashes).
     Detail,
+    /// The launchpad view: the focus board and open tasks across the fleet.
+    Launchpad,
 }
 
 /// A side effect for the event loop to perform after a key is handled. Actions
@@ -66,6 +68,8 @@ pub enum Cmd {
     StandupNextWindow,
     /// Copy the standup markdown to the clipboard.
     CopyStandup,
+    /// Open the launchpad view (read every repo's `.principia/` contribution).
+    OpenLaunchpad,
     /// Run the typed command across the target repos.
     RunCommand,
     /// Copy the focused repo's command output to the clipboard.
@@ -241,6 +245,34 @@ pub struct StandupView {
     commit_offset: std::cell::Cell<u16>,
 }
 
+/// The launchpad view: every repo's contribution plus the focus board, shown
+/// as one scrolling column.
+#[derive(Debug, Clone)]
+pub struct LaunchpadView {
+    pub entries: Vec<cohors_core::launchpad::LaunchpadEntry>,
+    pub board: cohors_core::launchpad::Board,
+    /// First visible line.
+    pub scroll: usize,
+    /// The furthest `scroll` may go. Set by the renderer (which knows the
+    /// viewport height) through a `Cell`, so key handling can clamp without
+    /// knowing the layout.
+    pub max_scroll: std::cell::Cell<usize>,
+}
+
+impl LaunchpadView {
+    pub fn new(
+        entries: Vec<cohors_core::launchpad::LaunchpadEntry>,
+        board: cohors_core::launchpad::Board,
+    ) -> Self {
+        Self {
+            entries,
+            board,
+            scroll: 0,
+            max_scroll: std::cell::Cell::new(0),
+        }
+    }
+}
+
 impl StandupView {
     pub fn new(commits: Vec<StandupCommit>) -> Self {
         let groups = group_commits(&commits);
@@ -299,6 +331,8 @@ pub struct App {
     pub standup: Option<StandupView>,
     /// The standup time window.
     pub standup_window: StandupWindow,
+    /// The launchpad view (`None` while loading, or not opened).
+    pub launchpad: Option<LaunchpadView>,
     /// The command being typed in `CommandInput` mode (mirrors `filter`).
     pub command_input: String,
     /// The `:`-command being typed in `Command` mode.
@@ -431,6 +465,7 @@ impl App {
             config_path,
             standup: None,
             standup_window: StandupWindow::Week,
+            launchpad: None,
             command_input: String::new(),
             command_line: String::new(),
             run: None,
@@ -579,7 +614,37 @@ impl App {
             Mode::OpenWith => self.on_key_open_with(key),
             Mode::PushBranch => self.on_key_push_branch(key),
             Mode::Detail => self.on_key_detail(key),
+            Mode::Launchpad => self.on_key_launchpad(key),
         }
+    }
+
+    /// Switch to the launchpad view; the event loop loads its data.
+    fn open_launchpad(&mut self) -> Cmd {
+        self.mode = Mode::Launchpad;
+        self.launchpad = None;
+        Cmd::OpenLaunchpad
+    }
+
+    fn on_key_launchpad(&mut self, key: KeyEvent) -> Cmd {
+        let Some(view) = &mut self.launchpad else {
+            // Still loading: only closing makes sense.
+            if matches!(key.code, KeyCode::Esc | KeyCode::Char('q' | 't')) {
+                self.mode = Mode::Normal;
+            }
+            return Cmd::None;
+        };
+        let max = view.max_scroll.get();
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q' | 't') => self.mode = Mode::Normal,
+            KeyCode::Down => view.scroll = (view.scroll + 1).min(max),
+            KeyCode::Up => view.scroll = view.scroll.saturating_sub(1),
+            KeyCode::PageDown => view.scroll = (view.scroll + 10).min(max),
+            KeyCode::PageUp => view.scroll = view.scroll.saturating_sub(10),
+            KeyCode::Home => view.scroll = 0,
+            KeyCode::End => view.scroll = max,
+            _ => {}
+        }
+        Cmd::None
     }
 
     fn on_key_detail(&mut self, key: KeyEvent) -> Cmd {
@@ -728,6 +793,7 @@ impl App {
                 self.standup = None;
                 return Cmd::OpenStandup;
             }
+            KeyCode::Char('t') => return self.open_launchpad(),
             _ => {}
         }
         Cmd::None
@@ -802,6 +868,7 @@ impl App {
                 self.standup = None;
                 return Cmd::OpenStandup;
             }
+            Some(C::Launchpad) => return self.open_launchpad(),
             Some(C::Help) => self.mode = Mode::Help,
             Some(C::Quit) => return Cmd::Quit,
             Some(C::DirtyOnly) => {

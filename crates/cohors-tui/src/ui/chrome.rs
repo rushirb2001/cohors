@@ -855,6 +855,7 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
     match app.mode {
         Mode::Command => vec![("", vec![("⏎", "run"), ("Esc", "cancel")])],
         Mode::Help => vec![("", vec![("? / Esc", "close")])],
+        Mode::Launchpad => vec![("", vec![("↑/↓", "scroll"), ("t / Esc", "close")])],
         Mode::Standup => {
             if app.standup.as_ref().is_some_and(|s| s.commits_focused) {
                 vec![(
@@ -938,6 +939,7 @@ pub(crate) fn footer_groups(app: &App) -> Vec<(&'static str, Vec<(&'static str, 
                     ("s", "sort"),
                     ("d", "attention"),
                     ("Tab", "standup"),
+                    ("t", "tasks"),
                     ("?", "help"),
                     ("q", "quit"),
                 ],
