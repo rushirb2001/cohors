@@ -98,11 +98,25 @@ fn main() -> anyhow::Result<()> {
             *allow_run,
             *demo,
         ),
+        Some(Command::Launchpad {
+            action,
+            select,
+            json,
+        }) => commands::launchpad::run(&cli, action.as_ref(), select.as_deref(), *json),
         Some(Command::Mcp {
             allow_writes,
             allow_run,
             allow_open,
-        }) => commands::run_mcp(&cli, *allow_writes, *allow_run, *allow_open),
+            allow_launchpad,
+        }) => commands::run_mcp(
+            &cli,
+            cohors_mcp::Caps {
+                allow_writes: *allow_writes,
+                allow_run: *allow_run,
+                allow_open: *allow_open,
+                allow_launchpad: *allow_launchpad,
+            },
+        ),
         None => commands::run_tui(&cli),
     }
 }

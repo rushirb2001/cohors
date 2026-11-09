@@ -1,5 +1,7 @@
 //! Implementations of the CLI subcommands.
 
+pub mod launchpad;
+
 use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
 use std::sync::Arc;
@@ -1471,16 +1473,18 @@ pub fn run_demo() -> Result<()> {
     crate::tui::run_demo()
 }
 
-/// `cohors mcp` — speak the Model Context Protocol over stdio. Read-only unless
-/// the matching `--allow-*` flags are passed (none have an effect yet — only the
-/// read tools are implemented).
 /// What `cohors mcp` prints when a human runs it at a terminal: what the server
 /// is, why nothing appeared to happen, and the copy-pasteable line that registers
 /// it. The absolute path matters — agents spawn with a stripped `PATH`, so a bare
 /// `cohors mcp` often fails to resolve and the agent silently ends up with no
 /// tools at all.
-fn mcp_guide(exe: &str, caps: (bool, bool, bool), color: bool) -> String {
-    let (writes, run, open) = caps;
+fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, color: bool) -> String {
+    let (writes, run, open, launchpad) = (
+        caps.allow_writes,
+        caps.allow_run,
+        caps.allow_open,
+        caps.allow_launchpad,
+    );
     let mut out = masthead(
         "mcp · your fleet, exposed to a coding agent",
         "it speaks JSON-RPC over stdio, so a client spawns it, not you",
@@ -1530,6 +1534,17 @@ fn mcp_guide(exe: &str, caps: (bool, bool, bool), color: bool) -> String {
                 .to_string(),
         ),
         (
+            "launchpad reads".to_string(),
+            "launchpad, read_contract, read_board".to_string(),
+        ),
+        (
+            "--allow-launchpad".to_string(),
+            format!(
+                "write_repo_contribution, write_board, record_activity · {}",
+                state(launchpad)
+            ),
+        ),
+        (
             "--allow-writes".to_string(),
             format!("fetch, pull, push, commit, stash · {}", state(writes)),
         ),
@@ -1559,7 +1574,9 @@ fn mcp_guide(exe: &str, caps: (bool, bool, bool), color: bool) -> String {
     out
 }
 
-pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool) -> Result<()> {
+/// `cohors mcp` — speak the Model Context Protocol over stdio. Read-only unless
+/// the matching `--allow-*` flags are passed.
+pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
     // An MCP client always pipes stdin. A terminal on stdin therefore means a
     // human ran this by hand, and would otherwise stare at a blank line forever
     // waiting for a client that is never going to speak. Explain and leave.
@@ -1569,19 +1586,11 @@ pub fn run_mcp(cli: &Cli, allow_writes: bool, allow_run: bool, allow_open: bool)
             .ok()
             .and_then(|p| p.to_str().map(str::to_string))
             .unwrap_or_else(|| "cohors".to_string());
-        print!(
-            "{}",
-            mcp_guide(&exe, (allow_writes, allow_run, allow_open), color)
-        );
+        print!("{}", mcp_guide(&exe, caps, color));
         return Ok(());
     }
 
     let scanner = crate::scan::from_cli(cli)?;
-    let caps = cohors_mcp::Caps {
-        allow_writes,
-        allow_run,
-        allow_open,
-    };
     let roots = scanner.roots();
     let config_path = scanner.config_path();
     let token = scanner.github_token();

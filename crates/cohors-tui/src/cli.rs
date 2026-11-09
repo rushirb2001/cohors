@@ -151,6 +151,22 @@ pub enum Command {
         #[arg(long)]
         demo: bool,
     },
+    /// What each repo offers and what work is waiting: flows, agents, tasks.
+    ///
+    /// A repo opts in by committing `.principia/repo.json` (ask your agent to
+    /// "set up this repo for the launchpad"). Bare, this reports the focus
+    /// board and every open task across the fleet; piped or with `--json` it
+    /// prints the same data as JSON.
+    Launchpad {
+        #[command(subcommand)]
+        action: Option<LaunchpadCmd>,
+        /// Only include repos matching a selector (same language as `scan`).
+        #[arg(long, value_name = "QUERY")]
+        select: Option<String>,
+        /// Print JSON instead of the human report.
+        #[arg(long)]
+        json: bool,
+    },
     /// Serve your fleet to a coding agent over MCP (read-only by default).
     ///
     /// Speaks Model Context Protocol as a stdio server, so a client spawns it
@@ -166,6 +182,10 @@ pub enum Command {
         /// Enable the local-only `open` tool (shared desktop session).
         #[arg(long)]
         allow_open: bool,
+        /// Enable the launchpad write tools (`write_repo_contribution`,
+        /// `write_board`, `record_activity`): launchpad metadata only, never git.
+        #[arg(long)]
+        allow_launchpad: bool,
     },
 }
 
@@ -183,4 +203,31 @@ pub struct ActionArgs {
     /// Preview the matching repos without acting.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum LaunchpadCmd {
+    /// Check a repo's `.principia/repo.json` against the contract.
+    Validate {
+        /// The repository to check (default: the current directory).
+        #[arg(value_name = "PATH")]
+        path: Option<String>,
+    },
+    /// Print the contract a `.principia/repo.json` must satisfy, as JSON.
+    Contract,
+    /// Append an agent-session event to the activity log (used by hooks).
+    Record {
+        /// `start`, `end`, `launch`, or `note`.
+        #[arg(long)]
+        phase: String,
+        /// Which agent runner this is.
+        #[arg(long, default_value = "claude-code")]
+        runner: String,
+        /// The repo-declared agent, if one is running.
+        #[arg(long)]
+        agent: Option<String>,
+        /// The repository (default: the one containing the current directory).
+        #[arg(long, value_name = "PATH")]
+        repo: Option<String>,
+    },
 }

@@ -1,0 +1,27 @@
+---
+source: crates/cohors-tui/src/commands/launchpad.rs
+expression: "render_report(&fleet(), &board, false)"
+---
+
+  cohors
+  launchpad · what each repo offers, and what is waiting in it
+  3 repos · 1 set up · 3 open tasks
+
+  focus
+  your cross-repo board, the short list you chose
+    ▸ Ship retries  pay-api · doing
+
+  open tasks
+  ◆ doing · ✕ blocked · ○ todo, most urgent first
+    ▸ pay-api  3 open
+      ◆ Task b  high  doing
+      ✕ Task d  blocked
+      ○ Task a  low
+
+  needs fixing
+  a .principia/repo.json that could not be read
+    ▸ infra  repo.json is not valid JSON
+
+  not set up yet
+  in any of these, ask your agent: "set up this repo for the launchpad"
+    web
