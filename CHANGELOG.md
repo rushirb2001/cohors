@@ -52,11 +52,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   overlay, and a solid RISK or WARN badge leading the status of the repos that
   need you. Colours still follow your terminal's palette, and `NO_COLOR` falls
   back to reverse video.
-- **The browser dashboard scrolls.** The page used to be pinned to one screen
-  with each panel scrolling itself. Now the table and the launchpad run their
-  full length, the tab bar and column headers stay pinned as you scroll, and the
-  detail drawer follows alongside. It is light by default, with a dark theme
-  behind a button that remembers your choice.
+- **The browser dashboard was redesigned around the work.** It now uses the
+  whole window and scrolls as a page: a slim top bar, a briefing that opens on
+  your focus items (or the most urgent open tasks), then the fleet table with a
+  Work column counting each repo's open tasks. Selecting a repo shows its
+  launchpad in the drawer: what the repo is, its tasks, the commands to run it,
+  and the agents and links it ships. A Board tab lays every open task out by
+  status. The toolbar and column headers stay pinned as you scroll. Light by
+  default, with a dark theme behind a button that remembers your choice. The
+  Stash column made way for Work; stashes still show in Status and the drawer.
 
 ### Fixed
 
