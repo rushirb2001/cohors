@@ -12,6 +12,7 @@
 //! - `GET  /api/repos[?enrich=1]` — the local scan (optionally GitHub-enriched).
 //! - `GET  /api/detail?path=…&url=…` — one repo's drill-in (local + remote).
 //! - `GET  /api/meta` — the roots being scanned + whether `--watch` is on.
+//! - `GET  /api/launchpad` — every repo's launchpad entry + the focus board.
 //! - `POST /api/action` — run a registry verb across a selector (gated by [`Caps`]).
 //!
 //! A tiny blocking server (`tiny_http`) on a few threads — no async, matching the
@@ -131,6 +132,7 @@ fn handle(
                 watch,
             },
         ),
+        (Method::Get, "/api/launchpad") => respond_json(req, &launchpad_payload(&scan())),
         (Method::Post, "/api/action") => api_action(req, action),
         _ => serve_static(req, dist, &url),
     }
@@ -145,6 +147,36 @@ fn api_repos(req: tiny_http::Request, url: &str, scan: &ScanFn, token: Option<&s
         cohors_fleet::enrich(&mut snapshots, token);
     }
     respond_json(req, &snapshots);
+}
+
+/// `GET /api/launchpad` — what each repo offers and what is waiting in it: the
+/// committed `.principia/` contribution, flows detected from manifests, and the
+/// user's cross-repo focus board (ADR-054).
+///
+/// When no repo in the scan exists on disk the fleet is the built-in demo, so
+/// the sample launchpad is served to match it.
+fn launchpad_payload(snapshots: &[RepoSnapshot]) -> Value {
+    use cohors_fleet::launchpad as lp;
+    let on_disk: Vec<&RepoSnapshot> = snapshots
+        .iter()
+        .filter(|s| s.path.as_ref().is_some_and(|p| p.as_std_path().is_dir()))
+        .collect();
+    if on_disk.is_empty() && !snapshots.is_empty() {
+        let (entries, board) = cohors_core::launchpad::demo();
+        return json!({ "entries": entries, "board": board });
+    }
+    let mut entries: Vec<_> = on_disk
+        .iter()
+        .filter_map(|s| {
+            let path = s.path.as_ref()?;
+            Some(lp::entry(&s.id.0, &s.name, path.as_std_path()))
+        })
+        .collect();
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    let board = lp::launchpad_home()
+        .map(|home| lp::read_board(&home))
+        .unwrap_or_default();
+    json!({ "entries": entries, "board": board })
 }
 
 /// `GET /api/detail?path=…&url=…` — one repo's drill-in. `path` (the local repo
@@ -355,6 +387,38 @@ mod tests {
         let args = json!({ "verb": "run", "command": "echo hi", "selector": { "all": true }, "confirm": true });
         let err = run_action("run", &args, &ctx(caps)).unwrap_err();
         assert!(err.contains("--allow-run"), "{err}");
+    }
+
+    #[test]
+    fn launchpad_serves_the_sample_for_the_demo_fleet_and_empty_for_no_fleet() {
+        // The demo fleet's paths don't exist on disk ⇒ the sample launchpad.
+        let demo = launchpad_payload(&demo_fleet());
+        assert_eq!(demo["entries"][0]["name"], "payments");
+        assert_eq!(demo["board"]["focus"][0]["repo"], "payments");
+        // No repos at all ⇒ an empty launchpad, not the sample.
+        let empty = launchpad_payload(&[]);
+        assert_eq!(empty["entries"], json!([]));
+    }
+
+    #[test]
+    fn launchpad_reads_a_real_repo() {
+        let dir = std::env::temp_dir().join(format!("cohors-web-lp-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".principia")).unwrap();
+        std::fs::write(
+            dir.join(".principia/repo.json"),
+            r#"{"specVersion":1,"name":"Svc","tasks":[{"id":"a","title":"Do it"}]}"#,
+        )
+        .unwrap();
+        let mut snap = demo_fleet().remove(0);
+        snap.path = Some(dir.to_str().unwrap().into());
+        let payload = launchpad_payload(&[snap]);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(payload["entries"][0]["name"], "Svc");
+        assert_eq!(payload["entries"][0]["configured"], true);
+        assert_eq!(
+            payload["entries"][0]["contribution"]["tasks"][0]["title"],
+            "Do it"
+        );
     }
 
     #[test]

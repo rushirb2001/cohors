@@ -23,6 +23,20 @@ pub struct RepoDetailResponse {
     pub remote: Option<RemoteDetail>,
 }
 
+/// The launchpad, as served by `/api/launchpad`: each repo's entry plus the
+/// cross-repo focus board. Both default, so an older server still deserializes.
+#[derive(Deserialize, Clone, Default)]
+#[serde(default)]
+pub struct LaunchpadResponse {
+    pub entries: Vec<cohors_core::launchpad::LaunchpadEntry>,
+    pub board: cohors_core::launchpad::Board,
+}
+
+/// Every repo's launchpad entry and the focus board.
+pub async fn fetch_launchpad() -> Result<LaunchpadResponse, String> {
+    get_json("/api/launchpad").await
+}
+
 /// Session metadata: the roots being scanned. (The page always polls now, so the
 /// server's `--watch` flag is ignored client-side and not deserialized.)
 #[derive(Deserialize, Clone, Default)]

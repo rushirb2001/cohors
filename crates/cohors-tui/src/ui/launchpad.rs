@@ -4,7 +4,7 @@
 //! first, then each repo that has open tasks (most urgent first, with the flow
 //! you would start it with), then the repos that have not opted in yet.
 
-use cohors_core::launchpad::{Flow, LaunchpadEntry, Task};
+use cohors_core::launchpad::Task;
 
 use super::*;
 
@@ -37,7 +37,13 @@ fn task_line<'a>(task: &Task, theme: &Theme) -> Line<'a> {
         Span::raw(safe(&task.title)),
     ];
     match task.priority.as_deref() {
-        Some("high") => spans.push(Span::styled("  high", theme.warn().bold())),
+        Some("high") => {
+            spans.push(Span::raw("  "));
+            match theme.badge(Severity::Warn) {
+                Some((_, badge)) => spans.push(Span::styled(" high ", badge)),
+                None => spans.push(Span::styled("high", theme.warn().bold())),
+            }
+        }
         Some("low") => spans.push(Span::styled("  low", theme.dim())),
         _ => {}
     }
@@ -50,18 +56,10 @@ fn task_line<'a>(task: &Task, theme: &Theme) -> Line<'a> {
     Line::from(spans)
 }
 
-/// The flow a person would start first: the declared primary, else the first
-/// declared, else the first detected.
-fn lead_flow(entry: &LaunchpadEntry) -> Option<&Flow> {
-    let declared = entry.contribution.as_ref().map(|c| c.flows.as_slice());
-    declared
-        .and_then(|flows| flows.iter().find(|f| f.primary).or(flows.first()))
-        .or(entry.detected_flows.first())
-}
-
 /// Every line of the body, built up front so the overlay can size and scroll.
 fn body_lines<'a>(view: &crate::app::LaunchpadView, theme: &Theme) -> Vec<Line<'a>> {
     let brand = theme.fg(SPIDER_PURPLE).bold();
+    let heading = theme.bronze().bold();
     let mut lines: Vec<Line> = Vec::new();
 
     let focus: Vec<_> = view
@@ -71,7 +69,7 @@ fn body_lines<'a>(view: &crate::app::LaunchpadView, theme: &Theme) -> Vec<Line<'
         .filter(|f| f.status.as_deref() != Some("done"))
         .collect();
     if !focus.is_empty() {
-        lines.push(Line::from(Span::styled("Focus", brand)));
+        lines.push(Line::from(Span::styled("Focus", heading)));
         for item in focus {
             lines.push(Line::from(vec![
                 Span::styled("  ▸ ", theme.dim()),
@@ -103,7 +101,7 @@ fn body_lines<'a>(view: &crate::app::LaunchpadView, theme: &Theme) -> Vec<Line<'
         for task in entry.open_tasks() {
             lines.push(task_line(task, theme));
         }
-        if let Some(flow) = lead_flow(entry) {
+        if let Some(flow) = entry.lead_flow() {
             lines.push(Line::from(vec![
                 Span::styled("    run ", theme.dim()),
                 Span::styled(safe(&flow.run), theme.ok()),
@@ -130,7 +128,7 @@ fn body_lines<'a>(view: &crate::app::LaunchpadView, theme: &Theme) -> Vec<Line<'
         .map(|e| safe(&e.name))
         .collect();
     if !unset.is_empty() {
-        lines.push(Line::from(Span::styled("Not set up yet", brand)));
+        lines.push(Line::from(Span::styled("Not set up yet", heading)));
         lines.push(Line::from(Span::styled(
             "  in one of these, ask your agent: \"set up this repo for the launchpad\"",
             theme.dim(),
@@ -168,13 +166,13 @@ pub(crate) fn render_launchpad(frame: &mut Frame, full: Rect, app: &App, theme: 
     };
     frame.render_widget(Clear, area);
     let outer = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::new(1, 1, 0, 0));
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
 
     let Some(view) = &app.launchpad else {
-        let inner = render_modal_header(frame, area, inner, Line::from("Launchpad").bold());
+        let inner = render_modal_header(frame, area, inner, theme, Line::from("Launchpad").bold());
         frame.render_widget(
             Paragraph::new(Span::styled(
                 "Reading each repo's launchpad file…",
@@ -198,7 +196,7 @@ pub(crate) fn render_launchpad(frame: &mut Frame, full: Rect, app: &App, theme: 
             theme.dim(),
         ),
     ]);
-    let inner = render_modal_header(frame, area, inner, header);
+    let inner = render_modal_header(frame, area, inner, theme, header);
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Tell the key handler how far it may scroll, then clamp what we draw.

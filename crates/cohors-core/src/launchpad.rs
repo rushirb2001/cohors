@@ -163,7 +163,8 @@ pub struct Contribution {
 
 /// One repo as the launchpad sees it: its contribution (if any) plus whatever
 /// could be inferred with zero config.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct LaunchpadEntry {
     pub id: String,
     pub name: String,
@@ -179,6 +180,15 @@ pub struct LaunchpadEntry {
 }
 
 impl LaunchpadEntry {
+    /// The flow a person would start first: the declared primary, else the
+    /// first declared, else the first detected.
+    pub fn lead_flow(&self) -> Option<&Flow> {
+        let declared = self.contribution.as_ref().map(|c| c.flows.as_slice());
+        declared
+            .and_then(|flows| flows.iter().find(|f| f.primary).or(flows.first()))
+            .or(self.detected_flows.first())
+    }
+
     /// Tasks not yet done, most urgent first.
     pub fn open_tasks(&self) -> Vec<&Task> {
         let mut tasks: Vec<&Task> = self

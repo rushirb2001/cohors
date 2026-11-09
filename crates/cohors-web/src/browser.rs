@@ -35,6 +35,13 @@ enum Mode {
     Demo,
 }
 
+/// Which view the main panel shows: the repo table, or the launchpad's lanes.
+#[derive(Clone, Copy, PartialEq)]
+enum Tab {
+    Repos,
+    Launchpad,
+}
+
 /// The drill-in detail's load state for the selected repo.
 #[derive(Clone)]
 enum DetailState {
@@ -194,6 +201,26 @@ fn App() -> impl IntoView {
         });
     });
 
+    // The launchpad loads when its tab is opened (and again each time it is
+    // reopened, so it reflects edits made since). The demo fleet has no files to
+    // read, so it shows the built-in sample instead.
+    let tab = RwSignal::new(Tab::Repos);
+    let launchpad = RwSignal::new(None::<api::LaunchpadResponse>);
+    Effect::new(move |_| {
+        if tab.get() != Tab::Launchpad {
+            return;
+        }
+        if mode.get_untracked() == Mode::Demo {
+            let (entries, board) = cohors_core::launchpad::demo();
+            launchpad.set(Some(api::LaunchpadResponse { entries, board }));
+            return;
+        }
+        spawn_local(async move {
+            let resp = api::fetch_launchpad().await.unwrap_or_default();
+            launchpad.set(Some(resp));
+        });
+    });
+
     // First-ever visit: auto-run the tour once, after the fleet has rendered so
     // the spotlight targets exist. A localStorage flag makes it show only once —
     // but `?tour` in the URL forces it, so a returning user can replay it without
@@ -329,6 +356,8 @@ fn App() -> impl IntoView {
                         enriching,
                         mode,
                         roots,
+                        tab,
+                        launchpad,
                     },
                 )
                 .into_any(),
@@ -349,6 +378,8 @@ fn App() -> impl IntoView {
                         enriching,
                         mode,
                         roots,
+                        tab,
+                        launchpad,
                     },
                 )
                 .into_any(),
@@ -379,6 +410,8 @@ struct DashCtx {
     enriching: RwSignal<bool>,
     mode: RwSignal<Mode>,
     roots: RwSignal<Vec<String>>,
+    tab: RwSignal<Tab>,
+    launchpad: RwSignal<Option<api::LaunchpadResponse>>,
 }
 
 /// The dashboard body: a header-band Overview (brand + fleet + at-a-glance
@@ -402,7 +435,21 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
         enriching,
         mode,
         roots,
+        tab,
+        launchpad,
     } = cx;
+    // Light is the default; the saved choice (if any) is applied on load.
+    let dark = RwSignal::new(saved_dark_theme());
+    apply_theme(dark.get_untracked());
+    // The table-only controls hide while the launchpad tab is showing.
+    let repos_only = move || if tab.get() == Tab::Repos { "" } else { "none" };
+    let launchpad_only = move || {
+        if tab.get() == Tab::Launchpad {
+            ""
+        } else {
+            "none"
+        }
+    };
     let visible = move || {
         let r = repos.get();
         let params = ViewParams {
@@ -483,6 +530,17 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                             }}
                         </div>
                         <div class="conn">
+                            <button
+                                class="theme-btn"
+                                title="Switch between the light and dark themes"
+                                on:click=move |_| {
+                                    let next = !dark.get();
+                                    apply_theme(next);
+                                    dark.set(next);
+                                }
+                            >
+                                {move || if dark.get() { "Light theme" } else { "Dark theme" }}
+                            </button>
                             {move || {
                                 let demo = mode.get() == Mode::Demo;
                                 view! {
@@ -512,7 +570,25 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                 // column headers double as the sort control (no separate buttons).
                 <section class="card fleet-wrap">
                     <header class="panel-head repos-head">
-                        <span class="panel-label">"Repositories"</span>
+                        <div class="tabs" role="tablist">
+                            <button
+                                class="tab"
+                                role="tab"
+                                class:on=move || tab.get() == Tab::Repos
+                                on:click=move |_| tab.set(Tab::Repos)
+                            >
+                                "Repositories"
+                            </button>
+                            <button
+                                class="tab"
+                                role="tab"
+                                class:on=move || tab.get() == Tab::Launchpad
+                                on:click=move |_| tab.set(Tab::Launchpad)
+                                title="What each repo offers, and what work is waiting in it"
+                            >
+                                "Launchpad"
+                            </button>
+                        </div>
                         <input
                             class="filter"
                             placeholder="filter repos by name…"
@@ -522,12 +598,13 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                         <button
                             class="toggle"
                             class:on=move || dirty_only.get()
+                            style:display=repos_only
                             on:click=move |_| dirty_only.update(|d| *d = !*d)
                             title="Show only repos that need attention"
                         >
                             "needs attention"
                         </button>
-                        <div class="act-controls">
+                        <div class="act-controls" style:display=repos_only>
                             {move || {
                                 let m = marked.get();
                                 (!m.is_empty())
@@ -555,7 +632,10 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                             )}
                         </div>
                     </header>
-                    <div class="scroll">
+                    <div class="scroll" style:display=launchpad_only>
+                        {move || launchpad_board(launchpad.get(), &filter.get(), selected)}
+                    </div>
+                    <div class="scroll" style:display=repos_only>
                         <table class="fleet">
                             <thead>
                                 <tr>
@@ -579,6 +659,220 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
             </div>
         </>
     }
+}
+
+/// Where the theme choice is remembered between visits.
+const THEME_KEY: &str = "cohors_theme";
+
+/// Whether the visitor previously chose the dark theme (light is the default).
+fn saved_dark_theme() -> bool {
+    web_sys::window()
+        .and_then(|w| w.local_storage().ok().flatten())
+        .and_then(|s| s.get_item(THEME_KEY).ok().flatten())
+        .is_some_and(|v| v == "dark")
+}
+
+/// Apply a theme by setting `data-theme` on the root element (the stylesheet
+/// keys its dark tokens off it), and remember the choice.
+fn apply_theme(dark: bool) {
+    let name = if dark { "dark" } else { "light" };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
+    if let Some(root) = window.document().and_then(|d| d.document_element()) {
+        let _ = root.set_attribute("data-theme", name);
+    }
+    if let Ok(Some(storage)) = window.local_storage() {
+        let _ = storage.set_item(THEME_KEY, name);
+    }
+}
+
+/// The Launchpad tab: the work waiting across the fleet, as three lanes
+/// (doing, blocked, to do) built from each repo's committed `.principia/`
+/// tasks, under the cross-repo focus board. The repo filter narrows it too.
+///
+/// Everything shown here is text from repository files, so it is rendered as
+/// plain text nodes (never HTML) and a flow's command is shown, never run.
+fn launchpad_board(
+    resp: Option<api::LaunchpadResponse>,
+    query: &str,
+    selected: RwSignal<Option<String>>,
+) -> AnyView {
+    let Some(resp) = resp else {
+        return view! { <p class="lp-note">"Reading each repo's launchpad file…"</p> }.into_any();
+    };
+    let q = query.trim().to_lowercase();
+    let entries: Vec<cohors_core::launchpad::LaunchpadEntry> = resp
+        .entries
+        .into_iter()
+        .filter(|e| q.is_empty() || e.name.to_lowercase().contains(&q))
+        .collect();
+    let total = entries.len();
+    let configured = entries.iter().filter(|e| e.configured).count();
+
+    // Sort every open task into its lane, keeping each repo's urgency order.
+    let mut lanes: [Vec<AnyView>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+    let mut repos_with_work = 0usize;
+    for e in &entries {
+        let run = e.lead_flow().map(|f| f.run.clone());
+        let tasks = e.open_tasks();
+        repos_with_work += usize::from(!tasks.is_empty());
+        for t in tasks {
+            let slot = match t.status() {
+                "doing" => 0,
+                "blocked" => 1,
+                _ => 2,
+            };
+            lanes[slot].push(task_card(
+                e.id.clone(),
+                e.name.clone(),
+                run.clone(),
+                t,
+                selected,
+            ));
+        }
+    }
+    let open: usize = lanes.iter().map(Vec::len).sum();
+    let [doing, blocked, todo] = lanes;
+
+    let focus: Vec<AnyView> = resp
+        .board
+        .focus
+        .iter()
+        .filter(|f| f.status.as_deref() != Some("done"))
+        .map(|f| {
+            let title = f.title.clone();
+            let repo = f.repo.clone().unwrap_or_default();
+            view! {
+                <li>
+                    <span class="focus-t">{title}</span>
+                    <span class="focus-r">{repo}</span>
+                </li>
+            }
+            .into_any()
+        })
+        .collect();
+    let broken: Vec<AnyView> = entries
+        .iter()
+        .filter_map(|e| Some((e.name.clone(), e.invalid.clone()?)))
+        .map(|(name, why)| view! { <li><b>{name}</b>" "{why}</li> }.into_any())
+        .collect();
+    let unset: Vec<AnyView> = entries
+        .iter()
+        .filter(|e| !e.configured && e.invalid.is_none())
+        .map(|e| {
+            let name = e.name.clone();
+            view! { <span class="chip">{name}</span> }.into_any()
+        })
+        .collect();
+
+    let summary = if open == 0 {
+        format!("Nothing waiting. {configured} of {total} repos are set up.")
+    } else {
+        format!(
+            "{open} open task{} in {repos_with_work} repo{}. {configured} of {total} repos are set up.",
+            if open == 1 { "" } else { "s" },
+            if repos_with_work == 1 { "" } else { "s" },
+        )
+    };
+
+    view! {
+        <div class="lp">
+            <p class="lp-sum">{summary}</p>
+            {(!focus.is_empty())
+                .then(|| {
+                    view! {
+                        <section class="lp-focus">
+                            <h4>"Focus"</h4>
+                            <ul>{focus}</ul>
+                        </section>
+                    }
+                })}
+            <div class="lanes">
+                {lane("doing", "Doing", doing)} {lane("blocked", "Blocked", blocked)}
+                {lane("todo", "To do", todo)}
+            </div>
+            {(!broken.is_empty())
+                .then(|| {
+                    view! {
+                        <section class="lp-extra">
+                            <h4>"Needs fixing"</h4>
+                            <ul class="lp-broken">{broken}</ul>
+                        </section>
+                    }
+                })}
+            {(!unset.is_empty())
+                .then(|| {
+                    view! {
+                        <section class="lp-extra">
+                            <h4>"Not set up yet"</h4>
+                            <p class="lp-hint">
+                                "In any of these, ask your agent to set up this repo for the launchpad."
+                            </p>
+                            <div class="lp-chips">{unset}</div>
+                        </section>
+                    }
+                })}
+        </div>
+    }
+    .into_any()
+}
+
+/// One lane of the launchpad: a titled column of task cards with its count.
+fn lane(class: &'static str, title: &'static str, cards: Vec<AnyView>) -> impl IntoView {
+    let n = cards.len();
+    view! {
+        <section class=format!("lane {class}")>
+            <header class="lane-h">
+                <span class="lane-t">{title}</span>
+                <span class="lane-n">{n}</span>
+            </header>
+            {if cards.is_empty() {
+                view! { <p class="lane-empty">"Nothing here"</p> }.into_any()
+            } else {
+                view! { <div class="lane-cards">{cards}</div> }.into_any()
+            }}
+        </section>
+    }
+}
+
+/// One task: its title, the repo it belongs to (click to open that repo's
+/// detail), a `high` badge when it is urgent, and the flow you would start the
+/// repo with.
+fn task_card(
+    id: String,
+    repo: String,
+    run: Option<String>,
+    task: &cohors_core::launchpad::Task,
+    selected: RwSignal<Option<String>>,
+) -> AnyView {
+    let high = task.priority.as_deref() == Some("high");
+    let title = task.title.clone();
+    let notes = task.notes.clone().unwrap_or_default();
+    view! {
+        <article class="tcard" title=notes>
+            <div class="tcard-t">{title}</div>
+            <div class="tcard-m">
+                <button
+                    class="tcard-repo"
+                    title="Show this repo's detail"
+                    on:click=move |_| selected.set(Some(id.clone()))
+                >
+                    {repo}
+                </button>
+                {high.then(|| view! { <span class="pri">"high"</span> })}
+            </div>
+            {run
+                .map(|r| {
+                    view! {
+                        <code class="tcard-run" title="The flow this repo starts with">
+                            {r}
+                        </code>
+                    }
+                })}
+        </article>
+    }
+    .into_any()
 }
 
 /// A sortable column header: clicking it sets that sort mode; the active column
@@ -1987,7 +2281,7 @@ fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
         view! {
             <span class=format!("leg {cls}")>
                 <i class="dot"></i>
-                {format!("{label} {n}")}
+                {format!("{n} {label}")}
             </span>
         }
     };
@@ -2002,8 +2296,8 @@ fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
                 {seg(calm, "calm")}
             </div>
             <div class="attn-legend">
-                {leg(counts[4], "risk", "At risk")} {leg(counts[3], "warn", "Warning")}
-                {leg(counts[2], "notice", "Minor")} {leg(calm, "calm", "Calm")}
+                {leg(counts[4], "risk", "at risk")} {leg(counts[3], "warn", "warning")}
+                {leg(counts[2], "notice", "minor")} {leg(calm, "calm", "calm")}
             </div>
         </div>
     }
