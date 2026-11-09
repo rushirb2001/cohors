@@ -1,0 +1,40 @@
+#!/bin/sh
+# Find the installed `cohors` binary and exec it with the given arguments.
+#
+# Why a launcher: an agent spawns MCP servers and hooks with a stripped PATH, so
+# a bare `cohors` often resolves to nothing and the agent silently ends up with
+# no tools. This looks in the places every install channel puts the binary.
+#
+# Override with COHORS_BIN=/path/to/cohors.
+
+if [ -n "${COHORS_BIN:-}" ] && [ -x "$COHORS_BIN" ]; then
+  exec "$COHORS_BIN" "$@"
+fi
+
+if command -v cohors >/dev/null 2>&1; then
+  exec cohors "$@"
+fi
+
+for candidate in \
+  "$HOME/.cargo/bin/cohors" \
+  "/opt/homebrew/bin/cohors" \
+  "/usr/local/bin/cohors" \
+  "/home/linuxbrew/.linuxbrew/bin/cohors" \
+  "$HOME/.local/bin/cohors" \
+  "$HOME/.nix-profile/bin/cohors"; do
+  if [ -x "$candidate" ]; then
+    exec "$candidate" "$@"
+  fi
+done
+
+cat >&2 <<'MSG'
+cohors: the `cohors` binary is not installed, so this plugin has no tools yet.
+
+Install it with any one of:
+  brew install rushirb2001/tap/cohors
+  pip install cohors
+  curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh
+
+Then restart the session. If it is installed somewhere unusual, set COHORS_BIN.
+MSG
+exit 127

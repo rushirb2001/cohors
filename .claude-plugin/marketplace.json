@@ -1,0 +1,16 @@
+{
+  "name": "cohors",
+  "owner": {
+    "name": "Rushir Bhavsar"
+  },
+  "metadata": {
+    "description": "Fleet and launchpad tools for people running many repositories and many agent sessions."
+  },
+  "plugins": [
+    {
+      "name": "cohors",
+      "source": "./plugin",
+      "description": "Every git repo you own as one fleet your agent can see, search, plan across, and (opt-in) act on."
+    }
+  ]
+}
