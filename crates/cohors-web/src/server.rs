@@ -122,6 +122,27 @@ fn handle(
 ) {
     let url = req.url().to_string();
     let path = url.split('?').next().unwrap_or("/");
+    // Binding to 127.0.0.1 is not enough on its own: a web page on another
+    // site can point a hostname it controls at 127.0.0.1 (DNS rebinding) and
+    // then read these endpoints as if it were same-origin. Such a request
+    // still carries the attacker's hostname in `Host`, so refuse any request
+    // not addressed to this machine by a local name, and any that says it
+    // comes from a foreign origin.
+    let header = |name: &'static str| {
+        req.headers()
+            .iter()
+            .find(|h| h.field.equiv(name))
+            .map(|h| h.value.as_str().to_string())
+    };
+    if !is_local_host(header("Host").as_deref())
+        || header("Origin").is_some_and(|o| !is_local_origin(&o))
+    {
+        let _ = req.respond(
+            Response::from_string("cohors web only answers requests addressed to localhost\n")
+                .with_status_code(403),
+        );
+        return;
+    }
     match (req.method(), path) {
         (Method::Get, "/api/repos") => api_repos(req, &url, scan, token),
         (Method::Get, "/api/detail") => api_detail(req, &url, token),
@@ -136,6 +157,31 @@ fn handle(
         (Method::Post, "/api/action") => api_action(req, action),
         _ => serve_static(req, dist, &url),
     }
+}
+
+/// True when a `Host` header names this machine: `localhost`, any
+/// `*.localhost` name (the URL `cohors web` prints is `cohors.localhost`), or a
+/// loopback address — with or without a port. A missing header is refused.
+fn is_local_host(host: Option<&str>) -> bool {
+    let Some(host) = host else {
+        return false;
+    };
+    let host = host.trim().to_ascii_lowercase();
+    // Drop the port: `[::1]:8080` → `[::1]`, `localhost:8080` → `localhost`.
+    let name = if host.starts_with('[') {
+        host.split_once(']')
+            .map_or(host.as_str(), |(addr, _)| &host[..addr.len() + 1])
+    } else {
+        host.split(':').next().unwrap_or("")
+    };
+    name == "localhost" || name.ends_with(".localhost") || name == "127.0.0.1" || name == "[::1]"
+}
+
+/// True when an `Origin` header is one of this server's own local origins.
+fn is_local_origin(origin: &str) -> bool {
+    origin
+        .strip_prefix("http://")
+        .is_some_and(|rest| is_local_host(Some(rest)))
 }
 
 /// `GET /api/repos[?enrich=1]` — the local scan, optionally enriched with remote
@@ -419,6 +465,37 @@ mod tests {
             payload["entries"][0]["contribution"]["tasks"][0]["title"],
             "Do it"
         );
+    }
+
+    #[test]
+    fn only_local_hosts_and_origins_are_served() {
+        for ok in [
+            "localhost",
+            "localhost:8080",
+            "cohors.localhost:8080",
+            "127.0.0.1:8080",
+            "[::1]:8080",
+            "LOCALHOST:8080",
+        ] {
+            assert!(is_local_host(Some(ok)), "{ok} should be allowed");
+        }
+        for bad in [
+            "evil.example:8080",
+            "localhost.evil.example",
+            "127.0.0.1.evil.example:8080",
+            "notlocalhost:8080",
+            "192.168.1.5:8080",
+            "",
+        ] {
+            assert!(!is_local_host(Some(bad)), "{bad} should be refused");
+        }
+        assert!(!is_local_host(None));
+
+        assert!(is_local_origin("http://cohors.localhost:8080"));
+        assert!(is_local_origin("http://127.0.0.1:8080"));
+        assert!(!is_local_origin("https://evil.example"));
+        assert!(!is_local_origin("http://evil.example"));
+        assert!(!is_local_origin("null"));
     }
 
     #[test]
