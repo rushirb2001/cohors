@@ -1295,3 +1295,70 @@ a.chip:hover { border-color: var(--accent); }
 /* Overlays use the same surface. */
 .modal, .tour-card, .dd-menu { border: 1px solid var(--border); border-radius: var(--r); }
 .modal .confirm, .tour-card .confirm, .primary { background: var(--text); color: var(--panel); border-radius: var(--r-sm); }
+
+/* ── The table gets the page; detail slides over it ─────────────────────── */
+/* A drawer docked beside a ten-column table crushed both at ordinary window
+   widths. The table now always has the full width, and the detail is a panel
+   that slides in from the right only while a repo is selected. */
+.grid { grid-template-columns: minmax(0, 1fr); }
+.side { display: none; }
+.side.open {
+  display: flex; position: fixed; z-index: 5; margin: 0;
+  top: var(--bar-h); right: 0; bottom: 0; width: min(480px, 94vw); max-height: none;
+  background: var(--panel); border-left: 1px solid var(--border);
+  box-shadow: -12px 0 32px rgba(0, 0, 0, 0.08);
+  animation: drawer-in 0.18s ease;
+}
+@keyframes drawer-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.side.open > * { flex: 1; min-height: 0; }
+.side .card { border: none; border-radius: 0; animation: none; }
+.side .scroll { overflow: auto; }
+.dt-close {
+  flex: none; width: 28px; height: 28px; border: none; background: none; cursor: pointer;
+  color: var(--dim); border-radius: var(--r-sm); font-size: 0.8rem;
+}
+.dt-close:hover { background: var(--line); color: var(--text); }
+
+/* Columns size to their content; Repo and Status share what is left. */
+.fleet { table-layout: auto; font-family: var(--sans); }
+.fleet th:nth-child(n) { width: auto; }
+.fleet th:nth-child(2) { width: 34%; }
+.fleet th:nth-child(9) { width: 26%; }
+.fleet th, .fleet td { padding: 10px 12px; overflow: visible; text-overflow: clip; }
+.fleet td.repo, .fleet td.status { overflow: hidden; text-overflow: ellipsis; max-width: 0; }
+th.mk, td.mk { width: 44px; }
+th.act, td.act { width: 1%; }
+
+/* Two-line repo cell: the name, then its branch beneath in the data face. */
+.fleet td[class^="repo"] { max-width: 0; overflow: hidden; }
+.rname { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.rbranch {
+  display: block; font-family: var(--mono); font-size: 0.74rem; color: var(--faint);
+  overflow: hidden; text-overflow: ellipsis; margin-top: 1px;
+}
+.repo.dim .rname { color: var(--text); }
+.fleet td:nth-child(n + 3):not(.status) { font-family: var(--mono); font-size: 0.8rem; }
+
+/* One status rendering: the sentence (a badge for risk and warning). */
+.fleet td.status .st .st-compact { display: none; }
+.fleet td.status .st .st-full { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.fleet td.status .st-full.muted { color: var(--faint); }
+
+/* Shed the least important columns before anything truncates. */
+@container fleet (max-width: 1080px) {
+  .fleet th:nth-child(8), .fleet td:nth-child(8) { display: none; }   /* Activity */
+}
+@container fleet (max-width: 860px) {
+  .fleet th:nth-child(5), .fleet td:nth-child(5) { display: none; }   /* PRs */
+  .fleet th:nth-child(7), .fleet td:nth-child(7) { display: none; }   /* Last */
+}
+
+/* Briefing: focus lines may wrap rather than cut off. */
+.brief { grid-template-columns: minmax(0, 1.6fr) minmax(0, 0.7fr) minmax(0, 1.3fr); }
+.focus-list li { align-items: flex-start; }
+.focus-list li::before { margin-top: 0.55em; transform: none; }
+.focus-item { white-space: normal; overflow: visible; }
+.focus-list .focus-r { margin-top: 0.25em; }
+/* The rows carry a trailing spacer cell from the old fixed layout; without it
+   the table reaches the right edge. */
+.fleet td.spacer { display: none; }

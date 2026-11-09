@@ -117,20 +117,6 @@ fn App() -> impl IntoView {
                                     }
                                 }
                             });
-                            // Once CI is known, bring focus to a failing build by
-                            // opening its detail — unless the user already picked a
-                            // repo while enrichment was in flight.
-                            if selected.get_untracked().is_none() {
-                                let failing = repos.get_untracked().into_iter().find(|s| {
-                                    matches!(
-                                        s.remote.as_ref().map(|r| r.ci),
-                                        Some(CiStatus::Failing)
-                                    )
-                                });
-                                if let Some(s) = failing {
-                                    selected.set(Some(s.id.0));
-                                }
-                            }
                         }
                         enriching.set(false);
                     });
@@ -487,9 +473,9 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
         {
             Some(s) => {
                 let entry = launchpad.get().and_then(|lp| entry_for(&lp, &s).cloned());
-                detail_panel(&s, now, detail, entry).into_any()
+                detail_panel(&s, now, detail, entry, selected).into_any()
             }
-            None => hint_panel().into_any(),
+            None => ().into_any(),
         }
     };
 
@@ -641,7 +627,7 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                         <table class="fleet">
                             <thead>
                                 <tr>
-                                    <th class="mk">"Mark"</th>
+                                    <th class="mk" aria-label="Mark for a bulk action"></th>
                                     {sort_th("Repo", SortMode::Name, sort)}
                                     <th title="Open launchpad tasks in this repo">"Work"</th>
                                     {sort_th("Sync", SortMode::AheadBehind, sort)}
@@ -657,7 +643,11 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                         </table>
                     </div>
                 </section>
-                <aside class="side">{aside}</aside>
+                // The detail drawer slides over the page only while a repo is
+                // selected, so the table keeps the full width the rest of the time.
+                <aside class="side" class:open=move || selected.get().is_some()>
+                    {aside}
+                </aside>
             </div>
         </>
     }
@@ -2221,6 +2211,7 @@ fn detail_panel(
     now: i64,
     detail: RwSignal<DetailState>,
     entry: Option<cohors_core::launchpad::LaunchpadEntry>,
+    selected: RwSignal<Option<String>>,
 ) -> impl IntoView + use<> {
     let name = s.name.clone();
     let a = assess(s, now);
@@ -2279,6 +2270,14 @@ fn detail_panel(
                     {sync_cell(s)}
                     {ci_cell(s, false)}
                 </span>
+                <button
+                    class="dt-close"
+                    title="Close"
+                    aria-label="Close the detail drawer"
+                    on:click=move |_| selected.set(None)
+                >
+                    "✕"
+                </button>
             </div>
             <div class="scroll">
                 <div class="facts">
@@ -2587,51 +2586,6 @@ fn attention_widget(repos: &[RepoSnapshot], now: i64) -> impl IntoView + use<> {
             <div class="attn-legend">
                 {leg(counts[4], "risk", "at risk")} {leg(counts[3], "warn", "warning")}
                 {leg(counts[2], "notice", "minor")} {leg(calm, "calm", "calm")}
-            </div>
-        </div>
-    }
-}
-
-/// The detail aside when nothing is selected: a skeleton that mirrors a selected
-/// repo's panel — the same facts grid (icons + labels) and the same section
-/// headers, in the same order — so the empty state previews exactly what fills
-/// in, rather than reading as dead space or a different layout.
-fn hint_panel() -> impl IntoView {
-    // One facts row: the real icon and label a selected repo shows, with a
-    // shimmer bar standing in for the value that fills in.
-    let fact = |icon: AnyView, label: &'static str| {
-        view! {
-            <div class="fact">
-                <span class="fi">{icon}</span>
-                <span class="fl">{label}</span>
-                <span class="fv"><span class="skel-line"></span></span>
-            </div>
-        }
-    };
-    let section = |name: &'static str| {
-        view! {
-            <div class="sec skel">
-                <div class="sec-h">{name}</div>
-                <div class="skel-body"></div>
-            </div>
-        }
-    };
-    view! {
-        <div class="card detail">
-            <div class="card-title">"Detail"</div>
-            <div class="scroll">
-                <p class="hint-lead">"Select a repository, and these fill in for it."</p>
-                <div class="facts">
-                    {fact(edit_icon().into_any(), "Changes")}
-                    {fact(stash_icon().into_any(), "Stash")}
-                    {fact(pr_icon().into_any(), "PRs")}
-                    {fact(clock_icon().into_any(), "Last")}
-                    {fact(activity_icon().into_any(), "Activity")}
-                </div>
-                {section("Needs attention")}
-                {section("Recent commits")}
-                {section("Open PRs")}
-                {section("Top contributors")}
             </div>
         </div>
     }
