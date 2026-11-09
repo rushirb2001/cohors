@@ -106,6 +106,13 @@ fn summary_counts(entries: &[LaunchpadEntry]) -> serde_json::Value {
     })
 }
 
+/// Drop control characters (ESC included) from text that came out of a repo's
+/// files. A task title or repo name is untrusted, and printed raw it could
+/// carry terminal escape sequences that recolour, rewrite, or hide output.
+fn safe(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).collect()
+}
+
 /// One task line: a status mark, the title, and a priority tag when it is not
 /// the default. Shape carries the status so it still reads without colour.
 fn task_row(task: &Task, color: bool) -> String {
@@ -114,14 +121,14 @@ fn task_row(task: &Task, color: bool) -> String {
         "blocked" => "✕",
         _ => "○",
     };
-    let mut line = format!("      {} {}", mark, clip(&task.title, 78));
+    let mut line = format!("      {} {}", mark, clip(&safe(&task.title), 78));
     match task.priority.as_deref() {
         Some("high") => line.push_str(&format!("  {}", bold(color, "high"))),
         Some("low") => line.push_str(&format!("  {}", dim(color, "low"))),
         _ => {}
     }
     if task.status() != "todo" {
-        line.push_str(&format!("  {}", dim(color, task.status())));
+        line.push_str(&format!("  {}", dim(color, &safe(task.status()))));
     }
     line.push('\n');
     line
@@ -156,15 +163,13 @@ pub(crate) fn render_report(
             color,
         ));
         for item in focus {
-            let repo = item.repo.as_deref().unwrap_or("—");
+            let repo = safe(item.repo.as_deref().unwrap_or("—"));
+            let status = safe(item.status.as_deref().unwrap_or("todo"));
             out.push_str(&format!(
                 "    {} {}  {}\n",
                 dim(color, "▸"),
-                bold(color, &clip(&item.title, 70)),
-                dim(
-                    color,
-                    &format!("{repo} · {}", item.status.as_deref().unwrap_or("todo"))
-                ),
+                bold(color, &clip(&safe(&item.title), 70)),
+                dim(color, &format!("{repo} · {status}")),
             ));
         }
         out.push('\n');
@@ -185,7 +190,7 @@ pub(crate) fn render_report(
             out.push_str(&format!(
                 "    {} {}  {}\n",
                 dim(color, "▸"),
-                brand(color, &entry.name),
+                brand(color, &safe(&entry.name)),
                 dim(color, &format!("{} open", tasks.len())),
             ));
             for task in tasks {
@@ -209,8 +214,8 @@ pub(crate) fn render_report(
             .unwrap_or(0);
         for entry in broken {
             out.push_str(&guide_row(
-                &entry.name,
-                entry.invalid.as_deref().unwrap_or(""),
+                &safe(&entry.name),
+                &safe(entry.invalid.as_deref().unwrap_or("")),
                 width,
                 color,
             ));
@@ -218,10 +223,10 @@ pub(crate) fn render_report(
         out.push('\n');
     }
 
-    let unset: Vec<&str> = entries
+    let unset: Vec<String> = entries
         .iter()
         .filter(|e| !e.configured && e.invalid.is_none())
-        .map(|e| e.name.as_str())
+        .map(|e| safe(&e.name))
         .collect();
     if !unset.is_empty() {
         out.push_str(&section(
@@ -375,6 +380,29 @@ mod tests {
             ..Board::default()
         };
         insta::assert_snapshot!(render_report(&fleet(), &board, false));
+    }
+
+    #[test]
+    fn repo_authored_text_cannot_inject_terminal_escapes() {
+        let mut entries = fleet();
+        entries[0].name = "pay\x1b[2Japi".into();
+        if let Some(c) = entries[0].contribution.as_mut() {
+            c.tasks[1].title = "evil\x1b]0;pwned\x07title\r\n".into();
+        }
+        entries[2].invalid = Some("bad\x1b[31m".into());
+        let board = Board {
+            focus: vec![FocusItem {
+                id: "f".into(),
+                title: "x\x1b[0m".into(),
+                repo: Some("r\x1b".into()),
+                ..FocusItem::default()
+            }],
+            ..Board::default()
+        };
+        // Colour off, so any ESC in the output could only have come from data.
+        let out = render_report(&entries, &board, false);
+        assert!(!out.contains('\x1b') && !out.contains('\x07') && !out.contains('\r'));
+        assert!(out.contains("pay[2Japi"));
     }
 
     #[test]

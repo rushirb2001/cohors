@@ -59,15 +59,22 @@ Call `write_repo_contribution` with `dry_run: true` first, fix every error it
 lists, then call it for real. Set `generatedFrom` to the current short commit
 SHA so staleness can be shown later.
 
-If the tool reports that it needs `--allow-launchpad`, tell the user: the
-plugin enables it by default, so a refusal means the server was registered by
-hand without the flag.
+The plugin starts the server **read-only**, so the real write is refused
+until the user opts in. When that happens, do one of:
 
-Without the MCP server, write the file directly and check it with:
+- Write `.principia/repo.json` yourself with your normal file tools (the user
+  approves the edit like any other), stamping `"specVersion": 1` and an
+  ISO-8601 UTC `"updated"`, then check it:
 
-```sh
-cohors launchpad validate .
-```
+  ```sh
+  cohors launchpad validate .
+  ```
+
+- Or tell the user they can let the server write launchpad files directly by
+  adding `--allow-launchpad` to the server's arguments.
+
+Either way, `dry_run: true` always works and is the fastest way to find every
+problem before writing.
 
 ## Finish
 

@@ -2,7 +2,7 @@
   "mcpServers": {
     "cohors": {
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/cohors-launch",
-      "args": ["mcp", "--allow-launchpad"]
+      "args": ["mcp"]
     }
   }
 }

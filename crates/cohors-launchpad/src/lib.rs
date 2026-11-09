@@ -263,6 +263,12 @@ pub fn write_contribution(
     }
 
     let dir = root.join(CONTRIB_DIR);
+    // A repo is untrusted input: a cloned repository could ship `.principia`
+    // (or the files in it) as a symlink pointing outside the repo, turning this
+    // write into a write to an arbitrary file. Refuse rather than follow.
+    refuse_symlink(&dir)?;
+    refuse_symlink(&path)?;
+    refuse_symlink(&root.join(".gitignore"))?;
     fs::create_dir_all(&dir).map_err(io_err("creating", &dir))?;
     write_json_atomic(&path, &stamped)?;
     ensure_gitignored(root)?;
@@ -293,13 +299,40 @@ fn ensure_gitignored(root: &Path) -> Result<(), LaunchpadError> {
     fs::write(&path, format!("{body}{separator}{LOCAL_FILE}\n")).map_err(io_err("writing", &path))
 }
 
+/// Error if `path` exists and is a symbolic link. `symlink_metadata` inspects
+/// the link itself rather than what it points to; a path that does not exist
+/// yet is fine.
+fn refuse_symlink(path: &Path) -> Result<(), LaunchpadError> {
+    match fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_symlink() => Err(LaunchpadError::Invalid(format!(
+            "refusing to write through a symbolic link: {}",
+            path.display()
+        ))),
+        _ => Ok(()),
+    }
+}
+
 /// Write pretty JSON to a temp sibling, then rename over the target.
 fn write_json_atomic(path: &Path, value: &Value) -> Result<(), LaunchpadError> {
     let mut body = serde_json::to_vec_pretty(value)
         .map_err(|e| LaunchpadError::Invalid(format!("serializing JSON: {e}")))?;
     body.push(b'\n');
     let tmp = path.with_extension("json.tmp");
-    fs::write(&tmp, body).map_err(io_err("writing", &tmp))?;
+    // Clear a leftover from a crashed run (never following a link), then
+    // create the temp file exclusively: `create_new` fails if anything, a
+    // symlink included, appears at that path in between.
+    refuse_symlink(&tmp)?;
+    match fs::remove_file(&tmp) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(io_err("clearing", &tmp)(e)),
+    }
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp)
+        .and_then(|mut file| file.write_all(&body))
+        .map_err(io_err("writing", &tmp))?;
     fs::rename(&tmp, path).map_err(io_err("replacing", path))
 }
 
@@ -352,6 +385,7 @@ pub fn write_board(
         });
     }
     fs::create_dir_all(home).map_err(io_err("creating", home))?;
+    refuse_symlink(&path)?;
     write_json_atomic(&path, &doc)?;
     Ok(WriteOutcome {
         written: true,
@@ -522,6 +556,44 @@ mod tests {
         assert!(!dir.path().join(CONTRIB_DIR).exists());
 
         assert!(write_contribution(dir.path(), &json!([]), NOW, false).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn writes_never_follow_symlinks() {
+        use std::os::unix::fs::symlink;
+        let doc = json!({ "name": "svc" });
+        let outside = repo();
+
+        // `.principia` itself is a link out of the repo.
+        let dir = repo();
+        symlink(outside.path(), dir.path().join(CONTRIB_DIR)).unwrap();
+        let err = write_contribution(dir.path(), &doc, NOW, false).unwrap_err();
+        assert!(err.to_string().contains("symbolic link"), "{err}");
+        assert!(!outside.path().join("repo.json").exists());
+
+        // `repo.json` is a link to a file elsewhere.
+        let dir = repo();
+        let target = outside.path().join("victim.txt");
+        fs::write(&target, "untouched").unwrap();
+        fs::create_dir_all(dir.path().join(CONTRIB_DIR)).unwrap();
+        symlink(&target, dir.path().join(CONTRIB_FILE)).unwrap();
+        assert!(write_contribution(dir.path(), &doc, NOW, false).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
+
+        // `.gitignore` is a link: nothing at all is written.
+        let dir = repo();
+        symlink(&target, dir.path().join(".gitignore")).unwrap();
+        assert!(write_contribution(dir.path(), &doc, NOW, false).is_err());
+        assert!(!dir.path().join(CONTRIB_FILE).exists());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
+
+        // A planted temp-file link is refused too.
+        let dir = repo();
+        fs::create_dir_all(dir.path().join(CONTRIB_DIR)).unwrap();
+        symlink(&target, dir.path().join(".principia/repo.json.tmp")).unwrap();
+        assert!(write_contribution(dir.path(), &doc, NOW, false).is_err());
+        assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
     }
 
     #[test]
