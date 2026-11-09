@@ -2,29 +2,29 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 26)"
 ---
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
-│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▆▒█▒▇▒█▒▇▒▆▒▆▒▄▒▇▒▅▒█▒▇ │
-│ ▀▐▖▀█▀▗▌▀  (demo)                                                     │  535 commits · 12 weeks  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
-│ 2 at risk · 4 warning · 4 minor · 2 calm                                                         │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│    Repo                      Sync   PRs    CI       Last  Activity      Status                   │
-│▌   legacy-billing                                                       could not read .git (per…│
-│  ○ mobile-app @release/2.0   ↑4 ↓1  3      pending    9h  ▃█▄█▅▁▆▂▇▃█▄  ↑4↓1 diverged            │
-│  ○ payments @main            ↑2     2      passing    2h  ▅▁▅▁▆▂▇▃█▄█▅  ↑2 unpushed              │
-│    ▷ @feat/idempotency-keys  local  0      local      1d                never pushed             │
-│  ○ analytics @main           ↑1     0      passing    4d  ▃█▄█▅▁▆▂▇▃█▄  ↑1 unpushed · aging      │
-│  ○ design-system @main       ↑1     1      passing    6h  ▃█▄█▅▁▆▂▇▃█▄  ↑1 unpushed              │
-│                                             ↓ 8 more                                             │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
+║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▆▒█▒▇▒█▒▇▒▆▒▆▒▄▒▇▒▅▒█▒▇ ║
+║ ▀▐▖▀█▀▗▌▀  (demo)                                                     │  535 commits · 12 weeks  ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Attention (10 of 12 repositories) ═══════════════════════════════════════════════════════════════╗
+║ 2 at risk · 4 warning · 4 minor · 2 calm                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Repositories (12) · sort: dirty-first ═══════════════════════════════════════════════════════════╗
+║    Repo                      Sync   PRs    CI       Last  Activity      Status                   ║
+║▌   legacy-billing                                                       could not read .git (per…║
+║  ○ mobile-app @release/2.0   ↑4 ↓1  3      pending    9h  ▃█▄█▅▁▆▂▇▃█▄   WARN  ↑4↓1 diverged     ║
+║  ○ payments @main            ↑2     2      passing    2h  ▅▁▅▁▆▂▇▃█▄█▅   WARN  ↑2 unpushed       ║
+║    ▷ @feat/idempotency-keys  local  0      local      1d                never pushed             ║
+║  ○ analytics @main           ↑1     0      passing    4d  ▃█▄█▅▁▆▂▇▃█▄   RISK  ↑1 unpushed · agi…║
+║  ○ design-system @main       ↑1     1      passing    6h  ▃█▄█▅▁▆▂▇▃█▄   WARN  ↑1 unpushed       ║
+║                                             ↓ 8 more                                             ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭─────────────────────────────────┬──────────────────────────────┬─────────────────────────────────╮
-│             select              │     act → legacy-billing     │              view               │
-│ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── │
-│     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       │
-│     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          │
-│                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          │
-╰─────────────────────────────────┴──────────────────────────────┴─────────────────────────────────╯
+╔═════════════════════════════════╤══════════════════════════════╤═════════════════════════════════╗
+║             select              │     act → legacy-billing     │              view               ║
+║ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── ║
+║     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       ║
+║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
+║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
+╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝

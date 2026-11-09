@@ -56,6 +56,34 @@ impl Theme {
         }
     }
 
+    /// Bronze — the colour of structure: panel titles, overlay titles, section
+    /// headings. A lighter bronze on dark terminals, a deeper one on light.
+    fn bronze(&self) -> Style {
+        if self.dark {
+            self.fg(Color::Rgb(0xC8, 0xA0, 0x64))
+        } else {
+            self.fg(Color::Rgb(0x8F, 0x6A, 0x2A))
+        }
+    }
+
+    /// The solid badge that leads a risk or warning status (`None` for milder
+    /// severities). Uses the terminal's own red/yellow so it follows the
+    /// user's palette; under `NO_COLOR` it falls back to reverse video, which
+    /// still reads as a block.
+    fn badge(&self, sev: Severity) -> Option<(&'static str, Style)> {
+        let (word, bg) = match sev {
+            Severity::Risk => (" RISK ", Color::Red),
+            Severity::Warn => (" WARN ", Color::Yellow),
+            _ => return None,
+        };
+        let style = if self.color {
+            Style::new().bg(bg).fg(Color::Black)
+        } else {
+            Style::new().add_modifier(Modifier::REVERSED)
+        };
+        Some((word, style.add_modifier(Modifier::BOLD)))
+    }
+
     fn dim(&self) -> Style {
         Style::new().add_modifier(Modifier::DIM)
     }
@@ -116,11 +144,11 @@ impl Theme {
             // Dark terminal: a dark purple wash + light base fg, so the native
             // accent colours read while the brand tint stays present.
             Style::new()
-                .bg(Color::Rgb(0x2E, 0x27, 0x3E))
+                .bg(Color::Rgb(0x2B, 0x1C, 0x31))
                 .fg(Color::Indexed(253))
         } else {
             Style::new()
-                .bg(Color::Rgb(0xFA, 0xF5, 0xFF))
+                .bg(Color::Rgb(0xF8, 0xEF, 0xF5))
                 .fg(Color::Indexed(235))
         }
     }
@@ -134,9 +162,9 @@ impl Theme {
         if !self.color {
             Style::new().add_modifier(Modifier::REVERSED)
         } else if self.dark {
-            Style::new().bg(Color::Rgb(0x4A, 0x3D, 0x74))
+            Style::new().bg(Color::Rgb(0x4A, 0x2C, 0x47))
         } else {
-            Style::new().bg(Color::Rgb(0xC9, 0xB8, 0xF0))
+            Style::new().bg(Color::Rgb(0xEA, 0xD3, 0xE4))
         }
     }
 }
@@ -245,9 +273,13 @@ pub(crate) fn dim_area(buf: &mut Buffer, area: Rect) {
 /// The branded header: a logo lockup — a shield mark built from block glyphs
 /// beside the wordmark, version, and tagline. cohors's "business card."
 /// Transient feedback lives in a self-dismissing toast, not here.
-/// The brand purple for the spider mark (a true violet, not the terminal's
-/// pinkish ANSI magenta). Dropped under `NO_COLOR` via [`Theme::fg`].
-pub(crate) const SPIDER_PURPLE: Color = Color::Rgb(0xA8, 0x55, 0xF7);
+/// The brand colour for the spider mark: Tyrian purple, lifted enough to read
+/// on both dark and light terminals. Dropped under `NO_COLOR` via [`Theme::fg`].
+pub(crate) const SPIDER_PURPLE: Color = Color::Rgb(0xB5, 0x5C, 0xA4);
+
+/// The frame of every panel and overlay: a double rule, the "Standard" look.
+/// Rules drawn inside a frame join it with `╟ ╢ ╤ ╧`.
+pub(crate) const FRAME: BorderType = BorderType::Double;
 
 /// The cohors mark — three rows of block "pixels" (width 9). Shared by the TUI
 /// header and the CLI's `cohors web` setup hint so the brand reads the same
@@ -272,7 +304,7 @@ pub(crate) fn version_str() -> &'static str {
 /// The brand purple as an RGB triple, for surfaces that emit their own ANSI
 /// (the CLI) rather than going through ratatui's [`Theme`]. Kept in lockstep
 /// with [`SPIDER_PURPLE`] by construction.
-pub(crate) const SPIDER_PURPLE_RGB: (u8, u8, u8) = (0xA8, 0x55, 0xF7);
+pub(crate) const SPIDER_PURPLE_RGB: (u8, u8, u8) = (0xB5, 0x5C, 0xA4);
 
 // The UI is one module split across focused files: `chrome` (header, footer,
 // attention panel, command box), `rows` (the repos table, its cells, and the

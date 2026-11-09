@@ -2,37 +2,37 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 34)"
 ---
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
-│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
-│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (4 of 5 repositories) ─────────────────────────────────────────────────────────────────╮
-│ ████████████████████████████████████████████████████████████████████████████████████████████████ │
-│ 1 at risk · 2 warning · 1 minor · 1 calm                                                         │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (5) · sort: dirty-first ────────────────────────────────────────────────────────────╮
-│    Repo                     Sync   PRs    CI       Last  Activity      Status                    │
-│▌   legacy-billing                                                      could not read .git (perm…│
-│  ○ payments @main           ↑2     2      passing    2h     quiet      ↑2 unpushed               │
-│    ▷ @feat/checkout-rework  ↑5 ↓1  0      failing    1d                5 ahead · 1 behind        │
-│  ○ web-app @feat/checkout   ⠋      ⠋      ⠋         20m     quiet      ↓5 behind — pull          │
-│  ○ infra @a1b2c3d           local  local  local      1w     quiet      4 uncommitted changes     │
-│  ○ auth-service @main       ⠋      ⠋      ⠋          3d     quiet      up to date                │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
-├──────────────────────────────────────────────────────────────────────────────────────────────────┤
-│ Working — 2 repo(s)                                                                              │
-│                                                                                                  │
-│ ⠋ web-app                                                                                        │
-│ ⠋ auth-service                                                                                   │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
+║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ ║
+║ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Attention (4 of 5 repositories) ═════════════════════════════════════════════════════════════════╗
+║ ████████████████████████████████████████████████████████████████████████████████████████████████ ║
+║ 1 at risk · 2 warning · 1 minor · 1 calm                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Repositories (5) · sort: dirty-first ════════════════════════════════════════════════════════════╗
+║    Repo                     Sync   PRs    CI       Last  Activity      Status                    ║
+║▌   legacy-billing                                                      could not read .git (perm…║
+║  ○ payments @main           ↑2     2      passing    2h     quiet       WARN  ↑2 unpushed        ║
+║    ▷ @feat/checkout-rework  ↑5 ↓1  0      failing    1d                5 ahead · 1 behind        ║
+║  ○ web-app @feat/checkout   ⠋      ⠋      ⠋         20m     quiet       WARN  ↓5 behind — pull   ║
+║  ○ infra @a1b2c3d           local  local  local      1w     quiet      4 uncommitted changes     ║
+║  ○ auth-service @main       ⠋      ⠋      ⠋          3d     quiet      up to date                ║
+║                                                                                                  ║
+║                                                                                                  ║
+║                                                                                                  ║
+╟──────────────────────────────────────────────────────────────────────────────────────────────────╢
+║ Working — 2 repo(s)                                                                              ║
+║                                                                                                  ║
+║ ⠋ web-app                                                                                        ║
+║ ⠋ auth-service                                                                                   ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 ────────────────────────────────────── press h to hide hints ───────────────────────────────────────
-╭─────────────────────────────────┬──────────────────────────────┬─────────────────────────────────╮
-│             select              │     act → legacy-billing     │              view               │
-│ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── │
-│     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       │
-│     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          │
-│                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          │
-╰─────────────────────────────────┴──────────────────────────────┴─────────────────────────────────╯
+╔═════════════════════════════════╤══════════════════════════════╤═════════════════════════════════╗
+║             select              │     act → legacy-billing     │              view               ║
+║ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── ║
+║     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       ║
+║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
+║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
+╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝

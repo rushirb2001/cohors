@@ -621,7 +621,7 @@ fn footer_hint_bar_wash_stays_inside_the_outline() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.draw(|f| render(f, &app, NOW)).unwrap();
     let buf = terminal.backend().buffer();
-    let wash = Color::Rgb(0xFA, 0xF5, 0xFF);
+    let wash = Color::Rgb(0xF8, 0xEF, 0xF5);
 
     // The inner hints carry the wash...
     let has_wash = (0..buf.area.height)
@@ -644,8 +644,8 @@ fn footer_hint_bar_uses_the_dark_wash_in_dark_mode() {
     let mut terminal = Terminal::new(backend).unwrap();
     terminal.draw(|f| render(f, &app, NOW)).unwrap();
     let buf = terminal.backend().buffer();
-    let dark = Color::Rgb(0x2E, 0x27, 0x3E);
-    let light = Color::Rgb(0xFA, 0xF5, 0xFF);
+    let dark = Color::Rgb(0x2B, 0x1C, 0x31);
+    let light = Color::Rgb(0xF8, 0xEF, 0xF5);
     let any_bg = |want: Color| {
         (0..buf.area.height)
             .any(|y| (0..buf.area.width).any(|x| buf.cell((x, y)).is_some_and(|c| c.bg == want)))

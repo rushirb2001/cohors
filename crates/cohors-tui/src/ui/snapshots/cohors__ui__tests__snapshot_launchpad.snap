@@ -2,37 +2,37 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 110, 34)"
 ---
-╭────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                                       │  Fleet activity          │
-│ ▟██▌█▐██▙  All your git repositories at a glance                                │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
-│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                                      │  quiet · 12 weeks        │
-╰────────╭──────────────────────────────────────────────────────────────────────────────────────────╮────────╯
-╭ Attenti│ Launchpad   ·   5 open tasks · 3 of 5 repos set up                                       │────────╮
-│ ███████├──────────────────────────────────────────────────────────────────────────────────────────┤███████ │
-│ 1 at ri│ Focus                                                                                    │        │
-╰────────│   ▸ Ship idempotent charge retries  payments · doing                                     │────────╯
-╭ Reposit│                                                                                          │────────╮
-│    Repo│   ▸ payments  Card and bank payments service                                             │        │
-│▌   lega│     ◆ Idempotency keys on charge retries  high  doing                                    │ion den…│
-│  ○ paym│     ○ Back off webhook redelivery                                                        │        │
-│    ▷ @f│     run docker compose up -d && cargo run                                                │        │
-│  ○ web-│                                                                                          │        │
-│  ○ infr│   ▸ web-app  Customer-facing storefront                                                  │        │
-│  ○ auth│     ✕ Checkout form fails keyboard-only pass  high  blocked                              │        │
-│        │     ○ Remove the legacy cart endpoint  low                                               │        │
-│        │     run pnpm dev                                                                         │        │
-│        │                                                                                          │        │
-│        │   ▸ data-pipeline  Nightly ingest and reporting jobs                                     │        │
-├────────│     ○ Nightly ingest job is red on main  high                                            │────────┤
-│ legacy-│                                                                                          │ detail │
-│        │ Not set up yet                                                                           │        │
-│ ⚠ could│   in one of these, ask your agent: "set up this repo for the launchpad"                  │        │
-╰────────│   mobile-app · infra                                                                     │────────╯
-─────────├──────────────────────────────────────────────────────────────────────────────────────────┤─────────
-╭────────│                                ↑/↓ scroll · t / Esc close                                │────────╮
-│        ╰──────────────────────────────────────────────────────────────────────────────────────────╯        │
-│ ─────────────────────────────────── │ ──────────────────────────────── │ ───────────────────────────────── │
-│       ␣ mrk repo │ / filter         │       ⏎ open  │ P push           │       ↑/↓ move │ ⇥ standup        │
-│       a mrk all  │ Esc clear        │       f fetch │ S stash          │       s sort   │ ? help           │
-│                                     │       p pull  │ ! run cmd        │       d attn   │ q quit           │
-╰─────────────────────────────────────┴──────────────────────────────────┴───────────────────────────────────╯
+╔════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                                       │  Fleet activity          ║
+║ ▟██▌█▐██▙  All your git repositories at a glance                                │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ ║
+║ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                                      │  quiet · 12 weeks        ║
+╚════════╔══════════════════════════════════════════════════════════════════════════════════════════╗════════╝
+╔ Attenti║ Launchpad   ·   5 open tasks · 3 of 5 repos set up                                       ║════════╗
+║ ███████╟──────────────────────────────────────────────────────────────────────────────────────────╢███████ ║
+║ 1 at ri║ Focus                                                                                    ║        ║
+╚════════║   ▸ Ship idempotent charge retries  payments · doing                                     ║════════╝
+╔ Reposit║                                                                                          ║════════╗
+║    Repo║   ▸ payments  Card and bank payments service                                             ║        ║
+║▌   lega║     ◆ Idempotency keys on charge retries   high   doing                                  ║ion den…║
+║  ○ paym║     ○ Back off webhook redelivery                                                        ║        ║
+║    ▷ @f║     run docker compose up -d && cargo run                                                ║        ║
+║  ○ web-║                                                                                          ║        ║
+║  ○ infr║   ▸ web-app  Customer-facing storefront                                                  ║        ║
+║  ○ auth║     ✕ Checkout form fails keyboard-only pass   high   blocked                            ║        ║
+║        ║     ○ Remove the legacy cart endpoint  low                                               ║        ║
+║        ║     run pnpm dev                                                                         ║        ║
+║        ║                                                                                          ║        ║
+║        ║   ▸ data-pipeline  Nightly ingest and reporting jobs                                     ║        ║
+╟────────║     ○ Nightly ingest job is red on main   high                                           ║────────╢
+║ legacy-║                                                                                          ║ detail ║
+║        ║ Not set up yet                                                                           ║        ║
+║ ⚠ could║   in one of these, ask your agent: "set up this repo for the launchpad"                  ║        ║
+╚════════║   mobile-app · infra                                                                     ║════════╝
+─────────╟──────────────────────────────────────────────────────────────────────────────────────────╢─────────
+╔════════║                                ↑/↓ scroll · t / Esc close                                ║════════╗
+║        ╚══════════════════════════════════════════════════════════════════════════════════════════╝        ║
+║ ─────────────────────────────────── │ ──────────────────────────────── │ ───────────────────────────────── ║
+║       ␣ mrk repo │ / filter         │       ⏎ open  │ P push           │       ↑/↓ move │ ⇥ standup        ║
+║       a mrk all  │ Esc clear        │       f fetch │ S stash          │       s sort   │ ? help           ║
+║                                     │       p pull  │ ! run cmd        │       d attn   │ q quit           ║
+╚═════════════════════════════════════╧══════════════════════════════════╧═══════════════════════════════════╝

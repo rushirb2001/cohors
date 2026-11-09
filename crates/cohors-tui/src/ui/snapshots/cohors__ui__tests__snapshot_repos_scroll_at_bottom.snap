@@ -2,21 +2,21 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 18)"
 ---
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
-│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▆▒█▒▇▒█▒▇▒▆▒▆▒▄▒▇▒▅▒█▒▇ │
-│ ▀▐▖▀█▀▗▌▀  (demo)                                                     │  535 commits · 12 weeks  │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Attention (10 of 12 repositories) ───────────────────────────────────────────────────────────────╮
-│ 2 at risk · 4 warning · 4 minor · 2 calm                                                         │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭ Repositories (12) · sort: dirty-first ───────────────────────────────────────────────────────────╮
-│    Repo                      Sync   PRs    CI       Last  Activity      Status                   │
-│                                             ↑ 7 more                                             │
-│  ○ experiments @9f8e7d6      local  local  local      1y  ▂▇▃█▄█▅▁▆▂▇▃  7 uncommitted changes    │
-│  ○ infra @a1b2c3d            local  local  local      1w  ▃▇▃█▄█▅▁▆▂▇▃  4 uncommitted changes    │
-│  ○ cli-tools @main           ●      0      passing   12h  ▃█▄█▅█▅▁▆▂▇▃  1 uncommitted change     │
-│  ○ auth-service @main        ●      0      passing    3d  █▅█▅▁▆▂▇▃█▄█  up to date               │
-│▌ ○ marketing-site @main      ●      local  local     1mo  ▇▃█▄█▅▁▆▂▇▃█  up to date               │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
+║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▆▒█▒▇▒█▒▇▒▆▒▆▒▄▒▇▒▅▒█▒▇ ║
+║ ▀▐▖▀█▀▗▌▀  (demo)                                                     │  535 commits · 12 weeks  ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Attention (10 of 12 repositories) ═══════════════════════════════════════════════════════════════╗
+║ 2 at risk · 4 warning · 4 minor · 2 calm                                                         ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
+╔ Repositories (12) · sort: dirty-first ═══════════════════════════════════════════════════════════╗
+║    Repo                      Sync   PRs    CI       Last  Activity      Status                   ║
+║                                             ↑ 7 more                                             ║
+║  ○ experiments @9f8e7d6      local  local  local      1y  ▂▇▃█▄█▅▁▆▂▇▃  7 uncommitted changes    ║
+║  ○ infra @a1b2c3d            local  local  local      1w  ▃▇▃█▄█▅▁▆▂▇▃  4 uncommitted changes    ║
+║  ○ cli-tools @main           ●      0      passing   12h  ▃█▄█▅█▅▁▆▂▇▃  1 uncommitted change     ║
+║  ○ auth-service @main        ●      0      passing    3d  █▅█▅▁▆▂▇▃█▄█  up to date               ║
+║▌ ○ marketing-site @main      ●      local  local     1mo  ▇▃█▄█▅▁▆▂▇▃█  up to date               ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
 ───────────────────────────────────── press h to unhide hints ──────────────────────────────────────

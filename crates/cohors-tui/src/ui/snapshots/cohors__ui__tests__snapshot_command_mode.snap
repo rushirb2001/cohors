@@ -2,25 +2,25 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 22)"
 ---
-╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          │
-│ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ │
-│ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        │
-╰────────────╭────────────────────────────────────────────────────────────────────────╮────────────╯
-╭ Attention (│ Command                                                                │────────────╮
-│ 1 at risk ·├────────────────────────────────────────────────────────────────────────┤            │
-╰────────────│ : sort name▏                                                           │────────────╯
-╭ Repositorie├────────────────────────────┬───────────────────────────────────────────┤────────────╮
-│    Repo    │ :fetch :pull :push         │ sync the targets with their remotes       │            │
-│▌   legacy-b│ :!<cmd>                    │ run any shell command across the targets  │ .git (perm…│
-│  ○ payments│ :sort <name·dirty·recent>  │ change the sort order                     │            │
-│            │ :dirty   /<text>           │ needs-attention · fuzzy filter            │            │
-╰────────────│ :jump <repo>               │ move the cursor to a repo                 │────────────╯
-─────────────│ :standup :refresh :quit    │ standup · rescan · exit                   │─────────────
-╭────────────├────────────────────────────┴───────────────────────────────────────────┤────────────╮
-│            │                           ⏎ run · Esc cancel                           │            │
-│ ───────────╰────────────────────────────────────────────────────────────────────────╯─────────── │
-│     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       │
-│     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          │
-│                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          │
-╰─────────────────────────────────┴──────────────────────────────┴─────────────────────────────────╯
+╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
+║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ ║
+║ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        ║
+╚════════════╔════════════════════════════════════════════════════════════════════════╗════════════╝
+╔ Attention (║ Command                                                                ║════════════╗
+║ 1 at risk ·╟────────────────────────────────────────────────────────────────────────╢            ║
+╚════════════║ : sort name▏                                                           ║════════════╝
+╔ Repositorie╟────────────────────────────┬───────────────────────────────────────────╢════════════╗
+║    Repo    ║ :fetch :pull :push         │ sync the targets with their remotes       ║            ║
+║▌   legacy-b║ :!<cmd>                    │ run any shell command across the targets  ║ .git (perm…║
+║  ○ payments║ :sort <name·dirty·recent>  │ change the sort order                     ║shed        ║
+║            ║ :dirty   /<text>           │ needs-attention · fuzzy filter            ║            ║
+╚════════════║ :jump <repo>               │ move the cursor to a repo                 ║════════════╝
+─────────────║ :standup :refresh :quit    │ standup · rescan · exit                   ║─────────────
+╔════════════╟────────────────────────────┴───────────────────────────────────────────╢════════════╗
+║            ║                           ⏎ run · Esc cancel                           ║            ║
+║ ───────────╚════════════════════════════════════════════════════════════════════════╝─────────── ║
+║     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       ║
+║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
+║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
+╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝

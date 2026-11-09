@@ -2,7 +2,7 @@ use super::*;
 
 pub(crate) fn render_header(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .border_style(theme.dim())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
@@ -368,7 +368,7 @@ fn footer_stacked_rows(app: &App, inner_w: u16) -> u16 {
 /// truncates — the fallback when the one-box bar won't fit horizontally.
 fn render_footer_stacked(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .border_style(theme.dim())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
@@ -475,7 +475,7 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
     let groups = footer_groups_short(app);
     let (widths, _rows, _total) = footer_bar_geometry(app);
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .border_style(theme.dim());
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -514,7 +514,7 @@ pub(crate) fn render_footer_bar(frame: &mut Frame, area: Rect, app: &App, theme:
                 .map(|_| Line::from(Span::styled("│", theme.dim())))
                 .collect();
             frame.render_widget(Paragraph::new(Text::from(bar)), *rect);
-            for (y, ch) in [(area.y, "┬"), (area.y + area.height - 1, "┴")] {
+            for (y, ch) in [(area.y, "╤"), (area.y + area.height - 1, "╧")] {
                 frame.render_widget(
                     Paragraph::new(Span::styled(ch, theme.dim())),
                     Rect {
@@ -653,7 +653,7 @@ pub(crate) fn render_attention_panel(
     // wide layout and the web show.
     let mut title = vec![Span::styled(
         " Attention ",
-        Style::new().add_modifier(Modifier::BOLD),
+        theme.bronze().add_modifier(Modifier::BOLD),
     )];
     if s.needs_attention > 0 {
         title.push(Span::styled(
@@ -662,7 +662,7 @@ pub(crate) fn render_attention_panel(
         ));
     }
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .title(Line::from(title))
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
@@ -769,14 +769,14 @@ pub(crate) fn fleet_activity_lines(app: &App, theme: &Theme) -> Vec<Line<'static
 fn render_attention_card(frame: &mut Frame, area: Rect, s: &FleetSummary, theme: &Theme) {
     let mut title = vec![Span::styled(
         " Attention ",
-        Style::new().add_modifier(Modifier::BOLD),
+        theme.bronze().add_modifier(Modifier::BOLD),
     )];
     title.push(Span::styled(
         format!("({} of {} repositories) ", s.needs_attention, s.total),
         theme.dim(),
     ));
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .title(Line::from(title))
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
@@ -1006,10 +1006,19 @@ pub(crate) fn render_modal_header(
     frame: &mut Frame,
     area: Rect,
     inner: Rect,
-    title: Line<'static>,
+    theme: &Theme,
+    mut title: Line<'static>,
 ) -> Rect {
     if inner.height < 3 {
         return inner;
+    }
+    // Every overlay's title speaks in the same voice: bold bronze. Only the
+    // first span is the title proper; anything after it (counts, context)
+    // keeps the style its caller chose.
+    if let Some(first) = title.spans.first_mut() {
+        first.style = first
+            .style
+            .patch(theme.bronze().add_modifier(Modifier::BOLD));
     }
     frame.render_widget(Paragraph::new(title), Rect { height: 1, ..inner });
     modal_rule(frame, area, inner.y + 1);
@@ -1021,7 +1030,7 @@ pub(crate) fn render_modal_header(
 }
 
 /// A solid, full-strength horizontal rule across a modal at row `y`, joined into
-/// its side borders with `├`/`┤`. Full strength (the default border style, not
+/// its double side borders with `╟`/`╢`. Full strength (the default border style, not
 /// dim) so it reads as a real structural line, matching the box borders.
 pub(crate) fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
     let style = Style::new();
@@ -1037,7 +1046,7 @@ pub(crate) fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
             height: 1,
         },
     );
-    for (x, ch) in [(area.x, "├"), (area.x + area.width.saturating_sub(1), "┤")] {
+    for (x, ch) in [(area.x, "╟"), (area.x + area.width.saturating_sub(1), "╢")] {
         frame.render_widget(
             Paragraph::new(Span::styled(ch, style)),
             Rect {
@@ -1069,7 +1078,7 @@ pub(crate) fn action_target_hint(app: &App) -> Option<(String, String)> {
 /// when nothing is typed yet.
 pub(crate) fn render_filter_input(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(BorderType::Plain)
         .border_style(theme.dim())
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
@@ -1175,7 +1184,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     frame.render_widget(Clear, area);
     let title = if shell { "Shell command" } else { "Command" };
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .border_style(if shell { accent } else { Style::new() })
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
@@ -1185,6 +1194,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
         frame,
         area,
         inner,
+        theme,
         Line::from(Span::styled(
             title,
             title_style.add_modifier(Modifier::BOLD),

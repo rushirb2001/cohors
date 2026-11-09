@@ -10,12 +10,12 @@ const HELP_STYLES: Styles = Styles::styled()
     .header(
         Style::new()
             .bold()
-            .fg_color(Some(Color::Rgb(RgbColor(168, 85, 247)))),
+            .fg_color(Some(Color::Rgb(RgbColor(181, 92, 164)))),
     )
     .usage(
         Style::new()
             .bold()
-            .fg_color(Some(Color::Rgb(RgbColor(168, 85, 247)))),
+            .fg_color(Some(Color::Rgb(RgbColor(181, 92, 164)))),
     )
     .literal(Style::new().bold())
     .placeholder(Style::new().dimmed())

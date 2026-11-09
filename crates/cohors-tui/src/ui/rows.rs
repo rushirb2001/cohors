@@ -13,7 +13,7 @@ pub(crate) fn render_repos_panel(
     // (matching the web, where the filter input and toggle stay visible).
     let mut title = vec![Span::styled(
         format!(" Repositories ({}) ", app.visible_len()),
-        Style::new().add_modifier(Modifier::BOLD),
+        theme.bronze().add_modifier(Modifier::BOLD),
     )];
     title.push(Span::styled(
         format!("· sort: {} ", app.sort.label()),
@@ -26,7 +26,7 @@ pub(crate) fn render_repos_panel(
         title.push(Span::styled(format!("· /{} ", app.filter), theme.dim()));
     }
     let mut block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .title(Line::from(title));
     // Transient feedback (scan progress, action results) rides the top-right of
     // this box's border — a self-dismissing toast that doesn't crowd the header.
@@ -717,7 +717,7 @@ pub(crate) fn render_inbox_dock(frame: &mut Frame, area: Rect, dock: &DockBox, t
         rule_row,
     );
     if rule_row.x > 0 {
-        for (x, ch) in [(rule_row.x - 1, "├"), (rule_row.x + rule_row.width, "┤")] {
+        for (x, ch) in [(rule_row.x - 1, "╟"), (rule_row.x + rule_row.width, "╢")] {
             frame.render_widget(
                 Paragraph::new(Span::styled(ch, dock.border)),
                 Rect {
@@ -1203,10 +1203,25 @@ fn reason_spans(
     theme: &Theme,
 ) -> Vec<Span<'static>> {
     match primary {
-        Some(r) => vec![Span::styled(
-            ellipsize(&r.label(), max),
-            severity_style(severity, theme),
-        )],
+        Some(r) => {
+            // Risk and warning lead with a solid badge, so the two severities
+            // that need you read from across the room; milder ones stay text.
+            let Some((word, badge)) = theme.badge(severity) else {
+                return vec![Span::styled(
+                    ellipsize(&r.label(), max),
+                    severity_style(severity, theme),
+                )];
+            };
+            let label_w = max.saturating_sub(word.chars().count() + 1);
+            vec![
+                Span::styled(word, badge),
+                Span::raw(" "),
+                Span::styled(
+                    ellipsize(&r.label(), label_w),
+                    severity_style(severity, theme),
+                ),
+            ]
+        }
         None => vec![Span::styled(ellipsize("up to date", max), theme.dim())],
     }
 }

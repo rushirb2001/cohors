@@ -117,11 +117,11 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
     frame.render_widget(Clear, area);
 
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::new(2, 2, 1, 1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let inner = render_modal_header(frame, area, inner, Line::from("Help").bold());
+    let inner = render_modal_header(frame, area, inner, theme, Line::from("Help").bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
     frame.render_widget(
         Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
@@ -244,7 +244,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     // The outer frame. Title + hints ride inside the box (on their own rules), and
     // the title sits directly under the top border — no blank pad line above it.
     let outer = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::new(1, 1, 0, 0));
 
     // Still walking the commits: a placeholder.
@@ -255,6 +255,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
             frame,
             area,
             inner,
+            theme,
             Line::from(format!("Standup · {window}")).bold(),
         );
         frame.render_widget(
@@ -283,7 +284,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     ]);
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
-    let inner = render_modal_header(frame, area, inner, header);
+    let inner = render_modal_header(frame, area, inner, theme, header);
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     if view.groups.is_empty() {
@@ -564,11 +565,12 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
         let area = detail_rect(full, 5); // 1 content row + 2 header + 2 hint footer
         frame.render_widget(Clear, area);
         let block = Block::bordered()
-            .border_type(BorderType::Rounded)
+            .border_type(FRAME)
             .padding(Padding::new(1, 0, 0, 0));
         let inner = block.inner(area);
         frame.render_widget(block, area);
-        let inner = render_modal_header(frame, area, inner, Line::from(title.clone()).bold());
+        let inner =
+            render_modal_header(frame, area, inner, theme, Line::from(title.clone()).bold());
         let inner = render_modal_hints(frame, area, inner, app, theme);
         frame.render_widget(
             Paragraph::new(Span::styled("Reading repo…", theme.dim())),
@@ -669,11 +671,11 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
     let area = detail_rect(full, content_rows + 3);
     frame.render_widget(Clear, area);
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::new(1, 0, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let inner = render_modal_header(frame, area, inner, Line::from(title).bold());
+    let inner = render_modal_header(frame, area, inner, theme, Line::from(title).bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Two columns split by a solid vertical divider that ties into the rules above
@@ -913,7 +915,7 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
     frame.render_widget(Clear, area);
 
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::new(1, 1, 0, 0));
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -921,7 +923,7 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
         Span::styled(format!("Run · {}", run.command), Style::new().bold()),
         Span::styled(format!("   ·  {summary}"), theme.dim()),
     ]);
-    let inner = render_modal_header(frame, area, inner, header);
+    let inner = render_modal_header(frame, area, inner, theme, header);
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Two columns split by a solid divider joined into the rules (`┬`/`┴`), like the
@@ -1097,11 +1099,11 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
     };
     frame.render_widget(Clear, area);
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let inner = render_modal_header(frame, area, inner, Line::from("Confirm").bold());
+    let inner = render_modal_header(frame, area, inner, theme, Line::from("Confirm").bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
     let lines = vec![
         Line::from(Span::styled(
@@ -1157,11 +1159,11 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
     frame.render_widget(Clear, area);
 
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let inner = render_modal_header(frame, area, inner, Line::from(title).bold());
+    let inner = render_modal_header(frame, area, inner, theme, Line::from(title).bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     // Split off the note row(s) when there are no detected editors.
@@ -1230,11 +1232,11 @@ pub(crate) fn render_push_branch(frame: &mut Frame, full: Rect, app: &App, theme
     };
     frame.render_widget(Clear, area);
     let block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(FRAME)
         .padding(Padding::horizontal(1));
     let inner = block.inner(area);
     frame.render_widget(block, area);
-    let inner = render_modal_header(frame, area, inner, Line::from(title).bold());
+    let inner = render_modal_header(frame, area, inner, theme, Line::from(title).bold());
     let inner = render_modal_hints(frame, area, inner, app, theme);
 
     let items: Vec<ListItem> = pick
