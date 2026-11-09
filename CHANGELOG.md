@@ -39,8 +39,24 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   the MCP server (found on your machine by a launcher, so the stripped-`PATH`
   problem goes away), skills for fleet work, setting a repo up, and planning
   focus, and hooks that log each session.
+- **The launchpad in the dashboard and the browser.** In the terminal, `t` (or
+  `:tasks`) opens the focus board and every repo's open tasks. In the browser, a
+  Launchpad tab lays the same work out in three lanes: doing, blocked, to do.
 - **ARM Linux** release binaries and pip wheels.
 - **`server.json`**, the manifest for the official MCP Registry.
+
+### Changed
+
+- **A new look, shared by every surface.** Tyrian purple for what you act on,
+  bronze for structure, double-rule frames around every terminal panel and
+  overlay, and a solid RISK or WARN badge leading the status of the repos that
+  need you. Colours still follow your terminal's palette, and `NO_COLOR` falls
+  back to reverse video.
+- **The browser dashboard scrolls.** The page used to be pinned to one screen
+  with each panel scrolling itself. Now the table and the launchpad run their
+  full length, the tab bar and column headers stay pinned as you scroll, and the
+  detail drawer follows alongside. It is light by default, with a dark theme
+  behind a button that remembers your choice.
 
 ### Fixed
 
