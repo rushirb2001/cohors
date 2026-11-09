@@ -8,7 +8,7 @@
 //! across repos, and an append-only **activity** log records agent sessions.
 //!
 //! This is the Principia contract, spec v1, implemented natively so one binary
-//! serves both the fleet and the launchpad (ADR-052). The on-disk format is
+//! serves both the fleet and the launchpad (ADR-054). The on-disk format is
 //! unchanged, so repos already carrying a `.principia/` directory keep working.
 //!
 //! Everything here is pure: models, validation, and flow detection take data

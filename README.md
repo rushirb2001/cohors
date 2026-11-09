@@ -40,14 +40,21 @@ run("<codemod>", {ids:[…]}, dry_run)     →  "would run in 3 repos"  (nothing
 run("<codemod>", {ids:[…]}, confirm)     →  per-repo { ok, exit_code, stdout, … }
 ```
 
-Register it. It's **read-only by default**; opt into actions with flags:
+**In Claude Code, install the plugin.** It registers the server for you, finds the binary wherever your install put it, and adds skills for fleet work, setting a repo up, and planning your focus:
+
+```text
+/plugin install cohors --marketplace rushirb2001/cohors
+```
+
+Or register the server by hand. It's **read-only by default**; opt into actions with flags:
 
 ```sh
 claude mcp add cohors -- "$(which cohors)" mcp                              # read-only
 claude mcp add cohors -- "$(which cohors)" mcp --allow-writes --allow-run   # + bulk actions
+claude mcp add cohors -- "$(which cohors)" mcp --allow-launchpad            # + launchpad writes
 ```
 
-Use the **absolute path**: an agent spawns the server with a stripped `PATH`, so a bare `cohors mcp` often resolves to nothing and the agent silently ends up with no tools. For any other client (Claude Desktop, Cursor, Zed, …), the same command and args go in its `mcpServers` block. Run `cohors mcp` by hand and it prints both lines, already filled in with your install path.
+When registering by hand, use the **absolute path**: an agent spawns the server with a stripped `PATH`, so a bare `cohors mcp` often resolves to nothing and the agent silently ends up with no tools. For any other client (Claude Desktop, Cursor, Zed, …), the same command and args go in its `mcpServers` block. Run `cohors mcp` by hand and it prints both lines, already filled in with your install path.
 
 **Why an MCP and not a bash loop?** The value isn't capability: an agent *can* loop over `git`. It's the **governed boundary**, which an agent cannot give itself:
 
@@ -56,7 +63,28 @@ Use the **absolute path**: an agent spawns the server with a stripped `PATH`, so
 - Scope-locked to your configured roots; an empty selector matches **nothing**, so a fumbled argument can't fan out across everything.
 - A target cap, an optional `run` command allowlist, and an audit log of every action.
 
-**Tools.** Reads (always on): `list_repos`, `get_repo`, `fleet_summary`, `search`, `changes`, `repo_path`, `list_prs`, `ci_status`. Actions (flag-gated): `fetch`, `pull`, `push`, `commit`, `stash`, `run`. Every read carries diagnostics (the roots searched, the config in effect), so an empty fleet explains itself instead of reading as "all clear."
+**Tools.** Reads (always on): `list_repos`, `get_repo`, `fleet_summary`, `search`, `changes`, `repo_path`, `list_prs`, `ci_status`, plus the launchpad reads `launchpad`, `read_contract`, `read_board`. Actions (flag-gated): `fetch`, `pull`, `push`, `commit`, `stash`, `run`. Launchpad writes (`--allow-launchpad`): `write_repo_contribution`, `write_board`, `record_activity`. Every read carries diagnostics (the roots searched, the config in effect), so an empty fleet explains itself instead of reading as "all clear."
+
+## The launchpad: what each repo offers, and what is waiting in it
+
+Status tells you what state a repo is in. The launchpad tells you what you can *do* there. A repository opts in by committing one small file, so its entry travels with the clone:
+
+```text
+your-repo/.principia/
+├── repo.json          # flows to run, agents it ships, short-lived tasks
+└── agents/release.md  # a prompt this repo ships for recurring work
+```
+
+You don't write it. In that repo, ask your agent to **"set up this repo for the launchpad"**; it reads the code and writes the file, and cohors rejects anything invalid with the full list of problems. Flows from npm, cargo, uv, Makefile, and gradle are detected with no file at all.
+
+```sh
+cohors launchpad              # your focus board + every open task across the fleet
+cohors launchpad validate .   # check this repo's .principia/repo.json
+```
+
+Then ask your agent to **"plan my day"**: it reads every repo's tasks, the uncommitted and unpushed work nobody wrote a task for, and failing CI, and proposes a cross-repo focus board.
+
+The format is the open [Principia](https://github.com/rushirb2001/principia) contract (spec v1). Text inside a repo's launchpad files is treated as untrusted data: the agent is told so, and cohors never runs a declared flow on its own.
 
 ## For you: a fast fleet dashboard
 
@@ -99,7 +127,7 @@ brew install rushirb2001/tap/cohors
 > brew install rushirb2001/tap/cohors
 > ```
 
-**pip** (macOS Apple Silicon / Intel, Linux x86_64; installs a prebuilt binary, no Rust):
+**pip** (macOS Apple Silicon / Intel, Linux x86_64 / ARM64; installs a prebuilt binary, no Rust):
 
 ```sh
 pip install cohors
@@ -137,6 +165,7 @@ cohors init                # save an editable config to ~/.config/cohors/config.
 cohors scan                # a report of what needs you, grouped by urgency (JSON when piped)
 cohors scan --select dirty # filter: e.g. dirty, behind, 'name:pay*', or raw JSON
 cohors fetch --select all --dry-run   # preview any bulk action before it touches anything
+cohors launchpad           # focus board + open tasks across the fleet (JSON when piped)
 cohors mcp                 # run the MCP server (read-only; --allow-writes / --allow-run to arm)
 cohors web                 # serve the same fleet in the browser (--root to scope, --watch for live)
 cohors web --demo          # browser UI on built-in sample data (nothing scanned)
@@ -156,15 +185,17 @@ Every command surface introduces itself: run an action without a selector and it
 | Remote / PR / CI awareness | Yes | No | No | Single repo |
 | Cross-repo search + weekly standup | Yes | No | No | No |
 | **Agent control plane (MCP)** | **Yes** | No | No | No |
+| Per-repo tasks, flows, and a focus board | Yes | No | Tasks via config | No |
 | Language | Rust | Go | Go / Python | Go / Rust |
 
 ## How it's built
 
 A Rust workspace around a pure, I/O-free core with thin adapters, so the *same* analysis powers the terminal, the agent, and the browser:
 
-- `cohors-core`: pure, WASM-safe models and analysis (attention scoring, the selector language and its shorthand parser, search).
+- `cohors-core`: pure, WASM-safe models and analysis (attention scoring, the selector language and its shorthand parser, search, the launchpad contract).
 - `cohors-config` · `cohors-git` ([gitoxide](https://github.com/GitoxideLabs/gitoxide)) · `cohors-github`: config, local git (bare repos included, history-memoized rescans), and GitHub (parallel, rate-limit-aware) adapters.
 - `cohors-actions`: the write layer, holding the git action primitives, the one action registry every surface wires from, and the `dispatch()` the machine surfaces share.
+- `cohors-launchpad`: the launchpad adapter, which reads each repo's `.principia/` contribution and does validated, symlink-safe writes of contributions, the focus board, and the activity log.
 - `cohors-fleet`: the composition layer, with one `Scanner` (config + git + github wired once) and the read facade every front-end goes through, enforced by tests rather than convention.
 - `cohors-mcp`: the MCP server (hand-rolled JSON-RPC over stdio), launched by `cohors mcp`.
 - `cohors-tui` ([ratatui](https://ratatui.rs)): the `cohors` binary (dashboard and CLI).

@@ -392,7 +392,7 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
     }
 }
 
-// ── Launchpad tools (the Principia contract — ADR-052) ───────────────────────
+// ── Launchpad tools (the Principia contract — ADR-054) ───────────────────────
 
 /// Catalog entries for the launchpad tools. Reads are always on; the three
 /// writes need `--allow-launchpad` (each still accepts `dry_run` without it).

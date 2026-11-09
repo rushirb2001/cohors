@@ -19,6 +19,41 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Added
+
+- **The launchpad.** cohors now reads what each repository says about itself:
+  a committed `.principia/repo.json` listing its flows (what to run), the agent
+  prompts it ships, and its short-lived tasks. This is the
+  [Principia](https://github.com/rushirb2001/principia) contract, spec v1,
+  implemented natively, so repos that already carry a `.principia/` directory
+  work with no migration. Flows are also detected with zero config from
+  npm/pnpm/yarn/bun scripts, cargo, uv, Makefile targets, and gradle.
+- **`cohors launchpad`** reports the focus board and every open task across the
+  fleet (JSON when piped). `cohors launchpad validate [PATH]` checks one repo's
+  contribution, `contract` prints the rules, and `record` logs an agent session.
+- **Six launchpad MCP tools.** `launchpad`, `read_contract`, and `read_board`
+  are always on. `write_repo_contribution`, `write_board`, and `record_activity`
+  need the new `--allow-launchpad` flag; each accepts `dry_run` without it. A
+  rejected write lists every problem at once and writes nothing.
+- **A Claude Code plugin**, installable from this repository as a marketplace:
+  the MCP server (found on your machine by a launcher, so the stripped-`PATH`
+  problem goes away), skills for fleet work, setting a repo up, and planning
+  focus, and hooks that log each session.
+- **ARM Linux** release binaries and pip wheels.
+- **`server.json`**, the manifest for the official MCP Registry.
+
+### Fixed
+
+- The Linux pip wheels were tagged `manylinux_2_31` but built against glibc
+  2.35. They are now tagged `manylinux_2_35`, so pip on an older system declines
+  the wheel instead of installing a binary that may not start.
+
+### Security
+
+- Text read from a repo's `.principia/` files is labelled as untrusted data to
+  the agent, and control characters are stripped before it is printed.
+- Launchpad writes refuse symbolic links at every path they touch.
+
 ## [0.6.0] — 2026-07-23
 
 A readability and onboarding release. Every repo row now carries its per-branch
