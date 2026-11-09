@@ -1,30 +1,71 @@
-/* cohors web — a calm, professional dashboard: neutral greys, a single restrained
-   accent, monospace data. The page never scrolls; each panel scrolls itself. */
+/* cohors web — "Standard": the Roman standard a cohort marched under. Tyrian
+   purple for what you act on, bronze for structure, and solid severity badges so
+   triage reads at a glance. Light by default; the header's theme button
+   switches to the dark variant and remembers the choice. Every surface (cards, modals, menus, the tour) draws from these
+   tokens, so nothing nested drifts from the rest. The page never scrolls; each
+   panel scrolls itself. */
 :root {
-  --bg: #f6f7f9;
+  color-scheme: light;
+  --bg: #f7f3f6;
   --panel: #ffffff;
-  --border: #e5e7eb;
-  --line: #f1f2f4;
-  --text: #1f2328;
-  --dim: #6b7280;
-  --faint: #9aa1ac;
-  --accent: #7c3aed;       /* brand violet — used sparingly */
-  --accent-soft: #f4f3fb;
-  --green: #1a7f37;
-  --red: #b42318;
-  --amber: #92610a;
-  --blue: #1f5fcf;
-  /* Distinct severity hues for the attention breakdown — four clearly-separated
-     colours (red → orange → indigo → green), not the muddy red/brown/blue mix. */
-  --sev-risk: #e5484d;
-  --sev-warn: #f2870a;
-  --sev-notice: #4f6bed;
-  --sev-calm: #17a34a;
-  /* Fonts are fetched from the Google Fonts CDN in index.html; the stacks fall
-     back to system fonts if it's unavailable (offline). Data/code uses the
-     monospace pair, UI prose the sans pair. */
-  --mono: "Google Sans Code", "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --sans: "Google Sans", "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --border: #e3d9e1;
+  --line: #f0e9ee;
+  --text: #2a1a2e;
+  --dim: #6f6273;
+  --faint: #a297a5;
+  --accent: #7a2e69;       /* Tyrian purple — what you can act on */
+  --accent-soft: #f6ecf3;
+  --on-accent: #ffffff;
+  --bronze: #8f6a2a;       /* structure: headings, rules, counts */
+  --hover: #faf6f9;
+  --skel: #f8f3f6;
+  --green: #2f7d4a;
+  --red: #b83a32;
+  --amber: #96640f;
+  --blue: #5b4bb0;
+  /* Severity badges: four clearly separated hues, each dark enough to carry
+     white text. */
+  --sev-risk: #c2372e;
+  --sev-warn: #b9770e;
+  --sev-notice: #6a55b8;
+  --sev-calm: #3f8a57;
+  --on-sev: #ffffff;
+  /* One radius scale: panels, then controls. Badges alone are fully round. */
+  --r: 6px;
+  --r-sm: 4px;
+  --shadow: 0 12px 32px rgba(42, 26, 46, 0.16);
+  /* Google Sans for the interface, Google Sans Code for data. The serif is an
+     accent only: the wordmark and the fleet name. */
+  --mono: "Google Sans Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: "Google Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --serif: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+}
+/* Dark is opt-in: the header's theme button sets this attribute. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1c1220;
+  --panel: #24172a;
+  --border: #3d2b42;
+  --line: #2f2034;
+  --text: #eadfce;
+  --dim: #a99aa2;
+  --faint: #7e6e79;
+  --accent: #d39ac6;
+  --accent-soft: #3a2338;
+  --on-accent: #1c1220;
+  --bronze: #c8a064;
+  --hover: #2b1c31;
+  --skel: #33243a;
+  --green: #8fb489;
+  --red: #e2685f;
+  --amber: #d9a441;
+  --blue: #b68fd0;
+  --sev-risk: #e2685f;
+  --sev-warn: #d9a441;
+  --sev-notice: #b68fd0;
+  --sev-calm: #8fb489;
+  --on-sev: #1c1220;
+  --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
 }
 
 * { box-sizing: border-box; }
@@ -86,7 +127,6 @@ button, input, select, textarea { font-family: inherit; }
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.05rem 0.45rem;
-  text-transform: uppercase;
   letter-spacing: 1px;
 }
 .tag { color: var(--dim); font-size: 0.85rem; }
@@ -118,7 +158,7 @@ button, input, select, textarea { font-family: inherit; }
   width: 220px;
   padding: 0.38rem 0.6rem;
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   background: var(--panel);
   color: var(--text);
 }
@@ -127,9 +167,9 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 0.8rem;
   border: 1px solid var(--accent);
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   padding: 0.38rem 0.8rem;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
 .primary:hover { filter: brightness(1.05); }
@@ -139,7 +179,7 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--panel);
   color: var(--dim);
   padding: 0.38rem 0.7rem;
-  border-radius: 7px;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
 .ghost:hover { color: var(--text); }
@@ -160,7 +200,7 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--dim);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   padding: 0.4rem 0.7rem;
 }
 
@@ -183,8 +223,7 @@ button, input, select, textarea { font-family: inherit; }
   flex: 1; min-width: 0; padding-left: 1.4rem; border-left: 1px solid var(--line);
 }
 .stat-h {
-  font-family: var(--mono); font-size: 0.66rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint);
+  font-family: var(--mono); font-size: 0.66rem; font-weight: 700; letter-spacing: 0.07em; color: var(--faint);
   margin-bottom: 0.55rem;
 }
 .stat-cap {
@@ -235,15 +274,15 @@ button, input, select, textarea { font-family: inherit; }
 .sec.skel { opacity: 0.6; }
 .sec.skel .sec-h { cursor: default; }
 .skel-body {
-  height: 2.4rem; margin-top: 0.5rem; border-radius: 6px;
-  background: linear-gradient(90deg, var(--line) 25%, #eef0f3 50%, var(--line) 75%);
+  height: 2.4rem; margin-top: 0.5rem; border-radius: var(--r-sm);
+  background: linear-gradient(90deg, var(--line) 25%, var(--skel) 50%, var(--line) 75%);
   background-size: 200% 100%; animation: skel-shimmer 1.6s ease-in-out infinite;
 }
 /* Inline shimmer bar standing in for a fact's value in the empty-state skeleton. */
 .skel-line {
   display: inline-block; width: 5.5rem; height: 0.8rem;
   border-radius: 4px; vertical-align: middle;
-  background: linear-gradient(90deg, var(--line) 25%, #eef0f3 50%, var(--line) 75%);
+  background: linear-gradient(90deg, var(--line) 25%, var(--skel) 50%, var(--line) 75%);
   background-size: 200% 100%; animation: skel-shimmer 1.6s ease-in-out infinite;
 }
 @keyframes skel-shimmer {
@@ -257,7 +296,7 @@ button, input, select, textarea { font-family: inherit; }
   font-family: var(--mono);
   font-size: 0.76rem;
   padding: 0.2rem 0.6rem;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   border: 1px solid var(--border);
   background: var(--panel);
   color: var(--dim);
@@ -279,13 +318,13 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 0.82rem;
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--r-sm);
   background: var(--panel);
   color: var(--text);
 }
 .filter::placeholder { color: var(--faint); }
 .filter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.sorts { display: flex; gap: 0.15rem; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 0.15rem; }
+.sorts { display: flex; gap: 0.15rem; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 0.15rem; }
 .sort, .toggle {
   font-family: var(--mono);
   font-size: 0.78rem;
@@ -293,13 +332,13 @@ button, input, select, textarea { font-family: inherit; }
   background: transparent;
   color: var(--dim);
   padding: 0.3rem 0.65rem;
-  border-radius: 6px;
+  border-radius: var(--r-sm);
   cursor: pointer;
 }
 .sort:hover { color: var(--text); }
 .sort.active { background: var(--line); color: var(--text); font-weight: 600; }
 .toggle { border: 1px solid var(--border); background: var(--panel); }
-.toggle.on { background: var(--text); color: #fff; border-color: var(--text); }
+.toggle.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 
 /* ── Layout grid (fills remaining height; columns scroll internally) ─────── */
 .grid {
@@ -317,7 +356,7 @@ button, input, select, textarea { font-family: inherit; }
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--r);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -421,17 +460,8 @@ button, input, select, textarea { font-family: inherit; }
    its own. 4rem comfortably clears the ~31px header plus the spotlight ring. */
 .fleet tbody tr,
 .fleet tbody td { scroll-margin-top: 4rem; }
-/* A 10% severity wash on the row — hover and selection override it. */
-.fleet tbody tr.sev-risk:not(:hover):not(.selected) {
-  background: color-mix(in srgb, var(--sev-risk) 10%, transparent);
-}
-.fleet tbody tr.sev-warn:not(:hover):not(.selected) {
-  background: color-mix(in srgb, var(--sev-warn) 10%, transparent);
-}
-.fleet tbody tr.sev-notice:not(:hover):not(.selected) {
-  background: color-mix(in srgb, var(--sev-notice) 10%, transparent);
-}
-.fleet tbody tr:hover { background: #fafafb; }
+/* Severity is carried by the status badge, so rows stay unwashed and calm. */
+.fleet tbody tr:hover { background: var(--hover); }
 .fleet tbody tr.selected { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 
 /* Default states are plain words/icons, not cryptic punctuation: a faint,
@@ -512,7 +542,7 @@ button, input, select, textarea { font-family: inherit; }
 .rich-loading { padding: 0.6rem 0.95rem; color: var(--dim); font-family: var(--mono); font-size: 0.78rem; }
 .rich { display: contents; }
 .sec { padding: 0.6rem 0.95rem; border-top: 1px solid var(--border); }
-.sec-h { color: var(--dim); font-weight: 700; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+.sec-h { color: var(--dim); font-weight: 700; font-size: 0.68rem; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
 /* Each drawer section is a collapsible <details>; its <summary> is the header.
    The browser's default left-side marker is hidden and replaced with a custom
    chevron pinned to the right (rotates down when open). Click to fold/unfold. */
@@ -564,7 +594,6 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--dim);
   font-weight: 700;
   font-size: 0.68rem;
-  text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 .diff .patch {
@@ -575,7 +604,7 @@ button, input, select, textarea { font-family: inherit; }
   font-size: 0.72rem;
   line-height: 1.45;
   white-space: pre;
-  background: #fbfbfc;
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.4rem 0.55rem;
@@ -598,8 +627,8 @@ button, input, select, textarea { font-family: inherit; }
 
 /* Quiet scrollbars. */
 .scroll::-webkit-scrollbar { width: 10px; }
-.scroll::-webkit-scrollbar-thumb { background: #e2e4e8; border-radius: 6px; border: 3px solid var(--panel); }
-.scroll::-webkit-scrollbar-thumb:hover { background: #d2d5db; }
+.scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--r-sm); border: 3px solid var(--panel); }
+.scroll::-webkit-scrollbar-thumb:hover { background: var(--faint); }
 
 /* ── select + act: row marks, action dropdowns, confirm modal ──────────── */
 /* Same language as the rest of the page: white panels, --border hairlines,
@@ -612,8 +641,8 @@ td.act { width: 2.4em; text-align: center; }
 .dd-btn { font-family: var(--mono); }
 .dd-menu {
   position: fixed; z-index: 45; min-width: 9em;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(31, 35, 40, 0.14);
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-sm);
+  box-shadow: var(--shadow);
   padding: 4px; display: flex; flex-direction: column;
   transform-origin: top left;
   animation: dd-in 0.12s ease;
@@ -624,18 +653,18 @@ td.act { width: 2.4em; text-align: center; }
 }
 .dd-item {
   background: none; border: none; text-align: left; padding: 6px 12px;
-  color: var(--text); cursor: pointer; border-radius: 6px;
+  color: var(--text); cursor: pointer; border-radius: var(--r-sm);
   font-family: var(--mono); font-size: 12.5px;
 }
 .dd-item:hover { background: var(--accent-soft); color: var(--accent); }
 
 .overlay {
-  position: fixed; inset: 0; z-index: 40; background: rgba(31, 35, 40, 0.35);
+  position: fixed; inset: 0; z-index: 40; background: rgba(28, 18, 32, 0.45);
   display: flex; align-items: center; justify-content: center;
 }
 .modal {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(31, 35, 40, 0.18);
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r);
+  box-shadow: var(--shadow);
   padding: 20px 22px; min-width: 360px; max-width: 520px;
 }
 .modal h3 {
@@ -643,13 +672,13 @@ td.act { width: 2.4em; text-align: center; }
 }
 .modal .targets {
   max-height: 40vh; overflow-y: auto; margin: 0 0 14px; padding: 8px 12px;
-  list-style: none; border: 1px solid var(--line); border-radius: 8px;
+  list-style: none; border: 1px solid var(--line); border-radius: var(--r-sm);
   font-family: var(--mono); font-size: 12.5px; color: var(--dim);
 }
 .modal .targets li { padding: 2px 0; }
 .modal .action-arg {
   width: 100%; margin-bottom: 14px; padding: 7px 10px;
-  border: 1px solid var(--border); border-radius: 8px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg);
   font-family: var(--mono); font-size: 12.5px; color: var(--text);
 }
 .modal .action-arg:focus {
@@ -657,7 +686,7 @@ td.act { width: 2.4em; text-align: center; }
 }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .modal .confirm {
-  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  background: var(--accent); color: var(--on-accent); border: none; border-radius: var(--r-sm);
   padding: 7px 16px; cursor: pointer; font-family: var(--mono); font-size: 12.5px;
 }
 .modal .confirm:hover { filter: brightness(1.08); }
@@ -673,8 +702,7 @@ td.act { width: 2.4em; text-align: center; }
   border-bottom: 1px solid var(--border);
 }
 .panel-label {
-  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
-  text-transform: uppercase; color: var(--faint);
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: var(--faint);
 }
 
 /* The header row: the brand mark in its own isolated, rounded card, then the
@@ -703,7 +731,7 @@ td.act { width: 2.4em; text-align: center; }
 /* The act controls in the Repositories subhead row. */
 .act-controls { display: flex; align-items: center; gap: 8px; }
 .act-controls .dd-btn {
-  border: 1px solid var(--border); border-radius: 7px; padding: 4px 12px;
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 4px 12px;
   background: var(--panel); color: var(--text); font-size: 12.5px;
 }
 .act-controls .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -711,7 +739,7 @@ td.act { width: 2.4em; text-align: center; }
 .act-controls > .dd:last-child .dd-btn {
   border-color: var(--accent); color: var(--accent); background: var(--accent-soft);
 }
-.act-controls > .dd:last-child .dd-btn:hover { background: #ece9f9; }
+.act-controls > .dd:last-child .dd-btn:hover { background: var(--accent); color: var(--on-accent); }
 
 th.mk, td.mk { width: 3em; }
 th.act, td.act { width: 4em; }
@@ -728,7 +756,7 @@ th.act, td.act { width: 4em; }
 /* Row-level git-action trigger: an outlined box so it reads as a clickable
    control, accenting on hover. */
 td.act .dd-btn {
-  border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px;
+  border: 1px solid var(--border); border-radius: var(--r-sm); padding: 2px 8px;
   background: var(--panel); color: var(--dim); font-size: 0.72rem;
 }
 td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -777,7 +805,7 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 .modal.results.run { min-width: 780px; max-width: 900px; }
 .run-panes {
   display: grid; grid-template-columns: 240px 1fr; margin-bottom: 14px;
-  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border); border-radius: var(--r-sm); overflow: hidden;
   min-height: 240px;
 }
 .run-list {
@@ -790,7 +818,7 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
   border-bottom: 1px solid var(--line); font-family: var(--mono); font-size: 12px;
 }
 .run-item:last-child { border-bottom: none; }
-.run-item:hover { background: #fafafb; }
+.run-item:hover { background: var(--hover); }
 .run-item.focused { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
 .run-item .run-exit { color: var(--faint); font-size: 11px; }
 .run-item.fail .run-exit { color: var(--red); }
@@ -812,7 +840,7 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
    the card floats and slides to each one. */
 .tour { position: fixed; inset: 0; z-index: 60; }
 .tour-spot {
-  position: fixed; border-radius: 8px; pointer-events: none;
+  position: fixed; border-radius: var(--r-sm); pointer-events: none;
   box-shadow: 0 0 0 3px var(--accent), 0 0 0 9999px rgba(20, 22, 28, 0.5);
   transition: left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
               top 0.38s cubic-bezier(0.4, 0, 0.2, 1),
@@ -821,8 +849,8 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 }
 .tour-card {
   position: fixed; z-index: 61; width: min(400px, 92vw);
-  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-  box-shadow: 0 16px 48px rgba(31, 35, 40, 0.28);
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r);
+  box-shadow: var(--shadow);
   padding: 15px 18px;
   transition: left 0.38s cubic-bezier(0.4, 0, 0.2, 1),
               top 0.38s cubic-bezier(0.4, 0, 0.2, 1);
@@ -844,7 +872,7 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 }
 /* The copy sits in a tinted callout so it reads as one distinct block. */
 .tour-copy {
-  background: var(--accent-soft); border-radius: 10px;
+  background: var(--accent-soft); border-radius: var(--r);
   border-left: 3px solid var(--accent);
   padding: 11px 13px; margin-bottom: 13px;
 }
@@ -868,7 +896,7 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
 .tour-actions { display: flex; align-items: center; justify-content: space-between; }
 .tour-nav { display: inline-flex; gap: 8px; }
 .tour-card .confirm {
-  background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  background: var(--accent); color: var(--on-accent); border: none; border-radius: var(--r-sm);
   padding: 6px 16px; cursor: pointer; font-size: 0.85rem;
 }
 .tour-card .confirm:hover { filter: brightness(1.08); }
@@ -908,4 +936,184 @@ td.act .dd-btn:hover { border-color: var(--accent); color: var(--accent); }
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+
+/* ── Standard: the shared refinements ───────────────────────────────────── */
+/* Bronze carries structure. Every card opens under a bronze hairline, and every
+   small heading (panel labels, stat and section headings) is sentence-case
+   bronze in the interface face — one voice for "this is a label". */
+.card { box-shadow: inset 0 2px 0 color-mix(in srgb, var(--bronze) 55%, transparent); }
+.modal, .tour-card, .dd-menu { border-top: 2px solid var(--bronze); }
+.panel-label, .stat-h, .sec-h, .diff > summary, .pill {
+  font-family: var(--sans); font-weight: 600; letter-spacing: 0; color: var(--bronze);
+}
+.panel-label, .stat-h { font-size: 0.78rem; }
+.sec-h, .diff > summary { font-size: 0.76rem; }
+.pill { background: transparent; border-color: color-mix(in srgb, var(--bronze) 45%, transparent); }
+/* The serif, used twice: the wordmark and the fleet's name. */
+.brand { font-family: var(--serif); font-style: italic; font-weight: 600; font-size: 2rem; letter-spacing: 0; line-height: 1; }
+.fleet-label { font-family: var(--serif); font-weight: 600; font-size: 1.5rem; letter-spacing: 0; }
+.modal h3 { font-family: var(--sans); font-size: 15px; font-weight: 600; }
+.tour-title { font-family: var(--sans); font-weight: 600; }
+/* One focus ring everywhere. */
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Severity as a solid badge (status column, header counts). */
+.fleet td.status .st.risk .st-full,
+.fleet td.status .st.warn .st-full,
+.fleet td.status .st.notice .st-full {
+  display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+  vertical-align: middle; padding: 0.05rem 0.6rem; border-radius: 999px;
+  color: var(--on-sev); font-weight: 600;
+}
+.fleet td.status .st.risk .st-full { background: var(--sev-risk); }
+.fleet td.status .st.warn .st-full { background: var(--sev-warn); }
+.fleet td.status .st.notice .st-full { background: var(--sev-notice); }
+@container fleet (max-width: 940px) {
+  .fleet td.status .st .st-full { display: none; }
+}
+.leg {
+  color: var(--on-sev); font-weight: 600; padding: 0.12rem 0.65rem; border-radius: 999px;
+}
+.leg .dot { display: none; }
+.leg.risk { background: var(--sev-risk); }
+.leg.warn { background: var(--sev-warn); }
+.leg.notice { background: var(--sev-notice); }
+.leg.calm { background: var(--sev-calm); }
+
+/* The light/dark switch beside the live indicator. */
+.theme-btn {
+  border: 1px solid var(--border); background: var(--panel); color: var(--dim);
+  font-family: var(--sans); font-size: 0.78rem; padding: 0.2rem 0.7rem;
+  border-radius: 999px; cursor: pointer; margin-right: 0.6rem;
+  transition: color 0.14s ease, border-color 0.14s ease;
+}
+.theme-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* Tabs in the main panel head: Repositories / Launchpad. */
+.tabs { flex: none; display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); }
+.tab {
+  border: none; background: transparent; color: var(--dim); cursor: pointer;
+  font-family: var(--sans); font-size: 0.82rem; font-weight: 600;
+  padding: 0.28rem 0.8rem; border-radius: 3px;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.tab:hover { color: var(--text); }
+.tab.on { background: var(--panel); color: var(--accent); box-shadow: 0 0 0 1px var(--border); }
+
+/* ── Launchpad: the work waiting across the fleet, in three lanes ───────── */
+.lp { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 14px; }
+.lp-note, .lp-sum, .lp-hint { margin: 0; color: var(--dim); font-size: 0.86rem; }
+.lp-note { padding: 2rem 1rem; text-align: center; }
+.lp h4 { margin: 0 0 6px; font: 600 0.78rem var(--sans); color: var(--bronze); }
+.lp-focus ul, .lp-broken { list-style: none; margin: 0; padding: 0; }
+.lp-focus li {
+  display: flex; align-items: baseline; gap: 0.7rem; padding: 0.4rem 0.7rem;
+  border-left: 2px solid var(--accent); background: var(--accent-soft);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+}
+.lp-focus li + li { margin-top: 4px; }
+.focus-t { font-weight: 600; }
+.focus-r { font-family: var(--mono); font-size: 0.76rem; color: var(--dim); }
+.lanes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 900px) { .lanes { grid-template-columns: minmax(0, 1fr); } }
+.lane { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; }
+.lane-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.lane-t { font-weight: 600; font-size: 0.9rem; }
+.lane-n {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 600;
+  min-width: 1.6em; text-align: center; padding: 0.05rem 0.45rem; border-radius: 999px;
+  background: var(--dim); color: var(--panel);
+}
+.lane.doing .lane-n { background: var(--sev-notice); color: var(--on-sev); }
+.lane.blocked .lane-n { background: var(--sev-risk); color: var(--on-sev); }
+.lane-empty { margin: 0; padding: 0.6rem 0.2rem; color: var(--faint); font-size: 0.82rem; }
+.lane-cards { display: flex; flex-direction: column; gap: 8px; }
+.tcard {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 9px 11px; display: flex; flex-direction: column; gap: 6px;
+}
+.lane.blocked .tcard { border-left: 3px solid var(--sev-risk); }
+.lane.doing .tcard { border-left: 3px solid var(--sev-notice); }
+.tcard-t { font-size: 0.88rem; line-height: 1.35; overflow-wrap: anywhere; }
+.tcard-m { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tcard-repo {
+  border: none; background: none; padding: 0; cursor: pointer;
+  font-family: var(--mono); font-size: 0.76rem; color: var(--accent);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tcard-repo:hover { text-decoration: underline; }
+.pri {
+  flex: none; font-family: var(--mono); font-size: 0.68rem; font-weight: 600;
+  padding: 0.02rem 0.5rem; border-radius: 999px;
+  background: var(--sev-warn); color: var(--on-sev);
+}
+.tcard-run {
+  font-family: var(--mono); font-size: 0.72rem; color: var(--green);
+  background: var(--bg); border-radius: 3px; padding: 0.15rem 0.45rem;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lp-broken li { font-family: var(--mono); font-size: 0.78rem; color: var(--red); padding: 0.1rem 0; }
+.lp-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
+/* ── Expansive layout: the page scrolls, the panels do not ──────────────── */
+/* The first design pinned everything to one screen and made each panel scroll
+   itself, which got cramped past a dozen repos. Now the page is the scroller:
+   the table and the launchpad grow to their full length, the tab bar and the
+   column headers stick to the top as you go, and the detail drawer rides along
+   beside the table. These rules come last so they override the pinned ones
+   above. */
+html, body { height: auto; min-height: 100%; }
+body { overflow: auto; }
+.app {
+  height: auto; min-height: 100vh;
+  max-width: 1600px; margin: 0 auto;
+  padding: 1.6rem 2rem 4rem; gap: 1.2rem;
+}
+.top-row { gap: 1.2rem; }
+.ov-top { padding: 14px 20px; }
+.ov-stats { padding: 16px 20px; }
+.grid {
+  flex: none; align-items: start;
+  grid-template-columns: minmax(0, 1fr) 380px; gap: 1.2rem;
+}
+/* The drawer stacks under the table only when there is truly no room. */
+@media (max-width: 1400px) { .grid { grid-template-columns: minmax(0, 1fr) 340px; } }
+@media (max-width: 1100px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* The main card clips to its rounded corners without becoming a scroll
+   container, so the sticky bars inside it stick to the page. */
+.card.fleet-wrap { overflow: clip; }
+.fleet-wrap > .scroll { flex: none; overflow: visible; }
+.repos-head {
+  position: sticky; top: 0; z-index: 3; min-height: 56px;
+  background: var(--panel);
+}
+.fleet thead th { top: 56px; }
+.fleet tbody tr, .fleet tbody td { scroll-margin-top: 9rem; }
+
+/* Roomier rows: this is a working surface you read all day. */
+.fleet { font-size: 0.84rem; }
+.fleet th, .fleet td { padding: 0.6rem 0.4rem; }
+/* Column shares, retuned for the roomier type so no header truncates. */
+.fleet th:nth-child(2) { width: 22%; }    /* Repo */
+.fleet th:nth-child(3) { width: 7%; }     /* Sync */
+.fleet th:nth-child(4) { width: 7%; }     /* Stash */
+.fleet th:nth-child(6) { width: 9%; }     /* CI */
+.fleet th:nth-child(7) { width: 6.5%; }   /* Last */
+.fleet th:nth-child(8) { width: 9%; }     /* Activity */
+.fleet th:nth-child(9) { width: 21%; }    /* Status */
+.lp { padding: 18px 20px 24px; gap: 18px; }
+.lanes { gap: 16px; }
+.lane { padding: 12px; }
+.tcard { padding: 11px 13px; }
+
+/* The detail drawer follows you down the page and scrolls on its own when the
+   repo has more to show than fits. */
+@media (min-width: 1101px) {
+  .side { position: sticky; top: 1.2rem; max-height: calc(100vh - 2.4rem); }
+}
+@media (max-width: 1100px) {
+  .side > * { flex: none; }
 }
