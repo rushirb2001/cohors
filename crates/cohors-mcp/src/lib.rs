@@ -27,6 +27,8 @@ use anyhow::Result;
 use cohors_core::{
     RepoSnapshot, SearchKind, Selector, SortMode, assess, fleet_summary, resolve, search_metadata,
 };
+// The launchpad adapter, reached through the fleet facade like every other read.
+use cohors_fleet::launchpad as cohors_launchpad;
 use rayon::prelude::*;
 use serde_json::{Value, json};
 
@@ -42,6 +44,11 @@ pub struct Caps {
     pub allow_run: bool,
     /// Enable the local-only `open` tool (shared desktop session).
     pub allow_open: bool,
+    /// Enable the launchpad write tools (`write_repo_contribution`,
+    /// `write_board`, `record_activity`). These write only launchpad metadata —
+    /// a repo's `.principia/` directory and the user's launchpad home — never
+    /// git state, so they are a separate, lower tier than `allow_writes`.
+    pub allow_launchpad: bool,
 }
 
 /// A source of fleet snapshots — injected so tests can supply a fixture fleet
@@ -63,6 +70,9 @@ struct Ctx<'a> {
     allowlist: &'a [String],
     /// Action-target cap, bypassed by `{all: true}` (0 = no cap). ADR-025.
     max_targets: usize,
+    /// The launchpad home (`~/.principia`): the focus board and activity log.
+    /// `None` when no home directory could be determined.
+    home: Option<&'a std::path::Path>,
 }
 
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
@@ -77,6 +87,7 @@ pub fn serve_stdio(
     allowlist: &[String],
     max_targets: usize,
 ) -> Result<()> {
+    let home = cohors_launchpad::launchpad_home();
     let ctx = Ctx {
         scan,
         token,
@@ -85,6 +96,7 @@ pub fn serve_stdio(
         caps,
         allowlist,
         max_targets,
+        home: home.as_deref(),
     };
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
@@ -167,7 +179,7 @@ fn handle(request: &Value, ctx: &Ctx, now: i64) -> Option<Value> {
 /// Server-level guidance surfaced to the model on `initialize` (the MCP
 /// `instructions` field). This is the highest-leverage place to make an agent
 /// reach for cohors instead of shelling out to `git`/`find`.
-const INSTRUCTIONS: &str = "cohors is the user's git repository fleet — every repo under their configured roots — with live local status (branch, ahead/behind, dirty worktree, stashes, last commit) and optional GitHub enrichment (CI, PRs). Whenever the user asks about \"my repos\", \"my projects\", the \"fleet\", what is dirty / unpushed / behind / needs attention, where a repo lives, or to find or change code across repos, use these cohors tools — do NOT shell out to find, cd, or per-repo git, and do not ask the user where their repos are. Start with fleet_summary (cheapest) or list_repos. Reads are always available; the write tools (fetch/pull/push/commit/stash) and run are gated and will tell you how to enable them. Target repos with the shared selector predicate, e.g. {\"dirty\": true}, {\"behind\": true}, {\"conflicted\": true}, {\"in_operation\": true} (merge/rebase mid-flight), {\"name\": \"pay*\"}, or {\"all\": true}.";
+const INSTRUCTIONS: &str = "cohors is the user's git repository fleet — every repo under their configured roots — with live local status (branch, ahead/behind, dirty worktree, stashes, last commit) and optional GitHub enrichment (CI, PRs). Whenever the user asks about \"my repos\", \"my projects\", the \"fleet\", what is dirty / unpushed / behind / needs attention, where a repo lives, or to find or change code across repos, use these cohors tools — do NOT shell out to find, cd, or per-repo git, and do not ask the user where their repos are. Start with fleet_summary (cheapest) or list_repos. Reads are always available; the write tools (fetch/pull/push/commit/stash) and run are gated and will tell you how to enable them. Target repos with the shared selector predicate, e.g. {\"dirty\": true}, {\"behind\": true}, {\"conflicted\": true}, {\"in_operation\": true} (merge/rebase mid-flight), {\"name\": \"pay*\"}, or {\"all\": true}. cohors is also the LAUNCHPAD: each repo can commit a .principia/repo.json describing its flows (what to run), agents (prompt files it ships) and tasks (short-lived, evidence-backed work). For \"what should I work on\", \"what's on my plate\", \"plan my day\", or \"how do I run X\", call `launchpad` (tasks + flows across the fleet) and `read_board` (the cross-repo focus board). To set a repo up, call read_contract first, then write_repo_contribution — it validates, REPLACES the whole document, and writes nothing when invalid. Declare a flow only when it adds what detection cannot infer; never mark a task done without evidence (a commit, a merged PR, or the user saying so); nothing machine-specific goes in the committed file.";
 
 /// The catalog returned by `tools/list`. JSON-Schema'd inputs; `repo` accepts an
 /// id, name, or path. Descriptions lead with *when* to use the tool, so an agent
@@ -263,6 +275,9 @@ fn tool_catalog() -> Value {
             }
         },
     ]);
+    if let Value::Array(arr) = &mut tools {
+        arr.extend(launchpad_catalog(&selector_schema));
+    }
     // The action half (fetch/pull/push/commit/stash/run) is generated from the
     // shared registry (ADR: one registry drives all surfaces), so a verb added in
     // `cohors-actions` shows up here automatically and the parity test enforces it.
@@ -344,6 +359,12 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         "search" => search(args, ctx, now),
         "list_prs" => Ok(list_prs(args, ctx, now)),
         "ci_status" => Ok(ci_status(args, ctx, now)),
+        "launchpad" => Ok(launchpad(args, ctx, now)),
+        "read_contract" => Ok(cohors_core::launchpad::contract()),
+        "write_repo_contribution" => write_repo_contribution(args, ctx, now),
+        "read_board" => read_board(ctx),
+        "write_board" => write_board(args, ctx, now),
+        "record_activity" => record_activity(args, ctx, now),
         // Every registry verb routes through the one shared dispatcher — the
         // verb→primitive mapping and the tier/confirm gates live in
         // `cohors-actions`, not per surface (ADR: one registry, one dispatch).
@@ -369,6 +390,267 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         }
         other => Err(format!("unknown tool `{other}`")),
     }
+}
+
+// ── Launchpad tools (the Principia contract — ADR-052) ───────────────────────
+
+/// Catalog entries for the launchpad tools. Reads are always on; the three
+/// writes need `--allow-launchpad` (each still accepts `dry_run` without it).
+fn launchpad_catalog(selector_schema: &Value) -> Vec<Value> {
+    let dry_run = json!({ "type": "boolean", "description": "Validate and report without writing (works without --allow-launchpad)." });
+    let status = json!({ "type": "string", "enum": cohors_core::launchpad::STATUSES });
+    vec![
+        json!({
+            "name": "launchpad",
+            "description": "What each repo OFFERS and what work is WAITING in it: its committed .principia/ contribution (summary, group, declared flows, repo-shipped agents, tasks) plus flows auto-detected from npm/cargo/uv/Makefile/gradle manifests. Use for \"what should I work on\", \"what's on my plate across repos\", \"how do I run/test X\", or to see which repos are not set up yet (configured: false). Omit selector for the whole fleet. Open tasks come back most-urgent first.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "selector": selector_schema.clone(),
+                    "include_done": { "type": "boolean", "description": "Also return finished tasks (default false)." },
+                    "only_configured": { "type": "boolean", "description": "Skip repos without a .principia/ contribution (default false)." }
+                }
+            }
+        }),
+        json!({
+            "name": "read_contract",
+            "description": "The exact rules a .principia/repo.json must satisfy, plus the judgement calls that make a contribution good rather than merely valid. Call this before write_repo_contribution so you do not guess the schema. Takes no arguments.",
+            "inputSchema": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "write_repo_contribution",
+            "description": "Validate and write one repo's .principia/repo.json (its flows, agents, tasks). REPLACES the whole document: read the current one with `launchpad` first and pass back everything you mean to keep, especially tasks the user is part-way through. Writes nothing when invalid and returns every error at once. Declare a flow only when it adds what detection cannot infer (a label, port, primary, composite command, cwd) — an empty flows array is a correct answer. Never set a task done without evidence. Nothing machine-specific: this file is committed. Also gitignores .principia/local.json. Requires --allow-launchpad; dry_run validates without it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "repo": { "type": "string", "description": "Repo id, name/alias, or path (must be inside the fleet)." },
+                    "name": { "type": "string", "description": "Display name." },
+                    "summary": { "type": "string", "maxLength": 80, "description": "One line: what this repo IS." },
+                    "group": { "type": "string", "description": "Free text; groups repos on the launchpad." },
+                    "icon": { "type": "string" },
+                    "generatedFrom": { "type": "string", "description": "Short SHA of the commit you read, so staleness can be shown." },
+                    "links": { "type": "array", "items": { "type": "object", "properties": { "label": { "type": "string" }, "url": { "type": "string" } }, "required": ["label", "url"] } },
+                    "flows": { "type": "array", "items": { "type": "object", "properties": {
+                        "id": { "type": "string" }, "label": { "type": "string" }, "run": { "type": "string" },
+                        "cwd": { "type": "string" }, "kind": { "type": "string", "enum": cohors_core::launchpad::FLOW_KINDS },
+                        "port": { "type": "integer" }, "background": { "type": "boolean" }, "primary": { "type": "boolean" }
+                    }, "required": ["id", "label", "run"] } },
+                    "agents": { "type": "array", "items": { "type": "object", "properties": {
+                        "id": { "type": "string" }, "label": { "type": "string" },
+                        "file": { "type": "string", "description": "Prompt file under .principia/ that already exists." },
+                        "supports": { "type": "array", "items": { "type": "string", "enum": cohors_core::launchpad::RUNNERS } }
+                    }, "required": ["id", "label", "file"] } },
+                    "tasks": { "type": "array", "items": { "type": "object", "properties": {
+                        "id": { "type": "string" }, "title": { "type": "string" }, "status": status.clone(),
+                        "priority": { "type": "string", "enum": cohors_core::launchpad::PRIORITIES },
+                        "notes": { "type": "string", "maxLength": 400 },
+                        "agent": { "type": "string", "description": "id of one of this repo's agents[]." }
+                    }, "required": ["id", "title"] } },
+                    "dry_run": dry_run.clone()
+                },
+                "required": ["repo", "name"]
+            }
+        }),
+        json!({
+            "name": "read_board",
+            "description": "The user's cross-repo focus board: the short list of things they are working on across every repo, plus recent agent activity. Use with `launchpad` when planning a day or picking up where they left off. Takes no arguments.",
+            "inputSchema": { "type": "object", "properties": {} }
+        }),
+        json!({
+            "name": "write_board",
+            "description": "Validate and REPLACE the cross-repo focus board. Match `repo` by name (as `launchpad` reports it), never by path, so the board stays valid across machines. Never set status done without evidence. Requires --allow-launchpad; dry_run validates without it.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "focus": { "type": "array", "items": { "type": "object", "properties": {
+                        "id": { "type": "string" }, "title": { "type": "string" },
+                        "repo": { "type": "string" }, "ref": { "type": "string", "description": "A task id inside that repo." },
+                        "status": status, "agent": { "type": "string" }, "thread": { "type": "string" }
+                    }, "required": ["id", "title"] } },
+                    "dry_run": dry_run
+                },
+                "required": ["focus"]
+            }
+        }),
+        json!({
+            "name": "record_activity",
+            "description": "Append one event to the agent activity log so the launchpad's timeline shows this session. Requires --allow-launchpad.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "runner": { "type": "string", "enum": cohors_core::launchpad::RUNNERS },
+                    "phase": { "type": "string", "enum": cohors_core::launchpad::PHASES },
+                    "repo": { "type": "string", "description": "Repo id, name, or path." },
+                    "branch": { "type": "string" },
+                    "agent": { "type": "string" }
+                },
+                "required": ["runner", "phase"]
+            }
+        }),
+    ]
+}
+
+/// The gate shared by the three launchpad writes.
+fn require_launchpad(ctx: &Ctx, tool: &str) -> Result<(), String> {
+    if ctx.caps.allow_launchpad {
+        Ok(())
+    } else {
+        Err(format!(
+            "`{tool}` requires the server to be started with --allow-launchpad (it writes launchpad metadata: a repo's .principia/ directory or the user's launchpad home). Pass dry_run: true to validate without it."
+        ))
+    }
+}
+
+fn launchpad_home<'a>(ctx: &Ctx<'a>) -> Result<&'a std::path::Path, String> {
+    ctx.home.ok_or_else(|| {
+        "no launchpad home: set $PRINCIPIA_HOME (or $HOME) and reconnect the server".to_string()
+    })
+}
+
+fn launchpad(args: &Value, ctx: &Ctx, now: i64) -> Value {
+    let snaps = (ctx.scan)();
+    let include_done = args.get("include_done").and_then(Value::as_bool) == Some(true);
+    let only_configured = args.get("only_configured").and_then(Value::as_bool) == Some(true);
+    let mut open_tasks = 0usize;
+    let mut configured = 0usize;
+    let repos: Vec<Value> = resolve_read(args, &snaps, now)
+        .into_iter()
+        .filter_map(|snap| {
+            let path = snap.path.as_ref()?;
+            let entry = cohors_launchpad::entry(&snap.id.0, &snap.name, path.as_std_path());
+            if only_configured && !entry.configured {
+                return None;
+            }
+            configured += usize::from(entry.configured);
+            open_tasks += entry.open_tasks().len();
+            let mut value = json!({
+                "id": entry.id,
+                "name": entry.name,
+                "configured": entry.configured,
+                "detected_flows": entry.detected_flows,
+            });
+            if let Some(why) = &entry.invalid {
+                value["invalid"] = json!(why);
+            }
+            if let Some(c) = &entry.contribution {
+                let tasks: Vec<&cohors_core::launchpad::Task> = if include_done {
+                    c.tasks.iter().collect()
+                } else {
+                    entry.open_tasks()
+                };
+                value["summary"] = json!(c.summary);
+                value["group"] = json!(c.group);
+                value["flows"] = json!(c.flows);
+                value["agents"] = json!(c.agents);
+                value["tasks"] = json!(tasks);
+                value["links"] = json!(c.links);
+                value["updated"] = json!(c.updated);
+                value["generated_from"] = json!(c.generated_from);
+            }
+            Some(value)
+        })
+        .collect();
+    json!({
+        "summary": { "repos": repos.len(), "configured": configured, "open_tasks": open_tasks },
+        "repos": repos,
+        "meta": meta(ctx, &snaps),
+    })
+}
+
+fn write_repo_contribution(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let dry_run = args.get("dry_run").and_then(Value::as_bool) == Some(true);
+    if !dry_run {
+        require_launchpad(ctx, "write_repo_contribution")?;
+    }
+    let key = repo_arg(args)?;
+    let snaps = (ctx.scan)();
+    // Resolving through the fleet is the scope lock: only a repo under the
+    // configured roots can be written, never an arbitrary path.
+    let snap =
+        find_repo(&snaps, &key).ok_or_else(|| format!("no repo matching `{key}` in the fleet"))?;
+    let path = snap
+        .path
+        .as_ref()
+        .ok_or_else(|| format!("repo `{key}` has no local path"))?;
+    // The document is the arguments minus the two that address the call.
+    let mut doc = args.as_object().cloned().unwrap_or_default();
+    doc.remove("repo");
+    doc.remove("dry_run");
+    let outcome =
+        cohors_launchpad::write_contribution(path.as_std_path(), &Value::Object(doc), now, dry_run)
+            .map_err(|e| e.to_string())?;
+    write_result(outcome, dry_run)
+}
+
+fn read_board(ctx: &Ctx) -> Result<Value, String> {
+    let home = launchpad_home(ctx)?;
+    Ok(json!({
+        "board": cohors_launchpad::read_board(home),
+        "recent_activity": cohors_launchpad::recent_activity(home, 20),
+    }))
+}
+
+fn write_board(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let dry_run = args.get("dry_run").and_then(Value::as_bool) == Some(true);
+    if !dry_run {
+        require_launchpad(ctx, "write_board")?;
+    }
+    let focus = args
+        .get("focus")
+        .ok_or("missing required argument `focus`")?;
+    let outcome = cohors_launchpad::write_board(launchpad_home(ctx)?, focus, now, dry_run)
+        .map_err(|e| e.to_string())?;
+    write_result(outcome, dry_run)
+}
+
+/// A rejected write is a tool error listing every problem; a success (or a
+/// clean dry run) is the outcome JSON.
+fn write_result(outcome: cohors_launchpad::WriteOutcome, dry_run: bool) -> Result<Value, String> {
+    if !outcome.validation.is_ok() {
+        let list: Vec<String> = outcome
+            .validation
+            .errors
+            .iter()
+            .map(|e| format!("  - {e}"))
+            .collect();
+        return Err(format!(
+            "Not written. Fix these and retry:\n{}",
+            list.join("\n")
+        ));
+    }
+    let mut value = outcome.to_json();
+    value["dry_run"] = json!(dry_run);
+    Ok(value)
+}
+
+fn record_activity(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    require_launchpad(ctx, "record_activity")?;
+    let field = |key: &str| {
+        args.get(key)
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string()
+    };
+    // Store the repo as its fleet name when it resolves, so the log does not
+    // depend on where a checkout lives.
+    let repo = field("repo");
+    let repo = if repo.is_empty() {
+        repo
+    } else {
+        find_repo(&(ctx.scan)(), &repo).map_or(repo, |s| s.name.clone())
+    };
+    let event = cohors_core::launchpad::ActivityEvent {
+        phase: field("phase"),
+        runner: field("runner"),
+        repo,
+        branch: field("branch"),
+        agent: field("agent"),
+        source: "cohors-mcp".to_string(),
+        ..Default::default()
+    };
+    let recorded = cohors_launchpad::record_activity(launchpad_home(ctx)?, event, now)
+        .map_err(|e| e.to_string())?;
+    serde_json::to_value(recorded).map_err(|e| e.to_string())
 }
 
 // ── Remote read tools (GitHub enrichment) ────────────────────────────────────
@@ -815,6 +1097,7 @@ mod tests {
             caps: Caps::default(),
             allowlist: &[],
             max_targets: 0,
+            home: None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -831,6 +1114,7 @@ mod tests {
             caps,
             allowlist: &[],
             max_targets: 0,
+            home: None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -847,6 +1131,7 @@ mod tests {
             caps,
             allowlist,
             max_targets,
+            home: None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -871,11 +1156,13 @@ mod tests {
         allow_writes: true,
         allow_run: false,
         allow_open: false,
+        allow_launchpad: false,
     };
     const RUN: Caps = Caps {
         allow_writes: false,
         allow_run: true,
         allow_open: false,
+        allow_launchpad: false,
     };
 
     fn act(name: &str, arguments: Value) -> Value {
@@ -907,6 +1194,7 @@ mod tests {
             caps: Caps::default(),
             allowlist: &[],
             max_targets: 0,
+            home: None,
         };
         let resp = handle(
             &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
@@ -1058,6 +1346,7 @@ mod tests {
             caps: Caps::default(),
             allowlist: &[],
             max_targets: 0,
+            home: None,
         };
         let resp = handle(
             &json!({
@@ -1318,5 +1607,256 @@ mod tests {
         );
         let resp = call_ctx(ok, RUN, &allow, 0);
         assert!(!is_error(&resp));
+    }
+
+    // ── Launchpad tools ──────────────────────────────────────────────────────
+
+    const LAUNCHPAD: Caps = Caps {
+        allow_writes: false,
+        allow_run: false,
+        allow_open: false,
+        allow_launchpad: true,
+    };
+
+    /// Drive a request against a one-repo fleet rooted in a real temp directory
+    /// (the launchpad tools touch the disk), with a temp launchpad home.
+    fn call_on_disk(
+        request: Value,
+        caps: Caps,
+        repo: &std::path::Path,
+        home: &std::path::Path,
+    ) -> Value {
+        let repo_path = repo.to_str().unwrap().to_string();
+        let scan_fn = move || {
+            let mut snap = cohors_core::demo::fleet(NOW).remove(0);
+            snap.name = "svc".to_string();
+            snap.path = Some(repo_path.as_str().into());
+            vec![snap]
+        };
+        let roots = vec!["/demo".to_string()];
+        let ctx = Ctx {
+            scan: &scan_fn,
+            token: None,
+            roots: &roots,
+            config_path: "(test)",
+            caps,
+            allowlist: &[],
+            max_targets: 0,
+            home: Some(home),
+        };
+        handle(&request, &ctx, NOW).expect("request expects a response")
+    }
+
+    #[test]
+    fn launchpad_tools_are_in_the_catalog() {
+        let resp = call(json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }));
+        let tools = resp["result"]["tools"].as_array().unwrap();
+        for name in [
+            "launchpad",
+            "read_contract",
+            "write_repo_contribution",
+            "read_board",
+            "write_board",
+            "record_activity",
+        ] {
+            assert!(
+                tools.iter().any(|t| t["name"] == name),
+                "catalog missing `{name}`"
+            );
+        }
+        // Every gated launchpad write names its flag, like the action tools do.
+        for name in ["write_repo_contribution", "write_board", "record_activity"] {
+            let tool = tools.iter().find(|t| t["name"] == name).unwrap();
+            assert!(
+                tool["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("--allow-launchpad")
+            );
+        }
+    }
+
+    #[test]
+    fn read_contract_needs_no_tier() {
+        let resp = call(act("read_contract", json!({})));
+        assert!(!is_error(&resp));
+        assert_eq!(payload(&resp)["specVersion"], 1);
+    }
+
+    #[test]
+    fn launchpad_writes_are_gated_but_dry_run_validates() {
+        let repo = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let args = json!({ "repo": "svc", "name": "svc" });
+
+        let gated = call_on_disk(
+            act("write_repo_contribution", args.clone()),
+            Caps::default(),
+            repo.path(),
+            home.path(),
+        );
+        assert!(is_error(&gated));
+        assert!(err_text(&gated).contains("--allow-launchpad"));
+
+        let mut preview = args.clone();
+        preview["dry_run"] = json!(true);
+        let dry = call_on_disk(
+            act("write_repo_contribution", preview),
+            Caps::default(),
+            repo.path(),
+            home.path(),
+        );
+        assert!(!is_error(&dry), "{}", err_text(&dry));
+        assert_eq!(payload(&dry)["written"], false);
+        assert!(!repo.path().join(".principia").exists());
+
+        for (tool, arguments) in [
+            ("write_board", json!({ "focus": [] })),
+            (
+                "record_activity",
+                json!({ "runner": "claude-code", "phase": "note" }),
+            ),
+        ] {
+            let resp = call_on_disk(
+                act(tool, arguments),
+                Caps::default(),
+                repo.path(),
+                home.path(),
+            );
+            assert!(err_text(&resp).contains("--allow-launchpad"), "{tool}");
+        }
+    }
+
+    #[test]
+    fn contribution_write_then_launchpad_read() {
+        let repo = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        std::fs::write(repo.path().join("Cargo.toml"), "").unwrap();
+
+        let before = payload(&call_on_disk(
+            act("launchpad", json!({})),
+            Caps::default(),
+            repo.path(),
+            home.path(),
+        ));
+        assert_eq!(before["repos"][0]["configured"], false);
+        assert_eq!(before["repos"][0]["detected_flows"][0]["id"], "cargo-check");
+
+        let write = call_on_disk(
+            act(
+                "write_repo_contribution",
+                json!({
+                    "repo": "svc", "name": "Service", "summary": "A service",
+                    "tasks": [
+                        { "id": "old", "title": "Old", "status": "done" },
+                        { "id": "low", "title": "Low", "priority": "low" },
+                        { "id": "now", "title": "Now", "status": "doing" },
+                    ],
+                }),
+            ),
+            LAUNCHPAD,
+            repo.path(),
+            home.path(),
+        );
+        assert!(!is_error(&write), "{}", err_text(&write));
+        assert_eq!(payload(&write)["written"], true);
+
+        let after = payload(&call_on_disk(
+            act("launchpad", json!({})),
+            Caps::default(),
+            repo.path(),
+            home.path(),
+        ));
+        assert_eq!(
+            after["summary"],
+            json!({ "repos": 1, "configured": 1, "open_tasks": 2 })
+        );
+        let entry = &after["repos"][0];
+        assert_eq!(entry["name"], "Service");
+        // Done tasks are dropped and the rest come back most-urgent first.
+        assert_eq!(entry["tasks"][0]["id"], "now");
+        assert_eq!(entry["tasks"].as_array().unwrap().len(), 2);
+
+        let all = payload(&call_on_disk(
+            act("launchpad", json!({ "include_done": true })),
+            Caps::default(),
+            repo.path(),
+            home.path(),
+        ));
+        assert_eq!(all["repos"][0]["tasks"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn invalid_contribution_lists_every_error_and_writes_nothing() {
+        let repo = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let resp = call_on_disk(
+            act(
+                "write_repo_contribution",
+                json!({
+                    "repo": "svc", "name": "svc",
+                    "flows": [{ "id": "Bad", "label": "x", "run": "/abs/cmd" }],
+                }),
+            ),
+            LAUNCHPAD,
+            repo.path(),
+            home.path(),
+        );
+        assert!(is_error(&resp));
+        let text = err_text(&resp);
+        assert!(
+            text.contains("kebab-case") && text.contains("absolute path"),
+            "{text}"
+        );
+        assert!(!repo.path().join(".principia").exists());
+    }
+
+    #[test]
+    fn contribution_write_is_scope_locked_to_the_fleet() {
+        let repo = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let resp = call_on_disk(
+            act(
+                "write_repo_contribution",
+                json!({ "repo": outside.path().to_str().unwrap(), "name": "x" }),
+            ),
+            LAUNCHPAD,
+            repo.path(),
+            home.path(),
+        );
+        assert!(err_text(&resp).contains("no repo matching"));
+        assert!(!outside.path().join(".principia").exists());
+    }
+
+    #[test]
+    fn board_and_activity_round_trip() {
+        let repo = tempfile::tempdir().unwrap();
+        let home = tempfile::tempdir().unwrap();
+        let on = |tool: &str, arguments: Value| {
+            call_on_disk(act(tool, arguments), LAUNCHPAD, repo.path(), home.path())
+        };
+
+        let written = on(
+            "write_board",
+            json!({ "focus": [{ "id": "f-1", "title": "Ship", "repo": "svc", "status": "doing" }] }),
+        );
+        assert!(!is_error(&written), "{}", err_text(&written));
+        // The repo is given as a path but logged by its fleet name.
+        let logged = on(
+            "record_activity",
+            json!({ "runner": "claude-code", "phase": "start", "repo": repo.path().to_str().unwrap() }),
+        );
+        assert_eq!(payload(&logged)["repo"], "svc");
+
+        let board = payload(&on("read_board", json!({})));
+        assert_eq!(board["board"]["focus"][0]["title"], "Ship");
+        assert_eq!(board["recent_activity"][0]["phase"], "start");
+
+        let bad = on(
+            "write_board",
+            json!({ "focus": [{ "id": "f-1", "title": "x", "status": "later" }] }),
+        );
+        assert!(err_text(&bad).contains("status must be one of"));
     }
 }
