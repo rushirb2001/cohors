@@ -12,7 +12,5 @@ publish = false
 serde = { workspace = true }
 camino = { workspace = true }
 nucleo-matcher = { workspace = true }
-
-[dev-dependencies]
-# Used only in tests, to assert snapshots round-trip through the cache format.
+# The launchpad contract validates raw JSON documents (pure, WASM-safe).
 serde_json = { workspace = true }

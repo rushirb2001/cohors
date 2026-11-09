@@ -7,6 +7,7 @@
 //! - [`provider`] — the [`RepoProvider`] trait that adapters implement.
 //! - [`sort`] / [`fuzzy`] / [`view`] — "what to show, and in what order".
 //! - [`time`] — clock-free relative-time formatting.
+//! - [`launchpad`] — what each repo says about itself: flows, agents, tasks.
 //!
 //! ## WASM safety (non-negotiable)
 //!
@@ -22,6 +23,7 @@ pub mod attention;
 pub mod demo;
 pub mod detail;
 pub mod fuzzy;
+pub mod launchpad;
 pub mod model;
 pub mod provider;
 pub mod search;

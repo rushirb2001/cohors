@@ -615,6 +615,7 @@ dependencies = [
  "cohors-core",
  "cohors-git",
  "cohors-github",
+ "cohors-launchpad",
  "serde",
  "tempfile",
  "thiserror 2.0.18",
@@ -652,6 +653,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "cohors-launchpad"
+version = "0.6.0"
+dependencies = [
+ "cohors-core",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
 name = "cohors-mcp"
 version = "0.6.0"
 dependencies = [
@@ -661,6 +673,7 @@ dependencies = [
  "cohors-fleet",
  "rayon",
  "serde_json",
+ "tempfile",
  "tracing",
 ]
 
