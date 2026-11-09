@@ -6,6 +6,7 @@ members = [
     "crates/cohors-git",
     "crates/cohors-github",
     "crates/cohors-actions",
+    "crates/cohors-launchpad",
     "crates/cohors-fleet",
     "crates/cohors-mcp",
     "crates/cohors-web",
@@ -92,6 +93,7 @@ cohors-config = { path = "crates/cohors-config" }
 cohors-git = { path = "crates/cohors-git" }
 cohors-github = { path = "crates/cohors-github" }
 cohors-actions = { path = "crates/cohors-actions" }
+cohors-launchpad = { path = "crates/cohors-launchpad" }
 cohors-fleet = { path = "crates/cohors-fleet" }
 cohors-mcp = { path = "crates/cohors-mcp" }
 cohors-web = { path = "crates/cohors-web" }

@@ -29,3 +29,8 @@ pub use cohors_git::{
     ContentHit, collect_commits, repo_changes, repo_detail, search_content, snapshot_repo,
 };
 pub use cohors_github::{discover_token, enrich, fetch_repo_detail};
+
+// The launchpad (each repo's `.principia/` contribution, the focus board, the
+// activity log) is reached through this facade too, so front-ends have one
+// place to read from. See ADR-052.
+pub use cohors_launchpad as launchpad;

@@ -1,7 +1,7 @@
 //! Structural dependency discipline: front-ends read through the fleet facade.
 //!
-//! The rule this enforces: **no front-end depends on `cohors-git` or
-//! `cohors-github` directly.** Reads funnel through `cohors-fleet` (this crate)
+//! The rule this enforces: **no front-end depends on `cohors-git`,
+//! `cohors-github`, or `cohors-launchpad` directly.** Reads funnel through `cohors-fleet` (this crate)
 //! and writes through `cohors-actions`, so an adapter change lands in exactly
 //! one place instead of flooding into every surface — and a new feature that
 //! tries to bypass the funnel fails CI here (its direct import wouldn't even
@@ -15,7 +15,7 @@ use std::path::Path;
 const FRONT_ENDS: &[&str] = &["cohors-tui", "cohors-mcp", "cohors-web"];
 
 /// Adapters no front-end may name directly.
-const FORBIDDEN: &[&str] = &["cohors-git", "cohors-github"];
+const FORBIDDEN: &[&str] = &["cohors-git", "cohors-github", "cohors-launchpad"];
 
 fn manifest(krate: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -65,6 +65,7 @@ fn every_front_end_is_listed() {
         "cohors-git",
         "cohors-github",
         "cohors-actions",
+        "cohors-launchpad",
         "cohors-fleet",
     ];
     for entry in std::fs::read_dir(root).unwrap().flatten() {

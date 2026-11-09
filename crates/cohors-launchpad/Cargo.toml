@@ -1,0 +1,18 @@
+[package]
+name = "cohors-launchpad"
+description = "Launchpad adapter for cohors: reads and writes each repo's committed .principia/ contribution, the cross-repo focus board, and the agent activity log."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+cohors-core = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
