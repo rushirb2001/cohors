@@ -25,7 +25,7 @@ pub struct RepoDetailResponse {
 
 /// The launchpad, as served by `/api/launchpad`: each repo's entry plus the
 /// cross-repo focus board. Both default, so an older server still deserializes.
-#[derive(Deserialize, Clone, Default)]
+#[derive(Deserialize, Clone, Default, PartialEq)]
 #[serde(default)]
 pub struct LaunchpadResponse {
     pub entries: Vec<cohors_core::launchpad::LaunchpadEntry>,

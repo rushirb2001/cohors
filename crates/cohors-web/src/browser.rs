@@ -81,6 +81,9 @@ fn App() -> impl IntoView {
     let tour_rect = RwSignal::new(None::<(f64, f64, f64, f64)>);
     let tour_card_pos = RwSignal::new(None::<(f64, f64)>);
     let roots = RwSignal::new(Vec::<String>::new());
+    // What each repo says about itself (tasks, flows, the focus board). Loaded
+    // alongside the fleet so every row, the briefing, and the drawer can use it.
+    let launchpad = RwSignal::new(None::<api::LaunchpadResponse>);
     // True while the remote-enrichment pass is in flight, so rows that *could* be
     // GitHub (have a remote URL, no `remote` yet) show a spinner instead of "—".
     let enriching = RwSignal::new(false);
@@ -98,6 +101,9 @@ fn App() -> impl IntoView {
                 Ok(list) if !list.is_empty() => {
                     repos.set(list);
                     mode.set(Mode::Live);
+                    spawn_local(async move {
+                        launchpad.set(Some(api::fetch_launchpad().await.unwrap_or_default()));
+                    });
                     // Second pass: enrich with remote signals (one server call;
                     // the server fans out and caches). Merge by id so the local
                     // rows stay put and only `remote` fills in.
@@ -134,11 +140,13 @@ fn App() -> impl IntoView {
                         "No git repositories found to scan. Showing the demo fleet.".to_string(),
                     ));
                     repos.set(demo::fleet(DEMO_NOW));
+                    launchpad.set(Some(demo_launchpad()));
                     mode.set(Mode::Demo);
                 }
                 Err(e) => {
                     notice.set(Some(format!("{e}. Showing the demo fleet.")));
                     repos.set(demo::fleet(DEMO_NOW));
+                    launchpad.set(Some(demo_launchpad()));
                     mode.set(Mode::Demo);
                 }
             }
@@ -164,6 +172,13 @@ fn App() -> impl IntoView {
                 && mode.get_untracked() == Mode::Live
             {
                 repos.set(list);
+                // Only publish a launchpad that actually changed, so the drawer
+                // and the board don't rebuild (and lose scroll) on every poll.
+                if let Ok(fresh) = api::fetch_launchpad().await
+                    && launchpad.get_untracked().as_ref() != Some(&fresh)
+                {
+                    launchpad.set(Some(fresh));
+                }
             }
         }
     });
@@ -201,25 +216,7 @@ fn App() -> impl IntoView {
         });
     });
 
-    // The launchpad loads when its tab is opened (and again each time it is
-    // reopened, so it reflects edits made since). The demo fleet has no files to
-    // read, so it shows the built-in sample instead.
     let tab = RwSignal::new(Tab::Repos);
-    let launchpad = RwSignal::new(None::<api::LaunchpadResponse>);
-    Effect::new(move |_| {
-        if tab.get() != Tab::Launchpad {
-            return;
-        }
-        if mode.get_untracked() == Mode::Demo {
-            let (entries, board) = cohors_core::launchpad::demo();
-            launchpad.set(Some(api::LaunchpadResponse { entries, board }));
-            return;
-        }
-        spawn_local(async move {
-            let resp = api::fetch_launchpad().await.unwrap_or_default();
-            launchpad.set(Some(resp));
-        });
-    });
 
     // First-ever visit: auto-run the tour once, after the fleet has rendered so
     // the spotlight targets exist. A localStorage flag makes it show only once —
@@ -466,11 +463,13 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
     let body = move || {
         let r = repos.get();
         let busy = enriching.get();
+        let lp = launchpad.get();
         visible()
             .into_iter()
             .map(|i| {
+                let work = lp.as_ref().map(|lp| work_info(lp, &r[i]));
                 repo_row(
-                    &r[i], selected, marked, menu, pending, action_arg, notice, now, busy,
+                    &r[i], selected, marked, menu, pending, action_arg, notice, now, busy, work,
                 )
             })
             .collect::<Vec<_>>()
@@ -486,7 +485,10 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
             .get()
             .and_then(|id| list.iter().find(|s| s.id.0 == id).cloned())
         {
-            Some(s) => detail_panel(&s, now, detail).into_any(),
+            Some(s) => {
+                let entry = launchpad.get().and_then(|lp| entry_for(&lp, &s).cloned());
+                detail_panel(&s, now, detail, entry).into_any()
+            }
             None => hint_panel().into_any(),
         }
     };
@@ -496,18 +498,15 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
             // 1 · Header row — the brand mark in its own isolated card, then the
             // overview (fleet name + path, stats, scan status) beside it.
             <div class="top-row">
-                <section class="card brand-card">
-                    <div class="mark">
-                        <span>"▜▒▟███▙▒▛"</span>
-                        <span>"▟██▌█▐██▙"</span>
-                        <span>"▀▐▖▀█▀▗▌▀"</span>
-                    </div>
-                    <div class="title">
+                <header class="mast overview">
+                    <div class="mast-brand">
+                        <div class="mark">
+                            <span>"▜▒▟███▙▒▛"</span>
+                            <span>"▟██▌█▐██▙"</span>
+                            <span>"▀▐▖▀█▀▗▌▀"</span>
+                        </div>
                         <span class="brand">"cohors"</span>
-                        <span class="pill">"web"</span>
                     </div>
-                </section>
-                <section class="card overview">
                     <div class="ov-top">
                         <div class="fleet-name">
                             <span class="fleet-label">"Your Fleet"</span>
@@ -551,9 +550,13 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                             }}
                         </div>
                     </div>
-                    // The fleet's activity and attention breakdown fill the rest
-                    // of the header card — always in view, no wasted space.
-                    <div class="ov-stats">
+                </header>
+                // 2 · The briefing: what you chose to focus on, then how busy
+                // and how healthy the fleet is. The page opens on the work.
+                <section class="brief">
+                    <div class="brief-focus">
+                        {move || focus_brief(launchpad.get(), selected)}
+                    </div>
                         {move || {
                             let r = repos.get();
                             activity_widget(&r)
@@ -562,7 +565,6 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                             let r = repos.get();
                             attention_widget(&r, now)
                         }}
-                    </div>
                 </section>
             </div>
             <div class="grid">
@@ -577,16 +579,16 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                                 class:on=move || tab.get() == Tab::Repos
                                 on:click=move |_| tab.set(Tab::Repos)
                             >
-                                "Repositories"
+                                "Repos"
                             </button>
                             <button
                                 class="tab"
                                 role="tab"
                                 class:on=move || tab.get() == Tab::Launchpad
                                 on:click=move |_| tab.set(Tab::Launchpad)
-                                title="What each repo offers, and what work is waiting in it"
+                                title="Every open task across the fleet, by status"
                             >
-                                "Launchpad"
+                                "Board"
                             </button>
                         </div>
                         <input
@@ -641,8 +643,8 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
                                 <tr>
                                     <th class="mk">"Mark"</th>
                                     {sort_th("Repo", SortMode::Name, sort)}
+                                    <th title="Open launchpad tasks in this repo">"Work"</th>
                                     {sort_th("Sync", SortMode::AheadBehind, sort)}
-                                    <th>"Stash"</th>
                                     <th>"PRs"</th>
                                     <th>"CI"</th>
                                     {sort_th("Last", SortMode::Recent, sort)}
@@ -659,6 +661,303 @@ fn dashboard(cx: DashCtx) -> impl IntoView {
             </div>
         </>
     }
+}
+
+/// The built-in sample launchpad, shown with the demo fleet.
+fn demo_launchpad() -> api::LaunchpadResponse {
+    let (entries, board) = cohors_core::launchpad::demo();
+    api::LaunchpadResponse { entries, board }
+}
+
+/// The launchpad entry belonging to a repo. Matched by id, falling back to the
+/// name (the sample launchpad is keyed by name).
+fn entry_for<'a>(
+    lp: &'a api::LaunchpadResponse,
+    s: &RepoSnapshot,
+) -> Option<&'a cohors_core::launchpad::LaunchpadEntry> {
+    lp.entries
+        .iter()
+        .find(|e| e.id == s.id.0)
+        .or_else(|| lp.entries.iter().find(|e| e.name == s.name))
+}
+
+/// What the Work column shows for one repo.
+#[derive(Clone, Copy)]
+struct WorkInfo {
+    configured: bool,
+    open: usize,
+    doing: usize,
+    blocked: usize,
+}
+
+fn work_info(lp: &api::LaunchpadResponse, s: &RepoSnapshot) -> WorkInfo {
+    let Some(entry) = entry_for(lp, s) else {
+        return WorkInfo {
+            configured: false,
+            open: 0,
+            doing: 0,
+            blocked: 0,
+        };
+    };
+    let tasks = entry.open_tasks();
+    WorkInfo {
+        configured: entry.configured,
+        open: tasks.len(),
+        doing: tasks.iter().filter(|t| t.status() == "doing").count(),
+        blocked: tasks.iter().filter(|t| t.status() == "blocked").count(),
+    }
+}
+
+/// The Work cell: the repo's open-task count as a badge (red when something is
+/// blocked, violet when something is in flight), a quiet "clear" when a set-up
+/// repo has nothing waiting, and empty when the repo has no launchpad file.
+fn work_cell(work: Option<WorkInfo>) -> AnyView {
+    // Nothing loaded yet, or the repo has no launchpad file: stay empty. Most
+    // repos start that way, and a word on every row would bury the ones with
+    // work. The drawer says how to set a repo up.
+    let Some(w) = work.filter(|w| w.configured) else {
+        return ().into_any();
+    };
+    if w.open == 0 {
+        return word("clear", "No open tasks");
+    }
+    let class = if w.blocked > 0 {
+        "work-n blocked"
+    } else if w.doing > 0 {
+        "work-n doing"
+    } else {
+        "work-n"
+    };
+    let tip = format!(
+        "{} open task{}: {} doing, {} blocked",
+        w.open,
+        if w.open == 1 { "" } else { "s" },
+        w.doing,
+        w.blocked
+    );
+    view! { <span class=class title=tip>{w.open}</span> }.into_any()
+}
+
+/// The briefing's first column: the focus board, or — when no board has been
+/// written yet — the most urgent open tasks, so the page always opens on the
+/// work rather than on a chart.
+fn focus_brief(lp: Option<api::LaunchpadResponse>, selected: RwSignal<Option<String>>) -> AnyView {
+    let Some(lp) = lp else {
+        return view! {
+            <div class="stat-h">"Focus"</div>
+            <p class="brief-note">"Reading the launchpad…"</p>
+        }
+        .into_any();
+    };
+    let id_of = |repo: &str| {
+        lp.entries
+            .iter()
+            .find(|e| e.name == repo)
+            .map(|e| e.id.clone())
+    };
+
+    // (title, repo name, repo id)
+    let mut items: Vec<(String, String, Option<String>)> = lp
+        .board
+        .focus
+        .iter()
+        .filter(|f| f.status.as_deref() != Some("done"))
+        .map(|f| {
+            let repo = f.repo.clone().unwrap_or_default();
+            (f.title.clone(), repo.clone(), id_of(&repo))
+        })
+        .collect();
+    let from_board = !items.is_empty();
+    if !from_board {
+        let mut tasks: Vec<_> = lp
+            .entries
+            .iter()
+            .flat_map(|e| e.open_tasks().into_iter().map(move |t| (t.rank(), t, e)))
+            .collect();
+        tasks.sort_by_key(|(rank, _, _)| *rank);
+        items = tasks
+            .into_iter()
+            .map(|(_, t, e)| (t.title.clone(), e.name.clone(), Some(e.id.clone())))
+            .collect();
+    }
+    let more = items.len().saturating_sub(4);
+    items.truncate(4);
+
+    let open: usize = lp.entries.iter().map(|e| e.open_tasks().len()).sum();
+    let busy = lp
+        .entries
+        .iter()
+        .filter(|e| !e.open_tasks().is_empty())
+        .count();
+    let heading = if from_board { "Focus" } else { "Most urgent" };
+    let caption = if open == 0 {
+        "No open tasks anywhere.".to_string()
+    } else {
+        format!(
+            "{open} open task{} in {busy} repo{}{}",
+            if open == 1 { "" } else { "s" },
+            if busy == 1 { "" } else { "s" },
+            if more > 0 {
+                format!(", {more} more below")
+            } else {
+                String::new()
+            },
+        )
+    };
+    if items.is_empty() {
+        return view! {
+            <div class="stat-h">"Focus"</div>
+            <p class="brief-note">
+                "Nothing waiting. Ask your agent to plan your day, or to set a repo up for the launchpad."
+            </p>
+        }
+        .into_any();
+    }
+    let rows: Vec<AnyView> = items
+        .into_iter()
+        .map(|(title, repo, id)| {
+            view! {
+                <li>
+                    <button
+                        class="focus-item"
+                        title="Show this repo's detail"
+                        on:click=move |_| {
+                            if let Some(id) = id.clone() {
+                                selected.set(Some(id));
+                            }
+                        }
+                    >
+                        {title}
+                    </button>
+                    <span class="focus-r">{repo}</span>
+                </li>
+            }
+            .into_any()
+        })
+        .collect();
+    view! {
+        <div class="stat-h">{heading}</div>
+        <ol class="focus-list">{rows}</ol>
+        <p class="brief-note">{caption}</p>
+    }
+    .into_any()
+}
+
+/// The drawer's Launchpad section for one repo: what it is, the work waiting in
+/// it, how to run it, and the agents and links it ships. All of this is text
+/// from the repository's own files, so it is shown, never executed, and a link
+/// is only rendered when it is plain http(s).
+fn launchpad_section(entry: cohors_core::launchpad::LaunchpadEntry) -> AnyView {
+    let flows = |flows: &[cohors_core::launchpad::Flow]| -> Vec<AnyView> {
+        flows
+            .iter()
+            .map(|f| {
+                let label = f.label.clone();
+                let run = f.run.clone();
+                view! {
+                    <li>
+                        <span class="fl-l">{label}</span>
+                        <code>{run}</code>
+                    </li>
+                }
+                .into_any()
+            })
+            .collect()
+    };
+    let detected = flows(&entry.detected_flows);
+    let Some(c) = entry.contribution.clone() else {
+        let why = entry.invalid.clone().unwrap_or_else(|| {
+            "No launchpad file yet. In this repo, ask your agent to set it up for the launchpad."
+                .to_string()
+        });
+        return view! {
+            <details class="sec lp-sec" open>
+                <summary class="sec-h">"Launchpad"</summary>
+                <p class="lp-hint">{why}</p>
+                {(!detected.is_empty())
+                    .then(|| {
+                        view! {
+                            <div class="lp-sub">"Detected commands"</div>
+                            <ul class="lp-flows">{detected}</ul>
+                        }
+                    })}
+            </details>
+        }
+        .into_any();
+    };
+
+    let tasks: Vec<AnyView> = entry
+        .open_tasks()
+        .into_iter()
+        .map(|t| {
+            let (mark, cls) = match t.status() {
+                "doing" => ("◆", "tm doing"),
+                "blocked" => ("✕", "tm blocked"),
+                _ => ("○", "tm"),
+            };
+            let title = t.title.clone();
+            let notes = t.notes.clone().unwrap_or_default();
+            let high = t.priority.as_deref() == Some("high");
+            view! {
+                <li title=notes>
+                    <span class=cls>{mark}</span>
+                    <span class="tt">{title}</span>
+                    {high.then(|| view! { <span class="pri">"high"</span> })}
+                </li>
+            }
+            .into_any()
+        })
+        .collect();
+    let declared = flows(&c.flows);
+    let agents: Vec<AnyView> = c
+        .agents
+        .iter()
+        .map(|a| {
+            let label = a.label.clone();
+            view! { <span class="chip">{label}</span> }.into_any()
+        })
+        .collect();
+    let links: Vec<AnyView> = c
+        .links
+        .iter()
+        .filter(|l| l.url.starts_with("https://") || l.url.starts_with("http://"))
+        .map(|l| {
+            let (label, url) = (l.label.clone(), l.url.clone());
+            view! { <a class="chip" href=url target="_blank" rel="noreferrer">{label}</a> }
+                .into_any()
+        })
+        .collect();
+    let summary = c.summary.clone();
+
+    view! {
+        <details class="sec lp-sec" open>
+            <summary class="sec-h">"Launchpad"</summary>
+            {(!summary.is_empty()).then(|| view! { <p class="lp-what">{summary}</p> })}
+            <div class="lp-sub">"Open tasks"</div>
+            {if tasks.is_empty() {
+                view! { <p class="lp-hint">"Nothing waiting here."</p> }.into_any()
+            } else {
+                view! { <ul class="lp-tasks">{tasks}</ul> }.into_any()
+            }}
+            {(!declared.is_empty() || !detected.is_empty())
+                .then(|| {
+                    view! {
+                        <div class="lp-sub">"Run"</div>
+                        <ul class="lp-flows">{declared}{detected}</ul>
+                    }
+                })}
+            {(!agents.is_empty())
+                .then(|| {
+                    view! {
+                        <div class="lp-sub">"Agents this repo ships"</div>
+                        <div class="lp-chips">{agents}</div>
+                    }
+                })}
+            {(!links.is_empty())
+                .then(|| view! { <div class="lp-chips lp-links">{links}</div> })}
+        </details>
+    }
+    .into_any()
 }
 
 /// Where the theme choice is remembered between visits.
@@ -1437,6 +1736,7 @@ fn repo_row(
     notice: RwSignal<Option<String>>,
     now: i64,
     busy: bool,
+    work: Option<WorkInfo>,
 ) -> impl IntoView + use<> {
     let id = s.id.0.clone();
     let id_click = id.clone();
@@ -1512,8 +1812,8 @@ fn repo_row(
         >
             {mark_td}
             <td class=name_class>{repo_cell(s)}</td>
+            <td>{work_cell(work)}</td>
             <td>{sync_cell(s)}</td>
-            <td>{stash_cell(s)}</td>
             <td>{prs_cell(s, busy)}</td>
             <td>{ci_cell(s, busy)}</td>
             <td class="last">{last_cell(s, now)}</td>
@@ -1730,20 +2030,6 @@ fn count_icon<V: IntoView>(n: u32, icon: V, color: &'static str, tip: String) ->
     view! { <span class=format!("count {color}") title=tip>{n.to_string()}{icon}</span> }.into_any()
 }
 
-/// The Stash cell: a box icon + count (amber), or a faint box when there are none.
-fn stash_cell(s: &RepoSnapshot) -> impl IntoView + use<> {
-    if s.stash_count > 0 {
-        let tip = format!(
-            "{} stash entr{}",
-            s.stash_count,
-            if s.stash_count == 1 { "y" } else { "ies" }
-        );
-        count_icon(s.stash_count, stash_icon(), "warn", tip)
-    } else {
-        iconw(stash_icon(), "muted", "no stashes")
-    }
-}
-
 /// The PRs cell: a pull-request icon + count (open PRs), a faint PR icon when
 /// there are none / off-remote, a spinner while enrichment is in flight.
 fn prs_cell(s: &RepoSnapshot, busy: bool) -> impl IntoView + use<> {
@@ -1934,9 +2220,11 @@ fn detail_panel(
     s: &RepoSnapshot,
     now: i64,
     detail: RwSignal<DetailState>,
+    entry: Option<cohors_core::launchpad::LaunchpadEntry>,
 ) -> impl IntoView + use<> {
     let name = s.name.clone();
     let a = assess(s, now);
+    let launchpad_block = entry.map(launchpad_section);
 
     // Every reason it wants attention (most urgent first), each severity-colored.
     let reasons: Vec<_> = a
@@ -2020,6 +2308,7 @@ fn detail_panel(
                         <span class="fv">{sparkline(&s.activity)}</span>
                     </div>
                 </div>
+                {launchpad_block}
                 {attention_block}
                 {move || rich_block(detail.get(), now)}
                 {link.map(|url| {
