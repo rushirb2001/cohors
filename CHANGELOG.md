@@ -109,12 +109,26 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   level with its upstream says nothing rather than `level`, so the only numbers
   on a row are the ones that mean something. On a wide terminal the repository
   name and branch columns grow to show long names whole.
-- **Keys.** `s` opens the standup and `t` the launchpad from anywhere, not only
-  from their cards. A card lists its keys only while it has the focus, which is
-  the only time they work; the keys that work everywhere are on the key bar.
-- **Command line.** A line that is not a command says what was wrong with it
+- **Keys: a letter is one verb on every card.** `f` fetches, `p` pulls, `P`
+  pushes, `c` commits and `S` stashes wherever a repository is under the cursor:
+  on Work at risk, in the repository table and in the detail view. On Do next the
+  same letters carry out the fetch, pull or push step; a step that only shows you
+  repositories (stashes to review, files to commit, a diverged branch) has no
+  letter and is opened with Enter, so `S` and `c` no longer mean "review" there.
+  A repository key pressed on Do next says where it works instead of doing
+  nothing. `s` (standup), `t` (launchpad), `F` (fetch everything) and `Y` (copy
+  the standup as markdown, formerly `y` on the Commits card) work from anywhere.
+  A card lists its keys only while it has the focus.
+- **Command line.** Tab completes commands, sort modes and repository names, and
+  cycles through them; Up and Down recall earlier lines; the cursor moves with
+  the arrow keys, Home and End, and Ctrl-A, Ctrl-E, Ctrl-U and Ctrl-W work as in
+  a shell. A line that is not a command says what was wrong with it
   (`commit needs a message: :commit <message>`) instead of `unknown command`, and
   is marked as a failure rather than with a tick.
+- **The detail view's list is one line per repository**, like the overview's
+  table, with the last commit beside it when the terminal is wide enough. The
+  path and commit id were repeated under every name; they are in the card about
+  the selected repository.
 
 ### Fixed
 

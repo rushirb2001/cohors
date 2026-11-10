@@ -44,7 +44,12 @@ pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
 pub(crate) fn overlay_hints(app: &App) -> Vec<(&'static str, &'static str)> {
     match app.mode {
         Mode::Normal | Mode::Filter => Vec::new(),
-        Mode::Command => vec![("⏎", "run"), ("Esc", "cancel")],
+        Mode::Command => vec![
+            ("⏎", "run"),
+            ("tab", "complete"),
+            ("↑/↓", "earlier lines"),
+            ("Esc", "cancel"),
+        ],
         Mode::Help => vec![("? / Esc", "close")],
         Mode::Launchpad => vec![("↑/↓", "scroll"), ("t / Esc", "close")],
         Mode::Standup => {
@@ -375,14 +380,23 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     ])
     .areas(inner);
 
+    let (before, after) = app.command_edit.split(&app.command_line);
+    let typed = if shell { accent } else { Style::new() };
+    // While Tab is cycling through completions, say how many there are.
+    let cycling = app
+        .command_edit
+        .completing()
+        .filter(|(_, count)| *count > 1)
+        .map(|(showing, count)| format!("   {showing} of {count}, tab for the next"))
+        .unwrap_or_default();
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(": ", accent.add_modifier(Modifier::BOLD)),
-            Span::styled(
-                app.command_line.clone(),
-                if shell { accent } else { Style::new() },
-            ),
+            // The cursor is drawn where it is, which is not always the end.
+            Span::styled(before.to_string(), typed),
             Span::raw("▏"),
+            Span::styled(after.to_string(), typed),
+            Span::styled(cycling, theme.dim()),
         ])),
         prompt_area,
     );

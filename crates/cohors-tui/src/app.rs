@@ -559,6 +559,9 @@ pub struct App {
     pub command_input: String,
     /// The `:`-command being typed in `Command` mode.
     pub command_line: String,
+    /// The command line's cursor, the lines run before, and a tab completion
+    /// in progress (the text itself is `command_line`).
+    pub command_edit: crate::command::LineState,
     /// The in-flight / last command run, shown in `CommandRun` mode.
     pub run: Option<CommandRun>,
     /// The destructive action awaiting confirmation (`Some` ⇒ `Mode::Confirm`).
@@ -697,6 +700,7 @@ impl App {
             launchpad: None,
             command_input: String::new(),
             command_line: String::new(),
+            command_edit: crate::command::LineState::default(),
             run: None,
             confirm: None,
             open_with: None,
@@ -1108,6 +1112,7 @@ impl App {
             KeyCode::Char(':') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
+                self.command_edit.start();
             }
             // `!` is the shell shortcut into the command palette: open it
             // pre-seeded with `!` so the next keystroke starts the command.
@@ -1136,6 +1141,7 @@ impl App {
     fn open_command_with(&mut self, text: &str) {
         self.mode = Mode::Command;
         self.command_line = text.to_string();
+        self.command_edit.start();
     }
 
     // ── The overview ─────────────────────────────────────────────────────────
@@ -1532,12 +1538,35 @@ impl App {
     }
 
     fn on_key_command_mode(&mut self, key: KeyEvent) -> Cmd {
+        // The text and its editing state are two fields, so both can be
+        // borrowed at once: `edit` changes `line`.
+        let (line, edit) = (&mut self.command_line, &mut self.command_edit);
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         match key.code {
             KeyCode::Esc => {
                 self.mode = Mode::Normal;
                 self.command_line.clear();
             }
+            // The readline keys people's fingers already know.
+            KeyCode::Char('a') if ctrl => edit.home(line),
+            KeyCode::Char('e') if ctrl => edit.end(),
+            KeyCode::Char('u') if ctrl => edit.kill_before(line),
+            KeyCode::Char('w') if ctrl => edit.kill_word(line),
+            KeyCode::Left => edit.left(line),
+            KeyCode::Right => edit.right(),
+            KeyCode::Home => edit.home(line),
+            KeyCode::End => edit.end(),
+            KeyCode::Delete => edit.delete(line),
+            // Up and Down walk the lines run before.
+            KeyCode::Up => edit.older(line),
+            KeyCode::Down => edit.newer(line),
+            // Tab finishes a command, a sort mode or a repository name.
+            KeyCode::Tab | KeyCode::BackTab => {
+                let names: Vec<String> = self.repos.iter().map(|r| r.name.clone()).collect();
+                edit.complete(line, &names, key.code == KeyCode::BackTab);
+            }
             KeyCode::Enter => {
+                edit.remember(line);
                 let parsed = crate::command::parse(&self.command_line);
                 // A line that is not a command says why, not just "unknown".
                 let rejected = parsed
@@ -1551,10 +1580,8 @@ impl App {
                 }
                 return cmd;
             }
-            KeyCode::Backspace => {
-                self.command_line.pop();
-            }
-            KeyCode::Char(c) => self.command_line.push(c),
+            KeyCode::Backspace => edit.backspace(line),
+            KeyCode::Char(c) => edit.insert(line, c),
             _ => {}
         }
         Cmd::None
@@ -2369,6 +2396,60 @@ mod tests {
             app.on_key(key(card));
             assert_eq!(app.on_key(key('F')), Cmd::FetchAll, "{card}");
         }
+    }
+
+    #[test]
+    fn the_command_line_recalls_completes_and_edits() {
+        let mut app = app_with(&[("payments", false), ("web-app", false)]);
+        let typed = |app: &mut App, text: &str| {
+            for c in text.chars() {
+                app.on_key(key(c));
+            }
+        };
+        // Tab finishes a command, then its argument.
+        app.on_key(key(':'));
+        typed(&mut app, "so");
+        app.on_key(code(KeyCode::Tab));
+        assert_eq!(app.command_line, "sort ");
+        typed(&mut app, "n");
+        app.on_key(code(KeyCode::Tab));
+        assert_eq!(app.command_line, "sort name");
+        app.on_key(code(KeyCode::Enter));
+        assert_eq!(app.sort, SortMode::Name);
+
+        // A repository name completes too, and Enter jumps to it.
+        app.on_key(key(':'));
+        typed(&mut app, "we");
+        app.on_key(code(KeyCode::Tab));
+        assert_eq!(app.command_line, "web-app");
+        app.on_key(code(KeyCode::Enter));
+        assert_eq!(app.selected_repo().unwrap().name, "web-app");
+
+        // Up brings back what was run, newest first; it can be edited.
+        app.on_key(key(':'));
+        app.on_key(code(KeyCode::Up));
+        assert_eq!(app.command_line, "web-app");
+        app.on_key(code(KeyCode::Up));
+        assert_eq!(app.command_line, "sort name");
+        for _ in 0..4 {
+            app.on_key(code(KeyCode::Backspace));
+        }
+        typed(&mut app, "recent");
+        // The cursor moves: fix a word from the middle of the line.
+        app.on_key(code(KeyCode::Home));
+        app.on_key(code(KeyCode::Delete));
+        typed(&mut app, "s");
+        assert_eq!(app.command_line, "sort recent");
+        app.on_key(code(KeyCode::Enter));
+        assert_eq!(app.sort, SortMode::Recent);
+
+        // Esc cancels, and a cancelled line is not remembered.
+        app.on_key(key(':'));
+        typed(&mut app, "quit");
+        app.on_key(code(KeyCode::Esc));
+        app.on_key(key(':'));
+        app.on_key(code(KeyCode::Up));
+        assert_eq!(app.command_line, "sort recent");
     }
 
     #[test]

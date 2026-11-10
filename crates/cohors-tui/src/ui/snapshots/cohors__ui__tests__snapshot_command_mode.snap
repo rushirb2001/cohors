@@ -20,7 +20,7 @@ expression: "render_to_string(&app, 100, 24)"
 │ here once a║ :standup  :tasks           │ your commits · the launchpad              ║            │
 ╰────────────║ :refresh  :quit            │ rescan · exit                             ║────────────╯
 ╭─  5  ▤ Repo╟────────────────────────────┴───────────────────────────────────────────╢────────────╮
-│        repo║                           ⏎ run · Esc cancel                           ║ast commit  │
+│        repo║          ⏎ run · tab complete · ↑/↓ earlier lines · Esc cancel         ║ast commit  │
 │  RISK  lega╚════════════════════════════════════════════════════════════════════════╝ould not r… │
 │  WARN  payments          main      ↑2              ·    3    1      1      ·    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
