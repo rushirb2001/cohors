@@ -5,27 +5,27 @@ expression: "render_to_string(&app, 100, 28)"
  cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
  1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
 ╭─  1  ▶╔══════════════════════════════════════════════════════════════════════════════════╗───────╮
-│▸▲  e  ║  payments  ·  main                                                               ║ing.   │
-│ ◆  P  ╟─────────────────────────────────────────┬────────────────────────────────────────╢ts.    │
-│ ○  p  ║ Changes · branches · PRs                │ Commits (5)                            ║eb-ap… │
-│ ○  c  ║ Attention                             █ │ a1b2c3d    2h  fix: retry charge on 5xx║h 7.   │
+│▸ RISK ║  payments  ·  main                                                               ║-bill… │
+│  WARN ╟─────────────────────────────────────────┬────────────────────────────────────────╢aymen… │
+│  NOTE ║ Changes · branches · PRs                │ Commits (5)                            ║rk: w… │
+│  NOTE ║ Attention                             █ │ a1b2c3d    2h  fix: retry charge on 5xx║p wit… │
 ╰───────║ ↑2 unpushed                           █ │ b2c3d4e    5h  test: cover partial-refu║───────╯
 ╭─  2  ▲║ 4 uncommitted changes                 █ │ c3d4e5f    1d  refactor: extract proces║───────╮
-│ ▲ lega║ 1 stash                               █ │ d4e5f60    3d  feat: idempotency keys o║       │
-│ ◆ paym║                                       █ │ e5f6071    4d  chore: bump stripe sdk t║  Push │
-│ ◆ web-║ Checks                                █ │                                        ║  Pull │
+│  RISK ║ 1 stash                               █ │ d4e5f60    3d  feat: idempotency keys o║       │
+│  WARN ║                                       █ │ e5f6071    4d  chore: bump stripe sdk t║  Push │
+│  WARN ║ Checks                                █ │                                        ║  Pull │
 ╰─  ⏎  o║ CI passing  ·  2 open pull requests   ║ │                                        ║───────╯
 ╭─  3  ✓║                                       ║ │                                        ║───────╮
 │ No lau║ Changes (3)                           ║ │                                        ║       │
 │ here o║  M src/charge.rs                      ║ │                                        ║       │
 ╰─  t  b║  M src/refund.rs                      ║ │                                        ║───────╯
 ╭─  5  ▤║ ?? notes.md                           ║ │                                        ║───────╮
-│   repo║                                       ║ │                                        ║ommit  │
-│ ▲ lega║ Branches (3)                          ║ │                                        ║not r… │
-│ ◆ paym║ ● main  ↑2                            ║ │                                        ║etry … │
-│ ◆ web-║   feat/idempotency  ↑3 ↓1             ║ │                                        ║art d… │
-│ ○ infr╟─────────────────────────────────────────┴────────────────────────────────────────╢ pin … │
-│ · auth║                     ↑/↓ scroll · g/G top / bottom · Esc close                    ║ bump… │
+│       ║                                       ║ │                                        ║ommit  │
+│  RISK ║ Branches (3)                          ║ │                                        ║not r… │
+│  WARN ║ ● main  ↑2                            ║ │                                        ║etry … │
+│  WARN ║   feat/idempotency  ↑3 ↓1             ║ │                                        ║art d… │
+│  NOTE ╟─────────────────────────────────────────┴────────────────────────────────────────╢ pin … │
+│       ║                     ↑/↓ scroll · g/G top / bottom · Esc close                    ║ bump… │
 │       ╚══════════════════════════════════════════════════════════════════════════════════╝       │
 │                                                                                                  │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯

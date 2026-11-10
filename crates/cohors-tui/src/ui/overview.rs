@@ -12,7 +12,8 @@
 use cohors_core::{ActionKind, KeyFigures, NextAction, Overview};
 
 use super::cards::{
-    CardFrame, Hint, Item, draw_card, draw_lines, draw_list, draw_message, hint, severity_span,
+    BLOCK_WIDTH, CardFrame, Hint, Item, draw_card, draw_lines, draw_list, draw_message, hint,
+    severity_block,
 };
 use super::layout::{Figures, OverviewPlan, Wants, list_window, plan_overview};
 use super::repos_table::render_repos_card;
@@ -360,8 +361,10 @@ pub(crate) struct Figure {
     pub short: &'static str,
     pub value: String,
     pub note: String,
-    /// Draw the number in the warning colour (work that could be lost).
-    pub warn: bool,
+    /// Fill the whole tile in this severity's colour: `Risk` for work that
+    /// exists only on this machine, `Warn` for stashes going stale. `None`
+    /// leaves the tile neutral, which is what a figure with nothing wrong is.
+    pub tone: Option<Severity>,
 }
 
 /// The six key figures, worded. Every number is one of the overview's own.
@@ -399,12 +402,12 @@ pub(crate) fn figures(f: &KeyFigures) -> [Figure; 6] {
     } else {
         format!("{} high", f.high_tasks)
     };
-    let figure = |label, short, value: String, note, warn| Figure {
+    let figure = |label, short, value: String, note, tone| Figure {
         label,
         short,
         value,
         note,
-        warn,
+        tone,
     };
     [
         figure(
@@ -412,42 +415,36 @@ pub(crate) fn figures(f: &KeyFigures) -> [Figure; 6] {
             "not backed up",
             f.not_backed_up.to_string(),
             not_backed_up,
-            f.not_backed_up > 0,
+            (f.not_backed_up > 0).then_some(Severity::Risk),
         ),
         figure(
             "Stashes",
             "stashes",
             f.stashes.to_string(),
             stashes,
-            f.stale_stash_repos > 0,
+            (f.stale_stash_repos > 0).then_some(Severity::Warn),
         ),
         figure(
             "Uncommitted",
             "uncommitted",
             f.uncommitted_files.to_string(),
             uncommitted,
-            false,
+            None,
         ),
         figure(
             "Stale fetch",
             "stale",
             f.stale_fetch_repos.to_string(),
             stale_fetch,
-            false,
+            None,
         ),
-        figure(
-            "Open tasks",
-            "tasks",
-            f.open_tasks.to_string(),
-            tasks,
-            false,
-        ),
+        figure("Open tasks", "tasks", f.open_tasks.to_string(), tasks, None),
         figure(
             "Commits 7d",
             "commits 7d",
             f.commits_week.to_string(),
             format!("prev week {}", f.commits_prev_week),
-            false,
+            None,
         ),
     ]
 }
@@ -460,7 +457,7 @@ fn render_figures(frame: &mut Frame, area: Rect, app: &App, layout: Figures, the
         None => figures(&KeyFigures::default()).map(|figure| Figure {
             value: theme.glyphs.ellipsis().to_string(),
             note: String::new(),
-            warn: false,
+            tone: None,
             ..figure
         }),
     };
@@ -485,27 +482,29 @@ fn render_figure_row(frame: &mut Frame, area: Rect, figures: &[Figure], theme: &
         let inner = draw_card(frame, *cell, &CardFrame::default(), theme).text;
         let width = inner.width as usize;
         let ell = theme.glyphs.ellipsis();
-        let value_style = if figure.warn {
-            theme.warn().add_modifier(Modifier::BOLD)
-        } else {
-            Style::new().add_modifier(Modifier::BOLD)
-        };
+        // A figure that needs attention is a filled tile: everything inside
+        // the frame takes the severity's colour, and the text is drawn in the
+        // fill's own contrasting tone (dim text on a coloured ground would be
+        // unreadable). A figure with nothing wrong stays neutral.
+        let fill = figure.tone.and_then(|tone| theme.fill(tone));
+        if let Some(fill) = fill {
+            let inside = Rect {
+                x: cell.x.saturating_add(1),
+                y: cell.y.saturating_add(1),
+                width: cell.width.saturating_sub(2),
+                height: cell.height.saturating_sub(2),
+            };
+            frame.buffer_mut().set_style(inside, fill);
+        }
+        let quiet = fill.unwrap_or_else(|| theme.dim());
+        let strong = fill.unwrap_or_default().add_modifier(Modifier::BOLD);
         draw_lines(
             frame,
             inner,
             vec![
-                Line::from(Span::styled(
-                    text::clip(figure.label, width, ell),
-                    theme.dim(),
-                )),
-                Line::from(Span::styled(
-                    text::clip(&figure.value, width, ell),
-                    value_style,
-                )),
-                Line::from(Span::styled(
-                    text::clip(&figure.note, width, ell),
-                    theme.dim(),
-                )),
+                Line::from(Span::styled(text::clip(figure.label, width, ell), quiet)),
+                Line::from(Span::styled(text::clip(&figure.value, width, ell), strong)),
+                Line::from(Span::styled(text::clip(&figure.note, width, ell), quiet)),
             ],
         );
     }
@@ -565,7 +564,8 @@ fn render_do_next(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
 
     // The title column is as wide as the longest title, but always leaves
     // room for the reason; on a narrow card the reason is dropped instead.
-    const LEAD: usize = 6; // mark, key and their spacing: `▲  P  `
+    // The severity block, the key, and their spacing: ` RISK   P  `.
+    const LEAD: usize = BLOCK_WIDTH + 2 + 1 + 2;
     let width = inner.width();
     let longest = actions
         .iter()
@@ -604,7 +604,7 @@ fn do_next_line(
     // Leave a gap between a clipped title and the reason.
     let title = text::clip(&action.title, title_width.saturating_sub(2), ell);
     let mut spans = vec![
-        severity_span(action.severity, theme),
+        severity_block(action.severity, theme),
         Span::raw("  "),
         Span::styled(
             action_key(action.kind).to_string(),
@@ -729,7 +729,7 @@ impl RiskColumns {
     /// `longest_step` is the width of the longest suggested-step label among
     /// the rows, so that column is exactly as wide as it needs to be.
     pub(crate) fn for_width(width: usize, longest_step: usize) -> Self {
-        const MARK: usize = 2;
+        const MARK: usize = BLOCK_WIDTH + 1; // the severity block and a space
         const AGE: usize = 5;
         let name = if width >= 100 { 22 } else { 18 }.min(width / 3);
         let branch = if width >= 90 { 15 } else { 0 };
@@ -765,7 +765,7 @@ fn at_risk_line(
         .map(|c| time::relative(c.timestamp, now))
         .unwrap_or_default();
     let mut spans = vec![
-        severity_span(line.severity, theme),
+        severity_block(line.severity, theme),
         Span::raw(" "),
         Span::styled(
             text::column(&text::safe(&line.name), columns.name, ell),
@@ -1422,12 +1422,13 @@ mod tests {
     #[test]
     fn at_risk_columns_give_the_reasons_whatever_is_left() {
         // The designed width, with "Publish branch" (14) as the longest step:
-        // name 22, branch 15, and 55 columns of reasons, as drawn.
+        // the severity block and its space (7), name 22, branch 15, and 50
+        // columns of reasons, as drawn.
         let wide = RiskColumns::for_width(115, 14);
         assert_eq!((wide.name, wide.branch, wide.age), (22, 15, 5));
-        assert_eq!((wide.reasons, wide.step), (55, 16));
+        assert_eq!((wide.reasons, wide.step), (50, 16));
         assert_eq!(
-            2 + wide.name + wide.branch + wide.reasons + wide.age + wide.step,
+            BLOCK_WIDTH + 1 + wide.name + wide.branch + wide.reasons + wide.age + wide.step,
             115
         );
         // Narrow: the branch goes first, then the suggested step.

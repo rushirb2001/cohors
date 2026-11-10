@@ -22,12 +22,12 @@ expression: "render_to_string(&app, 120, 40)"
 │ Working out what needs you…                    │ │ Working out what needs you…                                       │
 ╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────────────────────────╮
-│   repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit                │
-│   legacy-billing          unreadable                                                      could not read .git (perm… │
-│   payments                main           ↑2              0    3    1      1           2h  fix: retry on 5xx          │
-│   web-app                 feat/checkout  ↓5              0    7    0      0          20m  wip: cart drawer           │
-│   infra                   @a1b2c3d (det… no remote       0    0    4      0           1w  build: pin ci image        │
-│   auth-service            main           no remote       0    0    0      0           3d  chore: bump deps           │
+│        repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit           │
+│        legacy-billing          unreadable                                                      could not read .git … │
+│        payments                main           ↑2              0    3    1      1           2h  fix: retry on 5xx     │
+│        web-app                 feat/checkout  ↓5              0    7    0      0          20m  wip: cart drawer      │
+│        infra                   @a1b2c3d (det… no remote       0    0    4      0           1w  build: pin ci image   │
+│        auth-service            main           no remote       0    0    0      0           3d  chore: bump deps      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │

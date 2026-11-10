@@ -625,17 +625,19 @@ fn the_overview_at_119_columns_matches_the_approved_frame() {
         [0, 18, 20, 38, 40, 58, 60, 78, 80, 98, 100, 118]
     );
 
-    // Card 1: mark, key, title.
+    // Card 1: the severity block (six columns, the word one column in), then
+    // the key, then the title.
     let step = row_with(&rows, &["Push 4 commits"]);
-    assert_eq!(column_of(step, "▲"), 2);
-    assert_eq!(column_of(step, "P"), 5);
-    assert_eq!(column_of(step, "Push"), 8);
+    assert_eq!(column_of(step, "RISK"), 3);
+    assert_eq!(column_of(step, "P"), 10);
+    assert_eq!(column_of(step, "Push"), 13);
 
-    // Card 2: name, branch, reasons; the age and the step sit at the right.
+    // Card 2: block, name, branch, reasons; the age and the step sit at the right.
     let risk = row_with(&rows, &["design-system", "1 stash"]);
-    assert_eq!(column_of(risk, "design-system"), 4);
-    assert_eq!(column_of(risk, "main"), 26);
-    assert_eq!(column_of(risk, "1 commit"), 41);
+    assert_eq!(column_of(risk, "WARN"), 3);
+    assert_eq!(column_of(risk, "design-system"), 9);
+    assert_eq!(column_of(risk, "main"), 31);
+    assert_eq!(column_of(risk, "1 commit"), 46);
     assert_eq!(frame_columns(risk), [0, 118]);
 
     // Cards 3 and 4 side by side: 50 columns, a gap, then 68.
@@ -649,17 +651,19 @@ fn the_overview_at_119_columns_matches_the_approved_frame() {
 
     // Card 5: the table's columns.
     let header = row_with(&rows, &["repository", "upstream", "last commit"]);
+    // The severity block takes the first seven columns of every row, so the
+    // name starts at 9; the commit subject gives up the room.
     for (label, column) in [
-        ("repository", 4),
-        ("branch", 28),
-        ("upstream", 43),
-        ("stg", 57),
-        ("mod", 62),
-        ("new", 67),
-        ("stash", 72),
-        ("tasks", 79),
-        ("age", 87),
-        ("last commit", 92),
+        ("repository", 9),
+        ("branch", 33),
+        ("upstream", 48),
+        ("stg", 62),
+        ("mod", 67),
+        ("new", 72),
+        ("stash", 77),
+        ("tasks", 84),
+        ("age", 92),
+        ("last commit", 97),
     ] {
         assert_eq!(column_of(header, label), column, "{label}");
     }
@@ -675,26 +679,28 @@ fn the_detail_view_at_119_columns_matches_the_approved_frame() {
     let rows = rows_of(&render_to_string(&detail_app(), 119, 40));
 
     let header = row_with(&rows, &["repository", "fetched", "commit"]);
+    // As in the overview, the severity block leads every row, so the name
+    // starts at 9.
     for (label, column) in [
-        ("repository", 4),
-        ("branch", 34),
-        ("upstream", 54),
-        ("stg", 70),
-        ("mod", 75),
-        ("new", 80),
-        ("stash", 85),
-        ("tasks", 92),
-        ("fetched", 100),
-        ("commit", 109),
+        ("repository", 9),
+        ("branch", 39),
+        ("upstream", 58),
+        ("stg", 72),
+        ("mod", 77),
+        ("new", 82),
+        ("stash", 87),
+        ("tasks", 94),
+        ("fetched", 102),
+        ("commit", 111),
     ] {
         assert_eq!(column_of(header, label), column, "{label}");
     }
 
     // Second line of an entry: the path under the name, then id and subject.
     let path = row_with(&rows, &["~/code/payments", "abc1234"]);
-    assert_eq!(column_of(path, "~/code/payments"), 4);
-    assert_eq!(column_of(path, "abc1234"), 54);
-    assert_eq!(column_of(path, "fix:"), 63);
+    assert_eq!(column_of(path, "~/code/payments"), 9);
+    assert_eq!(column_of(path, "abc1234"), 58);
+    assert_eq!(column_of(path, "fix:"), 67);
 
     // Three cards of 39 columns, one column apart.
     let cards = row_with(&rows, &["staged", "last commit"]);
@@ -727,6 +733,93 @@ fn corner_of<'a>(terminal: &'a Terminal<TestBackend>, title: &str) -> &'a ratatu
         .rposition(|c| ['╭', '╔', '+', '#'].contains(c))
         .expect("a corner before the title");
     buf.cell((corner as u16, y as u16)).unwrap()
+}
+
+/// The cell where `word` starts on the first screen row containing every one
+/// of `on_row_with`.
+fn cell_at<'a>(
+    terminal: &'a Terminal<TestBackend>,
+    on_row_with: &[&str],
+    word: &str,
+) -> &'a ratatui::buffer::Cell {
+    let text = buffer_text(terminal);
+    let (y, line) = text
+        .lines()
+        .enumerate()
+        .find(|(_, line)| on_row_with.iter().all(|w| line.contains(w)))
+        .unwrap_or_else(|| panic!("no row with {on_row_with:?}"));
+    let x = line[..line.find(word).unwrap()].chars().count();
+    terminal
+        .backend()
+        .buffer()
+        .cell((x as u16, y as u16))
+        .unwrap()
+}
+
+/// Severity blocks are filled for risk and warning and quiet otherwise, in
+/// the muted tones of the neutral theme, and fall back to reverse video when
+/// there is no colour.
+#[test]
+fn severity_blocks_are_filled_only_where_work_could_be_lost() {
+    use ratatui::style::{Color, Modifier};
+    let brick = Color::Rgb(0xD9, 0x77, 0x6E);
+    let ochre = Color::Rgb(0xCF, 0xA2, 0x55);
+    let mut app = fleet_app();
+    app.dark = true;
+    let colour = draw(&app, 119, 53, true);
+
+    // Do next, Work at risk and the repository table all lead with the block.
+    assert_eq!(cell_at(&colour, &["Push 4 commits"], "RISK").bg, brick);
+    assert_eq!(
+        cell_at(&colour, &["design-system", "1 stash"], "WARN").bg,
+        ochre
+    );
+    assert_eq!(cell_at(&colour, &["analytics", "perf:"], "RISK").bg, brick);
+    // A note is not filled: it must not compete with real trouble.
+    let note = cell_at(&colour, &["cli-tools", "docs:"], "NOTE");
+    assert_eq!(note.bg, Color::Reset);
+    assert!(note.modifier.contains(Modifier::DIM));
+    // A clean repository has no block at all.
+    let clean = buffer_text(&colour);
+    let row = clean
+        .lines()
+        .find(|l| l.contains("auth-service") && l.contains("chore:"))
+        .unwrap();
+    assert!(
+        !["RISK", "WARN", "NOTE", "INFO"]
+            .iter()
+            .any(|w| row.contains(w))
+    );
+
+    // The figures that need attention are filled tiles; the rest are neutral.
+    assert_eq!(
+        cell_at(&colour, &["Not backed up", "Commits 7d"], "Not backed up").bg,
+        brick
+    );
+    // Stashes turn ochre only once one has gone stale; fresh ones are neutral.
+    let stale = app.overview.as_ref().unwrap().figures.stale_stash_repos > 0;
+    assert_eq!(
+        cell_at(&colour, &["Not backed up", "Commits 7d"], "Stashes").bg,
+        if stale { ochre } else { Color::Reset }
+    );
+    assert_eq!(
+        cell_at(&colour, &["Not backed up", "Commits 7d"], "Uncommitted").bg,
+        Color::Reset
+    );
+
+    // A light terminal gets the deeper tones.
+    app.dark = false;
+    let light = draw(&app, 119, 53, true);
+    assert_eq!(
+        cell_at(&light, &["Push 4 commits"], "RISK").bg,
+        Color::Rgb(0xB4, 0x48, 0x3F)
+    );
+
+    // Without colour the block is reverse video, and the word still says it.
+    let plain = draw(&app, 119, 53, false);
+    let block = cell_at(&plain, &["Push 4 commits"], "RISK");
+    assert_eq!(block.bg, Color::Reset);
+    assert!(block.modifier.contains(Modifier::REVERSED));
 }
 
 #[test]

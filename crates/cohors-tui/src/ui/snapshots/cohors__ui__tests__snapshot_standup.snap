@@ -5,24 +5,24 @@ expression: "render_to_string(&app, 100, 24)"
  cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
  1 not b╔══════════════════════════════════════════════════════════════════════════════════╗        
 ╭─  1  ▶║ Standup · this week   ·   29 commits · 2 repos                                   ║───────╮
-│▸▲  e  ╟──────────────────────────────────────────────────────────────────────────────────╢ing.   │
-│ ◆  P  ║ You authored 29 commits this week across 2 repos, shipping 24 features and       ║ts.    │
-│ ○  p  ║ fixing 5 bugs.                                                                   ║eb-ap… │
-│ ○  c  ║                                                                                  ║h 7.   │
+│▸ RISK ╟──────────────────────────────────────────────────────────────────────────────────╢-bill… │
+│  WARN ║ You authored 29 commits this week across 2 repos, shipping 24 features and       ║aymen… │
+│  NOTE ║ fixing 5 bugs.                                                                   ║rk: w… │
+│  NOTE ║                                                                                  ║p wit… │
 ╰───────╟────────────────────────┬─────────────────────────────────────────────────────────╢───────╯
 ╭─  2  ▲║ Repos                  │ payments  ·  24 commits                                 ║───────╮
-│ ▲ lega║ payments            24 │ aa00010  feat: payments work item 10                  ║ ║       │
-│ ◆ paym║ web-app              5 │ aa00011  feat: payments work item 11                  ║ ║  Push │
-│ ◆ web-║                        │ aa00012  feat: payments work item 12                  ║ ║  Pull │
+│  RISK ║ payments            24 │ aa00010  feat: payments work item 10                  ║ ║       │
+│  WARN ║ web-app              5 │ aa00011  feat: payments work item 11                  ║ ║  Push │
+│  WARN ║                        │ aa00012  feat: payments work item 12                  ║ ║  Pull │
 ╰─  ⏎  o║                        │ aa00013  feat: payments work item 13                  █ ║───────╯
 ╭─  3  ✓║                        │ aa00014  feat: payments work item 14                  █ ║───────╮
 │ No lau║                        │ aa00015  feat: payments work item 15                  █ ║       │
 │ here o║                        │ aa00016  feat: payments work item 16                  █ ║       │
 ╰─  t  b║                        │ aa00017  feat: payments work item 17                  ║ ║───────╯
 ╭─  5  ▤║                        │ aa00018  feat: payments work item 18                  ║ ║───────╮
-│   repo║                        │ aa00019  feat: payments work item 19                  ║ ║ommit  │
-│ ▲ lega║                        │ aa00020  feat: payments work item 20                  ║ ║not r… │
-│ ◆ paym╟────────────────────────┴─────────────────────────────────────────────────────────╢etry … │
+│       ║                        │ aa00019  feat: payments work item 19                  ║ ║ommit  │
+│  RISK ║                        │ aa00020  feat: payments work item 20                  ║ ║not r… │
+│  WARN ╟────────────────────────┴─────────────────────────────────────────────────────────╢etry … │
 │   ↓ 3 ║        ↑/↓ scroll commits · ← back to repos · w window · y copy · q close        ║       │
 ╰─  ␣  s╚══════════════════════════════════════════════════════════════════════════════════╝───────╯
   1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

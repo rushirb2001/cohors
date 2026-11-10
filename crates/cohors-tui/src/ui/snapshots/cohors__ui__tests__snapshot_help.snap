@@ -13,27 +13,27 @@ expression: "render_to_string(&app, 120, 50)"
 │ 2 commits     ║  Marks                                                                               ║rev week 0     │
 ╰───────────────║    ▲ ◆                work at risk: it exists only on this machine                   ║───────────────╯
 ╭─  1  ▶ Do next║    ○ ·                worth a look / clean                                           ║───────────────╮
-│▸▲  e  Check 1 ║    ●                  marked for a bulk action                                       ║               │
-│ ◆  P  Push 2 c║                                                                                      ║               │
-│ ○  p  Pull 1 r║  Everywhere                                                                          ║               │
-│ ○  c  Commit o║    1-5                focus a card                                                   ║               │
+│▸ RISK   e  Che║    ●                  marked for a bulk action                                       ║               │
+│  WARN   P  Pus║                                                                                      ║               │
+│  NOTE   p  Pul║  Everywhere                                                                          ║               │
+│  NOTE   c  Com║    1-5                focus a card                                                   ║               │
 ╰───────────────║    tab / shift-tab    next / previous card                                           ║───────────────╯
 ╭─  2  ▲ Work at║    ↑↓ j k             move within the focused card                                   ║───────────────╮
-│ ▲ legacy-billi║    ⏎                  open the highlighted row                                       ║               │
-│ ◆ payments    ║    :                  command line (:fetch :pull :push :commit :sort …)              ║      2h  Push │
-│ ◆ web-app     ║    !                  run a shell command in the marked repositories                 ║     20m  Pull │
+│  RISK  legacy-║    ⏎                  open the highlighted row                                       ║               │
+│  WARN  payment║    :                  command line (:fetch :pull :push :commit :sort …)              ║      2h  Push │
+│  WARN  web-app║    !                  run a shell command in the marked repositories                 ║     20m  Pull │
 ╰─  ⏎  open   e ║    /                  filter the repository table by name                            ║───────────────╯
 ╭─  3  ✓ Open ta║    r  ?  q            rescan / this help / quit (Ctrl-C also quits)                  ║───────────────╮
 │ No launchpad f║                                                                                      ║               │
 │ a repository h║  1 Do next and 2 Work at risk                                                        ║               │
 ╰─  t  board   ⏎║    a step's key       do that step for the repositories it lists                     ║───────────────╯
 ╭─  5  ▤ Reposit║    ⏎                  do the highlighted step / open the repository                  ║───────────────╮
-│   repository  ║                                                                                      ║               │
-│ ▲ legacy-billi║  3 Open tasks and 4 Commits                                                          ║ad .git (perm… │
-│ ◆ payments    ║    t  ⏎               the launchpad board / that repository's tasks                  ║n 5xx          │
-│ ◆ web-app     ║    s  y               the standup / copy the standup as markdown                     ║awer           │
-│ ○ infra       ║                                                                                      ║i image        │
-│ · auth-service║  5 Repositories, and the detail view                                                 ║deps           │
+│        reposit║                                                                                      ║mmit           │
+│  RISK  legacy-║  3 Open tasks and 4 Commits                                                          ║ot read .git … │
+│  WARN  payment║    t  ⏎               the launchpad board / that repository's tasks                  ║try on 5xx     │
+│  WARN  web-app║    s  y               the standup / copy the standup as markdown                     ║rt drawer      │
+│  NOTE  infra  ║                                                                                      ║pin ci image   │
+│        auth-se║  5 Repositories, and the detail view                                                 ║bump deps      │
 │               ║    ␣  *               mark it / mark all listed (again to clear)                     ║               │
 │               ║    f  F  p  P         fetch / fetch all / pull (ff only) / push                      ║               │
 │               ║    c  S               commit / stash; both ask before changing anything              ║               │

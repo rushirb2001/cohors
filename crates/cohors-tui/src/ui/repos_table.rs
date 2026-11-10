@@ -12,12 +12,14 @@
 
 use cohors_core::{RepoLine, ViewRow};
 
-use super::cards::{CardArea, CardFrame, Hint, Item, draw_card, draw_list, hint, severity_span};
+use super::cards::{
+    BLOCK_WIDTH, CardArea, CardFrame, Hint, Item, draw_card, draw_list, hint, severity_block,
+};
 use super::layout::list_window;
 use super::*;
 
 /// The severity mark and the space after it, before the first column.
-const MARK_WIDTH: usize = 2;
+const MARK_WIDTH: usize = BLOCK_WIDTH + 1; // the severity block and a space
 
 /// Which table is being laid out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -379,9 +381,9 @@ pub(crate) fn row_line(
     theme: &Theme,
 ) -> Line<'static> {
     let mark = match row.line {
-        Some(line) => severity_span(line.severity, theme),
+        Some(line) => severity_block(line.severity, theme),
         // Not judged yet (the overview is still being computed).
-        None => Span::raw(" "),
+        None => Span::raw(" ".repeat(BLOCK_WIDTH)),
     };
     let mut spans = vec![mark, Span::raw(" ")];
     for column in columns {
@@ -627,20 +629,25 @@ mod tests {
         // 119 columns: 115 of text inside the card.
         let overview = columns(TableKind::Overview, 115);
         let widths: Vec<usize> = overview.iter().map(|c| c.width).collect();
-        assert_eq!(widths, [24, 15, 12, 5, 5, 5, 7, 7, 6, 27]);
+        // The severity block takes seven columns; the commit subject gives them up.
+        assert_eq!(widths, [24, 15, 12, 5, 5, 5, 7, 7, 6, 22]);
         assert_eq!(total(&overview), 115);
 
         let detail = columns(TableKind::Detail, 115);
         let widths: Vec<usize> = detail.iter().map(|c| c.width).collect();
-        assert_eq!(widths, [30, 20, 14, 5, 5, 5, 7, 7, 10, 8]);
+        assert_eq!(widths, [30, 19, 12, 5, 5, 5, 7, 7, 10, 8]);
     }
 
     #[test]
     fn columns_drop_in_order_as_the_table_narrows() {
-        // 80-column terminal: the commit subject goes first.
+        // 80-column terminal: the commit subject goes first, then the task
+        // count (card 3 already shows tasks per repository).
         let at_80 = columns(TableKind::Overview, 76);
         assert!(!ids(&at_80).contains(&ColumnId::Commit));
-        assert!(ids(&at_80).contains(&ColumnId::Tasks));
+        assert!(!ids(&at_80).contains(&ColumnId::Tasks));
+        assert!(ids(&at_80).contains(&ColumnId::Stash));
+        // A little wider and the task count is back.
+        assert!(ids(&columns(TableKind::Overview, 84)).contains(&ColumnId::Tasks));
 
         // Narrower still: tasks, then stash, then upstream, then branch.
         let narrow = columns(TableKind::Overview, 44);
@@ -655,7 +662,7 @@ mod tests {
             ]
         );
 
-        let detail = columns(TableKind::Detail, 64);
+        let detail = columns(TableKind::Detail, 70);
         assert!(!ids(&detail).contains(&ColumnId::Fetched));
         assert!(ids(&detail).contains(&ColumnId::Upstream));
     }

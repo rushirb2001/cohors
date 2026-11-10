@@ -5,24 +5,24 @@ expression: "render_to_string(&app, 100, 24)"
  cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
  1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────╮
-│▸▲  e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.   │
-│ ◆  P  Push 2 commits from 1 repository             They exist only on this machine: payments.    │
-│ ○  p  Pull 1 repository that is behind             A fast-forward pull cannot lose work: web-ap… │
-│ ○  c╔══════════════════════════════════════════════════════════════════════════════════════╗7.   │
+│▸ RISK   e  Check 1 repository that could not be read    Nothing else is known about legacy-bill… │
+│  WARN   P  Push 2 commits from 1 repository             They exist only on this machine: paymen… │
+│  NOTE   p  Pull 1 repository that is behind             A fast-forward pull cannot lose work: w… │
+│  NOT╔══════════════════════════════════════════════════════════════════════════════════════╗wit… │
 ╰─────║ Run · git status -s   ·  1 ✓ · 0 ✗ · 2 running                                       ║─────╯
 ╭─  2 ╟────────────────────────┬─────────────────────────────────────────────────────────────╢─────╮
-│ ▲ le║ Repos                  │ payments                                                    ║     │
-│ ◆ pa║ ✓ payments             │ exit 0                                                      ║Push │
-│ ◆ we║ ⠋ web-app              │                                                             ║Pull │
+│  RIS║ Repos                  │ payments                                                    ║     │
+│  WAR║ ✓ payments             │ exit 0                                                      ║Push │
+│  WAR║ ⠋ web-app              │                                                             ║Pull │
 ╰─  ⏎ ║ ⠋ auth-service         │  M src/lib.rs                                               ║─────╯
 ╭─  3 ║                        │ ?? notes.txt                                                ║─────╮
 │ No l╟────────────────────────┴─────────────────────────────────────────────────────────────╢     │
 │ here║                ↑/↓ repo · PgUp/PgDn scroll output · y copy · Esc close               ║     │
 ╰─  t ╚══════════════════════════════════════════════════════════════════════════════════════╝─────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────╮
-│   repository             branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
-│ ▲ legacy-billing         unreadable                                                 could not r… │
-│ ◆ payments               main      ↑2              0    3    1      1      0    2h  fix: retry … │
+│        repository        branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
+│  RISK  legacy-billing    unreadable                                                 could not r… │
+│  WARN  payments          main      ↑2              0    3    1      1      0    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
   1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

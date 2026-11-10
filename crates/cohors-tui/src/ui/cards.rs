@@ -308,6 +308,17 @@ pub(crate) fn severity_style(severity: Severity, theme: &Theme) -> Style {
     }
 }
 
+/// How many columns a severity block takes: ` RISK `, ` WARN `, ` NOTE `.
+pub(crate) const BLOCK_WIDTH: usize = 6;
+
+/// The severity block that leads a row in the lists a person scans for
+/// trouble (Do next, Work at risk, Repositories): filled for risk and
+/// warning, quiet for the rest, blank when clean. See [`Theme::block`].
+pub(crate) fn severity_block(severity: Severity, theme: &Theme) -> Span<'static> {
+    let (word, style) = theme.block(severity);
+    Span::styled(word, style)
+}
+
 /// The severity mark as a styled span.
 pub(crate) fn severity_span(severity: Severity, theme: &Theme) -> Span<'static> {
     Span::styled(

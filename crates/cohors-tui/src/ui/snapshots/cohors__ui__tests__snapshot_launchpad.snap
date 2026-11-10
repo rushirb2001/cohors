@@ -9,27 +9,27 @@ expression: "render_to_string(&app, 110, 34)"
 ╰────────╔══════════════════════════════════════════════════════════════════════════════════════════╗────────╯
  1 not ba║ Launchpad   ·   5 open tasks · 3 of 5 repos set up                                       ║         
 ╭─  1  ▶ ╟──────────────────────────────────────────────────────────────────────────────────────────╢────────╮
-│▸▲  e  C║ Focus                                                                                    ║        │
-│ ◆  P  P║   ▸ Ship idempotent charge retries  payments · doing                                     ║        │
-│ ○  p  P║                                                                                          ║        │
-│ ○  c  C║   ▸ payments  Card and bank payments service                                             ║        │
+│▸ RISK  ║ Focus                                                                                    ║        │
+│  WARN  ║   ▸ Ship idempotent charge retries  payments · doing                                     ║        │
+│  NOTE  ║                                                                                          ║pp.     │
+│  NOTE  ║   ▸ payments  Card and bank payments service                                             ║        │
 ╰────────║     ◆ Idempotency keys on charge retries   high   doing                                  ║────────╯
 ╭─  2  ▲ ║     ○ Back off webhook redelivery                                                        ║────────╮
-│ ▲ legac║     run docker compose up -d && cargo run                                                ║        │
-│ ◆ payme║                                                                                          ║h  Push │
-│ ◆ web-a║   ▸ web-app  Customer-facing storefront                                                  ║m  Pull │
+│  RISK  ║     run docker compose up -d && cargo run                                                ║        │
+│  WARN  ║                                                                                          ║h  Push │
+│  WARN  ║   ▸ web-app  Customer-facing storefront                                                  ║m  Pull │
 ╰─  ⏎  op║     ✕ Checkout form fails keyboard-only pass   high   blocked                            ║────────╯
 ╭─  3  ✓ ║     ○ Remove the legacy cart endpoint  low                                               ║────────╮
 │ No laun║     run pnpm dev                                                                         ║        │
 │ once a ║                                                                                          ║        │
 ╰─  t  bo║   ▸ data-pipeline  Nightly ingest and reporting jobs                                     ║────────╯
 ╭─  5  ▤ ║     ○ Nightly ingest job is red on main   high                                           ║────────╮
-│   repos║                                                                                          ║it      │
-│ ▲ legac║ Not set up yet                                                                           ║ read … │
-│ ◆ payme║   in one of these, ask your agent: "set up this repo for the launchpad"                  ║y on 5… │
-│ ◆ web-a║   mobile-app · infra                                                                     ║ drawer │
-│ ○ infra╟──────────────────────────────────────────────────────────────────────────────────────────╢n ci i… │
-│ · auth-║                                ↑/↓ scroll · t / Esc close                                ║mp deps │
+│        ║                                                                                          ║commit  │
+│  RISK  ║ Not set up yet                                                                           ║ not r… │
+│  WARN  ║   in one of these, ask your agent: "set up this repo for the launchpad"                  ║retry … │
+│  WARN  ║   mobile-app · infra                                                                     ║cart d… │
+│  NOTE  ╟──────────────────────────────────────────────────────────────────────────────────────────╢: pin … │
+│        ║                                ↑/↓ scroll · t / Esc close                                ║: bump… │
 │        ╚══════════════════════════════════════════════════════════════════════════════════════════╝        │
 │                                                                                                            │
 │                                                                                                            │

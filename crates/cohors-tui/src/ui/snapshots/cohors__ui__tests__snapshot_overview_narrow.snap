@@ -18,17 +18,17 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 │ all recent      │ │ 3 high, 1 doing  │ │ prev week 61    │
 ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯
 ╭─  1  ▶ Do next ──────────────────────────────────────────╮
-│▸▲  e  Check 1 repository that could not be read          │
-│ ▲  P  Push 4 commits from 3 repositories                 │
-│ ◆  d  Reconcile 1 diverged branch                        │
-│ ○  p  Pull 2 repositories that are behind                │
-│ ○  c  Commit or discard 26 uncommitted files             │
+│▸ RISK   e  Check 1 repository that could not be read     │
+│  RISK   P  Push 4 commits from 3 repositories            │
+│  WARN   d  Reconcile 1 diverged branch                   │
+│  NOTE   p  Pull 2 repositories that are behind           │
+│  NOTE   c  Commit or discard 26 uncommitted files        │
 ╰──────────────────────────────────────────────────────────╯
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────╮
-│ ▲ analytics         1 commit not pushed, older th…    4d │
-│ ▲ legacy-billing    Could not be read                    │
-│ ◆ design-system     1 commit not pushed, 1 stash      6h │
-│ ◆ mobile-app        Diverged, 4 ahead and 1 behin…    9h │
+│  RISK  analytics         1 commit not pushed, old…    4d │
+│  RISK  legacy-billing    Could not be read               │
+│  WARN  design-system     1 commit not pushed, 1 s…    6h │
+│  WARN  mobile-app        Diverged, 4 ahead and 1 …    9h │
 │   ↓ 2 more                                               │
 ╰─  ⏎  open   e  unreadable   P  push 3   d  diverged  ────╯
 ╭─  3  ✓ Open tasks  5 ────────────────────────────────────╮
@@ -45,10 +45,10 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 │ 1 repository had no commits this week.                   │
 ╰─  s  standup   y  copy as markdown  ─────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────╮
-│   repository             branch      stg  mod  new   age │
-│ ▲ analytics              main          0    0    0    4d │
-│ ▲ legacy-billing         unreadable                      │
-│ ◆ design-system          main          0    0    0    6h │
+│        repository        branch      stg  mod  new   age │
+│  RISK  analytics         main          0    0    0    4d │
+│  RISK  legacy-billing    unreadable                      │
+│  WARN  design-system     main          0    0    0    6h │
 │   ↓ 9 more                                               │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push  ─╯
   1-5  focus card  tab  next card  ?  help  q  quit

@@ -85,22 +85,54 @@ impl Theme {
         }
     }
 
-    /// The solid badge that leads a risk or warning status (`None` for milder
-    /// severities). Uses the terminal's own red/yellow so it follows the
-    /// user's palette; under `NO_COLOR` it falls back to reverse video, which
-    /// still reads as a block.
-    fn badge(&self, sev: Severity) -> Option<(&'static str, Style)> {
-        let (word, bg) = match sev {
-            Severity::Risk => (" RISK ", Color::Red),
-            Severity::Warn => (" WARN ", Color::Yellow),
+    /// The fill of a severity block or tile: brick red for work at risk,
+    /// ochre for a warning, `None` for anything milder. These are the muted
+    /// tones of the neutral theme (the same two the browser uses), lighter on
+    /// a dark terminal and deeper on a light one, with text in the opposite
+    /// tone so it stays readable. Under `NO_COLOR` the fill is reverse video,
+    /// which still reads as a block.
+    fn fill(&self, sev: Severity) -> Option<Style> {
+        let (dark, light) = match sev {
+            Severity::Risk => ((0xD9, 0x77, 0x6E), (0xB4, 0x48, 0x3F)),
+            Severity::Warn => ((0xCF, 0xA2, 0x55), (0xA8, 0x74, 0x2A)),
             _ => return None,
         };
-        let style = if self.color {
-            Style::new().bg(bg).fg(Color::Black)
-        } else {
+        let style = if !self.color {
             Style::new().add_modifier(Modifier::REVERSED)
+        } else if self.dark {
+            Style::new()
+                .bg(Color::Rgb(dark.0, dark.1, dark.2))
+                .fg(Color::Rgb(0x1C, 0x1B, 0x1A))
+        } else {
+            Style::new()
+                .bg(Color::Rgb(light.0, light.1, light.2))
+                .fg(Color::White)
         };
-        Some((word, style.add_modifier(Modifier::BOLD)))
+        Some(style)
+    }
+
+    /// The severity block that leads a row: a filled ` RISK ` or ` WARN `, a
+    /// quiet unfilled ` NOTE ` or ` INFO `, and blank for a clean repo. Always
+    /// [`BLOCK_WIDTH`] columns, so rows line up. The word carries the meaning,
+    /// so it reads without colour and in plain ASCII.
+    fn block(&self, sev: Severity) -> (&'static str, Style) {
+        let word = match sev {
+            Severity::Risk => " RISK ",
+            Severity::Warn => " WARN ",
+            Severity::Notice => " NOTE ",
+            Severity::Info => " INFO ",
+            Severity::Ok => "      ",
+        };
+        let style = match self.fill(sev) {
+            Some(fill) => fill.add_modifier(Modifier::BOLD),
+            None => self.dim(),
+        };
+        (word, style)
+    }
+
+    /// The solid badge for a risk or warning (`None` for milder severities).
+    fn badge(&self, sev: Severity) -> Option<(&'static str, Style)> {
+        self.fill(sev).map(|_| self.block(sev))
     }
 
     fn dim(&self) -> Style {
