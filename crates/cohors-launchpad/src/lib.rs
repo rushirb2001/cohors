@@ -8,6 +8,8 @@
 //!   zero-config flows, and write a validated contribution.
 //! - **Per user:** the focus board (`board.json`) and the append-only activity
 //!   log (`history/<day>.jsonl`) under the launchpad home (`~/.principia`).
+//! - **Agents:** which agent runners are installed, and turning "set this repo
+//!   up" or "work on this task" into the exact command to start (see `agents`).
 //!
 //! Three rules hold everywhere:
 //!
@@ -20,6 +22,13 @@
 //!    the launchpad down.
 
 #![forbid(unsafe_code)]
+
+mod agents;
+
+pub use agents::{
+    LaunchKind, LaunchPlan, LaunchRequest, RepoTarget, detect_runners, find_on_path,
+    new_session_id, plan_launch, read_threads, write_prompt_file, write_thread,
+};
 
 use std::fs;
 use std::io::Write;
