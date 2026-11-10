@@ -326,6 +326,10 @@ pub struct LaunchPlan {
     /// A name for the terminal tab, e.g. `Claude Code: setup`.
     pub label: String,
     pub prompt_file: Option<PathBuf>,
+    /// The exact prompt text the runner will receive (what `prompt_file`
+    /// holds). Returned so a front-end can show a person what is about to run
+    /// *after* cohors has resolved it, rather than a copy it read earlier.
+    pub prompt: Option<String>,
     /// Whether the conversation was started under a session id cohors chose,
     /// and so can be found again.
     pub linked: bool,
@@ -341,6 +345,7 @@ impl LaunchPlan {
             "runner": self.runner,
             "label": self.label,
             "prompt_file": self.prompt_file,
+            "prompt": self.prompt,
             "linked": self.linked,
             "session": self.session,
         })
@@ -631,6 +636,7 @@ pub fn plan_launch(
         runner: runner.id.to_string(),
         label: format!("{}: {}", runner.label, step.what),
         prompt_file: None,
+        prompt: None,
         linked: false,
         session: None,
     };
@@ -680,6 +686,7 @@ pub fn plan_launch(
         };
         plan.args = runner.argv(launch, body).unwrap_or_default();
         plan.prompt_file = Some(file);
+        plan.prompt = Some(body.clone());
         if let (Some(session), Some(task_id), Some(repo)) = (&chosen, &step.link_task, request.repo)
         {
             // Recording the link is best-effort: the launch still works without it.
@@ -854,7 +861,10 @@ mod tests {
         // Terminal form reads the file; direct form carries the text.
         assert!(plan.command.starts_with("claude "));
         assert!(plan.command.contains(&file.display().to_string()));
-        assert_eq!(plan.args, [body]);
+        assert_eq!(plan.args, std::slice::from_ref(&body));
+        // The plan carries the same text, so a front-end can show what will run.
+        assert_eq!(plan.prompt.as_deref(), Some(body.as_str()));
+        assert_eq!(plan.to_json()["prompt"], body);
         assert!(!plan.linked && plan.session.is_none());
 
         let log = super::super::recent_activity(home.path(), 5);

