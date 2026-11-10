@@ -299,7 +299,8 @@ impl RowWidths {
         let branch = widest(&|r| r.branch.chars().count(), 6, 20);
         let sync = widest(&|r| sync_words(r).chars().count(), 5, 18);
         // indent + mark + name + sync + age, each followed by a two-space gap.
-        let fixed = |name: usize| 4 + 2 + name + 2 + sync + 2 + AGE_W + 2;
+        // indent, the severity block and a space, then each column and its gap.
+        let fixed = |name: usize| 4 + BLOCK_W + 1 + name + 2 + sync + 2 + AGE_W + 2;
         // Reasons want at least this much to be worth reading…
         const WHY_WANTED: usize = 48;
         // …and below this they say nothing, so the name gives up room instead.
@@ -455,7 +456,7 @@ fn scan_report(
             .max()
             .unwrap_or(0);
         // indent + mark + command + gap, then the title in what is left.
-        let title_w = width.saturating_sub(4 + 2 + cmd_w + 2 + 1).max(8);
+        let title_w = width.saturating_sub(4 + BLOCK_W + 1 + cmd_w + 2 + 1).max(8);
         for action in &overview.actions {
             out.push_str(&format!(
                 "    {} {}  {}\n",
@@ -538,14 +539,25 @@ pub fn standup(cli: &Cli, today: bool, json: bool) -> Result<()> {
     Ok(())
 }
 
-/// A severity as a shape, so it still reads with colour off: `▲` at risk, `◆`
-/// warning, `○` everything quieter.
+/// How wide a severity block is: ` RISK `, ` WARN `, ` NOTE `.
+const BLOCK_W: usize = 6;
+
+/// A severity as a block, the same one the dashboard leads its rows with: a
+/// filled ` RISK ` (brick red) or ` WARN ` (ochre), a quiet unfilled ` NOTE `
+/// or ` INFO `, and blank for a clean repo. Always [`BLOCK_W`] columns. The
+/// word carries the meaning, so it reads with colour off and when piped.
+///
+/// The fills are the muted tones of the neutral theme. A report cannot ask
+/// whether the terminal is light or dark, so it uses the deeper pair with
+/// white text, which reads on both.
 fn severity_mark(severity: cohors_core::Severity, color: bool) -> String {
     use cohors_core::Severity as S;
     match severity {
-        S::Risk => sgr(color, "31", "▲"),
-        S::Warn => sgr(color, "33", "◆"),
-        S::Notice | S::Info | S::Ok => dim(color, "○"),
+        S::Risk => sgr(color, "1;97;48;2;180;72;63", " RISK "),
+        S::Warn => sgr(color, "1;97;48;2;168;116;42", " WARN "),
+        S::Notice => dim(color, " NOTE "),
+        S::Info => dim(color, " INFO "),
+        S::Ok => " ".repeat(BLOCK_W),
     }
 }
 
@@ -584,20 +596,23 @@ fn overview_report(
             "most urgent first; the command under each step starts it",
             color,
         ));
+        // The reason and the command sit under the title, past the block.
+        let lead = 4 + BLOCK_W + 1;
+        let pad = " ".repeat(lead);
         for action in &o.actions {
             // The command that starts this step.
             let how = action_command(action);
             out.push_str(&format!(
                 "    {} {}\n",
                 severity_mark(action.severity, color),
-                bold(color, &clip(&action.title, width.saturating_sub(7))),
+                bold(color, &clip(&action.title, width.saturating_sub(lead + 1))),
             ));
             // The reason can be a full sentence: wrap it under the title
             // rather than let the terminal break it mid-word.
-            for line in wrap(&action.why, width.saturating_sub(7)) {
-                out.push_str(&format!("      {}\n", dim(color, &line)));
+            for line in wrap(&action.why, width.saturating_sub(lead + 1)) {
+                out.push_str(&format!("{pad}{}\n", dim(color, &line)));
             }
-            out.push_str(&format!("      {}\n", sgr(color, "36", how)));
+            out.push_str(&format!("{pad}{}\n", sgr(color, "36", how)));
         }
     }
     out.push('\n');
@@ -1499,7 +1514,8 @@ fn launch_screen(
         let more = overview.actions.len().saturating_sub(LAUNCH_STEPS);
         if more > 0 {
             out.push_str(&format!(
-                "       {}\n",
+                "    {}  {}\n",
+                " ".repeat(BLOCK_W),
                 dim(color, &format!("and {more} more in the dashboard"))
             ));
         }
@@ -1990,7 +2006,7 @@ mod tests {
             assert!(w.contains(&action.title), "{}", action.title);
         }
         assert!(w.find(&o.actions[0].title) < w.find(&o.actions[1].title));
-        assert!(w.contains('▲'));
+        assert!(w.contains(" RISK ")); // the severity block, as in the dashboard
         // …and the rest are counted, not dumped.
         let more = o.actions.len() - LAUNCH_STEPS;
         assert!(w.contains(&format!("and {more} more in the dashboard")));
