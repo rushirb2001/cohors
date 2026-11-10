@@ -1,0 +1,152 @@
+{
+  "window": "this week",
+  "author": "dev@example.com",
+  "total": 20,
+  "groups": [
+    {
+      "repo": "auth-service",
+      "commits": [
+        {
+          "repo": "auth-service",
+          "short_id": "333e556",
+          "summary": "docs: how to run the nightly job locally",
+          "timestamp": 1794173339
+        },
+        {
+          "repo": "auth-service",
+          "short_id": "323e53d",
+          "summary": "feat: dry-run flag for the importer",
+          "timestamp": 1794051779
+        },
+        {
+          "repo": "auth-service",
+          "short_id": "313e523",
+          "summary": "docs: how to run the nightly job locally",
+          "timestamp": 1793930219
+        },
+        {
+          "repo": "auth-service",
+          "short_id": "303e50a",
+          "summary": "feat: dry-run flag for the importer",
+          "timestamp": 1793808659
+        }
+      ]
+    },
+    {
+      "repo": "marketing-site",
+      "commits": [
+        {
+          "repo": "marketing-site",
+          "short_id": "c399b0a",
+          "summary": "feat: idempotency keys on the retry path",
+          "timestamp": 1794170939
+        },
+        {
+          "repo": "marketing-site",
+          "short_id": "c299af1",
+          "summary": "feat: show the saved card first",
+          "timestamp": 1794049379
+        },
+        {
+          "repo": "marketing-site",
+          "short_id": "c199ad8",
+          "summary": "feat: idempotency keys on the retry path",
+          "timestamp": 1793927819
+        },
+        {
+          "repo": "marketing-site",
+          "short_id": "c099abf",
+          "summary": "feat: show the saved card first",
+          "timestamp": 1793806259
+        }
+      ]
+    },
+    {
+      "repo": "data-pipeline",
+      "commits": [
+        {
+          "repo": "data-pipeline",
+          "short_id": "1f45c48",
+          "summary": "fix: handle an empty export without failing",
+          "timestamp": 1794168539
+        },
+        {
+          "repo": "data-pipeline",
+          "short_id": "2045c61",
+          "summary": "chore: bump the base image",
+          "timestamp": 1794046979
+        },
+        {
+          "repo": "data-pipeline",
+          "short_id": "1d45c16",
+          "summary": "fix: handle an empty export without failing",
+          "timestamp": 1793925419
+        },
+        {
+          "repo": "data-pipeline",
+          "short_id": "1e45c2f",
+          "summary": "chore: bump the base image",
+          "timestamp": 1793803859
+        }
+      ]
+    },
+    {
+      "repo": "payments",
+      "commits": [
+        {
+          "repo": "payments",
+          "short_id": "63ebf13",
+          "summary": "docs: how to run the nightly job locally",
+          "timestamp": 1794166139
+        },
+        {
+          "repo": "payments",
+          "short_id": "64ebf2c",
+          "summary": "feat: dry-run flag for the importer",
+          "timestamp": 1794044579
+        },
+        {
+          "repo": "payments",
+          "short_id": "61ebee1",
+          "summary": "docs: how to run the nightly job locally",
+          "timestamp": 1793923019
+        },
+        {
+          "repo": "payments",
+          "short_id": "62ebefa",
+          "summary": "feat: dry-run flag for the importer",
+          "timestamp": 1793801459
+        }
+      ]
+    },
+    {
+      "repo": "web-app",
+      "commits": [
+        {
+          "repo": "web-app",
+          "short_id": "7a49a3c",
+          "summary": "feat: idempotency keys on the retry path",
+          "timestamp": 1794163739
+        },
+        {
+          "repo": "web-app",
+          "short_id": "7949a23",
+          "summary": "feat: show the saved card first",
+          "timestamp": 1794042179
+        },
+        {
+          "repo": "web-app",
+          "short_id": "7c49a6f",
+          "summary": "feat: idempotency keys on the retry path",
+          "timestamp": 1793920619
+        },
+        {
+          "repo": "web-app",
+          "short_id": "7b49a55",
+          "summary": "feat: show the saved card first",
+          "timestamp": 1793799059
+        }
+      ]
+    }
+  ]
+}

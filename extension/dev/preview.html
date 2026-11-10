@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cohors extension preview</title>
+<!--
+  The dashboard webview in an ordinary browser, for review without launching
+  VS Code. It loads the real media/main.css, media/view.js and media/main.js,
+  defines the --vscode-* variables a theme would, stubs acquireVsCodeApi, and
+  answers the webview's messages from dev/fixtures/ the way the extension
+  host would. See dev/README.md.
+
+  Query parameters (handy for screenshots):
+    ?theme=dark|light|hc  &scenario=demo|empty|missing|badpath|error|noagent|norunner|untrusted|loading
+    &page=overview|repos|tasks|standup|devices  &sel=<repo id>  &view=<saved view id>
+-->
+<style>@font-face { font-family: "codicon"; src: url("../media/codicon.ttf") format("truetype"); }</style>
+<link rel="stylesheet" href="../media/codicon.css">
+<link rel="stylesheet" href="../media/main.css">
+<style>
+/* Dark Modern: the values VS Code's default dark theme resolves to. */
+body.t-dark {
+  --vscode-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --vscode-font-size: 13px; --vscode-font-weight: normal;
+  --vscode-editor-font-family: Menlo, Monaco, "Courier New", monospace;
+  --vscode-editor-background: #1f1f1f; --vscode-foreground: #cccccc;
+  --vscode-descriptionForeground: #9d9d9d; --vscode-disabledForeground: rgba(204, 204, 204, 0.5);
+  --vscode-errorForeground: #f85149; --vscode-icon-foreground: #cccccc; --vscode-focusBorder: #0078d4;
+  --vscode-textLink-foreground: #4daafc; --vscode-textLink-activeForeground: #4daafc;
+  --vscode-textPreformat-foreground: #d0d0d0; --vscode-textCodeBlock-background: #2b2b2b;
+  --vscode-panel-border: #2b2b2b; --vscode-widget-border: #313131; --vscode-widget-shadow: rgba(0, 0, 0, 0.36);
+  --vscode-button-background: #0078d4; --vscode-button-foreground: #ffffff; --vscode-button-hoverBackground: #026ec1;
+  --vscode-button-border: rgba(255, 255, 255, 0.07);
+  --vscode-button-secondaryBackground: #313131; --vscode-button-secondaryForeground: #cccccc; --vscode-button-secondaryHoverBackground: #3c3c3c;
+  --vscode-list-hoverBackground: #2a2d2e; --vscode-list-activeSelectionBackground: #04395e; --vscode-list-activeSelectionForeground: #ffffff;
+  --vscode-list-inactiveSelectionBackground: #37373d;
+  --vscode-badge-background: #616161; --vscode-badge-foreground: #f8f8f8;
+  --vscode-input-background: #313131; --vscode-input-foreground: #cccccc; --vscode-input-border: #3c3c3c; --vscode-input-placeholderForeground: #989898;
+  --vscode-inputOption-activeBackground: rgba(36, 137, 219, 0.51); --vscode-inputOption-activeForeground: #ffffff; --vscode-inputOption-activeBorder: #2488db;
+  --vscode-dropdown-background: #313131; --vscode-dropdown-foreground: #cccccc; --vscode-dropdown-border: #3c3c3c;
+  --vscode-editorError-foreground: #f14c4c; --vscode-editorWarning-foreground: #cca700; --vscode-editorInfo-foreground: #3794ff;
+  --vscode-testing-iconPassed: #73c991; --vscode-charts-purple: #b180d7; --vscode-charts-green: #89d185;
+  --vscode-toolbar-hoverBackground: rgba(90, 93, 94, 0.31);
+  --vscode-keybindingLabel-background: rgba(128, 128, 128, 0.17); --vscode-keybindingLabel-foreground: #cccccc; --vscode-keybindingLabel-border: rgba(51, 51, 51, 0.6);
+  --vscode-notifications-background: #1f1f1f; --vscode-notifications-foreground: #cccccc; --vscode-notifications-border: #2b2b2b;
+}
+/* Light Modern. */
+body.t-light {
+  --vscode-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --vscode-font-size: 13px; --vscode-font-weight: normal;
+  --vscode-editor-font-family: Menlo, Monaco, "Courier New", monospace;
+  --vscode-editor-background: #ffffff; --vscode-foreground: #3b3b3b;
+  --vscode-descriptionForeground: #3b3b3b; --vscode-disabledForeground: rgba(97, 97, 97, 0.5);
+  --vscode-errorForeground: #f85149; --vscode-icon-foreground: #3b3b3b; --vscode-focusBorder: #005fb8;
+  --vscode-textLink-foreground: #005fb8; --vscode-textLink-activeForeground: #005fb8;
+  --vscode-textPreformat-foreground: #3b3b3b; --vscode-textCodeBlock-background: #f8f8f8;
+  --vscode-panel-border: #e5e5e5; --vscode-widget-border: #e5e5e5; --vscode-widget-shadow: rgba(0, 0, 0, 0.16);
+  --vscode-button-background: #005fb8; --vscode-button-foreground: #ffffff; --vscode-button-hoverBackground: #0258a8;
+  --vscode-button-border: rgba(0, 0, 0, 0.1);
+  --vscode-button-secondaryBackground: #e5e5e5; --vscode-button-secondaryForeground: #3b3b3b; --vscode-button-secondaryHoverBackground: #cccccc;
+  --vscode-list-hoverBackground: #f2f2f2; --vscode-list-activeSelectionBackground: #e8e8e8; --vscode-list-activeSelectionForeground: #000000;
+  --vscode-list-inactiveSelectionBackground: #e4e6f1;
+  --vscode-badge-background: #cccccc; --vscode-badge-foreground: #3b3b3b;
+  --vscode-input-background: #ffffff; --vscode-input-foreground: #3b3b3b; --vscode-input-border: #cecece; --vscode-input-placeholderForeground: #767676;
+  --vscode-inputOption-activeBackground: #bed6ed; --vscode-inputOption-activeForeground: #000000; --vscode-inputOption-activeBorder: #005fb8;
+  --vscode-dropdown-background: #ffffff; --vscode-dropdown-foreground: #3b3b3b; --vscode-dropdown-border: #cecece;
+  --vscode-editorError-foreground: #e51400; --vscode-editorWarning-foreground: #bf8803; --vscode-editorInfo-foreground: #1a85ff;
+  --vscode-testing-iconPassed: #388a34; --vscode-charts-purple: #652d90; --vscode-charts-green: #388a34;
+  --vscode-toolbar-hoverBackground: rgba(184, 184, 184, 0.31);
+  --vscode-keybindingLabel-background: rgba(221, 221, 221, 0.4); --vscode-keybindingLabel-foreground: #3b3b3b; --vscode-keybindingLabel-border: rgba(204, 204, 204, 0.4);
+  --vscode-notifications-background: #ffffff; --vscode-notifications-foreground: #3b3b3b; --vscode-notifications-border: #e5e5e5;
+}
+/* Dark High Contrast, approximately: enough to check the contrastBorder path. */
+body.t-hc {
+  --vscode-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --vscode-font-size: 13px; --vscode-font-weight: normal;
+  --vscode-editor-font-family: Menlo, Monaco, "Courier New", monospace;
+  --vscode-editor-background: #000000; --vscode-foreground: #ffffff;
+  --vscode-descriptionForeground: rgba(255, 255, 255, 0.7); --vscode-disabledForeground: #a5a5a5;
+  --vscode-contrastBorder: #6fc3df; --vscode-contrastActiveBorder: #f38518; --vscode-focusBorder: #f38518;
+  --vscode-errorForeground: #f48771; --vscode-icon-foreground: #ffffff;
+  --vscode-textLink-foreground: #21a6ff; --vscode-textLink-activeForeground: #21a6ff;
+  --vscode-textPreformat-foreground: #ffffff; --vscode-textCodeBlock-background: #000000;
+  --vscode-panel-border: #6fc3df; --vscode-widget-shadow: transparent;
+  --vscode-button-background: #000000; --vscode-button-foreground: #ffffff; --vscode-button-hoverBackground: #000000;
+  --vscode-button-border: #6fc3df;
+  --vscode-button-secondaryBackground: #000000; --vscode-button-secondaryForeground: #ffffff; --vscode-button-secondaryHoverBackground: #000000;
+  --vscode-list-hoverBackground: transparent; --vscode-list-activeSelectionBackground: #000000; --vscode-list-activeSelectionForeground: #ffffff;
+  --vscode-list-inactiveSelectionBackground: #000000;
+  --vscode-badge-background: #000000; --vscode-badge-foreground: #ffffff;
+  --vscode-input-background: #000000; --vscode-input-foreground: #ffffff; --vscode-input-border: #6fc3df; --vscode-input-placeholderForeground: rgba(255, 255, 255, 0.7);
+  --vscode-inputOption-activeBackground: transparent; --vscode-inputOption-activeForeground: #ffffff; --vscode-inputOption-activeBorder: #6fc3df;
+  --vscode-dropdown-background: #000000; --vscode-dropdown-foreground: #ffffff; --vscode-dropdown-border: #6fc3df;
+  --vscode-editorError-foreground: #f48771; --vscode-editorWarning-foreground: #cca700; --vscode-editorInfo-foreground: #3794ff;
+  --vscode-testing-iconPassed: #73c991; --vscode-charts-purple: #b180d7; --vscode-charts-green: #89d185;
+  --vscode-notifications-background: #000000; --vscode-notifications-foreground: #ffffff; --vscode-notifications-border: #6fc3df;
+}
+
+/* The harness bar. Not part of the extension. */
+#harness { position: fixed; z-index: 100; top: 0; left: 0; right: 0; height: 34px; display: flex; align-items: center; gap: 10px; padding: 0 10px;
+  font: 12px/1 -apple-system, "Segoe UI", system-ui, sans-serif; background: #111; color: #ddd; border-bottom: 1px solid #333; }
+#harness b { font-weight: 600; }
+#harness select, #harness button { height: 22px; font: inherit; color: #ddd; background: #262626; border: 1px solid #444; border-radius: 3px; padding: 0 6px; max-width: none; }
+#harness #log { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #9a9a9a; font-family: ui-monospace, Menlo, monospace; }
+body.bare #harness { display: none; }
+#app { margin-top: 34px; height: calc(100vh - 34px) !important; }
+body.bare #app { margin-top: 0; height: 100vh !important; }
+.detail { top: 34px !important; }
+body.bare .detail { top: 0 !important; }
+</style>
+</head>
+<body class="t-dark vscode-dark">
+<div id="harness">
+  <b>cohors preview</b>
+  <button id="theme" type="button">Theme: Dark Modern</button>
+  <label>Scenario
+    <select id="scenario">
+      <option value="demo">Demo fleet</option>
+      <option value="empty">No repositories</option>
+      <option value="missing">cohors not installed</option>
+      <option value="badpath">Wrong cohors.binaryPath</option>
+      <option value="error">cohors failed</option>
+      <option value="noagent">cohors without `agent`</option>
+      <option value="norunner">No runner installed</option>
+      <option value="untrusted">Untrusted workspace</option>
+      <option value="loading">Still loading</option>
+    </select>
+  </label>
+  <span id="log">Messages the webview sends to the host appear here.</span>
+</div>
+<div id="app"></div>
+
+<script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const THEMES = [
+    { id: "dark", label: "Dark Modern", cls: ["t-dark", "vscode-dark"] },
+    { id: "light", label: "Light Modern", cls: ["t-light", "vscode-light"] },
+    { id: "hc", label: "Dark High Contrast", cls: ["t-hc", "vscode-high-contrast"] },
+  ];
+  let theme = Math.max(0, THEMES.findIndex((t) => t.id === params.get("theme")));
+  function applyTheme() {
+    document.body.className = THEMES[theme].cls.join(" ") + (params.has("bare") ? " bare" : "");
+    document.getElementById("theme").textContent = "Theme: " + THEMES[theme].label;
+  }
+  applyTheme();
+  document.getElementById("theme").addEventListener("click", () => { theme = (theme + 1) % THEMES.length; applyTheme(); });
+
+  const scenarioSelect = document.getElementById("scenario");
+  if (params.get("scenario")) scenarioSelect.value = params.get("scenario");
+
+  // Fixtures, loaded once. The webview's first "ready" waits for them.
+  const NAMES = ["host", "overview", "launchpad", "standup-week", "standup-today", "agent", "local", "devices"];
+  const fixtures = {};
+  const loaded = Promise.all(NAMES.map((n) =>
+    fetch(`fixtures/${n}.json`).then((r) => r.json()).then((j) => { fixtures[n] = j; })));
+  const clone = (v) => JSON.parse(JSON.stringify(v));
+
+  // The message the extension host would send for each scenario.
+  function stateFor(scenario) {
+    const base = clone(fixtures.host);
+    const full = () => Object.assign(base, {
+      status: "ok", overview: clone(fixtures.overview), launchpad: clone(fixtures.launchpad),
+      agent: clone(fixtures.agent), local: clone(fixtures.local),
+    });
+    switch (scenario) {
+      case "loading": return null;
+      case "missing":
+        return Object.assign(base, { status: "missing", binary: undefined, problem: { message: "cohors was not found on your PATH.", configured: false } });
+      case "badpath":
+        return Object.assign(base, { status: "missing", binary: undefined, problem: { message: "The cohors.binaryPath setting points at ~/bin/cohors, which is not an executable file.", configured: true } });
+      case "error":
+        return Object.assign(base, { status: "error", problem: { kind: "failed", message: "could not read the config file", detail: "error: could not read the config file\n  /home/dev/.config/cohors/config.toml: invalid type: string, expected a sequence for key `roots`" } });
+      case "empty": {
+        const s = full();
+        const f = s.overview.figures;
+        for (const k of Object.keys(f)) f[k] = 0;
+        Object.assign(s.overview, { headline: "No repositories.", repos: [], actions: [], work: [], commits: [], activity: [], focus: [] });
+        Object.assign(s.launchpad, { repos: [], recent_activity: [], summary: { repos: 0, configured: 0, open_tasks: 0 } });
+        s.launchpad.board.focus = [];
+        s.local = { threads: {}, sessions: {} };
+        return s;
+      }
+      case "noagent": {
+        const s = full();
+        s.agent = { runners: [], prompts: [], error: "This version of cohors has no `cohors agent` command, so agent setup is unavailable. Update cohors, then choose Detect again." };
+        return s;
+      }
+      case "norunner": {
+        const s = full();
+        s.agent.runners.forEach((r) => { r.available = false; r.path = null; r.reason = `${r.bin} was not found on your PATH`; });
+        return s;
+      }
+      case "untrusted": { const s = full(); s.trusted = false; return s; }
+      default: return full();
+    }
+  }
+
+  const log = (m) => {
+    const { type, ...rest } = m;
+    document.getElementById("log").textContent = `→ ${type} ${Object.keys(rest).length ? JSON.stringify(rest) : ""}`;
+  };
+  const toWebview = (m) => window.postMessage(m, "*");
+  const pushData = () => {
+    const state = stateFor(scenarioSelect.value);
+    if (state) toWebview({ type: "data", state });
+  };
+  scenarioSelect.addEventListener("change", () => {
+    if (scenarioSelect.value === "loading") return location.assign("?scenario=loading");
+    pushData();
+  });
+
+  // What the extension host would do with each message, without the editor.
+  function host(m) {
+    log(m);
+    switch (m.type) {
+      case "ready": case "refresh": case "redetect":
+        toWebview({ type: "busy", on: true });
+        return void loaded.then(() => setTimeout(() => { pushData(); toWebview({ type: "busy", on: false }); }, m.type === "ready" ? 0 : 400));
+      case "standup":
+        return void loaded.then(() => setTimeout(() => toWebview({ type: "standup", window: m.window, data: clone(fixtures[`standup-${m.window}`]) }), 150));
+      case "devices":
+        return void loaded.then(() => setTimeout(() => toWebview({ type: "devices", data: clone(fixtures.devices) }), 150));
+      case "copy": return void toWebview({ type: "toast", text: "Copied" });
+      case "copyStandup": return void toWebview({ type: "toast", text: "Standup copied as markdown" });
+      default: return;
+    }
+  }
+
+  // The webview API stub. State can be seeded from the URL for screenshots.
+  let stored = {};
+  const seed = {};
+  for (const k of ["page", "sel", "view", "q"]) if (params.get(k)) seed[k] = params.get(k);
+  if (params.get("window")) seed.standupWindow = params.get("window");
+  if (Object.keys(seed).length) stored = { ui: seed };
+  window.acquireVsCodeApi = () => ({
+    postMessage: host,
+    getState: () => stored,
+    setState: (s) => { stored = s; },
+  });
+})();
+</script>
+<script src="../media/view.js"></script>
+<script src="../media/main.js"></script>
+</body>
+</html>

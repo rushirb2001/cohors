@@ -1,0 +1,57 @@
+{
+  "at": 1794294899,
+  "android": {
+    "available": true,
+    "reason": null,
+    "booted": false,
+    "device": null,
+    "avds": [
+      "Pixel_8_API_35"
+    ]
+  },
+  "ios": {
+    "available": true,
+    "reason": null,
+    "booted": [
+      {
+        "name": "iPhone 16",
+        "udid": "8A1B2C3D-0000-4000-8000-000000000001",
+        "state": "Booted"
+      }
+    ],
+    "all": [
+      {
+        "name": "iPhone 16",
+        "udid": "8A1B2C3D-0000-4000-8000-000000000001",
+        "state": "Booted"
+      },
+      {
+        "name": "iPad Air 11-inch",
+        "udid": "8A1B2C3D-0000-4000-8000-000000000002",
+        "state": "Shutdown"
+      },
+      {
+        "name": "iPhone SE (3rd generation)",
+        "udid": "8A1B2C3D-0000-4000-8000-000000000003",
+        "state": "Shutdown"
+      }
+    ]
+  },
+  "ports": [
+    {
+      "port": 3000,
+      "pid": 4101,
+      "cmd": "node"
+    },
+    {
+      "port": 5173,
+      "pid": 4188,
+      "cmd": "node"
+    },
+    {
+      "port": 8080,
+      "pid": 4230,
+      "cmd": "payments"
+    }
+  ]
+}

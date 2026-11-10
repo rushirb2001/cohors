@@ -1,0 +1,358 @@
+{
+  "summary": {
+    "repos": 12,
+    "configured": 3,
+    "open_tasks": 5
+  },
+  "repos": [
+    {
+      "id": "demo/analytics",
+      "name": "analytics",
+      "configured": false,
+      "detected_flows": [
+        {
+          "id": "py-test",
+          "label": "pytest",
+          "run": "uv run pytest",
+          "kind": "test",
+          "source": "detected"
+        }
+      ]
+    },
+    {
+      "id": "demo/legacy-billing",
+      "name": "legacy-billing",
+      "configured": false,
+      "detected_flows": []
+    },
+    {
+      "id": "demo/design-system",
+      "name": "design-system",
+      "configured": false,
+      "detected_flows": [
+        {
+          "id": "npm-dev",
+          "label": "dev",
+          "run": "pnpm run dev",
+          "kind": "server",
+          "background": true,
+          "source": "detected"
+        },
+        {
+          "id": "npm-build",
+          "label": "build",
+          "run": "pnpm run build",
+          "kind": "build",
+          "source": "detected"
+        },
+        {
+          "id": "npm-test",
+          "label": "test",
+          "run": "pnpm run test",
+          "kind": "test",
+          "source": "detected"
+        }
+      ]
+    },
+    {
+      "configured": false,
+      "detected_flows": [
+        {
+          "id": "npm-dev",
+          "label": "dev",
+          "run": "yarn run dev",
+          "kind": "server",
+          "background": true,
+          "source": "detected"
+        },
+        {
+          "id": "npm-build",
+          "label": "build",
+          "run": "yarn run build",
+          "kind": "build",
+          "source": "detected"
+        },
+        {
+          "id": "npm-test",
+          "label": "test",
+          "run": "yarn run test",
+          "kind": "test",
+          "source": "detected"
+        }
+      ],
+      "id": "demo/mobile-app",
+      "name": "mobile-app"
+    },
+    {
+      "configured": true,
+      "contribution": {
+        "agents": [],
+        "flows": [
+          {
+            "id": "dev",
+            "label": "API + worker",
+            "primary": true,
+            "run": "docker compose up -d && cargo run",
+            "port": 8080
+          }
+        ],
+        "name": "payments",
+        "specVersion": 1,
+        "summary": "Card and bank payments service",
+        "tasks": [
+          {
+            "id": "idempotency-keys",
+            "priority": "high",
+            "status": "doing",
+            "title": "Idempotency keys on charge retries"
+          },
+          {
+            "id": "webhook-backoff",
+            "priority": "normal",
+            "status": "todo",
+            "title": "Back off webhook redelivery"
+          },
+          {
+            "id": "rotate-webhook-secret",
+            "title": "Rotate the webhook signing secret",
+            "status": "done",
+            "priority": "normal"
+          }
+        ],
+        "links": [
+          {
+            "label": "Runbook",
+            "url": "https://example.com/payments/runbook"
+          }
+        ]
+      },
+      "detected_flows": [],
+      "id": "demo/payments",
+      "name": "payments"
+    },
+    {
+      "configured": true,
+      "contribution": {
+        "agents": [
+          {
+            "id": "a11y-audit",
+            "label": "Accessibility audit",
+            "file": ".principia/agents/a11y-audit.md",
+            "supports": [
+              "claude-code",
+              "codex"
+            ]
+          }
+        ],
+        "flows": [
+          {
+            "id": "storefront",
+            "label": "Storefront (SSR)",
+            "primary": true,
+            "run": "pnpm dev"
+          },
+          {
+            "id": "e2e",
+            "label": "End-to-end tests",
+            "run": "pnpm test:e2e",
+            "kind": "test"
+          }
+        ],
+        "name": "web-app",
+        "specVersion": 1,
+        "summary": "Customer-facing storefront",
+        "tasks": [
+          {
+            "id": "checkout-a11y",
+            "priority": "high",
+            "status": "blocked",
+            "title": "Checkout form fails keyboard-only pass",
+            "agent": "a11y-audit",
+            "notes": "Tab order skips the card number field. Reproduce with the keyboard only."
+          },
+          {
+            "id": "drop-legacy-cart",
+            "priority": "low",
+            "status": "todo",
+            "title": "Remove the legacy cart endpoint"
+          }
+        ]
+      },
+      "detected_flows": [],
+      "id": "demo/web-app",
+      "name": "web-app"
+    },
+    {
+      "id": "demo/cli-tools",
+      "name": "cli-tools",
+      "configured": false,
+      "detected_flows": [
+        {
+          "id": "cargo-check",
+          "label": "cargo check",
+          "run": "cargo check",
+          "kind": "build",
+          "source": "detected"
+        },
+        {
+          "id": "cargo-test",
+          "label": "cargo test",
+          "run": "cargo test",
+          "kind": "test",
+          "source": "detected"
+        }
+      ]
+    },
+    {
+      "configured": true,
+      "contribution": {
+        "agents": [],
+        "flows": [],
+        "name": "data-pipeline",
+        "specVersion": 1,
+        "summary": "Nightly ingest and reporting jobs",
+        "tasks": [
+          {
+            "id": "fix-ci",
+            "priority": "high",
+            "status": "todo",
+            "title": "Nightly ingest job is red on main"
+          }
+        ]
+      },
+      "detected_flows": [],
+      "id": "demo/data-pipeline",
+      "name": "data-pipeline"
+    },
+    {
+      "id": "demo/experiments",
+      "name": "experiments",
+      "configured": false,
+      "detected_flows": []
+    },
+    {
+      "configured": false,
+      "detected_flows": [],
+      "id": "demo/infra",
+      "name": "infra"
+    },
+    {
+      "id": "demo/auth-service",
+      "name": "auth-service",
+      "configured": false,
+      "detected_flows": [
+        {
+          "id": "cargo-check",
+          "label": "cargo check",
+          "run": "cargo check",
+          "kind": "build",
+          "source": "detected"
+        },
+        {
+          "id": "cargo-test",
+          "label": "cargo test",
+          "run": "cargo test",
+          "kind": "test",
+          "source": "detected"
+        }
+      ]
+    },
+    {
+      "id": "demo/marketing-site",
+      "name": "marketing-site",
+      "configured": false,
+      "detected_flows": [
+        {
+          "id": "npm-dev",
+          "label": "dev",
+          "run": "npm run dev",
+          "kind": "server",
+          "background": true,
+          "source": "detected"
+        },
+        {
+          "id": "npm-build",
+          "label": "build",
+          "run": "npm run build",
+          "kind": "build",
+          "source": "detected"
+        },
+        {
+          "id": "npm-test",
+          "label": "test",
+          "run": "npm run test",
+          "kind": "test",
+          "source": "detected"
+        }
+      ]
+    }
+  ],
+  "board": {
+    "focus": [
+      {
+        "id": "f-1",
+        "ref": "idempotency-keys",
+        "repo": "payments",
+        "status": "doing",
+        "title": "Ship idempotent charge retries"
+      }
+    ],
+    "specVersion": 1
+  },
+  "recent_activity": [
+    {
+      "ts": "2026-11-10T06:34:59Z",
+      "phase": "end",
+      "runner": "claude-code",
+      "repo": "/home/dev/code/payments",
+      "branch": "main",
+      "agent": "",
+      "source": ""
+    },
+    {
+      "ts": "2026-11-10T05:14:59Z",
+      "phase": "launch",
+      "runner": "claude-code",
+      "repo": "/home/dev/code/payments",
+      "branch": "main",
+      "agent": "task:idempotency-keys",
+      "source": "cohors"
+    },
+    {
+      "ts": "2026-11-10T02:14:59Z",
+      "phase": "start",
+      "runner": "codex",
+      "repo": "/home/dev/code/web-app",
+      "branch": "feat/checkout",
+      "agent": "",
+      "source": ""
+    },
+    {
+      "ts": "2026-11-09T05:14:59Z",
+      "phase": "launch",
+      "runner": "claude-code",
+      "repo": "/home/dev/code/web-app",
+      "branch": "feat/checkout",
+      "agent": "a11y-audit",
+      "source": "cohors"
+    },
+    {
+      "ts": "2026-11-08T07:14:59Z",
+      "phase": "launch",
+      "runner": "claude-code",
+      "repo": "/home/dev/code/data-pipeline",
+      "branch": "main",
+      "agent": "setup-repo",
+      "source": "cohors"
+    },
+    {
+      "ts": "2026-11-07T07:14:59Z",
+      "phase": "end",
+      "runner": "gemini-cli",
+      "repo": "/home/dev/code/design-system",
+      "branch": "main",
+      "agent": "",
+      "source": ""
+    }
+  ]
+}

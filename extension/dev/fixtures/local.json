@@ -1,0 +1,25 @@
+{
+  "threads": {
+    "demo/payments": {
+      "idempotency-keys": "6f1c2b7e-3a54-4d1e-9c0f-2b8a7d5e4c31"
+    }
+  },
+  "sessions": {
+    "demo/payments": [
+      {
+        "id": "6f1c2b7e-3a54-4d1e-9c0f-2b8a7d5e4c31",
+        "title": "Idempotency keys on charge retries",
+        "turns": 14,
+        "branch": "main",
+        "ts": 1794287699
+      },
+      {
+        "id": "0d9e8c7b-6a5f-4e3d-8c2b-1a0f9e8d7c6b",
+        "title": "Why does the worker drop the last batch?",
+        "turns": 6,
+        "branch": "main",
+        "ts": 1794035699
+      }
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "generatedAt": 1794294899,
+  "home": "/home/dev",
+  "here": [
+    "/home/dev/code/payments"
+  ],
+  "trusted": true,
+  "rootsSetting": [],
+  "binary": {
+    "path": "/home/dev/.cargo/bin/cohors",
+    "version": "cohors 0.6.0"
+  }
+}
