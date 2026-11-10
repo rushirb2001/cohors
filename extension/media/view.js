@@ -376,7 +376,7 @@
 
     const risky = m.repos.filter((r) => r.at_risk);
     out.push(sec("risk", `${heading("warning", "Work at risk", risky.length)}${block(risky.length
-      ? `<table class="risk"><thead class="sr"><tr><th class="w-risk">Repository</th><th>Why</th><th class="w-age">Last commit</th><th class="w-act">Next step</th></tr></thead><tbody>${risky.map((r) => `<tr data-repo="${esc(r.id)}">
+      ? `<table class="risk"><thead class="hid"><tr><th class="w-risk">Repository</th><th>Why</th><th class="w-age">Last commit</th><th class="w-act">Next step</th></tr></thead><tbody>${risky.map((r) => `<tr data-repo="${esc(r.id)}">
           <td class="w-risk"><div class="clip">${mark(r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(r.id)}">${esc(r.name)}</button></div><div class="sub clip">${ico("git-branch")}${esc(r.branch)}</div></td>
           <td class="wrap">${esc(cap((r.reasons || []).join(", ")))}</td>
           <td class="n r w-age">${esc(r.commit ? age(r.commit.timestamp, m.now) : "")}</td>
@@ -667,7 +667,7 @@
     // Repositories not set up.
     const unset = (m.l.repos || []).filter((e) => !e.configured).map((e) => ({ e, r: m.byId.get(e.id) })).filter((x) => x.r);
     out.push(sec("unset", `${heading("repo", "Not set up", unset.length)}${block(unset.length
-      ? `<table><thead class="sr"><tr><th class="w-name">Repository</th><th>Path</th><th class="w-setup">Set up</th></tr></thead><tbody>${unset.map((x) => `<tr data-repo="${esc(x.r.id)}">
+      ? `<table><thead class="hid"><tr><th class="w-name">Repository</th><th>Path</th><th class="w-setup">Set up</th></tr></thead><tbody>${unset.map((x) => `<tr data-repo="${esc(x.r.id)}">
           <td class="clip w-name">${mark(x.r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(x.r.id)}">${esc(x.r.name)}</button></td>
           <td class="dim clip">${x.e.invalid ? `<span class="bad">Launchpad file is not valid: ${esc(x.e.invalid)}</span>` : `<span class="mono">${esc(tilde(x.r.path || "", m.home))}</span>`}</td>
           <td class="r w-setup">${x.r.path ? agentBtn(m, x.e.invalid ? "Fix with an agent" : "Set up with an agent", { do: "prompt", kind: "setup-repo", id: x.r.id }, { link: true }) : ""}</td></tr>`).join("")}</tbody></table>`
@@ -677,10 +677,11 @@
     // Recent agent activity.
     const acts = m.activity.slice(0, 12);
     const stamp = (ts) => Math.floor(Date.parse(ts) / 1000) || 0;
+    const runnerName = (id) => (m.agent.runners.find((r) => r.id === id) || {}).label || id || "Agent";
     out.push(sec("activity", `${heading("history", "Recent agent activity", acts.length || null)}${block(acts.length
       ? `<table><thead><tr><th class="w-n2">When</th><th class="w-up">Runner</th><th>Repository</th><th class="c-branch">Branch</th><th>What</th></tr></thead><tbody>${acts.map((a) => {
           const repo = m.repos.find((r) => r.path && r.path === a.repo);
-          return `<tr><td class="n" title="${esc(a.ts)}">${esc(age(stamp(a.ts), state.generatedAt || m.now))}</td><td class="clip">${esc(a.runner || "agent")}</td><td class="clip">${repo ? `<button type="button" class="link name" data-do="detail" data-id="${esc(repo.id)}">${esc(repo.name)}</button>` : esc(baseName(a.repo))}</td><td class="dim clip c-branch">${a.branch ? `${ico("git-branch")}${esc(a.branch)}` : ""}</td><td class="dim clip">${esc([a.phase === "launch" ? "started from cohors" : a.phase, a.agent].filter(Boolean).join(", "))}</td></tr>`;
+          return `<tr><td class="n" title="${esc(a.ts)}">${esc(age(stamp(a.ts), state.generatedAt || m.now))}</td><td class="clip">${esc(runnerName(a.runner))}</td><td class="clip">${repo ? `<button type="button" class="link name" data-do="detail" data-id="${esc(repo.id)}">${esc(repo.name)}</button>` : esc(baseName(a.repo))}</td><td class="dim clip c-branch">${a.branch ? `${ico("git-branch")}${esc(a.branch)}` : ""}</td><td class="dim clip">${esc([a.phase === "launch" ? "started from cohors" : a.phase, a.agent].filter(Boolean).join(", "))}</td></tr>`;
         }).join("")}</tbody></table>`
       : blank("No agent sessions recorded yet. Sessions started from here are logged, and the cohors plugin for Claude Code logs the ones you start anywhere."))}`));
 

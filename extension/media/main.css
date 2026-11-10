@@ -231,6 +231,9 @@ table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th { padding: 5px 10px; text-align: left; font-size: 0.9em; font-weight: 400; color: var(--fg-2); border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 td { height: var(--row); padding: 3px 10px; border-top: 1px solid var(--line-soft); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 tbody tr:first-child td { border-top: 0; }
+/* A header that is read out but not drawn. It stays a real first row, because
+   a fixed-layout table takes its column widths from that row. */
+thead.hid th { height: 0; padding-top: 0; padding-bottom: 0; border: 0; font-size: 0; line-height: 0; }
 th.r, td.r { text-align: right; }
 td.n { font-family: var(--mono); font-size: 0.94em; }
 td.n.zero { color: var(--fg-3); }
@@ -290,6 +293,7 @@ th.chk, td.chk { width: 30px; padding-right: 0; overflow: visible; }
 .flowgroup:first-child { border-top: 0; }
 .flowgroup .who { padding: 6px 10px; }
 .flowgroup .frow { padding-left: 0; }
+.flowgroup .frow:first-child { border-top: 0; }
 
 /* ── Detail panel ──────────────────────────────────────────────────────── */
 
@@ -341,18 +345,35 @@ body.vscode-high-contrast .rail .item[aria-pressed="true"],
 body.vscode-high-contrast .seg .btn[aria-pressed="true"] { outline: 1px solid var(--vscode-contrastActiveBorder); outline-offset: -1px; }
 body.vscode-high-contrast .btn { border-color: var(--vscode-contrastBorder); }
 
-/* ── Narrower tabs ─────────────────────────────────────────────────────── */
+/* ── Narrower tabs ───────────────────────────────────────────────────────
+ * Two kinds of narrowing. The shell reacts to the width of the tab. The
+ * content reacts to the width of the main column, which also shrinks when
+ * the detail panel opens beside it, so those rules are container queries.
+ */
+
+.main { container: main / inline-size; }
+
+@container main (max-width: 1000px) {
+  .c-last { display: none; }
+  .repos .w-name { width: auto; }
+}
+@container main (max-width: 860px) {
+  .figs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .pair { grid-template-columns: minmax(0, 1fr); }
+}
+@container main (max-width: 640px) {
+  .figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .c-extra, .c-branch { display: none; }
+  .w-act, .w-setup { width: 118px; }
+  td.w-act, td.w-setup { white-space: normal; }
+  .flowgroup { grid-template-columns: minmax(0, 1fr); }
+  .flowgroup .frow { padding-left: 10px; }
+}
 
 /* The detail panel floats over the page instead of taking a column. */
 @media (max-width: 1240px) {
   #app.has-detail { grid-template-columns: 208px minmax(0, 1fr); }
   .detail { position: fixed; z-index: 20; top: 0; right: 0; bottom: 0; width: min(400px, 94vw); box-shadow: -8px 0 24px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.3)); }
-}
-@media (max-width: 1100px) {
-  .figs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .pair { grid-template-columns: minmax(0, 1fr); }
-  .c-last { display: none; }
-  .repos .w-name { width: auto; }
 }
 /* The rail becomes a bar across the top. */
 @media (max-width: 760px) {
@@ -364,10 +385,4 @@ body.vscode-high-contrast .btn { border-color: var(--vscode-contrastBorder); }
   .rail .item .n { margin-left: 6px; }
   .brand .word, .brand .grow { display: none; }
   .main { padding: 12px 14px 24px; }
-  .figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .c-extra, .c-branch { display: none; }
-  .w-act, .w-setup { width: 118px; }
-  .flowgroup { grid-template-columns: minmax(0, 1fr); }
-  .flowgroup .frow { padding-left: 10px; }
-  td.w-act, td.w-setup { white-space: normal; }
 }

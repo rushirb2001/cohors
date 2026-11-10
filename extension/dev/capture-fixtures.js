@@ -147,7 +147,7 @@ function standup(windowLabel, days) {
       return {
         repo: c.name,
         short_id: sha(`${c.name}-${windowLabel}-${i}`),
-        summary: SUBJECTS[(n * 5 + i) % SUBJECTS.length],
+        summary: SUBJECTS[(n * 7) % SUBJECTS.length],
         timestamp: now - Math.round(((i + 1) * days * DAY) / (count + 1)) - n * 600,
       };
     });

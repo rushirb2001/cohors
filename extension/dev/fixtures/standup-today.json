@@ -9,13 +9,13 @@
         {
           "repo": "auth-service",
           "short_id": "85b73ae",
-          "summary": "docs: how to run the nightly job locally",
+          "summary": "feat: show the saved card first",
           "timestamp": 1794265499
         },
         {
           "repo": "auth-service",
           "short_id": "86b73c7",
-          "summary": "feat: dry-run flag for the importer",
+          "summary": "test: cover the duplicate-webhook case",
           "timestamp": 1794236099
         }
       ]
@@ -26,13 +26,13 @@
         {
           "repo": "marketing-site",
           "short_id": "6e889c8",
-          "summary": "chore: bump the base image",
+          "summary": "fix: handle an empty export without failing",
           "timestamp": 1794264299
         },
         {
           "repo": "marketing-site",
           "short_id": "6f889e1",
-          "summary": "fix: handle an empty export without failing",
+          "summary": "refactor: one error type for the worker",
           "timestamp": 1794234899
         }
       ]
