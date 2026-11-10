@@ -15,7 +15,9 @@ const path = require("path");
 
 const fixture = (name) => JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", `${name}.json`), "utf8"));
 const print = (value) => process.stdout.write(typeof value === "string" ? value : JSON.stringify(value, null, 2) + "\n");
-function fail(message) { process.stderr.write(`error: ${message}\n`); process.exit(1); }
+// The real binary reports a failure as one `Error: <reason>` line on stderr.
+function fail(message) { process.stderr.write(`Error: ${message}\n`); process.exit(1); }
+function unknown(name) { process.stderr.write(`error: unrecognized subcommand '${name}'\n`); process.exit(2); }
 
 // Global flags come before the subcommand.
 const argv = process.argv.slice(2);
@@ -58,7 +60,7 @@ switch (command) {
     const a = fixture("agent");
     if (rest[0] === "runners") { print({ runners: a.runners }); break; }
     if (rest[0] === "prompts") { print({ prompts: a.prompts }); break; }
-    if (rest[0] !== "command") fail(`unrecognized subcommand '${rest[0]}'`);
+    if (rest[0] !== "command") unknown(rest[0]);
     const kind = rest[1];
     const wanted = flag("--runner");
     const runner = wanted ? a.runners.find((r) => r.id === wanted) : a.runners.find((r) => r.available);
@@ -84,5 +86,5 @@ switch (command) {
     print(`\n  cohors (fixtures)\n  ${command} ${rest.join(" ")}\n\n  This stand-in does not touch any repository.\n\n`);
     break;
   default:
-    fail(`unrecognized subcommand '${command}'`);
+    unknown(command);
 }

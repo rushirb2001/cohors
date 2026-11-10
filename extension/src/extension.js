@@ -17,6 +17,7 @@ const path = require("path");
 const Cohors = require("./cohors");
 const Agent = require("./agent");
 const Local = require("./local");
+const Gate = require("./gate");
 const Devices = require("./devices");
 
 const EXT_DIR = path.join(__dirname, "..");
@@ -321,13 +322,35 @@ function openRepo(repoPath, newWindow) {
 
 /* ───────── agents ───────── */
 
+// Anything a repository supplies (a flow's command line, a declared agent's
+// prompt, a task's text) passes through this gate first: the window must be
+// trusted, and the user must have been shown what runs and where. Approvals
+// live in memory for this session only. See src/gate.js.
+const gate = Gate.create({
+  isTrusted: () => vscode.workspace.isTrusted,
+  confirm: async ({ message, detail, action }) =>
+    (await vscode.window.showWarningMessage(message, { modal: true, detail }, action)) === action,
+});
+
+// Report why the gate said no. A declined prompt needs no second message.
+function refused(result) {
+  if (result.reason === "declined") return;
+  vscode.window.showWarningMessage(`cohors: ${result.message}`);
+}
+
+const runnerLabel = (id) => {
+  const r = id && agentInfo && agentInfo.runners.find((x) => x.id === id);
+  return r ? r.label : "";
+};
+
 // Ask cohors for the command, open a terminal where it says, type it in.
-// `gate` names what is being run when it is code a repository declared: those
-// honour Workspace Trust.
-async function launch(kind, opts, gate) {
-  if (gate && !vscode.workspace.isTrusted) {
-    return void vscode.window.showWarningMessage(
-      `cohors: this workspace is not trusted, so ${gate} declared by a repository are disabled.`);
+// The command string is cohors's: it is sent exactly as returned.
+// `request` is the gate request when what is being started was declared by a
+// repository (an agent or a task); cohors's own prompts pass none.
+async function launch(kind, opts, request) {
+  if (request) {
+    const allowed = await gate.permit(request);
+    if (!allowed.ok) return void refused(allowed);
   }
   try {
     const r = await agent.command(kind, opts);
@@ -351,20 +374,31 @@ async function startIn(id, runner) {
   await openRepo(repo.path, true);
 }
 
-function runFlow(id, flowId) {
+// Every flow is a command line the repository's author wrote, whether it was
+// declared in the launchpad file or detected from a manifest. None runs
+// without trust and without having been shown (src/gate.js).
+async function runFlow(id, flowId) {
   const repo = repoWithPath(id), entry = entryById(id);
   if (!repo || !entry) return;
-  const declared = ((entry.contribution || {}).flows || []).find((f) => f.id === flowId);
-  const flow = declared || (entry.detected_flows || []).find((f) => f.id === flowId);
-  if (!flow || !flow.run) return;
-  // A declared flow is a command line a repository committed. Honour trust.
-  if (declared && !vscode.workspace.isTrusted) {
-    return void vscode.window.showWarningMessage(
-      "cohors: this workspace is not trusted, so flows declared by a repository are disabled.");
-  }
-  const cwd = flow.cwd ? Local.resolveInside(repo.path, flow.cwd) : repo.path;
-  if (!cwd) return void fail(new Error(`refusing to run "${flow.label || flow.id}" outside its repository.`));
-  terminal(cwd, flow.run, `${repo.name}: ${flow.label || flow.id}`);
+  const result = await gate.flow({ repo, entry, flowId, run: terminal });
+  if (!result.ok) refused(result);
+}
+
+// A repository's declared agent, through the gate.
+function runAgent(id, agentId, runner) {
+  const repo = repoWithPath(id), entry = entryById(id);
+  const decl = entry && ((entry.contribution || {}).agents || []).find((a) => a.id === agentId);
+  if (!repo || !decl) return void fail(new Error("that agent is no longer declared by this repository."));
+  return launch("agent", { repo: repo.path, agent: decl.id, runner }, Gate.agentRequest(repo.path, decl, runnerLabel(runner)));
+}
+
+// A repository's task, through the gate. `fallback` describes it when the
+// task is named by the focus board but not listed in the launchpad file.
+function runTask(repo, taskId, runner, fallback) {
+  const entry = entryById(repo.id);
+  const task = (entry && ((entry.contribution || {}).tasks || []).find((t) => t.id === taskId)) || fallback;
+  if (!task) return void fail(new Error("that task is no longer listed by this repository."));
+  return launch("task", { repo: repo.path, task: taskId, runner }, Gate.taskRequest(repo.path, task, runnerLabel(runner)));
 }
 
 // For the command palette, where there is no picker on screen: choose a
@@ -494,20 +528,19 @@ async function onMessage(m) {
       if (!here) return void fail(new Error("open a folder first."));
       return launch(Agent.PROMPT_KINDS.includes(m.kind) ? m.kind : "setup-repo", { repo: here, runner: m.runner });
     }
-    case "agent": {
-      const repo = repoWithPath(m.id);
-      return repo ? launch("agent", { repo: repo.path, agent: m.agent, runner: m.runner }, "agents") : undefined;
-    }
+    case "agent":
+      return runAgent(m.id, m.agent, m.runner);
     case "task": {
       const repo = repoWithPath(m.id);
-      return repo ? launch("task", { repo: repo.path, task: m.task, runner: m.runner }, "tasks") : undefined;
+      return repo ? runTask(repo, m.task, m.runner) : undefined;
     }
     case "focus": {
       // A focus-board item names its repository by name and its task by `ref`.
       const item = ((lastData && lastData.launchpad && lastData.launchpad.board.focus) || []).find((f) => f.id === m.item);
       const repo = item && lastData.overview.repos.find((r) => r.name === item.repo && r.path && path.isAbsolute(r.path));
       if (!item || !repo) return void fail(new Error("that focus item does not point at a repository cohors knows."));
-      return launch("task", { repo: repo.path, task: item.ref || item.id, runner: m.runner }, "tasks");
+      const taskId = item.ref || item.id;
+      return runTask(repo, taskId, m.runner, { id: taskId, title: item.title, agent: item.agent });
     }
     case "resume": {
       const repo = repoWithPath(m.id);

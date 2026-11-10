@@ -124,7 +124,6 @@
     if (count) count.textContent = n ? `${n} selected` : "None selected";
     main.querySelectorAll('[data-do="bulk"]').forEach((b) => { b.disabled = !n; });
     main.querySelectorAll('[data-do="act"]').forEach((b) => {
-      b.disabled = !n;
       const label = b.querySelector("span:not(.codicon)");
       if (label) label.textContent = n ? `Act on ${n} selected` : "Act on selected";
     });
@@ -237,7 +236,13 @@
       case "repo-action": return repoAction(d.id, viaKeyboard);
 
       case "fetch-all": return send({ type: "verb", verb: "fetch", all: true });
-      case "act": return send({ type: "act", ids: [...selected] });
+      case "act": {
+        if (selected.size) return send({ type: "act", ids: [...selected] });
+        // Nothing ticked yet: show where to tick instead of a dead button.
+        const table = $("main").querySelector("table.repos");
+        if (table) table.scrollIntoView({ block: "start", behavior: "smooth" });
+        return toast("Tick the repositories to act on in the table, then choose Act on selected.");
+      }
       case "bulk": return send({ type: "verb", verb: d.verb, ids: [...selected] });
       case "bulk-one": return send({ type: "verb", verb: d.verb, ids: [d.id] });
       case "select-shown":

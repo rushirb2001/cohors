@@ -199,7 +199,9 @@
     if (!st.ok) { o.disabled = true; o.title = st.why; }
     return btn(label, data, o);
   }
-  // Code a repository declared honours Workspace Trust.
+  // Anything a repository supplies honours Workspace Trust: its flows
+  // (declared or detected), its agents and its tasks. The host enforces the
+  // same rule and also shows each command before its first run.
   function trustedBtn(m, label, data, o, isAgent) {
     if (!m.trusted) return btn(label, data, Object.assign({}, o, { disabled: true, title: "Disabled because this workspace is not trusted." }));
     return isAgent ? agentBtn(m, label, data, o) : btn(label, data, o);
@@ -374,7 +376,7 @@
 
     const risky = m.repos.filter((r) => r.at_risk);
     out.push(sec("risk", `${heading("warning", "Work at risk", risky.length)}${block(risky.length
-      ? `<table class="risk"><thead class="sr"><tr><th>Repository</th><th>Why</th><th>Last commit</th><th>Next step</th></tr></thead><tbody>${risky.map((r) => `<tr data-repo="${esc(r.id)}">
+      ? `<table class="risk"><thead class="sr"><tr><th class="w-risk">Repository</th><th>Why</th><th class="w-age">Last commit</th><th class="w-act">Next step</th></tr></thead><tbody>${risky.map((r) => `<tr data-repo="${esc(r.id)}">
           <td class="w-risk"><div class="clip">${mark(r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(r.id)}">${esc(r.name)}</button></div><div class="sub clip">${ico("git-branch")}${esc(r.branch)}</div></td>
           <td class="wrap">${esc(cap((r.reasons || []).join(", ")))}</td>
           <td class="n r w-age">${esc(r.commit ? age(r.commit.timestamp, m.now) : "")}</td>
@@ -472,11 +474,12 @@
     return `<div class="trow" data-st="${st}">${ico(s.icon, "tst")}<div class="tmain"><div class="t">${esc(t.title)}</div><div class="d">${meta}</div>${t.notes ? `<div class="notes">${esc(t.notes)}</div>` : ""}</div>${action}</div>`;
   }
 
-  function flowRows(m, repo, flows, declared) {
+  function flowRows(m, repo, flows) {
     return flows.map((f) => {
       const meta = [f.port ? `port ${Number(f.port)}` : "", f.cwd && f.cwd !== "." ? `in ${f.cwd}` : "", f.primary ? "main flow" : ""].filter(Boolean).join(", ");
       const data = { do: "flow", id: repo.id, flow: f.id };
-      const run = declared ? trustedBtn(m, "Run", data, { title: "Runs in a terminal in this repository." }) : btn("Run", data, { title: "Runs in a terminal in this repository." });
+      // Declared or detected, a flow is the repository's own command line.
+      const run = trustedBtn(m, "Run", data, { title: "Shows the command, then runs it in a terminal in this repository." });
       return `<div class="frow"><div class="tmain"><div class="t">${esc(f.label || f.id)}${meta ? `<span class="dim"> · ${esc(meta)}</span>` : ""}</div><code>${esc(f.run)}</code></div>${repo.path ? run : ""}</div>`;
     }).join("");
   }
@@ -530,7 +533,7 @@
     const declared = c.flows || [];
     const detected = e.detected_flows || [];
     if (declared.length || detected.length) {
-      out.push(sec("d-flows", `${declared.length ? `<h3>Flows</h3>${flowRows(m, r, declared, true)}` : ""}${detected.length ? `<h3>Detected scripts</h3>${flowRows(m, r, detected, false)}` : ""}`));
+      out.push(sec("d-flows", `${declared.length ? `<h3>Flows</h3>${flowRows(m, r, declared)}` : ""}${detected.length ? `<h3>Detected scripts</h3>${flowRows(m, r, detected)}` : ""}`));
     }
 
     const agents = c.agents || [];
@@ -622,7 +625,7 @@
       runnerPicker(m) + agentBtn(m, "Plan my day", { do: "prompt", kind: "plan-day" }, { primary: true, icon: "sparkle", title: "An agent looks at uncommitted work, unpushed branches and open tasks, then writes the focus board." }))));
 
     if (!st.ok) out.push(sec("agent-note", `<div class="notice">${ico("info")}<span>${esc(st.why)}</span>${btn("Detect again", { do: "redetect" }, { link: true })}</div>`));
-    if (!m.trusted) out.push(sec("trust-note", `<div class="notice">${ico("shield")}<span>This workspace is not trusted, so agents, tasks and flows declared by a repository are disabled.</span></div>`));
+    if (!m.trusted) out.push(sec("trust-note", `<div class="notice">${ico("shield")}<span>This workspace is not trusted, so every flow, and every agent or task declared by a repository, is disabled.</span></div>`));
 
     // Focus board.
     out.push(sec("focus", `${heading("target", "Focus board", m.board.length)}${block(m.board.length
@@ -657,14 +660,14 @@
     const flowCount = withFlows.reduce((n, x) => n + x.e.contribution.flows.length, 0);
     const detectedCount = (m.l.repos || []).reduce((n, e) => n + (e.detected_flows || []).length, 0);
     out.push(sec("flows", `${heading("play", "Flows", flowCount)}${block(withFlows.length
-      ? withFlows.map((x) => `<div class="flowgroup"><div class="who clip"><button type="button" class="link name" data-do="detail" data-id="${esc(x.r.id)}">${esc(x.r.name)}</button></div><div>${flowRows(m, x.r, x.e.contribution.flows, true)}</div></div>`).join("")
+      ? withFlows.map((x) => `<div class="flowgroup"><div class="who clip"><button type="button" class="link name" data-do="detail" data-id="${esc(x.r.id)}">${esc(x.r.name)}</button></div><div>${flowRows(m, x.r, x.e.contribution.flows)}</div></div>`).join("")
       : blank("No repository has declared a flow. A flow is a command a repository names on purpose: a dev server, a test run, a build."),
       detectedCount ? `${plural(detectedCount, "script")} detected from package.json, Cargo, Make and the like. They are listed in each repository's detail panel.` : "")}`));
 
     // Repositories not set up.
     const unset = (m.l.repos || []).filter((e) => !e.configured).map((e) => ({ e, r: m.byId.get(e.id) })).filter((x) => x.r);
     out.push(sec("unset", `${heading("repo", "Not set up", unset.length)}${block(unset.length
-      ? `<table><thead class="sr"><tr><th>Repository</th><th>Path</th><th>Set up</th></tr></thead><tbody>${unset.map((x) => `<tr data-repo="${esc(x.r.id)}">
+      ? `<table><thead class="sr"><tr><th class="w-name">Repository</th><th>Path</th><th class="w-setup">Set up</th></tr></thead><tbody>${unset.map((x) => `<tr data-repo="${esc(x.r.id)}">
           <td class="clip w-name">${mark(x.r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(x.r.id)}">${esc(x.r.name)}</button></td>
           <td class="dim clip">${x.e.invalid ? `<span class="bad">Launchpad file is not valid: ${esc(x.e.invalid)}</span>` : `<span class="mono">${esc(tilde(x.r.path || "", m.home))}</span>`}</td>
           <td class="r w-setup">${x.r.path ? agentBtn(m, x.e.invalid ? "Fix with an agent" : "Set up with an agent", { do: "prompt", kind: "setup-repo", id: x.r.id }, { link: true }) : ""}</td></tr>`).join("")}</tbody></table>`

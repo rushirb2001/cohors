@@ -165,7 +165,16 @@ select {
   background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground);
   border: 1px solid var(--vscode-dropdown-border, transparent);
 }
-input[type="checkbox"] { margin: 0; vertical-align: -2px; accent-color: var(--vscode-button-background); }
+/* The editor's own checkbox: a themed box with a drawn tick. */
+input[type="checkbox"] {
+  appearance: none; position: relative; width: 16px; height: 16px; margin: 0; vertical-align: -3px; border-radius: 3px; cursor: pointer;
+  background: var(--vscode-checkbox-background, var(--vscode-input-background));
+  border: 1px solid var(--vscode-checkbox-border, var(--line));
+}
+input[type="checkbox"]:checked::after {
+  content: ""; position: absolute; left: 5px; top: 1.5px; width: 4px; height: 8px;
+  border: solid var(--vscode-checkbox-foreground, var(--fg)); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
+}
 
 /* ── Page top ──────────────────────────────────────────────────────────── */
 
@@ -236,7 +245,7 @@ tr.sel .dim, tr.sel td.n.zero, tr.sel .sub, tr.sel .link { color: inherit; }
 th.chk, td.chk { width: 30px; padding-right: 0; overflow: visible; }
 .w-name { width: 22%; }
 .w-branch { width: 14%; }
-.w-up { width: 112px; }
+.w-up { width: 138px; }
 .w-n { width: 46px; }
 .w-n2 { width: 58px; }
 .w-sha { width: 84px; }
