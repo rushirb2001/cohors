@@ -18,6 +18,8 @@ use crate::api;
 
 /// How many changed files the list shows before it says "and N more".
 const FILES_SHOWN: usize = 60;
+/// How many branches the list shows before it folds the rest away.
+const BRANCHES_SHOWN: usize = 8;
 
 /// Where the on-demand detail stands.
 #[derive(Clone)]
@@ -534,42 +536,46 @@ fn commits_section(detail: &api::Detail, now: i64) -> impl IntoView + use<> {
 }
 
 /// Every local branch with its own standing against its own upstream.
+///
+/// A repository can have dozens of merged branches. The ones worth reading
+/// come first (the one checked out, then any that differ from their upstream
+/// or have none), and a long tail of level branches is folded away.
 fn branches_section(branches: &[BranchInfo], now: i64) -> impl IntoView + use<> {
-    let rows = branches
-        .iter()
-        .map(|branch| {
-            let sync = if !branch.has_upstream {
-                "no upstream".to_string()
-            } else {
-                match (branch.ahead, branch.behind) {
-                    (0, 0) => "level".to_string(),
-                    (ahead, 0) => format!("{ahead} ahead"),
-                    (0, behind) => format!("{behind} behind"),
-                    (ahead, behind) => format!("{ahead} ahead, {behind} behind"),
-                }
-            };
-            let age = branch
-                .last_commit
-                .as_ref()
-                .map(|c| ui::ago(c.timestamp, now))
-                .unwrap_or_default();
-            view! {
-                <li>
-                    <span class="t">
-                        <span class="mono">{branch.name.clone()}</span>
-                        {branch.is_current.then(|| view! { <span class="soft">" (checked out)"</span> })}
-                    </span>
-                    <span class="meta">{sync}</span>
-                    <span class="meta">{age}</span>
-                </li>
-            }
-        })
+    let mut ordered: Vec<&BranchInfo> = branches.iter().collect();
+    // Lower sorts first. A stable sort, so each group keeps the server's order.
+    ordered.sort_by_key(|branch| {
+        if branch.is_current {
+            0
+        } else if branch.has_upstream && branch.ahead + branch.behind > 0 {
+            1
+        } else if !branch.has_upstream {
+            2
+        } else {
+            3
+        }
+    });
+    let mut rows = ordered
+        .into_iter()
+        .map(|branch| branch_row(branch, now))
         .collect::<Vec<_>>();
+    let folded = if rows.len() > BRANCHES_SHOWN {
+        rows.split_off(BRANCHES_SHOWN)
+    } else {
+        Vec::new()
+    };
     let body = if rows.is_empty() {
         view! { <p class="soft">"No local branches."</p> }.into_any()
     } else {
         view! { <ul class="list">{rows}</ul> }.into_any()
     };
+    let rest = (!folded.is_empty()).then(|| {
+        view! {
+            <details class="fold">
+                <summary>{format!("Show {} more branches", folded.len())}</summary>
+                <ul class="list">{folded}</ul>
+            </details>
+        }
+    });
     view! {
         <div class="sec">
             <h3>
@@ -577,7 +583,36 @@ fn branches_section(branches: &[BranchInfo], now: i64) -> impl IntoView + use<> 
                 <span class="n">{branches.len()}</span>
             </h3>
             {body}
+            {rest}
         </div>
+    }
+}
+
+fn branch_row(branch: &BranchInfo, now: i64) -> impl IntoView + use<> {
+    let sync = if !branch.has_upstream {
+        "no upstream".to_string()
+    } else {
+        match (branch.ahead, branch.behind) {
+            (0, 0) => "level".to_string(),
+            (ahead, 0) => format!("{ahead} ahead"),
+            (0, behind) => format!("{behind} behind"),
+            (ahead, behind) => format!("{ahead} ahead, {behind} behind"),
+        }
+    };
+    let age = branch
+        .last_commit
+        .as_ref()
+        .map(|c| ui::ago(c.timestamp, now))
+        .unwrap_or_default();
+    view! {
+        <li>
+            <span class="t">
+                <span class="mono">{branch.name.clone()}</span>
+                {branch.is_current.then(|| view! { <span class="soft">" (checked out)"</span> })}
+            </span>
+            <span class="meta">{sync}</span>
+            <span class="meta age">{age}</span>
+        </li>
     }
 }
 

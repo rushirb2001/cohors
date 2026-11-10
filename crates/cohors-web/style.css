@@ -177,7 +177,8 @@ input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var
   background: var(--sunken);
 }
 .cmd code { flex: 1; min-width: 0; font-size: 12.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cmd.wrap code { white-space: normal; overflow-wrap: anywhere; }
+/* In the narrow drawer a command wraps, so all of it can be read. */
+.drawer .cmd code { white-space: normal; overflow-wrap: anywhere; }
 .cmd .btn { background: var(--surface); }
 
 /* ── 5. Page head and key figures ───────────────────────────────────────── */
@@ -374,6 +375,8 @@ th.r .sort { flex-direction: row-reverse; }
 .list .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .list .code { flex: none; font: 12.5px var(--mono); color: var(--ink-2); }
 .list .meta { flex: none; font-size: 12.5px; color: var(--ink-3); white-space: nowrap; }
+/* Ages line up down the right edge. */
+.list .meta.age { width: 56px; text-align: right; }
 .list a { text-decoration: none; }
 .list a:hover { text-decoration: underline; }
 .list.reasons li { align-items: center; gap: 0; }
@@ -550,7 +553,8 @@ details.group > .flow-row { padding-left: calc(var(--s4) + 15px + var(--s3)); }
   main { padding: 0 var(--s4) var(--s6); }
   .lead .figs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .todo { grid-template-columns: auto minmax(0, 1fr); }
-  .todo .btn { grid-column: 2; grid-row: auto; justify-self: start; margin-top: var(--s2); }
+  /* The button drops under the reason instead of sitting beside it. */
+  .todo .btn { grid-column: 2; grid-row: auto; order: 1; justify-self: start; margin-top: var(--s2); }
   .task-row { grid-template-columns: 84px minmax(0, 1fr); }
   .task-row .who { display: none; }
   .task-notes { padding-left: var(--s4); }

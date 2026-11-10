@@ -457,7 +457,6 @@ fn sort_header(cx: Ctx, label: &'static str, key: SortKey, right: bool) -> impl 
                 class="sort"
                 class:on=move || current().is_some()
                 class:desc=move || current().is_some_and(|s| s.descending)
-                title="Sort by this column"
                 on:click=move |_| cycle_sort(cx, key)
             >
                 <span>{label}</span>

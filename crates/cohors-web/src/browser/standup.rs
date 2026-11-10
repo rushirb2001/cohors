@@ -54,11 +54,20 @@ pub fn page(cx: Ctx) -> impl IntoView {
 
     let subtitle = move || match state.get() {
         State::Loaded(standup) => match &standup.author {
-            Some(author) => format!(
-                "Commits by {author}, {} to {}.",
-                ui::local_time(standup.since),
-                ui::local_time(standup.until)
-            ),
+            Some(author) => {
+                // The server's day starts at midnight UTC, which is rarely
+                // midnight for the reader: say so beside the local times.
+                let day = if window.get() == TODAY {
+                    " The day starts at midnight UTC."
+                } else {
+                    ""
+                };
+                format!(
+                    "Commits by {author}, {} to {}.{day}",
+                    ui::local_time(standup.since),
+                    ui::local_time(standup.until)
+                )
+            }
             None => "Git has no identity configured, so there is nothing to list.".to_string(),
         },
         State::Loading => "Reading your commits across every repository.".to_string(),
