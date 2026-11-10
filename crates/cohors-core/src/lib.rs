@@ -8,6 +8,8 @@
 //! - [`sort`] / [`fuzzy`] / [`view`] — "what to show, and in what order".
 //! - [`time`] — clock-free relative-time formatting.
 //! - [`launchpad`] — what each repo says about itself: flows, agents, tasks.
+//! - [`overview`] — the one model every front-end draws: what to do next and why.
+//! - [`agents`] — the agent runners cohors can start and the prompts it hands them.
 //!
 //! ## WASM safety (non-negotiable)
 //!
@@ -19,6 +21,7 @@
 //! `wasm32-unknown-unknown` to catch any regression.
 #![forbid(unsafe_code)]
 
+pub mod agents;
 pub mod attention;
 pub mod demo;
 pub mod detail;
