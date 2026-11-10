@@ -1,0 +1,77 @@
+{
+  "runners": [
+    {
+      "id": "claude-code",
+      "label": "Claude Code",
+      "bin": "claude",
+      "available": true,
+      "path": "/home/dev/.local/bin/claude",
+      "reason": null,
+      "can_link": true,
+      "can_resume": true
+    },
+    {
+      "id": "codex",
+      "label": "Codex",
+      "bin": "codex",
+      "available": true,
+      "path": "/usr/local/bin/codex",
+      "reason": null,
+      "can_link": false,
+      "can_resume": true
+    },
+    {
+      "id": "gemini-cli",
+      "label": "Gemini CLI",
+      "bin": "gemini",
+      "available": false,
+      "path": null,
+      "reason": "gemini was not found on your PATH",
+      "can_link": true,
+      "can_resume": false
+    },
+    {
+      "id": "agy",
+      "label": "agy",
+      "bin": "agy",
+      "available": false,
+      "path": null,
+      "reason": "agy was not found on your PATH",
+      "can_link": false,
+      "can_resume": true
+    }
+  ],
+  "prompts": [
+    {
+      "id": "setup-repo",
+      "title": "Set up this repository",
+      "summary": "Read the repository and write its launchpad file: flows, agents and current tasks.",
+      "needs_repo": true
+    },
+    {
+      "id": "declare-flows",
+      "title": "Declare flows",
+      "summary": "Name the commands worth launching that detection cannot infer.",
+      "needs_repo": true
+    },
+    {
+      "id": "add-agent",
+      "title": "Add an agent",
+      "summary": "Ship a prompt for recurring, repository-specific work.",
+      "needs_repo": true
+    },
+    {
+      "id": "track-tasks",
+      "title": "Track tasks",
+      "summary": "Turn uncommitted work, TODOs and failing tests into short-lived tasks.",
+      "needs_repo": true
+    },
+    {
+      "id": "plan-day",
+      "title": "Plan my day",
+      "summary": "Look across every repository and write the focus board.",
+      "needs_repo": false
+    }
+  ],
+  "error": null
+}

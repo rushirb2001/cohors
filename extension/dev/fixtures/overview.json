@@ -1,0 +1,802 @@
+{
+  "now": 1794294899,
+  "headline": "12 repositories. 6 have work at risk, 2 are clean.",
+  "summary": {
+    "total": 12,
+    "needs_attention": 10,
+    "risk": 2,
+    "warn": 4,
+    "notice": 4,
+    "calm": 2,
+    "unpushed": 4,
+    "unpushed_aging": 1,
+    "behind": 3,
+    "dirty": 6,
+    "conflicted": 0,
+    "stash": 2,
+    "errors": 1
+  },
+  "figures": {
+    "repos": 12,
+    "clean": 2,
+    "at_risk": 6,
+    "unpublished": 0,
+    "unpushed_repos": 4,
+    "unpushed_commits": 8,
+    "not_backed_up": 4,
+    "behind_repos": 3,
+    "behind_commits": 9,
+    "stashes": 3,
+    "stash_repos": 2,
+    "stale_stash_repos": 0,
+    "uncommitted_files": 26,
+    "dirty_repos": 6,
+    "stale_fetch_repos": 0,
+    "oldest_fetch_days": 0,
+    "open_tasks": 5,
+    "high_tasks": 3,
+    "doing_tasks": 1,
+    "blocked_tasks": 1,
+    "task_repos": 3,
+    "configured_repos": 3,
+    "commits_week": 44,
+    "commits_prev_week": 61,
+    "commits_total": 535,
+    "active_repos": 11
+  },
+  "actions": [
+    {
+      "kind": "unreadable",
+      "severity": "risk",
+      "title": "Check 1 repository that could not be read",
+      "why": "Nothing else is known about legacy-billing.",
+      "label": "Open",
+      "verb": null,
+      "repos": [
+        "demo/legacy-billing"
+      ]
+    },
+    {
+      "kind": "push",
+      "severity": "risk",
+      "title": "Push 4 commits from 3 repositories",
+      "why": "They exist only on this machine: payments, design-system and analytics. Some are more than 2 days old.",
+      "label": "Push 3",
+      "verb": "push",
+      "repos": [
+        "demo/payments",
+        "demo/design-system",
+        "demo/analytics"
+      ]
+    },
+    {
+      "kind": "reconcile",
+      "severity": "warn",
+      "title": "Reconcile 1 diverged branch",
+      "why": "Local and remote both moved, so neither a push nor a fast-forward pull will work: mobile-app.",
+      "label": "Open",
+      "verb": null,
+      "repos": [
+        "demo/mobile-app"
+      ]
+    },
+    {
+      "kind": "pull",
+      "severity": "notice",
+      "title": "Pull 2 repositories that are behind",
+      "why": "A fast-forward pull cannot lose work: web-app and data-pipeline.",
+      "label": "Pull 2",
+      "verb": "pull",
+      "repos": [
+        "demo/web-app",
+        "demo/data-pipeline"
+      ]
+    },
+    {
+      "kind": "commit",
+      "severity": "notice",
+      "title": "Commit or discard 26 uncommitted files",
+      "why": "In 6 repositories. Largest: web-app with 7.",
+      "label": "Review changes",
+      "verb": null,
+      "repos": [
+        "demo/payments",
+        "demo/web-app",
+        "demo/mobile-app",
+        "demo/infra",
+        "demo/cli-tools",
+        "demo/experiments"
+      ]
+    }
+  ],
+  "repos": [
+    {
+      "id": "demo/analytics",
+      "name": "analytics",
+      "path": "/home/dev/code/analytics",
+      "branch": "main",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 1,
+      "behind": 0,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 2,
+      "severity": "risk",
+      "at_risk": true,
+      "reasons": [
+        "1 commit not pushed, older than 2 days",
+        "2 stashes"
+      ],
+      "action": {
+        "verb": "push",
+        "label": "Push"
+      },
+      "commit": {
+        "short_id": "5c10448",
+        "author": "you",
+        "timestamp": 1793949255,
+        "summary": "perf: precompute funnel rollups"
+      },
+      "fetched": 1794287699,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        2,
+        7,
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2,
+        7,
+        3
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/legacy-billing",
+      "name": "legacy-billing",
+      "path": "/home/dev/code/legacy-billing",
+      "branch": "(no commits)",
+      "upstream": null,
+      "has_remote": false,
+      "ahead": 0,
+      "behind": 0,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "risk",
+      "at_risk": true,
+      "reasons": [
+        "could not be read"
+      ],
+      "action": null,
+      "commit": null,
+      "fetched": null,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [],
+      "groups": [],
+      "error": "could not read .git (permission denied)"
+    },
+    {
+      "id": "demo/design-system",
+      "name": "design-system",
+      "path": "/home/dev/code/design-system",
+      "branch": "main",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 1,
+      "behind": 0,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 1,
+      "severity": "warn",
+      "at_risk": true,
+      "reasons": [
+        "1 commit not pushed",
+        "1 stash"
+      ],
+      "action": {
+        "verb": "push",
+        "label": "Push"
+      },
+      "commit": {
+        "short_id": "9e649ec",
+        "author": "you",
+        "timestamp": 1794273255,
+        "summary": "feat: dark-mode tokens"
+      },
+      "fetched": 1794251699,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        2,
+        7,
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2,
+        7,
+        3
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/mobile-app",
+      "name": "mobile-app",
+      "path": "/home/dev/code/mobile-app",
+      "branch": "release/2.0",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 4,
+      "behind": 1,
+      "staged": 3,
+      "modified": 1,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "warn",
+      "at_risk": true,
+      "reasons": [
+        "diverged, 4 ahead and 1 behind",
+        "4 uncommitted files"
+      ],
+      "action": {
+        "verb": null,
+        "label": "Reconcile"
+      },
+      "commit": {
+        "short_id": "fbfc556",
+        "author": "you",
+        "timestamp": 1794262455,
+        "summary": "feat: biometric unlock"
+      },
+      "fetched": 1794233699,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        2,
+        7,
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2,
+        7,
+        3
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/payments",
+      "name": "payments",
+      "path": "/home/dev/code/payments",
+      "branch": "main",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 2,
+      "behind": 0,
+      "staged": 1,
+      "modified": 2,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "warn",
+      "at_risk": true,
+      "reasons": [
+        "2 commits not pushed",
+        "3 uncommitted files"
+      ],
+      "action": {
+        "verb": "push",
+        "label": "Push"
+      },
+      "commit": {
+        "short_id": "ca39f62",
+        "author": "you",
+        "timestamp": 1794287655,
+        "summary": "fix: retry charge on 5xx from processor"
+      },
+      "fetched": 1794215699,
+      "tasks_open": 2,
+      "tasks_high": 1,
+      "configured": true,
+      "activity": [
+        4,
+        0,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2,
+        7,
+        3,
+        8,
+        4
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/web-app",
+      "name": "web-app",
+      "path": "/home/dev/code/web-app",
+      "branch": "feat/checkout",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 0,
+      "behind": 5,
+      "staged": 0,
+      "modified": 6,
+      "untracked": 1,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "warn",
+      "at_risk": true,
+      "reasons": [
+        "5 commits behind",
+        "7 uncommitted files"
+      ],
+      "action": {
+        "verb": "pull",
+        "label": "Pull"
+      },
+      "commit": {
+        "short_id": "ccb053a",
+        "author": "you",
+        "timestamp": 1794293655,
+        "summary": "wip: cart drawer animation"
+      },
+      "fetched": 1794197699,
+      "tasks_open": 2,
+      "tasks_high": 1,
+      "configured": true,
+      "activity": [
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2,
+        7,
+        3,
+        8,
+        4
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/cli-tools",
+      "name": "cli-tools",
+      "path": "/home/dev/code/cli-tools",
+      "branch": "main",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 0,
+      "behind": 0,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 1,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "notice",
+      "at_risk": false,
+      "reasons": [
+        "1 uncommitted file"
+      ],
+      "action": {
+        "verb": null,
+        "label": "Review changes"
+      },
+      "commit": {
+        "short_id": "06b0e5b",
+        "author": "you",
+        "timestamp": 1794251655,
+        "summary": "docs: add shell-completion install notes"
+      },
+      "fetched": 1794179699,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        2,
+        7,
+        3,
+        8,
+        4,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/data-pipeline",
+      "name": "data-pipeline",
+      "path": "/home/dev/code/data-pipeline",
+      "branch": "main",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 0,
+      "behind": 3,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "notice",
+      "at_risk": false,
+      "reasons": [
+        "3 commits behind"
+      ],
+      "action": {
+        "verb": "pull",
+        "label": "Pull"
+      },
+      "commit": {
+        "short_id": "6e1b76f",
+        "author": "you",
+        "timestamp": 1794276855,
+        "summary": "fix: backfill job off-by-one window"
+      },
+      "fetched": 1794161699,
+      "tasks_open": 1,
+      "tasks_high": 1,
+      "configured": true,
+      "activity": [
+        6,
+        2,
+        7,
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        5,
+        1,
+        6
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/experiments",
+      "name": "experiments",
+      "path": "/home/dev/code/experiments",
+      "branch": "@9f8e7d6 (detached)",
+      "upstream": null,
+      "has_remote": false,
+      "ahead": 0,
+      "behind": 0,
+      "staged": 0,
+      "modified": 4,
+      "untracked": 3,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "notice",
+      "at_risk": false,
+      "reasons": [
+        "7 uncommitted files",
+        "detached HEAD"
+      ],
+      "action": {
+        "verb": null,
+        "label": "Review changes"
+      },
+      "commit": {
+        "short_id": "7acc02f",
+        "author": "you",
+        "timestamp": 1759734855,
+        "summary": "spike: try wgpu for the renderer"
+      },
+      "fetched": null,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        1,
+        6,
+        2,
+        7,
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/infra",
+      "name": "infra",
+      "path": "/home/dev/code/infra",
+      "branch": "@a1b2c3d (detached)",
+      "upstream": null,
+      "has_remote": false,
+      "ahead": 0,
+      "behind": 0,
+      "staged": 0,
+      "modified": 2,
+      "untracked": 2,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "notice",
+      "at_risk": false,
+      "reasons": [
+        "4 uncommitted files",
+        "detached HEAD"
+      ],
+      "action": {
+        "verb": null,
+        "label": "Review changes"
+      },
+      "commit": {
+        "short_id": "30958d1",
+        "author": "you",
+        "timestamp": 1793603655,
+        "summary": "build: pin terraform provider versions"
+      },
+      "fetched": null,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        2,
+        6,
+        2,
+        7,
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/auth-service",
+      "name": "auth-service",
+      "path": "/home/dev/code/auth-service",
+      "branch": "main",
+      "upstream": "origin/main",
+      "has_remote": true,
+      "ahead": 0,
+      "behind": 0,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "ok",
+      "at_risk": false,
+      "reasons": [],
+      "action": null,
+      "commit": {
+        "short_id": "980b0e3",
+        "author": "you",
+        "timestamp": 1794035655,
+        "summary": "chore: bump jsonwebtoken to 9.3"
+      },
+      "fetched": 1794107699,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        8,
+        4,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2,
+        7,
+        3,
+        8
+      ],
+      "groups": [],
+      "error": null
+    },
+    {
+      "id": "demo/marketing-site",
+      "name": "marketing-site",
+      "path": "/home/dev/code/marketing-site",
+      "branch": "main",
+      "upstream": "origin/main",
+      "has_remote": false,
+      "ahead": 0,
+      "behind": 0,
+      "staged": 0,
+      "modified": 0,
+      "untracked": 0,
+      "conflicted": 0,
+      "stashes": 0,
+      "severity": "ok",
+      "at_risk": false,
+      "reasons": [],
+      "action": null,
+      "commit": {
+        "short_id": "a8ed8ed",
+        "author": "you",
+        "timestamp": 1791702855,
+        "summary": "content: Q2 launch landing page"
+      },
+      "fetched": null,
+      "tasks_open": 0,
+      "tasks_high": 0,
+      "configured": false,
+      "activity": [
+        6,
+        2,
+        7,
+        3,
+        8,
+        4,
+        0,
+        5,
+        1,
+        6,
+        2,
+        7
+      ],
+      "groups": [],
+      "error": null
+    }
+  ],
+  "work": [
+    {
+      "id": "demo/payments",
+      "name": "payments",
+      "open": 2,
+      "high": 1,
+      "doing": 1,
+      "blocked": 0,
+      "focus": 1
+    },
+    {
+      "id": "demo/web-app",
+      "name": "web-app",
+      "open": 2,
+      "high": 1,
+      "doing": 0,
+      "blocked": 1,
+      "focus": 0
+    },
+    {
+      "id": "demo/data-pipeline",
+      "name": "data-pipeline",
+      "open": 1,
+      "high": 1,
+      "doing": 0,
+      "blocked": 0,
+      "focus": 0
+    }
+  ],
+  "commits": [
+    {
+      "id": "demo/auth-service",
+      "name": "auth-service",
+      "count": 8
+    },
+    {
+      "id": "demo/marketing-site",
+      "name": "marketing-site",
+      "count": 7
+    },
+    {
+      "id": "demo/data-pipeline",
+      "name": "data-pipeline",
+      "count": 6
+    },
+    {
+      "id": "demo/payments",
+      "name": "payments",
+      "count": 4
+    },
+    {
+      "id": "demo/web-app",
+      "name": "web-app",
+      "count": 4
+    },
+    {
+      "id": "demo/analytics",
+      "name": "analytics",
+      "count": 3
+    },
+    {
+      "id": "demo/design-system",
+      "name": "design-system",
+      "count": 3
+    },
+    {
+      "id": "demo/mobile-app",
+      "name": "mobile-app",
+      "count": 3
+    },
+    {
+      "id": "demo/cli-tools",
+      "name": "cli-tools",
+      "count": 2
+    },
+    {
+      "id": "demo/experiments",
+      "name": "experiments",
+      "count": 2
+    },
+    {
+      "id": "demo/infra",
+      "name": "infra",
+      "count": 2
+    }
+  ],
+  "activity": [
+    38,
+    56,
+    46,
+    56,
+    48,
+    39,
+    40,
+    23,
+    51,
+    33,
+    61,
+    44
+  ],
+  "focus": [
+    {
+      "id": "f-1",
+      "title": "Ship idempotent charge retries",
+      "repo": "payments",
+      "ref": "idempotency-keys",
+      "status": "doing"
+    }
+  ],
+  "roots": [
+    "/home/dev/code"
+  ]
+}

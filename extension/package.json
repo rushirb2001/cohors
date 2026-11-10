@@ -1,0 +1,186 @@
+{
+  "name": "cohors",
+  "displayName": "cohors",
+  "description": "The state of every git repository you own, and what to do next, in one editor tab. Needs the cohors command-line tool.",
+  "version": "0.6.0",
+  "publisher": "rushirb2001",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/rushirb2001/cohors",
+    "directory": "extension"
+  },
+  "homepage": "https://github.com/rushirb2001/cohors#readme",
+  "bugs": {
+    "url": "https://github.com/rushirb2001/cohors/issues"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "multi-repo",
+    "dashboard",
+    "standup",
+    "agents"
+  ],
+  "main": "./src/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In an untrusted workspace cohors still shows your repositories and can run its own fetch, pull, push, commit and stash. Every flow is disabled, whether a repository declared it or it was detected from the repository's scripts, and so is every agent and task a repository declares. The workspace also cannot set which folders are scanned.",
+      "restrictedConfigurations": [
+        "cohors.roots"
+      ]
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "cohors.show",
+        "title": "cohors: Open dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "cohors.refresh",
+        "title": "cohors: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "cohors.fetchAll",
+        "title": "cohors: Fetch every repository"
+      },
+      {
+        "command": "cohors.setupRepo",
+        "title": "cohors: Set up this repo with an agent"
+      },
+      {
+        "command": "cohors.planDay",
+        "title": "cohors: Plan my day with an agent"
+      },
+      {
+        "command": "cohors.useWorkspaceRoots",
+        "title": "cohors: Use this workspace's folders as roots"
+      },
+      {
+        "command": "cohors.showContract",
+        "title": "cohors: Show the launchpad contract"
+      },
+      {
+        "command": "cohors.openSettings",
+        "title": "cohors: Open settings"
+      },
+      {
+        "command": "cohors.installHelp",
+        "title": "cohors: How to install the cohors command-line tool"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "cohors.show",
+        "key": "ctrl+alt+l",
+        "mac": "cmd+alt+l"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "cohors",
+          "title": "cohors",
+          "icon": "media/cohors.svg"
+        }
+      ]
+    },
+    "views": {
+      "cohors": [
+        {
+          "id": "cohors.fleet",
+          "name": "Fleet"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "cohors.fleet",
+        "contents": "Reading your repositories…",
+        "when": "cohors.state == loading"
+      },
+      {
+        "view": "cohors.fleet",
+        "contents": "The cohors command-line tool was not found. Install it, or point the cohors.binaryPath setting at it.\n[How to install](command:cohors.installHelp)\n[Open settings](command:cohors.openSettings)\n[Try again](command:cohors.refresh)",
+        "when": "cohors.state == missing"
+      },
+      {
+        "view": "cohors.fleet",
+        "contents": "cohors could not read your repositories. The dashboard says why.\n[Open dashboard](command:cohors.show)\n[Try again](command:cohors.refresh)",
+        "when": "cohors.state == error"
+      },
+      {
+        "view": "cohors.fleet",
+        "contents": "No repositories were found under your roots.\n[Use this workspace's folders](command:cohors.useWorkspaceRoots)\n[Open settings](command:cohors.openSettings)",
+        "when": "cohors.state == empty"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "cohors.show",
+          "when": "view == cohors.fleet",
+          "group": "navigation@1"
+        },
+        {
+          "command": "cohors.refresh",
+          "when": "view == cohors.fleet",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "cohors",
+      "properties": {
+        "cohors.binaryPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "Absolute path to the `cohors` command-line tool. Leave empty to find `cohors` on your login shell's `PATH`."
+        },
+        "cohors.roots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Folders to scan for repositories. Leave empty to use the roots in your cohors config file. The command **cohors: Use this workspace's folders as roots** fills this in for the current workspace."
+        },
+        "cohors.refreshSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 0,
+          "description": "Seconds between background refreshes. It only ticks while the dashboard tab is focused, and file changes in the open workspace refresh it straight away. 0 turns polling off."
+        },
+        "cohors.openOnStartup": {
+          "type": "string",
+          "enum": [
+            "never",
+            "emptyWindow",
+            "always"
+          ],
+          "enumDescriptions": [
+            "Only when you ask for it.",
+            "When a window opens with no folder.",
+            "Every time a window opens."
+          ],
+          "default": "emptyWindow",
+          "description": "When to open the dashboard automatically."
+        }
+      }
+    }
+  }
+}
