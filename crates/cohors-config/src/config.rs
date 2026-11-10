@@ -53,6 +53,22 @@ pub struct Config {
     pub actions: ActionsConfig,
     /// How the TUI renders status glyphs (auto / ascii / unicode / nerd).
     pub icons: IconMode,
+    /// What the dashboard assumes about the terminal's background
+    /// (auto / dark / light).
+    pub theme: ThemeMode,
+}
+
+/// What the dashboard assumes about the terminal's background. The default
+/// `auto` asks the terminal for its background colour; a terminal that does
+/// not answer gets a look that works on any background (no filled panels).
+/// `dark` or `light` says it outright, for a terminal that cannot be asked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    #[default]
+    Auto,
+    Dark,
+    Light,
 }
 
 /// How the TUI renders status glyphs. The default `auto` picks Unicode glyphs,
@@ -113,6 +129,7 @@ impl Default for Config {
             follow_symlinks: false,
             actions: ActionsConfig::default(),
             icons: IconMode::default(),
+            theme: ThemeMode::default(),
         }
     }
 }
@@ -139,6 +156,7 @@ const KNOWN_KEYS: &[&str] = &[
     "actions",
     "mcp",
     "icons",
+    "theme",
 ];
 
 impl Config {
@@ -273,6 +291,14 @@ impl Config {
                 other => tracing::warn!(%other, "ignoring unknown COHORS_ICONS value"),
             }
         }
+        if let Some(theme) = vars("COHORS_THEME") {
+            match theme.trim().to_ascii_lowercase().as_str() {
+                "auto" => self.theme = ThemeMode::Auto,
+                "dark" => self.theme = ThemeMode::Dark,
+                "light" => self.theme = ThemeMode::Light,
+                other => tracing::warn!(%other, "ignoring unknown COHORS_THEME value"),
+            }
+        }
     }
 
     /// The editor command to open repos with: config `editor`, then `$EDITOR`,
@@ -312,7 +338,7 @@ pub fn expand_tilde(pattern: &str, home: &Utf8Path) -> String {
 pub const STARTER_CONFIG: &str = r#"# cohors configuration.
 # Edit this file, then run `cohors`. All paths support `~` and globs.
 # Env overrides for agents/CI: COHORS_CONFIG, COHORS_ROOTS (comma-separated),
-# COHORS_EDITOR, COHORS_MAX_DEPTH, COHORS_ICONS.
+# COHORS_EDITOR, COHORS_MAX_DEPTH, COHORS_ICONS, COHORS_THEME.
 
 # Where cohors looks for git repos.
 roots = ["~/projects"]
@@ -336,6 +362,11 @@ follow_symlinks = false
 # is set), "ascii" (plain text everywhere), "unicode", or "nerd" (only if your
 # terminal uses a Nerd Font — it's never assumed).
 # icons = "auto"
+
+# The terminal's background: "auto" asks the terminal, and a terminal that does
+# not answer gets a look that works on any background. Say "dark" or "light" if
+# yours cannot be asked and you want the filled panels.
+# theme = "auto"
 
 # Optional pretty names, keyed by absolute path or repo dir name.
 [aliases]
@@ -459,6 +490,28 @@ mod tests {
             assert_eq!(c.actions.run_allowlist, ["git *"], "[{table}]");
             assert_eq!(c.actions.max_action_targets, 9, "[{table}]");
         }
+    }
+
+    #[test]
+    fn parse_theme_mode() {
+        let c = Config::parse("", Utf8Path::new("t.toml")).expect("parse");
+        assert_eq!(c.theme, ThemeMode::Auto);
+        for (s, want) in [
+            ("auto", ThemeMode::Auto),
+            ("dark", ThemeMode::Dark),
+            ("light", ThemeMode::Light),
+        ] {
+            let c =
+                Config::parse(&format!("theme = \"{s}\""), Utf8Path::new("t.toml")).expect("parse");
+            assert_eq!(c.theme, want, "theme = {s:?}");
+        }
+        // The environment says it too, and nonsense changes nothing.
+        let mut c = Config::default();
+        c.apply_env(|key| (key == "COHORS_THEME").then(|| " Dark ".to_string()));
+        assert_eq!(c.theme, ThemeMode::Dark);
+        let mut c = Config::default();
+        c.apply_env(|key| (key == "COHORS_THEME").then(|| "sepia".to_string()));
+        assert_eq!(c.theme, ThemeMode::Auto);
     }
 
     #[test]

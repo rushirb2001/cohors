@@ -43,8 +43,13 @@ pub(crate) struct Theme {
     /// tint (letting the native accent colours read) instead of a light one.
     dark: bool,
     glyphs: Glyphs,
+    /// The terminal's actual background colour, when it is known. Everything
+    /// that is only right on one kind of background (a card's surface, the
+    /// soft wash on the cursor row) is derived from this, and is not painted
+    /// at all when it is `None`.
+    ground: Option<Color>,
     /// Cards are filled surfaces rather than frames of lines (see
-    /// [`Theme::surface`]). On whenever there is colour to fill them with.
+    /// [`Theme::surface`]). On when there is colour and the background is known.
     panels: bool,
     /// The section the open overlay belongs to, which colours its title
     /// band: the launchpad is the tasks card's colour, the standup the
@@ -64,27 +69,34 @@ fn mix(a: Color, b: Color, share: f32) -> Color {
 }
 
 impl Theme {
-    /// The theme for this run: colour is on unless `NO_COLOR` is set, and
-    /// with colour the cards are filled panels. `COHORS_CARDS=lines` keeps the
-    /// line frames, for a terminal whose palette makes the fills hard to read.
-    fn from_env(icons: cohors_config::IconMode, dark: bool) -> Self {
+    /// The theme for this run. Colour is on unless `NO_COLOR` is set. Cards
+    /// are filled panels when there is colour AND the terminal's background
+    /// is known (`ground`); otherwise they are line frames, which look right
+    /// on any background. `COHORS_CARDS=lines` asks for the frames outright.
+    fn from_env(icons: cohors_config::IconMode, dark: bool, ground: Option<(u8, u8, u8)>) -> Self {
         let mut theme = Self::new(icons, dark, std::env::var_os("NO_COLOR").is_none());
+        theme.ground = ground.map(|(r, g, b)| Color::Rgb(r, g, b));
         let lines = std::env::var("COHORS_CARDS").is_ok_and(|value| value == "lines");
-        theme.panels = theme.color && !lines;
+        theme.panels = theme.color && theme.ground.is_some() && !lines;
         theme
     }
 
     /// A theme with colour explicitly on or off (tests use this to render the
-    /// `NO_COLOR` variant without touching the environment). Cards are line
-    /// frames; [`Theme::with_panels`] turns the fills on.
+    /// `NO_COLOR` variant without touching the environment). The background
+    /// is taken as known, and cards are line frames; [`Theme::with_panels`]
+    /// turns the fills on and [`Theme::with_unknown_ground`] forgets the
+    /// background.
     pub(crate) fn new(icons: cohors_config::IconMode, dark: bool, color: bool) -> Self {
-        Self {
+        let mut theme = Self {
             color,
             dark,
             glyphs: Glyphs::resolve(icons, !color),
+            ground: None,
             panels: false,
             overlay: std::cell::Cell::new(None),
-        }
+        };
+        theme.ground = Some(theme.assumed_ground());
+        theme
     }
 
     /// The same theme with cards drawn as filled panels (needs colour).
@@ -92,6 +104,39 @@ impl Theme {
     pub(crate) fn with_panels(mut self) -> Self {
         self.panels = self.color;
         self
+    }
+
+    /// The same theme for a terminal that would not say what its background
+    /// is: no panels, and nothing else that depends on knowing it.
+    #[cfg(test)]
+    pub(crate) fn with_unknown_ground(mut self) -> Self {
+        self.ground = None;
+        self.panels = false;
+        self
+    }
+
+    /// A typical background of the kind `dark` says, for when the kind is
+    /// known but the exact colour is not.
+    fn assumed_ground(&self) -> Color {
+        self.tone((0x1C, 0x1B, 0x1A), (0xFF, 0xFF, 0xFF))
+    }
+
+    /// The terminal's background colour (a typical one if it is not known;
+    /// nothing that reaches the screen uses this without knowing it).
+    fn ground(&self) -> Color {
+        self.ground.unwrap_or_else(|| self.assumed_ground())
+    }
+
+    /// A shade off the terminal's own background: lighter on a dark
+    /// terminal by `on_dark`, darker on a light one by `on_light` (both as a
+    /// share of the way to white or black). Deriving it from the real
+    /// background is what makes a panel sit right on any colour scheme.
+    fn shade(&self, on_dark: f32, on_light: f32) -> Color {
+        if self.dark {
+            mix(Color::Rgb(0xFF, 0xFF, 0xFF), self.ground(), on_dark)
+        } else {
+            mix(Color::Rgb(0, 0, 0), self.ground(), on_light)
+        }
     }
 
     /// One of two colours, by whether the terminal is dark or light.
@@ -121,29 +166,31 @@ impl Theme {
         self.fg(self.section_hue(Some(number)))
     }
 
-    /// The style of a line-framed card's border: the accent when it has the
-    /// focus, dim otherwise.
-    fn card_line(&self, focused: bool) -> Style {
-        if focused {
-            self.accent().add_modifier(Modifier::BOLD)
-        } else {
-            self.dim()
+    /// The style of a line-framed card's border: its section's colour when it
+    /// has the focus (the accent if it belongs to no section), dim otherwise.
+    fn card_line(&self, section: Option<u8>, focused: bool) -> Style {
+        match (focused, section) {
+            (true, Some(_)) => self
+                .fg(self.section_hue(section))
+                .add_modifier(Modifier::BOLD),
+            (true, None) => self.accent().add_modifier(Modifier::BOLD),
+            (false, _) => self.dim(),
         }
     }
 
     /// The fill of a card: a shade off the terminal's background, so each
     /// card is a surface of its own with no lines around it. `None` when
-    /// cards are line frames (no colour, or `COHORS_CARDS=lines`).
+    /// cards are line frames (no colour, a background that is not known, or
+    /// `COHORS_CARDS=lines`).
     fn surface(&self) -> Option<Color> {
-        self.panels
-            .then(|| self.tone((0x2D, 0x2B, 0x29), (0xEE, 0xEA, 0xE3)))
+        self.panels.then(|| self.shade(0.08, 0.07))
     }
 
-    /// The fill of an overlay: a shade lighter than a card, so it stands
+    /// The fill of an overlay: a shade further from the background than a
+    /// card on a dark terminal, and nearer to it on a light one, so it stands
     /// clear of the dashboard behind it. `None` when overlays are line frames.
     fn overlay_surface(&self) -> Option<Color> {
-        self.panels
-            .then(|| self.tone((0x38, 0x35, 0x32), (0xF8, 0xF5, 0xEF)))
+        self.panels.then(|| self.shade(0.13, 0.03))
     }
 
     /// The strip across the top of a panel that carries its title, as the
@@ -153,11 +200,10 @@ impl Theme {
     /// opposite tone, so focus is the one loud band on the screen.
     fn band(&self, number: Option<u8>, focused: bool) -> (Color, Color) {
         let hue = self.section_hue(number);
-        let surface = self.tone((0x2D, 0x2B, 0x29), (0xEE, 0xEA, 0xE3));
         if focused {
             (hue, self.tone((0x1C, 0x1B, 0x1A), (0xFF, 0xFF, 0xFF)))
         } else {
-            (mix(hue, surface, 0.30), hue)
+            (mix(hue, self.shade(0.08, 0.07), 0.30), hue)
         }
     }
 
@@ -266,25 +312,45 @@ impl Theme {
         self.fg(Color::Green)
     }
 
-    /// The cursor row's wash: a soft, dark-adaptive brand tint rather than a
-    /// full reverse, so dim cells stay legible on it (reverse turns dim text
-    /// invisible). Under `NO_COLOR` it falls back to reverse, the only
-    /// structural way to mark a row.
+    /// The cursor row's wash: a soft brand tint rather than a full reverse,
+    /// so dim cells stay legible on it (reverse turns dim text invisible).
+    /// The tint is dark on a dark terminal and light on a light one, so it is
+    /// only used when the background is known. When it is not, the row is a
+    /// solid purple with its own dark text (see [`Theme::selection_text`]),
+    /// which reads on anything. Under `NO_COLOR` it is reverse video, the
+    /// only structural way to mark a row.
     fn selection(&self) -> Style {
         if !self.color {
             Style::new().add_modifier(Modifier::REVERSED)
+        } else if self.ground.is_none() {
+            Style::new()
+                .bg(SPIDER_PURPLE)
+                .patch(self.selection_text().unwrap_or_default())
         } else if self.dark {
             Style::new().bg(Color::Rgb(0x4A, 0x2C, 0x47))
         } else {
             Style::new().bg(Color::Rgb(0xEA, 0xD3, 0xE4))
         }
     }
+
+    /// What to lay over the text of the cursor row, or `None` to leave each
+    /// cell its own colour. With a background that is not known the row is a
+    /// solid colour, and text in the terminal's default colour might be the
+    /// same tone as it; so the whole row takes one dark, undimmed text colour
+    /// chosen to read on that solid.
+    fn selection_text(&self) -> Option<Style> {
+        (self.color && self.ground.is_none()).then(|| {
+            Style::new()
+                .fg(Color::Rgb(0x1C, 0x1B, 0x1A))
+                .remove_modifier(Modifier::DIM)
+        })
+    }
 }
 
 /// Render the whole dashboard for one frame. `now` (Unix seconds) is injected
 /// so relative commit ages are deterministic in tests.
 pub fn render(frame: &mut Frame, app: &App, now: i64) {
-    let theme = Theme::from_env(app.icons, app.dark);
+    let theme = Theme::from_env(app.icons, app.dark, app.ground);
     render_with(frame, app, now, &theme);
 }
 
@@ -316,8 +382,7 @@ pub(crate) fn render_with(frame: &mut Frame, app: &App, now: i64, theme: &Theme)
         Mode::Detail | Mode::OpenWith | Mode::PushBranch => Some(5),
     });
     if overlay_open {
-        let ground = theme.tone((0x1C, 0x1B, 0x1A), (0xFF, 0xFF, 0xFF));
-        dim_area(frame.buffer_mut(), area, ground);
+        dim_area(frame.buffer_mut(), area, theme.ground());
     }
 
     match app.mode {

@@ -577,9 +577,14 @@ pub struct App {
     pub suggested_roots: Vec<String>,
     /// Configured glyph mode for the dashboard (auto / ascii / unicode / nerd).
     pub icons: cohors_config::IconMode,
-    /// Whether the terminal has a dark background (detected once at startup), so
-    /// the dock / hint cards can adapt their wash. Defaults to light.
+    /// Whether to treat the terminal's background as dark. A guess unless
+    /// `ground` is known.
     pub dark: bool,
+    /// The terminal's actual background colour, when it is known (it answered
+    /// the question at startup, or the user's `theme` setting says which kind
+    /// it is). `None` means not known: the dashboard then paints nothing that
+    /// would only look right on one kind of background.
+    pub ground: Option<(u8, u8, u8)>,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -709,6 +714,7 @@ impl App {
             suggested_roots: Vec::new(),
             icons: cohors_config::IconMode::default(),
             dark: false,
+            ground: None,
         }
     }
 

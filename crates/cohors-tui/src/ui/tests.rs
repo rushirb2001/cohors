@@ -827,13 +827,112 @@ fn severity_blocks_are_filled_only_where_work_could_be_lost() {
 }
 
 #[test]
-fn the_focused_card_has_the_accent_border_and_the_others_do_not() {
+fn the_focused_card_has_its_sections_colour_on_its_frame_and_the_others_do_not() {
+    use ratatui::style::Color;
     let mut app = fleet_app();
+    app.dark = true;
     app.focus = Card::AtRisk;
     let terminal = draw(&app, 120, 45, true);
-    assert_eq!(corner_of(&terminal, "Work at risk").fg, SPIDER_PURPLE);
-    assert_ne!(corner_of(&terminal, "Do next").fg, SPIDER_PURPLE);
-    assert_ne!(corner_of(&terminal, "Repositories").fg, SPIDER_PURPLE);
+    // Work at risk is brick; an unfocused frame is dim, with no colour.
+    assert_eq!(
+        corner_of(&terminal, "Work at risk").fg,
+        Color::Rgb(0xD9, 0x77, 0x6E)
+    );
+    assert_eq!(corner_of(&terminal, "Do next").fg, Color::Reset);
+    assert_eq!(corner_of(&terminal, "Repositories").fg, Color::Reset);
+    // Every card's title is in its section's colour, focused or not.
+    assert_eq!(
+        cell_at(&terminal, &["Do next"], "Do next").fg,
+        SPIDER_PURPLE
+    );
+}
+
+// ── A background that is not known ───────────────────────────────────────────
+
+/// The screen on a terminal that would not say what its background is.
+fn draw_unknown_ground(app: &App, w: u16, h: u16) -> Terminal<TestBackend> {
+    let theme = Theme::new(app.icons, true, true).with_unknown_ground();
+    let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+    terminal.draw(|f| render_with(f, app, NOW, &theme)).unwrap();
+    terminal
+}
+
+/// When the terminal's background is not known, nothing is painted that is
+/// only right on one kind of background. The only fills left are the ones
+/// that bring their own text colour: severity blocks, the figure tiles that
+/// need attention, and the cursor row.
+#[test]
+fn an_unknown_background_gets_no_surface_that_was_guessed() {
+    use ratatui::style::{Color, Modifier};
+    let mut app = fleet_app();
+    app.focus = Card::Repos;
+    let terminal = draw_unknown_ground(&app, 119, 60);
+    let buf = terminal.backend().buffer();
+
+    // Cards are line frames, exactly as with a known background and no panels.
+    assert_eq!(
+        buffer_text(&terminal),
+        buffer_text(&draw(&app, 119, 60, true))
+    );
+    // Every filled cell names its own text colour.
+    for cell in buf.content() {
+        if cell.bg != Color::Reset {
+            assert_ne!(
+                cell.fg,
+                Color::Reset,
+                "{:?} on {:?}",
+                cell.symbol(),
+                cell.bg
+            );
+        }
+    }
+    // The colour grading is still there: titles in their section's colour.
+    assert_eq!(
+        cell_at(&terminal, &["Do next"], "Do next").fg,
+        SPIDER_PURPLE
+    );
+    assert_eq!(
+        cell_at(&terminal, &["Repositories", "12"], "Repositories").fg,
+        Color::Rgb(0x5F, 0xAE, 0xA6)
+    );
+    // The cursor row is a solid colour with dark, undimmed text all across,
+    // dim cells included (the commit subject is normally dim).
+    let subject = cell_at(&terminal, &["analytics", "perf:"], "perf:");
+    assert_eq!(subject.bg, SPIDER_PURPLE);
+    assert_eq!(subject.fg, Color::Rgb(0x1C, 0x1B, 0x1A));
+    assert!(!subject.modifier.contains(Modifier::DIM));
+
+    // An overlay is a frame of lines too, with no filled surface.
+    app.mode = Mode::Help;
+    let help = draw_unknown_ground(&app, 119, 60);
+    assert!(buffer_text(&help).contains('╔'));
+}
+
+/// With a known background the panel is a shade off THAT background, not a
+/// fixed grey: lighter than a dark one, darker than a light one.
+#[test]
+fn a_panels_surface_is_a_shade_off_the_real_background() {
+    use ratatui::style::Color;
+    let brightness = |colour: Color| match colour {
+        Color::Rgb(r, g, b) => u32::from(r) + u32::from(g) + u32::from(b),
+        other => panic!("not a 24-bit colour: {other:?}"),
+    };
+    for (ground, dark) in [((0x00, 0x2B, 0x36), true), ((0xFD, 0xF6, 0xE3), false)] {
+        let mut theme = Theme::new(cohors_config::IconMode::Unicode, dark, true).with_panels();
+        theme.ground = Some(Color::Rgb(ground.0, ground.1, ground.2));
+        let surface = theme.surface().unwrap();
+        let (base, shade) = (brightness(theme.ground()), brightness(surface));
+        if dark {
+            assert!(shade > base && shade - base < 90, "{surface:?}");
+        } else {
+            assert!(shade < base && base - shade < 90, "{surface:?}");
+        }
+        // The hue of the background carries into the panel (a teal terminal
+        // gets a teal-tinted panel, not a grey one).
+        if let (Color::Rgb(_, g, b), true) = (surface, dark) {
+            assert!(b > g, "{surface:?}");
+        }
+    }
 }
 
 #[test]

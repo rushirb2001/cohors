@@ -23,7 +23,7 @@ use cohors_core::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind, MouseEventKind,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind, MouseEventKind,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -36,6 +36,7 @@ use crate::app::{
     Opener, PushPick, RunResult, RunState,
 };
 use crate::cli::Cli;
+use crate::ground::{Fed, GroundReply};
 use crate::scan::Scanner;
 use crate::ui;
 
@@ -114,31 +115,111 @@ enum BgMsg {
     },
 }
 
-/// Run the dashboard to completion, always restoring the terminal afterward.
-/// Detect the terminal's background so the cards can adapt. `COHORS_THEME`
-/// (`dark` / `light`) overrides; otherwise ask the terminal over OSC 11 (short
-/// timeout), falling back to light — the historical default — when the query is
-/// unsupported or stdout isn't a terminal. Run once at startup, before we take
-/// over the screen.
-fn detect_dark() -> bool {
-    match std::env::var("COHORS_THEME").ok().as_deref() {
-        Some("dark") => return true,
-        Some("light") => return false,
-        _ => {}
-    }
-    if !std::io::stdout().is_terminal() {
-        return false;
-    }
-    matches!(
-        termbg::theme(Duration::from_millis(100)),
-        Ok(termbg::Theme::Dark)
-    )
+/// What is known about the terminal's background.
+#[derive(Debug, Clone, Copy)]
+struct Ground {
+    /// Whether to treat it as dark. A guess when `rgb` is `None`.
+    dark: bool,
+    /// Its actual colour, when the terminal told us or the user said which
+    /// kind it is. `None` means "not known", and the dashboard then paints
+    /// nothing that would only look right on one kind of background.
+    rgb: Option<(u8, u8, u8)>,
 }
 
+/// The backgrounds assumed when the user says `dark` or `light` outright.
+const ASSUMED_DARK: (u8, u8, u8) = (0x1C, 0x1B, 0x1A);
+const ASSUMED_LIGHT: (u8, u8, u8) = (0xFF, 0xFF, 0xFF);
+
+/// What the user's `theme` setting (or `COHORS_THEME`) says about the
+/// background. `dark` or `light` settles it; `auto` leaves it not known until
+/// the terminal answers [`ask_ground`].
+fn ground_from_setting(mode: cohors_config::ThemeMode) -> Ground {
+    use cohors_config::ThemeMode;
+    match mode {
+        ThemeMode::Dark => Ground {
+            dark: true,
+            rgb: Some(ASSUMED_DARK),
+        },
+        ThemeMode::Light => Ground {
+            dark: false,
+            rgb: Some(ASSUMED_LIGHT),
+        },
+        // Not known. `dark` is only a guess for the few colours that come as
+        // a pair (a fill with its own text colour), which read either way.
+        ThemeMode::Auto => Ground {
+            dark: true,
+            rgb: None,
+        },
+    }
+}
+
+/// Ask the terminal for its background colour and give it a moment to answer.
+///
+/// Call once the screen has been taken over (raw mode), and only when the
+/// background is not already known. The answer comes back on the same stream
+/// as keystrokes (see [`crate::ground`]). Most terminals answer within a few
+/// milliseconds, so waiting briefly here means the first frame is already
+/// drawn right. A terminal that is slower still gets its answer taken up by
+/// the event loop when it arrives, and one that never answers costs only this
+/// wait: silence is never read as light or as dark.
+fn ask_ground(reply: &mut GroundReply) -> Option<(u8, u8, u8)> {
+    use std::io::Write;
+    const WAIT: Duration = Duration::from_millis(120);
+
+    let mut out = std::io::stdout();
+    if !out.is_terminal() || out.write_all(crate::ground::QUERY.as_bytes()).is_err() {
+        return None;
+    }
+    let _ = out.flush();
+    let asked = Instant::now();
+    while let Some(left) = WAIT.checked_sub(asked.elapsed()) {
+        if !event::poll(left).unwrap_or(false) {
+            break;
+        }
+        if let Ok(Event::Key(key)) = event::read()
+            && let Fed::Answer(colour) = reply.feed(&key)
+        {
+            return colour;
+        }
+    }
+    None
+}
+
+/// Take `key` out of the stream if it is part of the terminal's (late) answer
+/// about its background, and apply the answer when it completes. Returns
+/// whether the key was taken, in which case it must not reach the dashboard.
+fn took_ground_reply(reply: &mut GroundReply, key: &KeyEvent, app: &mut App) -> bool {
+    match reply.feed(key) {
+        Fed::NotPart => false,
+        Fed::Taken => true,
+        Fed::Answer(colour) => {
+            // Only fill in what is not known: a `theme` setting stands.
+            if app.ground.is_none()
+                && let Some(colour) = colour
+            {
+                app.ground = Some(colour);
+                app.dark = crate::ground::is_dark(colour);
+            }
+            true
+        }
+    }
+}
+
+/// The `theme` preference from the environment alone, for demo mode, which
+/// has no config file.
+fn theme_from_env() -> cohors_config::ThemeMode {
+    match std::env::var("COHORS_THEME").ok().as_deref() {
+        Some("dark") => cohors_config::ThemeMode::Dark,
+        Some("light") => cohors_config::ThemeMode::Light,
+        _ => cohors_config::ThemeMode::Auto,
+    }
+}
+
+/// Run the dashboard to completion, always restoring the terminal afterward.
 pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Result<()> {
-    let dark = detect_dark();
+    let ground = ground_from_setting(scanner.theme_mode());
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_loop(&mut terminal, scanner, cli, use_cache, watch, dark);
+    let result = run_loop(&mut terminal, scanner, cli, use_cache, watch, ground);
     let _ = restore_terminal(&mut terminal);
     result
 }
@@ -150,19 +231,27 @@ const WATCH_INTERVAL: Duration = Duration::from_secs(5);
 /// the app from `cohors_core::demo` and stubs every action, so nothing touches
 /// the disk or network — a zero-config way to try cohors.
 pub fn run_demo() -> Result<()> {
-    let dark = detect_dark();
+    let ground = ground_from_setting(theme_from_env());
     let mut terminal = setup_terminal().context("setting up the terminal")?;
-    let result = run_demo_loop(&mut terminal, dark);
+    let result = run_demo_loop(&mut terminal, ground);
     let _ = restore_terminal(&mut terminal);
     result
 }
 
-fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
+fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
     // A fixed "now" so the sample commit ages stay exactly as designed for the
     // length of the session.
     let now = now_secs();
     let mut app = App::new(vec!["(demo)".to_string()], "(demo — no config)".to_string());
-    app.dark = dark;
+    app.dark = ground.dark;
+    app.ground = ground.rgb;
+    let mut ground_reply = GroundReply::default();
+    if app.ground.is_none()
+        && let Some(colour) = ask_ground(&mut ground_reply)
+    {
+        app.ground = Some(colour);
+        app.dark = crate::ground::is_dark(colour);
+    }
     seed_demo(&mut app, now);
     app.status = Some("demo mode — sample data; actions are stubbed".to_string());
 
@@ -176,6 +265,11 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
 
         if event::poll(POLL)? {
             match event::read()? {
+                // A late answer about the terminal's background arrives as
+                // keys; it is taken out here and never reaches the dashboard.
+                Event::Key(key)
+                    if key.kind == KeyEventKind::Press
+                        && took_ground_reply(&mut ground_reply, &key, &mut app) => {}
                 Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
                     Cmd::Quit => break,
                     // The standup works for real — seeded from demo commits.
@@ -315,13 +409,21 @@ fn run_loop(
     cli: &Cli,
     use_cache: bool,
     watch: bool,
-    dark: bool,
+    ground: Ground,
 ) -> Result<()> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
     app.icons = scanner.icon_mode();
-    app.dark = dark;
+    app.dark = ground.dark;
+    app.ground = ground.rgb;
+    let mut ground_reply = GroundReply::default();
+    if app.ground.is_none()
+        && let Some(colour) = ask_ground(&mut ground_reply)
+    {
+        app.ground = Some(colour);
+        app.dark = crate::ground::is_dark(colour);
+    }
     // Stamped on every overview request, so a result that a newer request has
     // superseded is dropped when it arrives.
     let mut overview_seq: u64 = 0;
@@ -358,6 +460,11 @@ fn run_loop(
 
         if event::poll(POLL)? {
             match event::read()? {
+                // A late answer about the terminal's background arrives as
+                // keys; it is taken out here and never reaches the dashboard.
+                Event::Key(key)
+                    if key.kind == KeyEventKind::Press
+                        && took_ground_reply(&mut ground_reply, &key, &mut app) => {}
                 Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
                     Cmd::Quit => break,
                     Cmd::Refresh => start_refresh(&mut app, &scanner, &tx),

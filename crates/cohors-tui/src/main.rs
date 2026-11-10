@@ -11,6 +11,7 @@ mod cli;
 mod command;
 mod commands;
 mod glyphs;
+mod ground;
 mod logging;
 mod scan;
 mod tui;

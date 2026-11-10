@@ -121,7 +121,7 @@ pub(crate) fn draw_card_filled(
     // Without colour the focused card is told apart by a heavier frame.
     let heavy = card.focused && !theme.color;
     let set = theme.glyphs.card_border(heavy);
-    let border_style = theme.card_line(card.focused);
+    let border_style = theme.card_line(card.number.or(card.hue), card.focused);
 
     let mut block = Block::bordered().border_set(set).border_style(border_style);
     if card.number.is_some() || !card.title.is_empty() {
@@ -231,6 +231,16 @@ fn title_line(card: &CardFrame, rule: &str, border: Style, theme: &Theme) -> Lin
     }
     label.extend(card.title.iter().cloned());
     label.push(Span::raw(" "));
+    // A card that belongs to a section speaks in that section's colour, so
+    // the five are told apart whatever the cards are made of. (A panel then
+    // recolours the title for its band; without colour this does nothing.)
+    let section = card.number.or(card.hue);
+    if section.is_some() {
+        let hue = theme.fg(theme.section_hue(section));
+        for span in &mut label {
+            span.style = span.style.patch(hue);
+        }
+    }
     let mut spans = vec![Span::styled(rule.to_string(), border)];
     spans.extend(label);
     Line::from(spans)
@@ -336,6 +346,16 @@ pub(crate) fn draw_list(
                 ..text
             };
             frame.render_widget(Paragraph::new(line), line_area);
+        }
+        if on_cursor && let Some(ink) = theme.selection_text() {
+            // A solid cursor row: its text takes one colour that reads on it.
+            let row = Rect {
+                x: area.gutter_x,
+                y,
+                width: text.width + 2,
+                height: item_height,
+            };
+            frame.buffer_mut().set_style(row, ink);
         }
         let gutter = item.gutter.or_else(|| {
             on_cursor.then(|| Span::styled(theme.glyphs.cursor(), theme.accent().bold()))

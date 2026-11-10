@@ -114,6 +114,11 @@ impl Scanner {
     pub fn icon_mode(&self) -> cohors_config::IconMode {
         self.config.icons
     }
+
+    /// What the user said about the terminal's background (auto / dark / light).
+    pub fn theme_mode(&self) -> cohors_config::ThemeMode {
+        self.config.theme
+    }
 }
 
 /// The user's configured git email (`git config user.email`), for the standup.

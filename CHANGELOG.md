@@ -103,8 +103,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   card has the one bright band. Overlays take the colour of the section they
   belong to, and the dashboard behind an open overlay fades, fills included.
   When the terminal is tall enough a blank row separates the header, the figures
-  and each band of cards; smaller terminals keep every row for content. Without
-  colour (`NO_COLOR`), or with `COHORS_CARDS=lines`, cards keep their line frames.
+  and each band of cards; smaller terminals keep every row for content.
+  A panel is a shade off the terminal's real background, so it sits right on any
+  colour scheme. cohors asks the terminal for that colour; a terminal that does
+  not answer gets line frames in the same section colours instead, because a
+  guessed shade is wrong on half of all terminals. The new `theme` setting
+  (`"auto"`, `"dark"` or `"light"`, also `COHORS_THEME`) says it outright for a
+  terminal that cannot be asked. Without colour (`NO_COLOR`), or with
+  `COHORS_CARDS=lines`, cards keep their line frames.
 - **Quieter rows.** A count of zero is a small dot rather than a `0`, and a branch
   level with its upstream says nothing rather than `level`, so the only numbers
   on a row are the ones that mean something. On a wide terminal the repository
@@ -132,6 +138,12 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Fixed
 
+- A terminal that did not say what its background was used to be treated as
+  light, which could put light fills on a dark terminal. Not knowing is now its
+  own case, and nothing is painted that depends on the answer.
+- On a terminal that did not answer the background question, the first key
+  pressed after the dashboard opened was lost. The question is now asked without
+  a second reader on the keyboard, and a late answer is still used.
 - The Linux pip wheels were tagged `manylinux_2_31` but built against glibc
   2.35. They are now tagged `manylinux_2_35`, so pip on an older system declines
   the wheel instead of installing a binary that may not start.
