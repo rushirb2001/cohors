@@ -1,26 +1,28 @@
 ---
 source: crates/cohors-tui/src/ui/tests.rs
-expression: "render_to_string(&app, 100, 22)"
+expression: "render_to_string(&app, 100, 24)"
 ---
-╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
-║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ ║
-║ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        ║
-╚═════╔══════════════════════════════════════════════════════════════════════════════════════╗═════╝
-╔ Atte║ Run · cargo test   ·  1 ✓ · 1 ✗                                                      ║═════╗
-║ 1 at╟────────────────────────┬─────────────────────────────────────────────────────────────╢     ║
-╚═════║ Repos                  │ web-app                                                     ║═════╝
-╔ Repo║ ✓ payments             │ exit 1                                                      ║═════╗
-║    R║ ✗ web-app 1            │                                                             ║     ║
-║▌   l║                        │ running 3 tests                                             ║perm…║
-║  ○ p║                        │ ── stderr ──                                                ║     ║
-║     ║                        │ test cart::total failed                                     ║     ║
-╚═════║                        │ error: 1 test failed                                        ║═════╝
-──────╟────────────────────────┴─────────────────────────────────────────────────────────────╢──────
-╔═════║                ↑/↓ repo · PgUp/PgDn scroll output · y copy · Esc close               ║═════╗
-║     ╚══════════════════════════════════════════════════════════════════════════════════════╝     ║
-║ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── ║
-║     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       ║
-║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
-║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
-╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝
+ cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
+ 1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────╮
+│▸▲  e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.   │
+│ ◆  P  Push 2 commits from 1 repository             They exist only on this machine: payments.    │
+│ ○  p╔══════════════════════════════════════════════════════════════════════════════════════╗-ap… │
+│ ○  c║ Run · cargo test   ·  1 ✓ · 1 ✗                                                      ║7.   │
+╰─────╟────────────────────────┬─────────────────────────────────────────────────────────────╢─────╯
+╭─  2 ║ Repos                  │ web-app                                                     ║─────╮
+│ ▲ le║ ✓ payments             │ exit 1                                                      ║     │
+│ ◆ pa║ ✗ web-app 1            │                                                             ║Push │
+│ ◆ we║                        │ running 3 tests                                             ║Pull │
+╰─  ⏎ ║                        │ ── stderr ──                                                ║─────╯
+╭─  3 ║                        │ test cart::total failed                                     ║─────╮
+│ No l║                        │ error: 1 test failed                                        ║     │
+│ here╟────────────────────────┴─────────────────────────────────────────────────────────────╢     │
+╰─  t ║                ↑/↓ repo · PgUp/PgDn scroll output · y copy · Esc close               ║─────╯
+╭─  5 ╚══════════════════════════════════════════════════════════════════════════════════════╝─────╮
+│   repository             branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
+│ ▲ legacy-billing         unreadab…                                                  could not r… │
+│ ◆ payments               main      ↑2              0    3    1      1      0    2h  fix: retry … │
+│   ↓ 3 more                                                                                       │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

@@ -2,31 +2,31 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 28)"
 ---
-╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
-║ ▟██▌█▐╔══════════════════════════════════════════════════════════════════════════════════╗▒▁▒▁▒▁ ║
-║ ▀▐▖▀█▀║  payments  ·  main                                                               ║       ║
-╚═══════╟─────────────────────────────────────────┬────────────────────────────────────────╢═══════╝
-╔ Attent║ Changes · branches · PRs                │ Commits (5)                            ║═══════╗
-║ ██████║ Attention                             █ │ a1b2c3d    2h  fix: retry charge on 5xx║██████ ║
-║ 1 at r║ ↑2 unpushed                           █ │ b2c3d4e    5h  test: cover partial-refu║       ║
-╚═══════║ 4 uncommitted changes                 █ │ c3d4e5f    1d  refactor: extract proces║═══════╝
-╔ Reposi║ 1 stash                               █ │ d4e5f60    3d  feat: idempotency keys o║═══════╗
-║    Rep║                                       █ │ e5f6071    4d  chore: bump stripe sdk t║       ║
-║▌   leg║ Changes (3)                           █ │                                        ║ (perm…║
-║  ○ pay║  M src/charge.rs                      █ │                                        ║       ║
-║    ▷ @║  M src/refund.rs                      ║ │                                        ║       ║
-║  ○ web║ ?? notes.md                           ║ │                                        ║pull   ║
-║  ○ inf║                                       ║ │                                        ║es     ║
-║  ○ aut║ Branches (3)                          ║ │                                        ║       ║
-║       ║ ● main  ↑2                            ║ │                                        ║       ║
-║       ║   feat/idempotency  ↑3 ↓1             ║ │                                        ║       ║
-╚═══════║   spike/webhooks  · no upstream       ║ │                                        ║═══════╝
-────────║                                       ║ │                                        ║────────
-╔═══════║ Stashes (1)                           ║ │                                        ║═══════╗
-║       ╟─────────────────────────────────────────┴────────────────────────────────────────╢       ║
-║ ──────║                     ↑/↓ scroll · g/G top / bottom · Esc close                    ║────── ║
-║     ␣ ╚══════════════════════════════════════════════════════════════════════════════════╝       ║
-║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
-║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
-╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝
+ cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
+ 1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
+╭─  1  ▶╔══════════════════════════════════════════════════════════════════════════════════╗───────╮
+│▸▲  e  ║  payments  ·  main                                                               ║ing.   │
+│ ◆  P  ╟─────────────────────────────────────────┬────────────────────────────────────────╢ts.    │
+│ ○  p  ║ Changes · branches · PRs                │ Commits (5)                            ║eb-ap… │
+│ ○  c  ║ Attention                             █ │ a1b2c3d    2h  fix: retry charge on 5xx║h 7.   │
+╰───────║ ↑2 unpushed                           █ │ b2c3d4e    5h  test: cover partial-refu║───────╯
+╭─  2  ▲║ 4 uncommitted changes                 █ │ c3d4e5f    1d  refactor: extract proces║───────╮
+│ ▲ lega║ 1 stash                               █ │ d4e5f60    3d  feat: idempotency keys o║       │
+│ ◆ paym║                                       █ │ e5f6071    4d  chore: bump stripe sdk t║  Push │
+│ ◆ web-║ Changes (3)                           █ │                                        ║  Pull │
+╰─  ⏎  o║  M src/charge.rs                      █ │                                        ║───────╯
+╭─  3  ✓║  M src/refund.rs                      ║ │                                        ║───────╮
+│ No lau║ ?? notes.md                           ║ │                                        ║       │
+│ here o║                                       ║ │                                        ║       │
+╰─  t  b║ Branches (3)                          ║ │                                        ║───────╯
+╭─  5  ▤║ ● main  ↑2                            ║ │                                        ║───────╮
+│   repo║   feat/idempotency  ↑3 ↓1             ║ │                                        ║ommit  │
+│ ▲ lega║   spike/webhooks  · no upstream       ║ │                                        ║not r… │
+│ ◆ paym║                                       ║ │                                        ║etry … │
+│ ◆ web-║ Stashes (1)                           ║ │                                        ║art d… │
+│ ○ infr╟─────────────────────────────────────────┴────────────────────────────────────────╢ pin … │
+│ · auth║                     ↑/↓ scroll · g/G top / bottom · Esc close                    ║ bump… │
+│       ╚══════════════════════════════════════════════════════════════════════════════════╝       │
+│                                                                                                  │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

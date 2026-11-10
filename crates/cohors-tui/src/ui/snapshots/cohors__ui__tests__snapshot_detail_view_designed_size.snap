@@ -1,0 +1,34 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&detail_app(), 119, 30)"
+---
+╭─  5  ▤ Repositories  12 ────────────────────────────────────────────────────────────────────────────────────────────╮
+│   repository                    branch              upstream        stg  mod  new  stash  tasks   fetched  commit   │
+│ ▲ analytics                     main                ↑1                0    0    0      2      0     never      4d   │
+│   ~/code/analytics                                  abc1234  perf: precompute funnel rollups                        │
+│ ▲ legacy-billing                unreadable                                                                          │
+│   ~/code/legacy-billing                             could not read .git (permission denied)                         │
+│ ◆ design-system                 main                ↑1                0    0    0      1      0     never      6h   │
+│   ~/code/design-system                              abc1234  feat: dark-mode tokens                                 │
+│ ◆ mobile-app                    release/2.0         ↑4 ↓1             3    1    0      0      0     never      9h   │
+│   ~/code/mobile-app                                 abc1234  feat: biometric unlock                                 │
+│▸◆ payments                      main                ↑2                1    2    0      0      2     never      2h   │
+│   ~/code/payments                                   abc1234  fix: retry charge on 5xx from processor                │
+│ ◆ web-app                       feat/checkout       ↓5                0    6    1      0      2     never     20m   │
+│   ~/code/web-app                                    abc1234  wip: cart drawer animation                             │
+│ ○ cli-tools                     main                level             0    0    1      0      0     never     12h   │
+│   ~/code/cli-tools                                  abc1234  docs: add shell-completion install notes               │
+│   ↓ 5 more                                                                                                          │
+│                                                                                                                     │
+╰─  ␣  select   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort   esc  overview  ─╯
+╭─ payments  state ───────────────────╮ ╭─ signals ───────────────────────────╮ ╭─ tasks  2 ──────────────────────────╮
+│ branch      main                    │ │ ◆ 2 commits not pushed              │ │ · Idempotency keys on charge retri… │
+│ upstream    origin/main             │ │ ○ 3 uncommitted files               │ │ · Back off webhook redelivery       │
+│ fetched     never                   │ │                                     │ │                                     │
+│ staged      1                       │ │ last commit                         │ │ run                                 │
+│ modified    2                       │ │ fix: retry charge on 5xx from proc… │ │ docker compose up -d && cargo run   │
+│ untracked   0                       │ │                                     │ │                                     │
+│ stashes     0                       │ │ path                                │ │                                     │
+│ commit      abc1234, 2h ago         │ │ ~/code/payments                     │ │                                     │
+╰─  d  changes  ──────────────────────╯ ╰─  f  fetch  ────────────────────────╯ ╰─  t  board   !  run  ───────────────╯
+  ↑↓  move    ⏎  full detail    tab  next card    :  command    ?  help    q  quit

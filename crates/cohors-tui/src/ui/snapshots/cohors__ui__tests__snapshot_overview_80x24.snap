@@ -1,0 +1,28 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&fleet_app(), 80, 24)"
+---
+ cohors  ~/code   12 repositories. 6 have work at risk, 2 are …  scanned 2m ago 
+ 4 not backed up  3 stashes  26 uncommitted  0 stale  5 tasks  44 commits 7d    
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────╮
+│▸▲  e  Check 1 repository that could not be read    Nothing else is known ab… │
+│ ▲  P  Push 4 commits from 3 repositories           They exist only on this … │
+│   ↓ 3 more                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─  2  ▲ Work at risk  6 ──────────────────────────────────────────────────────╮
+│ ▲ analytics         1 commit not pushed, older than 2 days…    4d  Push      │
+│ ▲ legacy-billing    Could not be read                                        │
+│   ↓ 4 more                                                                   │
+╰─  ⏎  open   e  unreadable   P  push 3   d  diverged   p  pull 2  ────────────╯
+╭─  3  ✓ Open tasks  5 ──────────────╮ ╭─  4  ● Commits, last 7 days  44 ──────╮
+│ repository     open  high  focus   │ │ auth-service      ██████████      8   │
+│ payments          2     1      1   │ │   ↓ 10 more                           │
+│   ↓ 2 more                         │ │ 1 repository had no commits this wee… │
+╰─  t  board   ⏎  tasks  ────────────╯ ╰─  s  standup   y  copy as markdown  ──╯
+╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────╮
+│   repository       branch    upstream      stg  mod  new  stash  tasks   age │
+│ ▲ analytics        main      ↑1              0    0    0      2      0    4d │
+│ ▲ legacy-billing   unreadab…                                                 │
+│   ↓ 10 more                                                                  │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit  ─────────╯
+  1-5  focus card  tab  next card  ↑↓  move  :  command  ?  help  q  quit

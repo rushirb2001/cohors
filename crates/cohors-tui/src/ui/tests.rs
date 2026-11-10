@@ -1,5 +1,12 @@
+//! Rendering tests. A text snapshot is what the screen would show, drawn on
+//! ratatui's in-memory `TestBackend`; the `.snap` files under `snapshots/` are
+//! the reviewed, expected output. Colours are not part of a text snapshot, so
+//! the few things only colour or style can show are asserted on the buffer
+//! directly.
+
 use super::*;
-use crate::app::{App, Mode};
+use crate::app::{App, Card, Mode, Pane, Screen};
+use cohors_core::launchpad::Board;
 use cohors_core::{
     Branch, BranchInfo, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, Upstream,
     WorktreeStatus,
@@ -57,13 +64,22 @@ fn snap(
     }
 }
 
-fn demo_app() -> App {
+/// Give `app` the overview of its own snapshots, as the event loop would
+/// after a scan (here without any launchpad files).
+fn with_overview(mut app: App) -> App {
+    let overview = cohors_core::overview(&app.repos, &[], &Board::default(), NOW);
+    app.set_overview(overview, Vec::new());
+    app.scanned_at = Some(NOW - 120);
+    app
+}
+
+/// A small hand-built fleet: five repositories in clearly different states.
+/// The overlay tests draw on top of it.
+fn small_app() -> App {
     let mut app = App::new(
         vec!["~/projects".to_string(), "~/work".to_string()],
         "~/.config/cohors/config.toml".to_string(),
     );
-    // A few repos carry GitHub remote info so the Remote cloud is exercised
-    // in passing/failing/pending states; the rest stay local ("—").
     let remote = |open_prs: u32, ci: CiStatus| {
         Some(RemoteInfo {
             host: "github.com".to_string(),
@@ -92,14 +108,7 @@ fn demo_app() -> App {
         None,
     );
     payments.remote = remote(2, CiStatus::Passing);
-    // Per-branch CI: `main` passes, the feature branch fails — each branch row
-    // shows its own checks, since CI is keyed by ref, not the worktree.
-    payments.remote.as_mut().unwrap().ci_by_branch = std::collections::HashMap::from([
-        ("main".to_string(), CiStatus::Passing),
-        ("feat/checkout-rework".to_string(), CiStatus::Failing),
-    ]);
-    // A multi-branch repo: the dashboard lists each branch, with the open-PR count
-    // attached to the branch the PRs target (both target `main`).
+    // Two local branches, so the "push which branch?" picker has a choice.
     payments.branches = vec![
         BranchInfo {
             name: "main".into(),
@@ -171,13 +180,22 @@ fn demo_app() -> App {
             Some("could not read .git (permission denied)"),
         ),
     ]);
+    with_overview(app)
+}
+
+/// The built-in sample fleet with its launchpad: what `cohors demo` shows.
+fn fleet_app() -> App {
+    let mut app = App::new(
+        vec!["~/code".to_string()],
+        "~/.config/cohors/config.toml".to_string(),
+    );
+    crate::tui::seed_demo(&mut app, NOW);
+    app.scanned_at = Some(NOW - 120);
     app
 }
 
-fn render_to_string(app: &App, w: u16, h: u16) -> String {
-    let backend = TestBackend::new(w, h);
-    let mut terminal = Terminal::new(backend).unwrap();
-    terminal.draw(|f| render(f, app, NOW)).unwrap();
+/// The buffer as text, one line per row.
+fn buffer_text(terminal: &Terminal<TestBackend>) -> String {
     let buf = terminal.backend().buffer();
     let mut out = String::new();
     for y in buf.area.top()..buf.area.bottom() {
@@ -188,66 +206,457 @@ fn render_to_string(app: &App, w: u16, h: u16) -> String {
         }
         out.push('\n');
     }
-    // Normalize the version so a bump doesn't churn every header snapshot —
-    // these tests assert layout, not the version number.
+    // Normalize the version so a bump doesn't churn every snapshot — these
+    // tests assert layout, not the version number.
     out.replace(&format!("v{}", env!("CARGO_PKG_VERSION")), "vX.Y.Z")
 }
 
-#[test]
-fn snapshot_list() {
-    let app = demo_app();
-    // Tall enough to show the whole fleet, including the multi-branch `payments`
-    // repo expanded into its per-branch lines.
-    insta::assert_snapshot!(render_to_string(&app, 100, 28));
+/// Draw `app` with an explicit colour setting and return the terminal.
+fn draw(app: &App, w: u16, h: u16, color: bool) -> Terminal<TestBackend> {
+    let theme = Theme::new(app.icons, app.dark, color);
+    let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+    terminal.draw(|f| render_with(f, app, NOW, &theme)).unwrap();
+    terminal
 }
 
-/// The medium width tier: too narrow for the Activity sparkline, but the modern
-/// split Sync / PRs / CI columns survive (it does NOT cliff to the fused set).
-#[test]
-fn snapshot_list_medium() {
-    let app = demo_app();
-    insta::assert_snapshot!(render_to_string(&app, 88, 32));
+/// The screen in colour (colour itself is not part of the text).
+fn render_to_string(app: &App, w: u16, h: u16) -> String {
+    buffer_text(&draw(app, w, h, true))
 }
 
-/// The narrow tier: no room for PRs or the CI word, but CI survives as a
-/// colour-coded square in its own column (never fused away).
-#[test]
-fn snapshot_list_narrow() {
-    let app = demo_app();
-    insta::assert_snapshot!(render_to_string(&app, 72, 32));
+/// The screen as a `NO_COLOR` terminal shows it: the plain-text glyph tier.
+fn render_plain(app: &App, w: u16, h: u16) -> String {
+    buffer_text(&draw(app, w, h, false))
 }
 
-/// On a narrow terminal the header collapses to the spider + lede + the
-/// directory only — no taglines, divider, or info column.
+// ── The overview ─────────────────────────────────────────────────────────────
+
+/// The screen cohors opens on, with the sample fleet.
 #[test]
-fn snapshot_header_compact() {
-    let app = demo_app();
-    insta::assert_snapshot!(render_to_string(&app, 60, 16));
+fn snapshot_overview() {
+    insta::assert_snapshot!(render_to_string(&fleet_app(), 120, 45));
 }
 
-/// With `h` pressed, the hint boxes collapse to just the toggle divider,
-/// which now reads "unhide".
+/// The size the design was drawn at: 119 columns by 53 rows.
 #[test]
-fn snapshot_hints_hidden() {
-    let mut app = demo_app();
-    app.hints_hidden = true;
+fn snapshot_overview_designed_size() {
+    insta::assert_snapshot!(render_to_string(&fleet_app(), 119, 53));
+}
+
+/// A classic 80 by 24 terminal: one-line header, the figures as one line, and
+/// all five cards still present.
+#[test]
+fn snapshot_overview_80x24() {
+    insta::assert_snapshot!(render_to_string(&fleet_app(), 80, 24));
+}
+
+/// Narrow and tall: cards 3 and 4 stack, and columns drop from the tables.
+#[test]
+fn snapshot_overview_narrow() {
+    insta::assert_snapshot!(render_to_string(&fleet_app(), 60, 50));
+}
+
+/// Too narrow for six figure cards in a row but tall: they wrap three by two.
+#[test]
+fn snapshot_overview_figure_grid() {
+    insta::assert_snapshot!(render_to_string(&fleet_app(), 96, 60));
+}
+
+/// No colour and the plain-text glyph tier: severity is a character, the
+/// focused card has a heavier frame, and nothing outside ASCII is drawn.
+#[test]
+fn snapshot_overview_no_color_ascii() {
+    let app = fleet_app();
+    let screen = render_plain(&app, 120, 45);
+    assert!(screen.is_ascii(), "the plain tier must be pure ASCII");
+    insta::assert_snapshot!(screen);
+}
+
+/// An empty fleet says what is missing and how to add a root.
+#[test]
+fn snapshot_overview_empty() {
+    let app = with_overview(App::new(
+        vec!["~/projects".to_string()],
+        "~/.config/cohors/config.toml".to_string(),
+    ));
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+/// Empty fleet, but repositories were detected elsewhere: the one-key rescue.
+#[test]
+fn snapshot_overview_empty_picker() {
+    let mut app = App::new(
+        vec!["~/projects".to_string()],
+        "~/.config/cohors/config.toml".to_string(),
+    );
+    app.suggested_roots = vec!["~/code".to_string(), "~/work".to_string()];
+    insta::assert_snapshot!(render_to_string(&app, 100, 30));
+}
+
+/// The first moments of a run: scanning, nothing to show yet.
+#[test]
+fn snapshot_overview_scanning() {
+    let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
+    app.scanning = true;
     insta::assert_snapshot!(render_to_string(&app, 100, 20));
 }
 
-/// Action/scan feedback shows as a self-dismissing toast (bottom-right, above
-/// the footer), not in the header.
+/// Repositories but no launchpad files: the tasks card explains what would
+/// make tasks appear, and the open-tasks figure says there is no launchpad.
+#[test]
+fn snapshot_overview_without_launchpad() {
+    insta::assert_snapshot!(render_to_string(&small_app(), 120, 45));
+}
+
+/// Snapshots painted from the cache before the overview has been computed:
+/// the table already lists the repositories, the cards say they are waiting.
+#[test]
+fn snapshot_overview_before_it_is_computed() {
+    let mut app = small_app();
+    app.overview = None;
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// Each card focused once. The cursor mark in the gutter shows which card has
+/// the focus (the accent border is colour, so it is asserted separately).
+#[test]
+fn snapshot_focus_do_next() {
+    let mut app = fleet_app();
+    app.focus = Card::DoNext;
+    app.cursors.next = 1;
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+#[test]
+fn snapshot_focus_at_risk() {
+    let mut app = fleet_app();
+    app.focus = Card::AtRisk;
+    app.cursors.risk = 1;
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+#[test]
+fn snapshot_focus_tasks() {
+    let mut app = fleet_app();
+    app.focus = Card::Tasks;
+    app.cursors.tasks = 1;
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+#[test]
+fn snapshot_focus_commits() {
+    let mut app = fleet_app();
+    app.focus = Card::Commits;
+    app.cursors.commits = 2;
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+/// The table focused, with the cursor far enough down that it has scrolled.
+#[test]
+fn snapshot_focus_repos() {
+    let mut app = fleet_app();
+    app.focus = Card::Repos;
+    app.selected = app.visible_len() - 1;
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+/// Marked repositories show a dot in the gutter and a count in the title.
+#[test]
+fn snapshot_repos_marked() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.selection.insert(RepoId("payments".to_string()));
+    app.selection.insert(RepoId("web-app".to_string()));
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// Typing a filter narrows the table and shows the query in its title.
+#[test]
+fn snapshot_repos_filtered() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.mode = Mode::Filter;
+    app.filter = "pay".to_string();
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// A filter that matches nothing says so, and how to clear it.
+#[test]
+fn snapshot_repos_filter_matches_nothing() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.filter = "zzz".to_string();
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// A "Do next" step that needs a person narrows the table to its repositories.
+#[test]
+fn snapshot_repos_narrowed_to_a_step() {
+    let mut app = fleet_app();
+    app.focus = Card::DoNext;
+    let step = app
+        .actions()
+        .iter()
+        .position(|action| action.verb.is_none())
+        .expect("the sample fleet has a step that needs a look");
+    app.cursors.next = step;
+    app.on_key(ratatui::crossterm::event::KeyEvent::from(
+        ratatui::crossterm::event::KeyCode::Enter,
+    ));
+    assert_eq!(app.focus, Card::Repos);
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+/// An action's result is shown at the right end of the key bar.
 #[test]
 fn snapshot_toast() {
-    let mut app = demo_app();
+    let mut app = small_app();
     app.status = Some("pushed 3 repos".to_string());
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
 }
+
+/// Below the size floor the dashboard is replaced by a short message.
+#[test]
+fn snapshot_too_small() {
+    insta::assert_snapshot!(render_to_string(&fleet_app(), 40, 10));
+}
+
+// ── The detail view ──────────────────────────────────────────────────────────
+
+/// The detail view of the sample fleet with a repository that has tasks
+/// selected, so all three cards have something to show.
+fn detail_app() -> App {
+    let mut app = fleet_app();
+    app.screen = Screen::Repos;
+    app.focus = Card::Repos;
+    app.selected = app
+        .view()
+        .iter()
+        .position(|row| app.repos[row.index].name == "payments")
+        .expect("the sample fleet has a payments repository");
+    app
+}
+
+#[test]
+fn snapshot_detail_view() {
+    insta::assert_snapshot!(render_to_string(&detail_app(), 120, 45));
+}
+
+/// The size the design was drawn at.
+#[test]
+fn snapshot_detail_view_designed_size() {
+    insta::assert_snapshot!(render_to_string(&detail_app(), 119, 30));
+}
+
+/// One of the three cards focused: it gets the frame, the list keeps its
+/// cursor.
+#[test]
+fn snapshot_detail_view_tasks_focused() {
+    let mut app = detail_app();
+    app.pane = Pane::Tasks;
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+/// A narrow screen drops list columns and shows two of the three cards.
+#[test]
+fn snapshot_detail_view_narrow() {
+    insta::assert_snapshot!(render_to_string(&detail_app(), 80, 30));
+}
+
+/// The unreadable repository: no state to show, only why it could not be read.
+#[test]
+fn snapshot_detail_view_unreadable() {
+    let mut app = detail_app();
+    app.selected = app
+        .view()
+        .iter()
+        .position(|row| app.repos[row.index].has_error())
+        .expect("the sample fleet has an unreadable repository");
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+#[test]
+fn snapshot_detail_view_no_color_ascii() {
+    let screen = render_plain(&detail_app(), 120, 45);
+    assert!(screen.is_ascii(), "the plain tier must be pure ASCII");
+    insta::assert_snapshot!(screen);
+}
+
+// ── Style: what a text snapshot cannot show ──────────────────────────────────
+
+/// The cell at the top-left corner of the first card whose title contains
+/// `title`.
+fn corner_of<'a>(terminal: &'a Terminal<TestBackend>, title: &str) -> &'a ratatui::buffer::Cell {
+    let buf = terminal.backend().buffer();
+    let text = buffer_text(terminal);
+    let (y, line) = text
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.contains(title))
+        .unwrap_or_else(|| panic!("no card titled {title:?}"));
+    // Byte offset → column: count the characters before the title, then step
+    // back to the corner that starts this card.
+    let col = line[..line.find(title).unwrap()].chars().count();
+    let corner = line
+        .chars()
+        .take(col)
+        .collect::<Vec<_>>()
+        .iter()
+        .rposition(|c| ['╭', '╔', '+', '#'].contains(c))
+        .expect("a corner before the title");
+    buf.cell((corner as u16, y as u16)).unwrap()
+}
+
+#[test]
+fn the_focused_card_has_the_accent_border_and_the_others_do_not() {
+    let mut app = fleet_app();
+    app.focus = Card::AtRisk;
+    let terminal = draw(&app, 120, 45, true);
+    assert_eq!(corner_of(&terminal, "Work at risk").fg, SPIDER_PURPLE);
+    assert_ne!(corner_of(&terminal, "Do next").fg, SPIDER_PURPLE);
+    assert_ne!(corner_of(&terminal, "Repositories").fg, SPIDER_PURPLE);
+}
+
+#[test]
+fn without_colour_the_focused_card_has_a_heavier_frame() {
+    let mut app = fleet_app();
+    app.icons = cohors_config::IconMode::Unicode;
+    app.focus = Card::AtRisk;
+    let terminal = draw(&app, 120, 45, false);
+    assert_eq!(corner_of(&terminal, "Work at risk").symbol(), "╔");
+    assert_eq!(corner_of(&terminal, "Do next").symbol(), "╭");
+    // And no cell on the screen carries a colour.
+    let buf = terminal.backend().buffer();
+    assert!(
+        buf.content()
+            .iter()
+            .all(|cell| cell.fg == Color::Reset && cell.bg == Color::Reset)
+    );
+}
+
+#[test]
+fn the_cursor_row_is_washed_only_in_the_focused_card() {
+    let mut app = fleet_app();
+    app.focus = Card::DoNext;
+    let terminal = draw(&app, 120, 45, true);
+    let buf = terminal.backend().buffer();
+    let wash = Theme::new(app.icons, false, true).selection().bg.unwrap();
+    let washed_rows: Vec<u16> = (0..buf.area.height)
+        .filter(|&y| (0..buf.area.width).any(|x| buf.cell((x, y)).unwrap().bg == wash))
+        .collect();
+    assert_eq!(
+        washed_rows.len(),
+        1,
+        "exactly one cursor row: {washed_rows:?}"
+    );
+}
+
+// ── Robustness ───────────────────────────────────────────────────────────────
+
+/// A fleet built to break layouts: very long and non-ASCII names, control
+/// characters in text that comes from repositories, an unreadable repository,
+/// huge counts, and a repository with nothing known about it.
+fn hostile_app() -> App {
+    let mut app = App::new(
+        vec!["/a/very/long/root/path/that/goes/on/and/on/for/a/while/projects".to_string()],
+        "cfg".to_string(),
+    );
+    let long = "an-extremely-long-repository-name-that-no-column-could-ever-hold-in-full";
+    let mut huge = snap(
+        long,
+        Branch::Named("feature/an/equally/long/branch/name/with/many/segments".into()),
+        Some(("origin/main", 4_000_000, 3_000_000)),
+        (u32::MAX / 4, u32::MAX / 4, u32::MAX / 4),
+        9_999,
+        Some((
+            NOW - 30,
+            "subject with \u{1b}[31mescapes\u{7} and a\ttab\nand newline",
+        )),
+        None,
+    );
+    huge.activity = vec![255; 60];
+    let mut wide = snap(
+        "日本語のリポジトリ名🚀",
+        Branch::Detached("deadbee".into()),
+        None,
+        (0, 0, 1),
+        0,
+        Some((NOW + 500, "commit dated in the future")),
+        None,
+    );
+    wide.remote_url = Some("git@example.com:x/y.git".to_string());
+    wide.last_fetch = Some(NOW + 10_000);
+    let mut bare = snap("", Branch::Unborn, None, (0, 0, 0), 0, None, None);
+    bare.path = None;
+    app.set_repos(vec![
+        huge,
+        wide,
+        bare,
+        snap(
+            "broken",
+            Branch::Unborn,
+            None,
+            (0, 0, 0),
+            0,
+            None,
+            Some("fatal: \u{1b}[2Jnot a git repository (or any of the parent directories)"),
+        ),
+    ]);
+    with_overview(app)
+}
+
+/// No terminal size, focus, screen or fleet may panic. This draws every size
+/// from 1×1 upward for the sample fleet, an empty fleet and a hostile one.
+#[test]
+fn no_size_or_fleet_panics() {
+    let empty = with_overview(App::new(Vec::new(), String::new()));
+    let fleets = [fleet_app(), empty, hostile_app()];
+    let sizes: Vec<(u16, u16)> = (1..=131)
+        .step_by(13)
+        .flat_map(|w| (1..=61).step_by(6).map(move |h| (w, h)))
+        .chain([(48, 12), (47, 12), (48, 11), (80, 24), (200, 100), (300, 5)])
+        .collect();
+    for mut app in fleets {
+        for (screen, focus, pane) in [
+            (Screen::Overview, Card::DoNext, Pane::List),
+            (Screen::Overview, Card::Commits, Pane::List),
+            (Screen::Overview, Card::Repos, Pane::List),
+            (Screen::Repos, Card::Repos, Pane::List),
+            (Screen::Repos, Card::Repos, Pane::Tasks),
+        ] {
+            app.screen = screen;
+            app.focus = focus;
+            app.pane = pane;
+            app.selected = app.visible_len().saturating_sub(1);
+            for &(w, h) in &sizes {
+                for color in [true, false] {
+                    draw(&app, w, h, color);
+                }
+            }
+        }
+    }
+}
+
+/// Escape sequences in a commit subject or an error message are stripped
+/// before they reach the screen.
+#[test]
+fn control_characters_from_repositories_are_not_drawn() {
+    let mut app = hostile_app();
+    app.focus = Card::Repos;
+    for screen in [Screen::Overview, Screen::Repos] {
+        app.screen = screen;
+        let text = render_to_string(&app, 160, 50);
+        assert!(!text.contains('\u{1b}') && !text.contains('\u{7}'));
+    }
+}
+
+// ── Overlays (drawn on top of the overview) ──────────────────────────────────
 
 /// The "Open with…" picker lists detected openers with the default marked.
 #[test]
 fn snapshot_open_with() {
     use crate::app::{OpenWith, Opener};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::OpenWith;
     let openers = vec![
         Opener::Editor {
@@ -262,7 +671,7 @@ fn snapshot_open_with() {
         Opener::Lazygit,
     ];
     app.open_with = Some(OpenWith::new(openers, Some("code".to_string())));
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
 /// When PATH has no editor CLI, the picker shows a note explaining why and
@@ -270,11 +679,11 @@ fn snapshot_open_with() {
 #[test]
 fn snapshot_open_with_no_editor() {
     use crate::app::{OpenWith, Opener};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::OpenWith;
     let openers = vec![Opener::Reveal, Opener::Lazygit];
     app.open_with = Some(OpenWith::new(openers, None));
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
 /// The "push which branch?" picker lists a repo's local branches (current marked
@@ -283,7 +692,7 @@ fn snapshot_open_with_no_editor() {
 #[test]
 fn snapshot_push_branch() {
     use crate::app::PushPick;
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::PushBranch;
     let payments = app.repos.iter().find(|r| r.name == "payments").unwrap();
     app.push_pick = Some(PushPick {
@@ -292,142 +701,32 @@ fn snapshot_push_branch() {
         branches: payments.branches.clone(),
         cursor: 0,
     });
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
-/// On a compact terminal the footer's group boxes collapse to single columns
-/// (so the keys never clip) instead of falling back to a different layout.
-/// Even at an ultra-narrow width the stacked footer shows every hint (one per
-/// line if it must) — no lossy essentials fallback.
-#[test]
-fn snapshot_footer_ultra_narrow() {
-    let app = demo_app();
-    insta::assert_snapshot!(render_to_string(&app, 30, 30));
-}
-
-#[test]
-fn snapshot_footer_compact() {
-    let app = demo_app();
-    insta::assert_snapshot!(render_to_string(&app, 56, 22));
-}
-
-/// On a tall terminal the docked context pane appears below the list and
-/// shows the selected repo at a glance: why it wants attention, its
-/// changes/sync, and the last commit.
-#[test]
-fn snapshot_dock_idle() {
-    let mut app = demo_app();
-    app.selected = 1; // skip the unreadable repo that sorts to the top
-    insta::assert_snapshot!(render_to_string(&app, 120, 34));
-}
-
-/// ASCII icon mode (also the `NO_COLOR` fallback): the synced state renders as
-/// a steady "ok" word instead of a colour-only, blinking `●`, and a marked repo
-/// uses a `*` gutter instead of `●` — the multi-user portability path.
-#[test]
-fn snapshot_ascii_synced() {
-    let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
-    app.icons = cohors_config::IconMode::Ascii;
-    app.set_repos(vec![snap(
-        "in-sync",
-        Branch::Named("main".to_string()),
-        Some(("origin/main", 0, 0)),
-        (0, 0, 0),
-        0,
-        Some((NOW - 3600, "chore: nothing to do")),
-        None,
-    )]);
-    app.selection.insert(app.repos[0].id.clone()); // marked → `*` gutter
-    insta::assert_snapshot!(render_to_string(&app, 100, 34));
-}
-
-/// While a bulk action runs, the dock shows the in-flight repos with spinners
-/// instead of the cursor's repo.
-#[test]
-fn snapshot_dock_action() {
-    let mut app = demo_app();
-    app.busy.insert(app.repos[1].id.clone());
-    app.busy.insert(app.repos[2].id.clone());
-    insta::assert_snapshot!(render_to_string(&app, 100, 34));
-}
-
-/// A long commit message wraps across the dock's remaining lines instead of
-/// being truncated with an ellipsis.
-#[test]
-fn snapshot_dock_wraps_long_commit() {
-    let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
-    app.set_repos(vec![snap(
-        "load-tester",
-        Branch::Named("main".to_string()),
-        Some(("origin/main", 1, 0)),
-        (0, 0, 0),
-        0,
-        Some((
-            NOW - 7 * 86_400,
-            "chore: add load-test harnesses (mock origin, HTTP load driver, quota-RPC pgbench) + ignore results and refresh the CI perf matrix",
-        )),
-        None,
-    )]);
-    insta::assert_snapshot!(render_to_string(&app, 100, 34));
-}
-
-/// On a window too short for the whole fleet, the list shows a "… N more ↓"
-/// affordance on its bottom border.
-#[test]
-fn snapshot_repos_scroll_affordance() {
-    let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
-    app.set_repos(cohors_core::demo::fleet(NOW));
-    app.hints_hidden = true; // give the list room so some rows show and some overflow
-    // Short height so the 12-repo fleet overflows the viewport.
-    insta::assert_snapshot!(render_to_string(&app, 100, 18));
-}
-
-/// Scrolled to the end of the list, the "more" hint flips to the top
-/// (`↑ N more`), since the hidden repos are now above.
-#[test]
-fn snapshot_repos_scroll_at_bottom() {
-    let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
-    app.set_repos(cohors_core::demo::fleet(NOW));
-    app.hints_hidden = true;
-    app.selected = app.visible_len() - 1; // cursor at the last repo → scrolled down
-    insta::assert_snapshot!(render_to_string(&app, 100, 18));
-}
-
-/// Scrolled to the middle, both hints show at once — `↑ N more` below the
-/// header and `… N more ↓` at the bottom.
-#[test]
-fn snapshot_repos_scroll_middle() {
-    let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
-    app.set_repos(cohors_core::demo::fleet(NOW));
-    app.hints_hidden = true;
-    // Far enough down that some repos are hidden above *and* below.
-    app.selected = app.visible_len().saturating_sub(4);
-    insta::assert_snapshot!(render_to_string(&app, 100, 18));
-}
-
-/// Command mode shows a `:` input line in the top strip.
+/// Command mode shows a `:` input line and the cheat sheet of verbs.
 #[test]
 fn snapshot_command_mode() {
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Command;
     app.command_line = "sort name".to_string();
-    insta::assert_snapshot!(render_to_string(&app, 100, 22));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
 /// Shell mode (opened with `!`) collapses the sheet to just the shell row.
 #[test]
 fn snapshot_command_mode_shell() {
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Command;
     app.command_line = "!git checkout main".to_string();
-    insta::assert_snapshot!(render_to_string(&app, 100, 22));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
-/// The drill-in detail pane renders its sections (commits/changes/branches).
+/// The full drill-in renders its sections (commits/changes/branches).
 #[test]
 fn snapshot_detail() {
     use crate::app::DetailView;
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Detail;
     let id = app.repos[0].id.clone();
     let mut dv = DetailView::new(id, "payments".to_string());
@@ -436,12 +735,12 @@ fn snapshot_detail() {
     insta::assert_snapshot!(render_to_string(&app, 100, 28));
 }
 
-/// Detail with GitHub data: the PR + contributor sections populated.
+/// The drill-in with GitHub data: the PR + contributor sections populated.
 #[test]
 fn snapshot_detail_with_remote() {
     use crate::app::DetailView;
     use cohors_core::{Contributor, PullRequest, RemoteDetail};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Detail;
     let id = app.repos[0].id.clone();
     let mut dv = DetailView::new(id, "payments".to_string());
@@ -487,26 +786,10 @@ fn snapshot_detail_with_remote() {
     insta::assert_snapshot!(render_to_string(&app, 100, 28));
 }
 
-/// The `cohors demo` fleet renders end-to-end (validates the demo data path).
-#[test]
-fn snapshot_demo_fleet() {
-    let mut app = App::new(vec!["(demo)".to_string()], "(demo)".to_string());
-    app.set_repos(cohors_core::demo::fleet(NOW));
-    insta::assert_snapshot!(render_to_string(&app, 100, 26));
-}
-
-#[test]
-fn snapshot_multiselect() {
-    let mut app = demo_app();
-    app.selection.insert(RepoId("payments".to_string()));
-    app.selection.insert(RepoId("web-app".to_string()));
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
-}
-
 #[test]
 fn snapshot_confirm_stash() {
     use crate::app::{ConfirmAction, Pending};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.selection.insert(RepoId("payments".to_string()));
     app.selection.insert(RepoId("web-app".to_string()));
     app.mode = Mode::Confirm;
@@ -517,13 +800,13 @@ fn snapshot_confirm_stash() {
             RepoId("web-app".to_string()),
         ]),
     });
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
 #[test]
 fn snapshot_command_run_running() {
     use crate::app::{CommandRun, RunResult};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::CommandRun;
     app.run = Some(CommandRun::new(
         1,
@@ -550,13 +833,13 @@ fn snapshot_command_run_running() {
             },
         ],
     ));
-    insta::assert_snapshot!(render_to_string(&app, 100, 22));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
 #[test]
 fn snapshot_command_run_finished() {
     use crate::app::{CommandRun, RunResult};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::CommandRun;
     let mut run = CommandRun::new(
         2,
@@ -584,90 +867,33 @@ fn snapshot_command_run_finished() {
     );
     run.focus = 1; // the failing repo, so its stderr shows
     app.run = Some(run);
-    insta::assert_snapshot!(render_to_string(&app, 100, 22));
-}
-
-#[test]
-fn snapshot_dirty_only() {
-    let mut app = demo_app();
-    app.dirty_only = true;
-    insta::assert_snapshot!(render_to_string(&app, 100, 20));
-}
-
-#[test]
-fn snapshot_filtered() {
-    let mut app = demo_app();
-    app.mode = Mode::Filter;
-    app.filter = "pay".to_string();
     insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
-/// A just-opened filter (empty query): the boxed input inside the repos panel
-/// shows its muted placeholder above the column headers.
-#[test]
-fn snapshot_filter_empty() {
-    let mut app = demo_app();
-    app.mode = Mode::Filter;
-    insta::assert_snapshot!(render_to_string(&app, 100, 24));
-}
-
-/// The footer hint bar washes its *inner* cells with the faint brand-purple card
-/// colour, but never the box outline (styles aren't captured by the symbol
-/// snapshots, so assert both directly).
-#[test]
-fn footer_hint_bar_wash_stays_inside_the_outline() {
-    let app = demo_app();
-    let backend = TestBackend::new(100, 24);
-    let mut terminal = Terminal::new(backend).unwrap();
-    terminal.draw(|f| render(f, &app, NOW)).unwrap();
-    let buf = terminal.backend().buffer();
-    let wash = Color::Rgb(0xF8, 0xEF, 0xF5);
-
-    // The inner hints carry the wash...
-    let has_wash = (0..buf.area.height)
-        .any(|y| (0..buf.area.width).any(|x| buf.cell((x, y)).is_some_and(|c| c.bg == wash)));
-    assert!(has_wash, "footer hints should carry the purple wash");
-
-    // ...but the box outline stays clean — the footer spans the full width, so its
-    // bottom-left corner (last row, column 0) is a border cell that must not wash.
-    let corner = buf.cell((0, buf.area.height - 1)).unwrap();
-    assert_ne!(corner.bg, wash, "the wash must not bleed onto the outline");
-}
-
-/// In a dark terminal the cards flip to a dark wash (so the native accent colours
-/// read), never the light one.
-#[test]
-fn footer_hint_bar_uses_the_dark_wash_in_dark_mode() {
-    let mut app = demo_app();
-    app.dark = true;
-    let backend = TestBackend::new(100, 24);
-    let mut terminal = Terminal::new(backend).unwrap();
-    terminal.draw(|f| render(f, &app, NOW)).unwrap();
-    let buf = terminal.backend().buffer();
-    let dark = Color::Rgb(0x2B, 0x1C, 0x31);
-    let light = Color::Rgb(0xF8, 0xEF, 0xF5);
-    let any_bg = |want: Color| {
-        (0..buf.area.height)
-            .any(|y| (0..buf.area.width).any(|x| buf.cell((x, y)).is_some_and(|c| c.bg == want)))
-    };
-    assert!(any_bg(dark), "dark mode should use the dark purple wash");
-    assert!(!any_bg(light), "dark mode must not use the light wash");
-}
-
+/// The help overlay: the marks and the whole keymap.
 #[test]
 fn snapshot_help() {
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Help;
     // Tall enough that the whole help fits, so the box collapses to its
     // content (no trailing whitespace) rather than being capped + clipped.
-    insta::assert_snapshot!(render_to_string(&app, 100, 64));
+    insta::assert_snapshot!(render_to_string(&app, 120, 50));
+}
+
+/// Every key the help overlay promises has to fit on a 45-row terminal too.
+#[test]
+fn the_help_fits_a_45_row_terminal() {
+    let mut app = small_app();
+    app.mode = Mode::Help;
+    let screen = render_to_string(&app, 120, 45);
+    assert!(screen.contains("config:"), "the last help line is cut off");
 }
 
 #[test]
 fn snapshot_standup() {
     use crate::app::StandupView;
     use cohors_core::{StandupCommit, StandupWindow};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Standup;
     app.standup_window = StandupWindow::Week;
     // payments (most active) sorts first; its commits overflow the pane,
@@ -695,7 +921,7 @@ fn snapshot_standup() {
     view.commits_focused = true;
     view.commit_cursor = 20;
     app.standup = Some(view);
-    insta::assert_snapshot!(render_to_string(&app, 100, 22));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
 /// On a narrow terminal the standup's two panes stack (Repos box on top,
@@ -704,7 +930,7 @@ fn snapshot_standup() {
 fn snapshot_standup_narrow_stacked() {
     use crate::app::StandupView;
     use cohors_core::{StandupCommit, StandupWindow};
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Standup;
     app.standup_window = StandupWindow::Week;
     let mut commits = Vec::new();
@@ -729,8 +955,16 @@ fn snapshot_standup_narrow_stacked() {
 }
 
 #[test]
+fn snapshot_standup_collecting() {
+    let mut app = small_app();
+    app.mode = Mode::Standup;
+    app.standup = None;
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
+}
+
+#[test]
 fn snapshot_launchpad() {
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Launchpad;
     let (entries, board) = cohors_core::launchpad::demo();
     app.launchpad = Some(crate::app::LaunchpadView::new(entries, board));
@@ -739,45 +973,36 @@ fn snapshot_launchpad() {
 
 #[test]
 fn snapshot_launchpad_loading() {
-    let mut app = demo_app();
+    let mut app = small_app();
     app.mode = Mode::Launchpad;
     app.launchpad = None;
-    insta::assert_snapshot!(render_to_string(&app, 100, 18));
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
 }
 
+/// Enter on a repository in the tasks card opens the launchpad at that
+/// repository's block, not at the top.
 #[test]
-fn snapshot_standup_collecting() {
-    let mut app = demo_app();
-    app.mode = Mode::Standup;
-    app.standup = None;
-    insta::assert_snapshot!(render_to_string(&app, 100, 18));
-}
-
-#[test]
-fn snapshot_empty() {
-    let app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
-    insta::assert_snapshot!(render_to_string(&app, 100, 30));
-}
-
-/// Empty fleet, but repos detected elsewhere: the first-run rescue prompt.
-#[test]
-fn snapshot_empty_picker() {
-    let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
-    app.suggested_roots = vec!["~/code".to_string(), "~/work".to_string()];
-    insta::assert_snapshot!(render_to_string(&app, 100, 30));
-}
-
-#[test]
-fn snapshot_loading() {
-    let mut app = App::new(vec!["~/projects".to_string()], "cfg".to_string());
-    app.scanning = true;
-    insta::assert_snapshot!(render_to_string(&app, 100, 12));
+fn the_launchpad_can_open_on_a_repository() {
+    let (entries, board) = cohors_core::launchpad::demo();
+    let with_tasks: Vec<String> = entries
+        .iter()
+        .filter(|e| !e.open_tasks().is_empty())
+        .map(|e| e.name.clone())
+        .collect();
+    let view = crate::app::LaunchpadView::new(entries, board);
+    let lines: Vec<usize> = with_tasks
+        .iter()
+        .map(|name| launchpad_line_of(&view, name).expect("a block for every repo with tasks"))
+        .collect();
+    // Blocks come one after another, further down each time.
+    assert!(lines.windows(2).all(|pair| pair[0] < pair[1]), "{lines:?}");
+    assert_eq!(launchpad_line_of(&view, "no-such-repository"), None);
 }
 
 /// The header leads with the root holding the most repos, and ties (or no
 /// matching repos) keep the first configured root.
 #[test]
-fn header_dir_leads_with_the_busiest_root() {
+fn header_roots_lead_with_the_busiest_root() {
     let repo_at = |name: &str, path: &str| {
         let mut r = snap(
             name,
@@ -796,15 +1021,15 @@ fn header_dir_leads_with_the_busiest_root() {
         vec!["/srv/projects".to_string(), "/srv/work".to_string()],
         "cfg".to_string(),
     );
-    // More repos under the second root → it leads; the other counts as "(+1)".
+    // More repos under the second root → it leads; the other is "+1 more".
     app.repos = vec![
         repo_at("a", "/srv/projects/a"),
         repo_at("b", "/srv/work/b"),
         repo_at("c", "/srv/work/c"),
     ];
-    assert_eq!(header_dir(&app), "/srv/work (+1)");
+    assert_eq!(overview::header_roots(&app), "/srv/work (+1 more)");
 
     // A tie (here, no repo under either root) keeps the first configured root.
     app.repos = vec![repo_at("x", "/elsewhere/x")];
-    assert_eq!(header_dir(&app), "/srv/projects (+1)");
+    assert_eq!(overview::header_roots(&app), "/srv/projects (+1 more)");
 }

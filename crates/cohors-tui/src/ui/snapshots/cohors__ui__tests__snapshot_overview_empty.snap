@@ -1,0 +1,49 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 120, 45)"
+---
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛   cohors  your git fleet                                                                                   │
+│ ▟██▌█▐██▙   ~/projects                                                                                               │
+│ ▀▐▖▀█▀▗▌▀   No repositories found.                                           scanned 2m ago                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ No repositories found ──────────────────────────────────────────────────────────────────────────────────────────────╮
+│ cohors found no git repositories under ~/projects.                                                                   │
+│                                                                                                                      │
+│ To point cohors at your projects:                                                                                    │
+│   cohors --root ~/code   look in one folder, this run only                                                           │
+│   or add the folder to roots in ~/.config/cohors/config.toml                                                         │
+│                                                                                                                      │
+│   r  scan again      q  quit                                                                                         │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

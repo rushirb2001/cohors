@@ -1,30 +1,35 @@
-//! Rendering. Pure view-model → widgets: every frame derives the visible rows
-//! from [`App::view`] (i.e. `cohors-core`) and maps them onto ratatui widgets.
-//! No state is mutated here.
+//! Rendering. Pure view-model → widgets: every frame reads the state in
+//! [`App`] (the shared overview model and the repository snapshots) and maps it
+//! onto ratatui widgets. Apart from remembered scroll offsets, no state is
+//! mutated here.
+//!
+//! The dashboard is two screens with overlays on top:
+//!
+//! - `overview` — the screen cohors opens on: header, key figures, five cards.
+//! - `detail_list` — every repository as a two-line list, plus three cards
+//!   about the selected one.
+//! - `modals`, `launchpad`, `chrome` — the overlays (help, standup, the full
+//!   repository drill-in, confirmations, the command line) and their frames.
+//!
+//! Shared pieces: `cards` (the card frame and scrolling lists), `repos_table`
+//! (the repository table both screens use), `layout` (pure sizing decisions)
+//! and `text` (pure clipping and wording helpers).
 
-pub(crate) use cohors_core::{
-    AttentionReason, Branch, CiStatus, FleetSummary, RepoSnapshot, Severity, StandupCommit, assess,
-    fleet_summary, time,
-};
+pub(crate) use cohors_core::{Branch, RepoSnapshot, Severity, StandupCommit, assess, time};
 pub(crate) use ratatui::Frame;
 pub(crate) use ratatui::buffer::Buffer;
 pub(crate) use ratatui::layout::{Alignment, Constraint, Layout, Rect};
 pub(crate) use ratatui::style::{Color, Modifier, Style, Stylize};
 pub(crate) use ratatui::text::{Line, Span, Text};
 pub(crate) use ratatui::widgets::{
-    Block, BorderType, Cell, Clear, List, ListItem, ListState, Padding, Paragraph, Row, Scrollbar,
-    ScrollbarOrientation, ScrollbarState, Table, TableState, Wrap,
+    Block, BorderType, Clear, List, ListItem, ListState, Padding, Paragraph, Scrollbar,
+    ScrollbarOrientation, ScrollbarState, Wrap,
 };
 
 pub(crate) use crate::app::{App, ConfirmAction, Mode, Opener, RunState};
 pub(crate) use crate::glyphs::Glyphs;
 
-/// Spinner frames (braille) for the scan indicator.
-pub(crate) const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-
-pub(crate) fn spinner_frame(tick: usize) -> &'static str {
-    SPINNER[tick % SPINNER.len()]
-}
+use crate::app::Screen;
 
 /// Color policy. Colors are dropped when `NO_COLOR` is set; structural
 /// modifiers (dim/bold/reversed) are kept so the layout still reads. Also carries
@@ -32,15 +37,21 @@ pub(crate) fn spinner_frame(tick: usize) -> &'static str {
 /// truth (with ASCII fallback under `NO_COLOR`).
 pub(crate) struct Theme {
     color: bool,
-    /// Whether the terminal has a dark background, so the cards flip to a dark
-    /// wash (letting the native accent colours read) instead of a light one.
+    /// Whether the terminal has a dark background, so washes flip to a dark
+    /// tint (letting the native accent colours read) instead of a light one.
     dark: bool,
     glyphs: Glyphs,
 }
 
 impl Theme {
+    /// The theme for this run: colour is on unless `NO_COLOR` is set.
     fn from_env(icons: cohors_config::IconMode, dark: bool) -> Self {
-        let color = std::env::var_os("NO_COLOR").is_none();
+        Self::new(icons, dark, std::env::var_os("NO_COLOR").is_none())
+    }
+
+    /// A theme with colour explicitly on or off (tests use this to render the
+    /// `NO_COLOR` variant without touching the environment).
+    pub(crate) fn new(icons: cohors_config::IconMode, dark: bool, color: bool) -> Self {
         Self {
             color,
             dark,
@@ -56,7 +67,13 @@ impl Theme {
         }
     }
 
-    /// Bronze — the colour of structure: panel titles, overlay titles, section
+    /// The accent: the brand purple. It marks the focused card, the keys that
+    /// act, and the bars. Dropped under `NO_COLOR`, where shape does the work.
+    fn accent(&self) -> Style {
+        self.fg(SPIDER_PURPLE)
+    }
+
+    /// Bronze — the colour of structure in the overlays: titles and section
     /// headings. A lighter bronze on dark terminals, a deeper one on light.
     fn bronze(&self) -> Style {
         if self.dark {
@@ -96,9 +113,6 @@ impl Theme {
     fn ahead(&self) -> Style {
         self.fg(Color::Cyan)
     }
-    fn behind(&self) -> Style {
-        self.fg(Color::Yellow)
-    }
     fn detached(&self) -> Style {
         self.fg(Color::Magenta)
     }
@@ -117,46 +131,10 @@ impl Theme {
     fn ok(&self) -> Style {
         self.fg(Color::Green)
     }
-    /// The docked context pane's card wash: a light grey background with a
-    /// dark base foreground. Setting BOTH keeps the card readable on any
-    /// terminal theme (spans that pick their own fg still patch over it).
-    /// Dropped entirely under NO_COLOR.
-    fn dock_card(&self) -> Style {
-        if !self.color {
-            Style::new()
-        } else if self.dark {
-            // Dark terminal: a dark-grey card with a light base fg, so the native
-            // accent colours (green / yellow / cyan) read as they do off-card.
-            Style::new().bg(Color::Indexed(236)).fg(Color::Indexed(253))
-        } else {
-            Style::new().bg(Color::Indexed(255)).fg(Color::Indexed(235))
-        }
-    }
 
-    /// The footer hint bar's card wash: the same idea as [`Self::dock_card`], but
-    /// nudged toward the brand — a faint purple (~6% `SPIDER_PURPLE` over white),
-    /// with the same dark base fg so keys/labels stay readable on any terminal
-    /// theme (accent spans patch their own colour over it). Dropped under NO_COLOR.
-    fn hint_card(&self) -> Style {
-        if !self.color {
-            Style::new()
-        } else if self.dark {
-            // Dark terminal: a dark purple wash + light base fg, so the native
-            // accent colours read while the brand tint stays present.
-            Style::new()
-                .bg(Color::Rgb(0x2B, 0x1C, 0x31))
-                .fg(Color::Indexed(253))
-        } else {
-            Style::new()
-                .bg(Color::Rgb(0xF8, 0xEF, 0xF5))
-                .fg(Color::Indexed(235))
-        }
-    }
-
-    /// The selected-row wash: a soft, dark-adaptive brand tint rather than a full
-    /// reverse — so a multi-line (multi-branch) row doesn't become a harsh block,
-    /// and dim cells (PRs, activity) stay legible on the highlight (reverse turns
-    /// dim text invisible). Under NO_COLOR it falls back to reverse, the only
+    /// The cursor row's wash: a soft, dark-adaptive brand tint rather than a
+    /// full reverse, so dim cells stay legible on it (reverse turns dim text
+    /// invisible). Under `NO_COLOR` it falls back to reverse, the only
     /// structural way to mark a row.
     fn selection(&self) -> Style {
         if !self.color {
@@ -173,88 +151,77 @@ impl Theme {
 /// so relative commit ages are deterministic in tests.
 pub fn render(frame: &mut Frame, app: &App, now: i64) {
     let theme = Theme::from_env(app.icons, app.dark);
+    render_with(frame, app, now, &theme);
+}
+
+/// [`render`] with an explicit theme.
+pub(crate) fn render_with(frame: &mut Frame, app: &App, now: i64, theme: &Theme) {
     let area = frame.area();
+    // Too small to lay anything out sensibly: say so, rather than garble.
+    if !layout::fits(area.width, area.height) {
+        render_too_small(frame, area, theme);
+        return;
+    }
 
-    // Top-level layout: the branded header box, the body, and a boxed key-hint
-    // footer — one labelled group per row, each wrapping if the terminal is
-    // narrow, so no command is ever truncated.
-    let footer_h = footer_height(app, area.width);
-    let [header_area, body_area, footer_area] = Layout::vertical([
-        Constraint::Length(5),
-        Constraint::Min(0),
-        Constraint::Length(footer_h),
-    ])
-    .areas(area);
-    render_header(frame, header_area, app, &theme);
-    render_footer(frame, footer_area, app, &theme);
-
-    if app.repos.is_empty() {
-        if app.scanning {
-            render_loading(frame, body_area, app);
-        } else {
-            render_empty(frame, body_area, app, &theme);
-        }
-    } else {
-        // The Attention panel on top, then the Repositories panel (which hosts the
-        // context pane, and the fuzzy filter input, inside its own box). With
-        // vertical room the attention panel is its full-width card (severity bar +
-        // bucket counts); on a short terminal it collapses to a single bucket line.
-        // The attention card stays put while filtering — only the filter input box
-        // appears (inside the repos panel), so `/` doesn't reshuffle the layout.
-        let strip_height = if body_area.height >= 14 { 4 } else { 3 };
-        let [strip, rest] =
-            Layout::vertical([Constraint::Length(strip_height), Constraint::Min(0)])
-                .areas(body_area);
-        render_attention_panel(frame, strip, app, now, &theme);
-        render_repos_panel(frame, rest, app, now, &theme);
+    match app.screen {
+        Screen::Overview => overview::render_overview(frame, area, app, now, theme),
+        Screen::Repos => detail_list::render_detail_view(frame, area, app, now, theme),
     }
 
     // Dim the whole frame behind a modal overlay so the background recedes and
     // the overlay stands out. The overlays `Clear` their own area, so they
     // render crisp on top of the dimmed background.
-    let overlay_open = matches!(
-        app.mode,
-        Mode::Help
-            | Mode::Standup
-            | Mode::Command
-            | Mode::CommandRun
-            | Mode::Confirm
-            | Mode::OpenWith
-            | Mode::PushBranch
-            | Mode::Detail
-            | Mode::Launchpad
-    );
+    let overlay_open = !matches!(app.mode, Mode::Normal | Mode::Filter);
     if overlay_open {
         dim_area(frame.buffer_mut(), area);
     }
 
-    if app.mode == Mode::Help {
-        render_help(frame, area, app, &theme);
+    match app.mode {
+        Mode::Normal | Mode::Filter => {}
+        Mode::Help => render_help(frame, area, app, theme),
+        Mode::Standup => render_standup(frame, area, app, theme),
+        Mode::Command => render_command_box(frame, area, app, theme),
+        Mode::CommandRun => render_command_run(frame, area, app, theme),
+        Mode::Confirm => render_confirm(frame, area, app, theme),
+        Mode::OpenWith => render_open_with(frame, area, app, theme),
+        Mode::PushBranch => render_push_branch(frame, area, app, theme),
+        Mode::Detail => render_detail(frame, area, app, now, theme),
+        Mode::Launchpad => render_launchpad(frame, area, app, theme),
     }
-    if app.mode == Mode::Standup {
-        render_standup(frame, area, app, &theme);
-    }
-    if app.mode == Mode::Command {
-        render_command_box(frame, area, app, &theme);
-    }
-    if app.mode == Mode::CommandRun {
-        render_command_run(frame, area, app, &theme);
-    }
-    if app.mode == Mode::Confirm {
-        render_confirm(frame, area, app, &theme);
-    }
-    if app.mode == Mode::OpenWith {
-        render_open_with(frame, area, app, &theme);
-    }
-    if app.mode == Mode::PushBranch {
-        render_push_branch(frame, area, app, &theme);
-    }
-    if app.mode == Mode::Detail {
-        render_detail(frame, area, app, now, &theme);
-    }
-    if app.mode == Mode::Launchpad {
-        render_launchpad(frame, area, app, &theme);
-    }
+}
+
+/// What a terminal too small for the dashboard shows instead of it.
+fn render_too_small(frame: &mut Frame, area: Rect, theme: &Theme) {
+    let lines = vec![
+        Line::from(Span::styled(
+            "Terminal too small",
+            Style::new().add_modifier(Modifier::BOLD),
+        )),
+        Line::from(Span::styled(
+            format!(
+                "cohors needs {}x{}, this is {}x{}.",
+                layout::MIN_WIDTH,
+                layout::MIN_HEIGHT,
+                area.width,
+                area.height
+            ),
+            theme.dim(),
+        )),
+        Line::from(Span::styled(
+            "Enlarge the window, or q to quit.",
+            theme.dim(),
+        )),
+    ];
+    let height = (lines.len() as u16).min(area.height);
+    let centered = Rect {
+        y: area.y + (area.height - height) / 2,
+        height,
+        ..area
+    };
+    frame.render_widget(
+        Paragraph::new(Text::from(lines)).alignment(Alignment::Center),
+        centered,
+    );
 }
 
 /// Dim every cell in `area` (keeps its colours, adds the DIM attribute) — used
@@ -270,15 +237,13 @@ pub(crate) fn dim_area(buf: &mut Buffer, area: Rect) {
     }
 }
 
-/// The branded header: a logo lockup — a shield mark built from block glyphs
-/// beside the wordmark, version, and tagline. cohors's "business card."
-/// Transient feedback lives in a self-dismissing toast, not here.
 /// The brand colour for the spider mark: Tyrian purple, lifted enough to read
 /// on both dark and light terminals. Dropped under `NO_COLOR` via [`Theme::fg`].
 pub(crate) const SPIDER_PURPLE: Color = Color::Rgb(0xB5, 0x5C, 0xA4);
 
-/// The frame of every panel and overlay: a double rule, the "Standard" look.
-/// Rules drawn inside a frame join it with `╟ ╢ ╤ ╧`.
+/// The frame of every overlay: a double rule, which sets an overlay apart
+/// from the rounded cards underneath it. Rules drawn inside a frame join it
+/// with `╟ ╢ ╤ ╧`.
 pub(crate) const FRAME: BorderType = BorderType::Double;
 
 /// The cohors mark — three rows of block "pixels" (width 9). Shared by the TUI
@@ -306,18 +271,19 @@ pub(crate) fn version_str() -> &'static str {
 /// with [`SPIDER_PURPLE`] by construction.
 pub(crate) const SPIDER_PURPLE_RGB: (u8, u8, u8) = (0xB5, 0x5C, 0xA4);
 
-// The UI is one module split across focused files: `chrome` (header, footer,
-// attention panel, command box), `rows` (the repos table, its cells, and the
-// dock), and `modals` (detail, help, standup, confirm, run output). Items are
-// pub(crate) and re-exported here so the split stays invisible to callers.
+mod cards;
 mod chrome;
+mod detail_list;
 mod launchpad;
+mod layout;
 mod modals;
-mod rows;
+mod overview;
+mod repos_table;
 #[cfg(test)]
 mod tests;
+mod text;
 
 pub(crate) use chrome::*;
-pub(crate) use launchpad::render_launchpad;
+pub(crate) use launchpad::{launchpad_line_of, render_launchpad};
 pub(crate) use modals::*;
-pub(crate) use rows::*;
+pub(crate) use text::abbrev_home;

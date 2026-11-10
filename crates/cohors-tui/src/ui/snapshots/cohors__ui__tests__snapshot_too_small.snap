@@ -1,0 +1,10 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&fleet_app(), 40, 10)"
+---
+                                        
+                                        
+                                        
+           Terminal too small           
+   cohors needs 48x12, this is 40x10.   
+    Enlarge the window, or q to quit.

@@ -1,24 +1,28 @@
 ---
 source: crates/cohors-tui/src/ui/tests.rs
-expression: "render_to_string(&app, 100, 20)"
+expression: "render_to_string(&app, 100, 24)"
 ---
-╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
-║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ ║
-║ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        ║
-╚══════════════════════════════════════════════════════════════════════════════════════════════════╝
-╔ Attention (4 of 5 repo╔══════════════════════════════════════════════════╗═══════════════════════╗
-║ 1 at risk · 2 warning ║ Open legacy-billing with…                        ║                       ║
-╚═══════════════════════╟──────────────────────────────────────────────────╢═══════════════════════╝
-╔ Repositories (5) · sor║ VS Code  · default                               ║═══════════════════════╗
-║    Repo               ║ Neovim                                           ║tus                    ║
-║                       ║ Reveal in file manager                           ║                       ║
-╚═══════════════════════║ Open in lazygit                                  ║═══════════════════════╝
-────────────────────────╟──────────────────────────────────────────────────╢────────────────────────
-╔═══════════════════════║ ↑/↓ choose · ⏎ open · d set default · Esc cancel ║═══════════════════════╗
-║             select    ╚══════════════════════════════════════════════════╝    view               ║
-║ ─────────────────────────────── │ ──────────────────────────── │ ─────────────────────────────── ║
-║     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       ║
-║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
-║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
-╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝
+ cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
+ 1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────╮
+│▸▲  e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.   │
+│ ◆  P  Push 2 commits from 1 repository             They exist only on this machine: payments.    │
+│ ○  p  Pull 1 repository that is behind             A fast-forward pull cannot lose work: web-ap… │
+│ ○  c  Commit or discard 15 uncommitted files       In 3 repositories. Largest: web-app with 7.   │
+╰───────────────────────╔══════════════════════════════════════════════════╗───────────────────────╯
+╭─  2  ▲ Work at risk  3║ Open legacy-billing with…                        ║───────────────────────╮
+│ ▲ legacy-billing    (n╟──────────────────────────────────────────────────╢                       │
+│ ◆ payments          ma║ VS Code  · default                               ║es, 1 sta…    2h  Push │
+│ ◆ web-app           fe║ Neovim                                           ║             20m  Pull │
+╰─  ⏎  open   e  unreada║ Reveal in file manager                           ║───────────────────────╯
+╭─  3  ✓ Open tasks  0 ─║ Open in lazygit                                  ║───────────────────────╮
+│ No launchpad files yet╟──────────────────────────────────────────────────╢                       │
+│ here once a repository║ ↑/↓ choose · ⏎ open · d set default · Esc cancel ║                       │
+╰─  t  board   ⏎  tasks ╚══════════════════════════════════════════════════╝wn  ───────────────────╯
+╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────╮
+│   repository             branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
+│ ▲ legacy-billing         unreadab…                                                  could not r… │
+│ ◆ payments               main      ↑2              0    3    1      1      0    2h  fix: retry … │
+│   ↓ 3 more                                                                                       │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

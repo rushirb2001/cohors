@@ -1,0 +1,317 @@
+//! The card: the one container every part of the dashboard is drawn in.
+//!
+//! A card is a rounded frame whose top border carries its title (with the
+//! number key that focuses it) and whose bottom border lists the keys that act
+//! on it. The focused card gets the accent colour; where colour is off it gets
+//! a heavier frame instead, so focus never depends on colour alone.
+//!
+//! This module also draws the scrolling lists that live inside cards, because
+//! every list shares the same rules: a cursor mark in the gutter, a washed
+//! background on the cursor row, and an "N more" line when rows are hidden.
+
+use super::layout::ListWindow;
+use super::*;
+
+/// One key hint on a card's bottom border: the key, then what it does.
+pub(crate) struct Hint {
+    pub key: String,
+    pub label: String,
+}
+
+pub(crate) fn hint(key: &str, label: &str) -> Hint {
+    Hint {
+        key: key.to_string(),
+        label: label.to_string(),
+    }
+}
+
+/// What to draw around a card's content.
+#[derive(Default)]
+pub(crate) struct CardFrame {
+    /// The number key that focuses the card, shown in the title.
+    pub number: Option<u8>,
+    /// The title text, after the number and the icon.
+    pub title: Vec<Span<'static>>,
+    /// Keys that act on the card, listed on the bottom border.
+    pub hints: Vec<Hint>,
+    pub focused: bool,
+}
+
+/// Where a card's content goes: `text` is the area inside the frame with one
+/// column of padding on each side, and `gutter_x` is the left padding column,
+/// which lists use for the cursor mark.
+#[derive(Clone, Copy)]
+pub(crate) struct CardArea {
+    pub gutter_x: u16,
+    pub text: Rect,
+}
+
+impl CardArea {
+    /// The text width in columns, as a `usize` for string arithmetic.
+    pub(crate) fn width(&self) -> usize {
+        self.text.width as usize
+    }
+
+    /// The same area without its first `rows` lines (e.g. below a table header).
+    pub(crate) fn below(&self, rows: u16) -> CardArea {
+        let rows = rows.min(self.text.height);
+        CardArea {
+            gutter_x: self.gutter_x,
+            text: Rect {
+                y: self.text.y + rows,
+                height: self.text.height - rows,
+                ..self.text
+            },
+        }
+    }
+}
+
+/// Draw a card's frame into `area` and return where its content goes.
+pub(crate) fn draw_card(
+    frame: &mut Frame,
+    area: Rect,
+    card: &CardFrame,
+    theme: &Theme,
+) -> CardArea {
+    // Without colour the focused card is told apart by a heavier frame.
+    let heavy = card.focused && !theme.color;
+    let set = theme.glyphs.card_border(heavy);
+    let border_style = if card.focused {
+        theme.accent().add_modifier(Modifier::BOLD)
+    } else {
+        theme.dim()
+    };
+
+    let mut block = Block::bordered().border_set(set).border_style(border_style);
+    if card.number.is_some() || !card.title.is_empty() {
+        block = block.title_top(title_line(card, set.horizontal_top, border_style, theme));
+    }
+    if !card.hints.is_empty() {
+        block = block.title_bottom(hints_line(
+            &card.hints,
+            area.width,
+            set.horizontal_bottom,
+            border_style,
+            theme,
+        ));
+    }
+    frame.render_widget(block, area);
+
+    CardArea {
+        gutter_x: area.x.saturating_add(1),
+        text: Rect {
+            x: area.x.saturating_add(2),
+            y: area.y.saturating_add(1),
+            width: area.width.saturating_sub(4),
+            height: area.height.saturating_sub(2),
+        },
+    }
+}
+
+/// The title on the top border: `─  1  ▶ Do next  5 ` (the leading rule is
+/// part of the title so the text sits two columns in from the corner).
+fn title_line(card: &CardFrame, rule: &str, border: Style, theme: &Theme) -> Line<'static> {
+    let mut spans = vec![Span::styled(rule.to_string(), border)];
+    match card.number {
+        Some(number) => {
+            let key_style = if card.focused {
+                theme.accent().add_modifier(Modifier::BOLD)
+            } else {
+                Style::new().add_modifier(Modifier::BOLD)
+            };
+            spans.push(Span::styled(format!("  {number}  "), key_style));
+            let icon = theme.glyphs.card_icon(number);
+            if !icon.is_empty() {
+                spans.push(Span::styled(format!("{icon} "), border));
+            }
+        }
+        None => spans.push(Span::raw(" ")),
+    }
+    spans.extend(card.title.iter().cloned());
+    spans.push(Span::raw(" "));
+    Line::from(spans)
+}
+
+/// The key hints on the bottom border: `─  ⏎  open   f  fetch  `. Only whole
+/// hints are shown; the ones that do not fit are left off rather than cut in
+/// half (they are all listed in the help overlay).
+fn hints_line(
+    hints: &[Hint],
+    card_width: u16,
+    rule: &str,
+    border: Style,
+    theme: &Theme,
+) -> Line<'static> {
+    // Corners (2), the leading rule (1), two spaces each side of the hints,
+    // and at least one rule before the right corner.
+    let mut room = (card_width as usize).saturating_sub(2 + 1 + 2 + 2 + 1);
+    let key_style = Style::new().add_modifier(Modifier::BOLD);
+    let mut spans = vec![Span::styled(rule.to_string(), border), Span::raw("  ")];
+    let mut shown = 0;
+    for hint in hints {
+        let gap = if shown == 0 { 0 } else { 3 };
+        let width = gap + hint.key.chars().count() + 2 + hint.label.chars().count();
+        if width > room {
+            break;
+        }
+        room -= width;
+        if gap > 0 {
+            spans.push(Span::raw("   "));
+        }
+        spans.push(Span::styled(hint.key.clone(), key_style));
+        spans.push(Span::styled(format!("  {}", hint.label), theme.dim()));
+        shown += 1;
+    }
+    if shown == 0 {
+        // Not even one hint fits: leave the border plain.
+        return Line::from(Span::styled(rule.to_string(), border));
+    }
+    spans.push(Span::raw("  "));
+    Line::from(spans)
+}
+
+/// One entry of a list: its line(s) of text, and optionally a mark for the
+/// gutter (a "marked for a bulk action" dot, or a spinner).
+pub(crate) struct Item {
+    pub lines: Vec<Line<'static>>,
+    pub gutter: Option<Span<'static>>,
+}
+
+impl Item {
+    pub(crate) fn line(line: Line<'static>) -> Self {
+        Self {
+            lines: vec![line],
+            gutter: None,
+        }
+    }
+}
+
+/// Draw the visible part of a list into a card.
+///
+/// `window` says which entries are visible, `item_height` how many lines each
+/// takes, and `cursor` which entry (if any) the cursor is on. `build` is only
+/// called for the entries that are actually drawn.
+pub(crate) fn draw_list(
+    frame: &mut Frame,
+    area: CardArea,
+    window: ListWindow,
+    item_height: u16,
+    cursor: Option<usize>,
+    theme: &Theme,
+    mut build: impl FnMut(usize) -> Item,
+) {
+    let text = area.text;
+    for slot in 0..window.shown {
+        let index = window.offset + slot;
+        let y = text.y + slot as u16 * item_height;
+        if y + item_height > text.y + text.height {
+            break; // never draw outside the card
+        }
+        let item = build(index);
+        let on_cursor = cursor == Some(index);
+        if on_cursor {
+            // Wash the whole row, gutter and right padding included.
+            let row = Rect {
+                x: area.gutter_x,
+                y,
+                width: text.width + 2,
+                height: item_height,
+            };
+            frame.buffer_mut().set_style(row, theme.selection());
+        }
+        for (i, line) in item
+            .lines
+            .into_iter()
+            .take(item_height as usize)
+            .enumerate()
+        {
+            let line_area = Rect {
+                y: y + i as u16,
+                height: 1,
+                ..text
+            };
+            frame.render_widget(Paragraph::new(line), line_area);
+        }
+        let gutter = item.gutter.or_else(|| {
+            on_cursor.then(|| Span::styled(theme.glyphs.cursor(), theme.accent().bold()))
+        });
+        if let Some(mark) = gutter {
+            let cell = Rect {
+                x: area.gutter_x,
+                y,
+                width: 1,
+                height: 1,
+            };
+            frame.render_widget(Paragraph::new(mark), cell);
+        }
+    }
+    if window.clipped() {
+        let y = text.y + window.shown as u16 * item_height;
+        if y < text.y + text.height {
+            let note = Rect {
+                y,
+                height: 1,
+                ..text
+            };
+            frame.render_widget(Paragraph::new(more_line(window, theme)), note);
+        }
+    }
+}
+
+/// `  ↓ 16 more` — how many entries are hidden, and in which direction.
+fn more_line(window: ListWindow, theme: &Theme) -> Line<'static> {
+    let mut parts = Vec::new();
+    if window.below > 0 {
+        parts.push(format!(
+            "{} {} more",
+            theme.glyphs.more_arrow(true),
+            window.below
+        ));
+    }
+    if window.above > 0 {
+        parts.push(format!(
+            "{} {} above",
+            theme.glyphs.more_arrow(false),
+            window.above
+        ));
+    }
+    Line::from(Span::styled(
+        format!("  {}", parts.join("   ")),
+        theme.dim(),
+    ))
+}
+
+/// Draw plain lines into a card, top-aligned and clipped to it (used for the
+/// notes and empty states that are not lists).
+pub(crate) fn draw_lines(frame: &mut Frame, area: Rect, lines: Vec<Line<'static>>) {
+    frame.render_widget(Paragraph::new(Text::from(lines)), area);
+}
+
+/// A dim, word-wrapped message: what an empty card says.
+pub(crate) fn draw_message(frame: &mut Frame, area: Rect, message: &str, theme: &Theme) {
+    let lines: Vec<Line> = text::wrap(message, area.width as usize)
+        .into_iter()
+        .map(|line| Line::from(Span::styled(line, theme.dim())))
+        .collect();
+    draw_lines(frame, area, lines);
+}
+
+/// The style a severity is drawn in. The mark's shape already says which
+/// severity it is; the colour only reinforces it.
+pub(crate) fn severity_style(severity: Severity, theme: &Theme) -> Style {
+    match severity {
+        Severity::Ok => theme.dim(),
+        Severity::Info => theme.dim(),
+        Severity::Notice => theme.ahead(),
+        Severity::Warn => theme.warn(),
+        Severity::Risk => theme.risk(),
+    }
+}
+
+/// The severity mark as a styled span.
+pub(crate) fn severity_span(severity: Severity, theme: &Theme) -> Span<'static> {
+    Span::styled(
+        theme.glyphs.severity_mark(severity),
+        severity_style(severity, theme),
+    )
+}

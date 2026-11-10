@@ -12,7 +12,8 @@
 //!     assumed (most terminals don't ship a Nerd Font).
 
 use cohors_config::IconMode;
-use cohors_core::CiStatus;
+use cohors_core::Severity;
+use ratatui::symbols::border;
 
 /// The resolved rendering tier (no `Auto` — that decision has been made).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,7 +38,186 @@ impl Default for Glyphs {
     }
 }
 
+/// A card frame made of characters every terminal has.
+const ASCII_BORDER: border::Set<'static> = border::Set {
+    top_left: "+",
+    top_right: "+",
+    bottom_left: "+",
+    bottom_right: "+",
+    vertical_left: "|",
+    vertical_right: "|",
+    horizontal_top: "-",
+    horizontal_bottom: "-",
+};
+
+/// The focused card's frame in the Ascii tier: `=` rules and `#` corners.
+const ASCII_BORDER_HEAVY: border::Set<'static> = border::Set {
+    top_left: "#",
+    top_right: "#",
+    bottom_left: "#",
+    bottom_right: "#",
+    vertical_left: "|",
+    vertical_right: "|",
+    horizontal_top: "=",
+    horizontal_bottom: "=",
+};
+
 impl Glyphs {
+    // ── The card dashboard ───────────────────────────────────────────────────
+    // Every glyph the overview and the detail view draw goes through one of the
+    // methods in this first group, so the Ascii tier never emits a character a
+    // plain terminal cannot show.
+
+    /// The severity mark that leads a row. The *shape* carries the meaning, so
+    /// it still reads without colour: a triangle for work at risk, a diamond
+    /// for a warning, a ring for something to note, a dot for clean.
+    pub fn severity_mark(&self, severity: Severity) -> &'static str {
+        match (self.kind, severity) {
+            (IconKind::Ascii, Severity::Risk) => "!",
+            (IconKind::Ascii, Severity::Warn) => "+",
+            (IconKind::Ascii, Severity::Notice | Severity::Info) => "-",
+            (IconKind::Ascii, Severity::Ok) => ".",
+            (_, Severity::Risk) => "▲",
+            (_, Severity::Warn) => "◆",
+            (_, Severity::Notice | Severity::Info) => "○",
+            (_, Severity::Ok) => "·",
+        }
+    }
+
+    /// The gutter marker on the row the cursor is on.
+    pub fn cursor(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => ">",
+            IconKind::Unicode | IconKind::Nerd => "▸",
+        }
+    }
+
+    /// The character that ends clipped text.
+    pub fn ellipsis(&self) -> char {
+        match self.kind {
+            IconKind::Ascii => '~',
+            IconKind::Unicode | IconKind::Nerd => '…',
+        }
+    }
+
+    /// One cell of a ranked bar (commits per repository).
+    pub fn bar_cell(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "#",
+            IconKind::Unicode | IconKind::Nerd => "█",
+        }
+    }
+
+    /// The arrow in "N more" when rows are hidden below (`true`) or above.
+    pub fn more_arrow(&self, below: bool) -> &'static str {
+        match (self.kind, below) {
+            (IconKind::Ascii, true) => "v",
+            (IconKind::Ascii, false) => "^",
+            (_, true) => "↓",
+            (_, false) => "↑",
+        }
+    }
+
+    /// The small bullet before a plain list item (a task that is not started).
+    pub fn bullet(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "-",
+            IconKind::Unicode | IconKind::Nerd => "·",
+        }
+    }
+
+    /// The caret drawn after text that is being typed (the filter).
+    pub fn caret(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "_",
+            IconKind::Unicode | IconKind::Nerd => "▏",
+        }
+    }
+
+    /// How the Enter key is written in a key hint.
+    pub fn key_enter(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "enter",
+            IconKind::Unicode | IconKind::Nerd => "⏎",
+        }
+    }
+
+    /// How the space bar is written in a key hint.
+    pub fn key_space(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "space",
+            IconKind::Unicode | IconKind::Nerd => "␣",
+        }
+    }
+
+    /// How the up/down arrow keys are written in a key hint.
+    pub fn key_updown(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "up/dn",
+            IconKind::Unicode | IconKind::Nerd => "↑↓",
+        }
+    }
+
+    /// Commits ahead of / behind the upstream, e.g. `↑2 ↓1` (`+2 -1` in Ascii).
+    pub fn ahead_behind(&self, ahead: u32, behind: u32) -> String {
+        let (up, down) = match self.kind {
+            IconKind::Ascii => ("+", "-"),
+            IconKind::Unicode | IconKind::Nerd => ("↑", "↓"),
+        };
+        match (ahead, behind) {
+            (a, 0) => format!("{up}{a}"),
+            (0, b) => format!("{down}{b}"),
+            (a, b) => format!("{up}{a} {down}{b}"),
+        }
+    }
+
+    /// The icon in a card's title: 1 Do next, 2 Work at risk, 3 Open tasks,
+    /// 4 Commits, 5 Repositories. Any other number has no icon.
+    pub fn card_icon(&self, number: u8) -> &'static str {
+        let (unicode, ascii) = match number {
+            1 => ("▶", ">"),
+            2 => ("▲", "!"),
+            3 => ("✓", "v"),
+            4 => ("●", "*"),
+            5 => ("▤", "="),
+            _ => ("", ""),
+        };
+        match self.kind {
+            IconKind::Ascii => ascii,
+            IconKind::Unicode | IconKind::Nerd => unicode,
+        }
+    }
+
+    /// The box-drawing set for a card. A card has rounded corners; `heavy` asks
+    /// for a visibly different frame, used to mark the focused card where
+    /// colour is not available to do it.
+    pub fn card_border(&self, heavy: bool) -> border::Set<'static> {
+        match (self.kind, heavy) {
+            (IconKind::Ascii, false) => ASCII_BORDER,
+            (IconKind::Ascii, true) => ASCII_BORDER_HEAVY,
+            (_, false) => border::ROUNDED,
+            (_, true) => border::DOUBLE,
+        }
+    }
+
+    /// One frame of the "working" spinner for animation tick `tick`.
+    pub fn spinner(&self, tick: usize) -> &'static str {
+        const BRAILLE: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+        const ASCII: [&str; 4] = ["|", "/", "-", "\\"];
+        match self.kind {
+            IconKind::Ascii => ASCII[tick % ASCII.len()],
+            IconKind::Unicode | IconKind::Nerd => BRAILLE[tick % BRAILLE.len()],
+        }
+    }
+
+    /// The brand mark, or nothing in the Ascii tier (it is built from block
+    /// elements that a plain terminal cannot draw).
+    pub fn shows_brand_mark(&self) -> bool {
+        self.kind != IconKind::Ascii
+    }
+
+    // ── Construction, and glyphs older than the cards ────────────────────────
+
     /// Resolve the configured [`IconMode`] against the terminal's colour support.
     /// `Auto` picks Unicode, but drops to Ascii when colour is off — a colourless
     /// `●` can't say synced-vs-anything, so a plain word reads better. `Nerd` is
@@ -53,50 +233,12 @@ impl Glyphs {
         Self { kind }
     }
 
-    /// The "in sync with upstream" indicator: a glyph in the glyph tiers, a
-    /// steady, self-describing word under Ascii (where colour can't carry it).
-    pub fn synced(&self) -> &'static str {
-        match self.kind {
-            IconKind::Ascii => "ok",
-            IconKind::Unicode | IconKind::Nerd => "●",
-        }
-    }
-
-    /// Whether the synced indicator should blink. Only the glyph tiers blink; the
-    /// Ascii word stays steady — blinking text is noise, and an animated indicator
-    /// must never be the *only* channel a state reads on.
-    pub fn blink_synced(&self) -> bool {
-        matches!(self.kind, IconKind::Unicode | IconKind::Nerd)
-    }
-
     /// The selection-gutter marker for a repo marked for a bulk action. A filled
     /// dot in the glyph tiers, an asterisk under Ascii (where `●` may be missing).
     pub fn marked(&self) -> &'static str {
         match self.kind {
             IconKind::Ascii => "*",
             IconKind::Unicode | IconKind::Nerd => "●",
-        }
-    }
-
-    /// The selection-gutter marker for an *unmarked* repo: an empty circle that
-    /// fills (to [`marked`]) when the repo is picked — a checkbox affordance, so
-    /// the gutter always reads as "tick me" rather than being blank. A hollow `○`
-    /// in the glyph tiers, a plain `o` under Ascii.
-    pub fn unmarked(&self) -> &'static str {
-        match self.kind {
-            IconKind::Ascii => "o",
-            IconKind::Unicode | IconKind::Nerd => "○",
-        }
-    }
-
-    /// The sub-row marker for a branch line under a multi-branch repo: a hollow
-    /// triangle that echoes the [`unmarked`](Self::unmarked) checkbox circle, so a
-    /// branch reads as a child of the repo above it. A `▷` in the glyph tiers, a
-    /// plain `>` under Ascii.
-    pub fn branch_marker(&self) -> &'static str {
-        match self.kind {
-            IconKind::Ascii => ">",
-            IconKind::Unicode | IconKind::Nerd => "▷",
         }
     }
 
@@ -110,59 +252,6 @@ impl Glyphs {
             IconKind::Ascii => &['.', ':', '-', '=', '+', '*', '#', '@'],
         }
     }
-
-    /// The spacer drawn between fleet-activity bars: the brand mark's own shade
-    /// texture element (`▒`) in the glyph tiers, a plain colon under Ascii (where
-    /// `▒` may be missing). Dim-styled by the caller.
-    pub fn spark_spacer(&self) -> &'static str {
-        match self.kind {
-            IconKind::Unicode | IconKind::Nerd => "▒",
-            IconKind::Ascii => ":",
-        }
-    }
-
-    /// The compact CI indicator for the narrow table: a filled square whose
-    /// *colour* carries the state (green pass / red fail / amber pending / grey
-    /// none), the stand-in for the "passing"/"failing" word when the column
-    /// can't fit it. Ascii can't colour, so it falls back to a short letter.
-    pub fn ci_square(&self, ci: CiStatus) -> &'static str {
-        match self.kind {
-            IconKind::Unicode | IconKind::Nerd => "■",
-            IconKind::Ascii => match ci {
-                CiStatus::Passing => "ok",
-                CiStatus::Failing => "x",
-                CiStatus::Pending => "~",
-                CiStatus::None => "-",
-            },
-        }
-    }
-
-    /// One cell of the attention severity bar. In the glyph tiers every segment
-    /// is a solid block and *colour* separates the buckets; under Ascii each
-    /// bucket gets its own character (risk `#`, warn `+`, notice `-`, calm `.`)
-    /// so the split reads without colour.
-    pub fn bar(&self, bucket: usize) -> char {
-        match self.kind {
-            IconKind::Unicode | IconKind::Nerd => '█',
-            IconKind::Ascii => ['#', '+', '-', '.'][bucket.min(3)],
-        }
-    }
-
-    /// The remote CI dot (used in the compact, fused Sync cell). In the glyph
-    /// tiers it's a single `●` whose *colour* says pass/fail/pending — so under
-    /// Ascii (no colour) it becomes a short self-describing letter instead, and an
-    /// empty string when there's no CI signal (the caller then omits it).
-    pub fn ci_dot(&self, ci: CiStatus) -> &'static str {
-        match self.kind {
-            IconKind::Unicode | IconKind::Nerd => "●",
-            IconKind::Ascii => match ci {
-                CiStatus::Passing => "ok",
-                CiStatus::Failing => "x",
-                CiStatus::Pending => "~",
-                CiStatus::None => "",
-            },
-        }
-    }
 }
 
 #[cfg(test)]
@@ -171,47 +260,85 @@ mod tests {
 
     #[test]
     fn auto_drops_to_ascii_without_colour() {
-        assert_eq!(Glyphs::resolve(IconMode::Auto, false).synced(), "●");
-        assert_eq!(Glyphs::resolve(IconMode::Auto, true).synced(), "ok");
+        assert_eq!(Glyphs::resolve(IconMode::Auto, false).marked(), "●");
+        assert_eq!(Glyphs::resolve(IconMode::Auto, true).marked(), "*");
     }
 
     #[test]
     fn explicit_modes_ignore_colour() {
-        assert_eq!(Glyphs::resolve(IconMode::Unicode, true).synced(), "●");
-        assert_eq!(Glyphs::resolve(IconMode::Ascii, false).synced(), "ok");
-    }
-
-    #[test]
-    fn only_glyph_tiers_blink() {
-        assert!(Glyphs::resolve(IconMode::Unicode, false).blink_synced());
-        assert!(Glyphs::resolve(IconMode::Nerd, false).blink_synced());
-        assert!(!Glyphs::resolve(IconMode::Ascii, false).blink_synced());
-    }
-
-    #[test]
-    fn marked_marker_falls_back_to_ascii() {
-        assert_eq!(Glyphs::resolve(IconMode::Unicode, false).marked(), "●");
+        assert_eq!(Glyphs::resolve(IconMode::Unicode, true).marked(), "●");
         assert_eq!(Glyphs::resolve(IconMode::Ascii, false).marked(), "*");
+        // Nerd is only ever chosen explicitly, and draws the same shapes here.
+        assert_eq!(Glyphs::resolve(IconMode::Nerd, true).marked(), "●");
     }
 
     #[test]
-    fn branch_marker_is_a_hollow_triangle_with_ascii_fallback() {
+    fn the_spinner_cycles_and_has_an_ascii_form() {
+        let ascii = Glyphs::resolve(IconMode::Ascii, false);
+        let frames: Vec<&str> = (0..8).map(|tick| ascii.spinner(tick)).collect();
+        assert!(frames.iter().all(|frame| frame.is_ascii()));
+        assert_eq!(frames[0], frames[4]); // four frames, then around again
+        let unicode = Glyphs::resolve(IconMode::Unicode, false);
+        assert_ne!(unicode.spinner(0), unicode.spinner(1));
+        // Any tick is a valid frame: the index wraps rather than overflowing.
+        let _ = unicode.spinner(usize::MAX);
+    }
+
+    #[test]
+    fn severity_reads_as_a_shape_in_every_tier() {
+        let unicode = Glyphs::resolve(IconMode::Unicode, false);
+        let ascii = Glyphs::resolve(IconMode::Ascii, false);
+        let all = [
+            Severity::Risk,
+            Severity::Warn,
+            Severity::Notice,
+            Severity::Ok,
+        ];
+        // Four distinct marks per tier, and the Ascii ones really are ASCII.
+        for glyphs in [unicode, ascii] {
+            let marks: std::collections::HashSet<_> =
+                all.iter().map(|s| glyphs.severity_mark(*s)).collect();
+            assert_eq!(marks.len(), all.len());
+        }
+        assert!(all.iter().all(|s| ascii.severity_mark(*s).is_ascii()));
+        assert_eq!(unicode.severity_mark(Severity::Risk), "▲");
+        // Info and Notice share the ring: both mean "worth a look, not urgent".
         assert_eq!(
-            Glyphs::resolve(IconMode::Unicode, false).branch_marker(),
-            "▷"
+            unicode.severity_mark(Severity::Info),
+            unicode.severity_mark(Severity::Notice)
         );
-        assert_eq!(Glyphs::resolve(IconMode::Ascii, false).branch_marker(), ">");
     }
 
     #[test]
-    fn ci_dot_is_a_letter_under_ascii() {
-        let g = Glyphs::resolve(IconMode::Unicode, false);
-        assert_eq!(g.ci_dot(CiStatus::Passing), "●");
-        assert_eq!(g.ci_dot(CiStatus::Failing), "●");
-        let a = Glyphs::resolve(IconMode::Ascii, false);
-        assert_eq!(a.ci_dot(CiStatus::Passing), "ok");
-        assert_eq!(a.ci_dot(CiStatus::Failing), "x");
-        assert_eq!(a.ci_dot(CiStatus::Pending), "~");
-        assert_eq!(a.ci_dot(CiStatus::None), ""); // caller omits it
+    fn the_ascii_tier_draws_cards_with_plain_characters() {
+        let ascii = Glyphs::resolve(IconMode::Ascii, false);
+        for heavy in [false, true] {
+            let set = ascii.card_border(heavy);
+            for piece in [set.top_left, set.horizontal_top, set.vertical_left] {
+                assert!(piece.is_ascii(), "{piece}");
+            }
+        }
+        for number in 1..=5 {
+            assert!(ascii.card_icon(number).is_ascii());
+        }
+        assert!(ascii.key_enter().is_ascii() && ascii.key_space().is_ascii());
+        assert!(ascii.ellipsis().is_ascii() && ascii.bar_cell().is_ascii());
+        assert!(ascii.cursor().is_ascii() && ascii.caret().is_ascii());
+        assert!(!ascii.shows_brand_mark());
+        // The focused frame differs from the plain one, so focus shows without colour.
+        assert_ne!(
+            ascii.card_border(true).horizontal_top,
+            ascii.card_border(false).horizontal_top
+        );
+    }
+
+    #[test]
+    fn ahead_behind_names_only_the_sides_that_moved() {
+        let unicode = Glyphs::resolve(IconMode::Unicode, false);
+        assert_eq!(unicode.ahead_behind(2, 0), "↑2");
+        assert_eq!(unicode.ahead_behind(0, 3), "↓3");
+        assert_eq!(unicode.ahead_behind(2, 3), "↑2 ↓3");
+        let ascii = Glyphs::resolve(IconMode::Ascii, false);
+        assert_eq!(ascii.ahead_behind(2, 3), "+2 -3");
     }
 }
