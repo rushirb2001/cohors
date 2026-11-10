@@ -13,12 +13,15 @@ description: >
 
 Do not plan from memory. Make these calls:
 
-1. `read_board` — the current board and recent agent activity. Anything still
+1. `overview` — what to do next across the fleet and why, the repos where
+   local work is at risk, and the key numbers. Start here.
+2. `read_board` — the current board and recent agent activity. Anything still
    `doing` is in flight.
-2. `launchpad` — every repo's open tasks, most urgent first.
-3. `list_repos` with `{"attention": "any"}` — uncommitted, unpushed, behind,
+3. `launchpad` — every repo's open tasks, most urgent first.
+4. `list_repos` with `{"attention": "any"}` — uncommitted, unpushed, behind,
    conflicted or mid-rebase work that nobody wrote a task for.
-4. `ci_status` with `{"ci": "failing"}` when a GitHub token is present.
+5. `ci_status` with `{"ci": "failing"}` when a GitHub token is present.
+6. `standup` — what was actually committed this week, to see what is moving.
 
 ## Then write the board
 

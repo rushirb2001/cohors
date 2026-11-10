@@ -18,7 +18,8 @@ ask the user where their repos are.
 
 | The user wants | Call |
 | --- | --- |
-| "Is anything on fire?" | `fleet_summary` |
+| "What should I do?", "brief me", "what's at risk?" | `overview` (actions most urgent first, each with the repos it applies to) |
+| "Is anything on fire?" (counts only) | `fleet_summary` |
 | Status of many repos | `list_repos` (narrow with a selector, shrink with `fields`) |
 | One repo in depth | `get_repo` |
 | What is uncommitted, and the diff | `changes` |
@@ -26,6 +27,7 @@ ask the user where their repos are.
 | Open PRs / red CI | `list_prs`, `ci_status` |
 | Where a repo is on disk | `repo_path` |
 | What to work on, how to run things | `launchpad`, `read_board` |
+| "What did I do today / this week?", a standup | `standup` |
 
 ## Selectors
 
