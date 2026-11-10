@@ -100,6 +100,19 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Your commits across every repo, as a paste-ready digest (no TUI).
+    ///
+    /// Lists the commits you authored (matched by `git config user.email`) in
+    /// the last seven days, grouped by repo with the most active first, as
+    /// markdown you can paste into a standup channel.
+    Standup {
+        /// Only today's commits instead of the last seven days.
+        #[arg(long)]
+        today: bool,
+        /// Print the commits grouped by repo as JSON instead of markdown.
+        #[arg(long)]
+        json: bool,
+    },
     /// Launch the dashboard on a built-in sample fleet: no config, no scanning.
     ///
     /// A zero-setup way to try cohors: every column and view is populated with

@@ -19,7 +19,7 @@ pub const CONFIRM_VERBS: &[&str] = &["commit", "stash", "run"];
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
 #[cfg(not(target_arch = "wasm32"))]
-pub use server::{Caps, ScanFn, serve};
+pub use server::{Caps, ScanFn, ServeOptions, serve};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod standalone {
@@ -34,7 +34,7 @@ pub mod standalone {
     use camino::Utf8PathBuf;
     use cohors_fleet::Scanner;
 
-    use crate::{Caps, serve};
+    use crate::{Caps, ServeOptions, serve};
 
     /// Parse `args` (everything after argv[0]) and run the server.
     ///
@@ -80,22 +80,18 @@ pub mod standalone {
             Scanner::new(config.as_deref(), &roots)
                 .map_err(|e| anyhow::anyhow!("building scanner: {e}"))?,
         );
-        let token = scanner.github_token();
-        let served_roots = scanner.roots();
-        let mcp = scanner.actions_config();
-        let scan = Arc::new(move || scanner.scan());
-
-        serve(
-            &dist,
+        let options = ServeOptions {
             port,
-            scan,
-            served_roots,
-            token,
-            false,
+            roots: scanner.roots(),
+            token: scanner.github_token(),
+            watch: false,
             caps,
-            mcp.run_allowlist,
-            mcp.max_action_targets,
-            false,
-        )
+            allowlist: scanner.actions_config().run_allowlist,
+            max_targets: scanner.actions_config().max_action_targets,
+            demo: false,
+            author_email: scanner.author_email(),
+        };
+        let scan = Arc::new(move || scanner.scan());
+        serve(&dist, scan, options)
     }
 }

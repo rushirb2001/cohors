@@ -420,6 +420,44 @@ pub fn overview(cli: &Cli, json: bool) -> Result<()> {
     Ok(())
 }
 
+/// `cohors standup` — your commits across every repo, as a digest.
+///
+/// At a terminal it prints the markdown digest (the one the dashboard copies);
+/// with `--json` it prints the commits grouped by repo. `today` narrows the
+/// window from the last seven days to today.
+pub fn standup(cli: &Cli, today: bool, json: bool) -> Result<()> {
+    use cohors_core::StandupWindow;
+    let scanner = crate::scan::from_cli(cli)?;
+    let Some(author) = scanner.author_email() else {
+        bail!(
+            "no git identity: set `git config --global user.email` so cohors knows which commits are yours"
+        );
+    };
+    let window = if today {
+        StandupWindow::Today
+    } else {
+        StandupWindow::Week
+    };
+    let (since, until) = window.range(now_secs());
+    let commits = cohors_fleet::fleet_commits(&scanner.scan(), &author, since, until);
+    if json {
+        let groups: Vec<serde_json::Value> = cohors_core::group_commits(&commits)
+            .into_iter()
+            .map(|(repo, commits)| serde_json::json!({ "repo": repo, "commits": commits }))
+            .collect();
+        let out = serde_json::json!({
+            "window": window.label(),
+            "author": author,
+            "total": commits.len(),
+            "groups": groups,
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+    } else {
+        print!("{}", cohors_core::to_markdown(&commits, window));
+    }
+    Ok(())
+}
+
 /// A severity as a shape, so it still reads with colour off: `▲` at risk, `◆`
 /// warning, `○` everything quieter.
 fn severity_mark(severity: cohors_core::Severity, color: bool) -> String {
@@ -1211,10 +1249,19 @@ pub fn run_web(
     // server lives in `cohors-web` now (the write seam is no longer trapped in
     // this binary); we hand it a scan closure + the shared safety config.
     let actions_config = scanner.actions_config();
-    let roots = scanner.roots();
-    let caps = cohors_web::Caps {
-        allow_writes,
-        allow_run,
+    let options = cohors_web::ServeOptions {
+        port,
+        roots: scanner.roots(),
+        token,
+        watch: cli.watch,
+        caps: cohors_web::Caps {
+            allow_writes,
+            allow_run,
+        },
+        allowlist: actions_config.run_allowlist,
+        max_targets: actions_config.max_action_targets,
+        demo,
+        author_email: scanner.author_email(),
     };
     let scan: std::sync::Arc<cohors_web::ScanFn> = if demo {
         let now = now_secs();
@@ -1223,18 +1270,7 @@ pub fn run_web(
         let scanner = scanner.clone();
         std::sync::Arc::new(move || scanner.scan())
     };
-    let result = cohors_web::serve(
-        &dist,
-        port,
-        scan,
-        roots,
-        token,
-        cli.watch,
-        caps,
-        actions_config.run_allowlist,
-        actions_config.max_action_targets,
-        demo,
-    );
+    let result = cohors_web::serve(&dist, scan, options);
     let _ = watcher.kill();
     result
 }
@@ -1796,6 +1832,7 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
         caps,
         &actions_config.run_allowlist,
         actions_config.max_action_targets,
+        scanner.author_email().as_deref(),
     )
 }
 

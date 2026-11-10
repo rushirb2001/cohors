@@ -73,6 +73,9 @@ struct Ctx<'a> {
     /// The launchpad home (`~/.principia`): the focus board and activity log.
     /// `None` when no home directory could be determined.
     home: Option<&'a std::path::Path>,
+    /// Whose commits `standup` lists (`git config user.email`); `None` when
+    /// git has no identity configured.
+    author: Option<&'a str>,
 }
 
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
@@ -86,6 +89,7 @@ pub fn serve_stdio(
     caps: Caps,
     allowlist: &[String],
     max_targets: usize,
+    author: Option<&str>,
 ) -> Result<()> {
     let home = cohors_launchpad::launchpad_home();
     let ctx = Ctx {
@@ -97,6 +101,7 @@ pub fn serve_stdio(
         allowlist,
         max_targets,
         home: home.as_deref(),
+        author,
     };
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
@@ -224,6 +229,16 @@ fn tool_catalog() -> Value {
             "name": "overview",
             "description": "The briefing: what to DO NEXT across the fleet and why, in one call. Returns `actions` (most urgent first — each with a title, the reason, the registry verb that carries it out when there is one, and the ids of the repos it applies to), `figures` (the key numbers: work not backed up, stashes, uncommitted files, stale fetches, open tasks, commits this week), `repos` (one line per repo, most urgent first, with every reason in plain words and `at_risk` marking where local work could be lost), `work` (open tasks per repo) and `commits` (last 7 days per repo). This is the exact model the terminal UI, the web dashboard and the editor extension render, so what you report matches what the user sees. Use it for \"what should I do\", \"brief me\", \"what's at risk\", or before planning a day; use list_repos when you need raw per-repo fields or a selector. To act on an action, pass its repos as {\"ids\": [...]} to the named verb. Takes no arguments.",
             "inputSchema": { "type": "object", "properties": {} }
+        },
+        {
+            "name": "standup",
+            "description": "What the user committed across every repo, for a standup or a status update: their commits (matched by git user.email) in the window, grouped by repo with the most active first, plus a ready-to-paste markdown digest. Use for \"what did I do today / this week\", \"write my standup\", or a weekly summary; do NOT run git log in each repo. window is \"today\" or \"week\" (default week).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "window": { "type": "string", "enum": ["today", "week"], "description": "Which window to report (default week)." }
+                }
+            }
         },
         {
             "name": "search",
@@ -369,6 +384,7 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
             }
             Ok(value)
         }
+        "standup" => standup(args, ctx, now),
         "repo_path" => repo_path(args, ctx),
         "changes" => Ok(changes(args, ctx, now)),
         "search" => search(args, ctx, now),
@@ -824,6 +840,40 @@ fn get_repo(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     Ok(value)
 }
 
+/// The author's commits across the fleet in a window, grouped by repo, with the
+/// markdown digest. The collection and grouping are the same shared functions
+/// the terminal UI and the web dashboard use.
+fn standup(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    use cohors_core::StandupWindow;
+    let window = match args.get("window").and_then(Value::as_str) {
+        None | Some("week") => StandupWindow::Week,
+        Some("today") => StandupWindow::Today,
+        Some(other) => {
+            return Err(format!(
+                "unknown window `{other}` (use \"today\" or \"week\")"
+            ));
+        }
+    };
+    let author = ctx.author.ok_or(
+        "no git identity: set `git config --global user.email` so cohors knows which commits are yours",
+    )?;
+    let snaps = (ctx.scan)();
+    let (since, until) = window.range(now);
+    let commits = cohors_fleet::fleet_commits(&snaps, author, since, until);
+    let groups: Vec<Value> = cohors_core::group_commits(&commits)
+        .into_iter()
+        .map(|(repo, commits)| json!({ "repo": repo, "commits": commits }))
+        .collect();
+    Ok(json!({
+        "window": window.label(),
+        "author": author,
+        "total": commits.len(),
+        "groups": groups,
+        "markdown": cohors_core::to_markdown(&commits, window),
+        "meta": meta(ctx, &snaps),
+    }))
+}
+
 fn repo_path(args: &Value, ctx: &Ctx) -> Result<Value, String> {
     let key = repo_arg(args)?;
     let snaps = (ctx.scan)();
@@ -1116,6 +1166,7 @@ mod tests {
             allowlist: &[],
             max_targets: 0,
             home: None,
+            author: None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1133,6 +1184,7 @@ mod tests {
             allowlist: &[],
             max_targets: 0,
             home: None,
+            author: None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1150,6 +1202,7 @@ mod tests {
             allowlist,
             max_targets,
             home: None,
+            author: None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1213,6 +1266,7 @@ mod tests {
             allowlist: &[],
             max_targets: 0,
             home: None,
+            author: None,
         };
         let resp = handle(
             &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
@@ -1236,6 +1290,17 @@ mod tests {
         assert!(names.contains(&"get_repo"));
         assert!(names.contains(&"repo_path"));
         assert!(names.contains(&"overview"));
+        assert!(names.contains(&"standup"));
+    }
+
+    #[test]
+    fn standup_needs_an_identity_and_a_known_window() {
+        // The fixture context has no git identity: say how to fix it.
+        let resp = call(act("standup", json!({})));
+        assert!(is_error(&resp));
+        assert!(err_text(&resp).contains("user.email"));
+        let resp = call(act("standup", json!({ "window": "decade" })));
+        assert!(err_text(&resp).contains("unknown window"));
     }
 
     #[test]
@@ -1383,6 +1448,7 @@ mod tests {
             allowlist: &[],
             max_targets: 0,
             home: None,
+            author: None,
         };
         let resp = handle(
             &json!({
@@ -1679,6 +1745,7 @@ mod tests {
             allowlist: &[],
             max_targets: 0,
             home: Some(home),
+            author: None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }

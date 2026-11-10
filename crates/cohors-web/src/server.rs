@@ -16,6 +16,7 @@
 //!   "Do next", key figures, one line per repo, tasks and commits. The same
 //!   struct the terminal UI, the editor extension and the MCP server render.
 //! - `GET  /api/launchpad` — every repo's launchpad entry + the focus board.
+//! - `GET  /api/standup?window=today|week` — the author's commits across the fleet.
 //! - `POST /api/action` — run a registry verb across a selector (gated by [`Caps`]).
 //!
 //! A tiny blocking server (`tiny_http`) on a few threads — no async, matching the
@@ -71,33 +72,59 @@ struct MetaResponse {
     allow_run: bool,
 }
 
-/// Serve `dist_dir` on `127.0.0.1:port`, exposing the local scan under `/api` and
-/// the action endpoint gated by `caps`. Blocks until the process is stopped.
-#[allow(clippy::too_many_arguments)]
-pub fn serve(
-    dist_dir: &Utf8Path,
-    port: u16,
-    scan: Arc<ScanFn>,
+/// How to run the server: everything except the assets directory and the scan.
+/// A struct rather than a long argument list, so adding an option does not
+/// ripple through every caller.
+#[derive(Debug, Clone, Default)]
+pub struct ServeOptions {
+    pub port: u16,
+    /// The roots being scanned, shown on the page.
+    pub roots: Vec<String>,
+    /// GitHub token for enrichment. Stays server-side.
+    pub token: Option<String>,
+    /// `--watch`: the page polls for fresh scans.
+    pub watch: bool,
+    pub caps: Caps,
+    /// Glob patterns restricting `run` (empty = any command).
+    pub allowlist: Vec<String>,
+    /// Action-target cap (0 = no cap).
+    pub max_targets: usize,
+    /// `--demo`: the scan closure returns the sample fleet, so the sample
+    /// launchpad is served to match and the page labels itself as demo data.
+    pub demo: bool,
+    /// Whose commits the standup lists (`git config user.email`).
+    pub author_email: Option<String>,
+}
+
+/// What the read endpoints need to know about this session.
+struct Site {
     roots: Vec<String>,
     token: Option<String>,
     watch: bool,
-    caps: Caps,
-    allowlist: Vec<String>,
-    max_targets: usize,
     demo: bool,
-) -> Result<()> {
-    let server = Server::http(("127.0.0.1", port))
+    author_email: Option<String>,
+}
+
+/// Serve `dist_dir` on `127.0.0.1:port`, exposing the local scan under `/api` and
+/// the action endpoint gated by `options.caps`. Blocks until the process is stopped.
+pub fn serve(dist_dir: &Utf8Path, scan: Arc<ScanFn>, options: ServeOptions) -> Result<()> {
+    let server = Server::http(("127.0.0.1", options.port))
         .map_err(|e| anyhow!("could not start web server: {e}"))?;
     let server = Arc::new(server);
     let dist = dist_dir.to_owned();
-    let token = Arc::new(token);
-    let roots = Arc::new(roots);
     let action = ActionCtx {
         scan: scan.clone(),
-        caps,
-        allowlist: Arc::new(allowlist),
-        max_targets,
+        caps: options.caps,
+        allowlist: Arc::new(options.allowlist),
+        max_targets: options.max_targets,
     };
+    let site = Arc::new(Site {
+        roots: options.roots,
+        token: options.token,
+        watch: options.watch,
+        demo: options.demo,
+        author_email: options.author_email,
+    });
 
     // Enough workers that a slow enrich/detail fetch (which hits GitHub) doesn't
     // stall the static assets or other API calls the page fires concurrently.
@@ -105,22 +132,12 @@ pub fn serve(
     for _ in 0..8 {
         let server = server.clone();
         let dist = dist.clone();
-        let token = token.clone();
-        let roots = roots.clone();
+        let site = site.clone();
         let scan = scan.clone();
         let action = action.clone();
         workers.push(thread::spawn(move || {
             while let Ok(req) = server.recv() {
-                handle(
-                    req,
-                    &dist,
-                    &*scan,
-                    &roots,
-                    token.as_deref(),
-                    watch,
-                    demo,
-                    &action,
-                );
+                handle(req, &dist, &*scan, &site, &action);
             }
         }));
     }
@@ -130,15 +147,11 @@ pub fn serve(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn handle(
     req: tiny_http::Request,
     dist: &Utf8Path,
     scan: &ScanFn,
-    roots: &[String],
-    token: Option<&str>,
-    watch: bool,
-    demo: bool,
+    site: &Site,
     action: &ActionCtx,
 ) {
     let url = req.url().to_string();
@@ -164,21 +177,31 @@ fn handle(
         );
         return;
     }
+    let token = site.token.as_deref();
     match (req.method(), path) {
         (Method::Get, "/api/repos") => api_repos(req, &url, scan, token),
         (Method::Get, "/api/detail") => api_detail(req, &url, token),
         (Method::Get, "/api/meta") => respond_json(
             req,
             &MetaResponse {
-                roots: roots.to_vec(),
-                watch,
-                demo,
+                roots: site.roots.clone(),
+                watch: site.watch,
+                demo: site.demo,
                 allow_writes: action.caps.allow_writes,
                 allow_run: action.caps.allow_run,
             },
         ),
-        (Method::Get, "/api/overview") => respond_json(req, &overview_payload(&scan(), demo)),
-        (Method::Get, "/api/launchpad") => respond_json(req, &launchpad_payload(&scan(), demo)),
+        (Method::Get, "/api/overview") => respond_json(req, &overview_payload(&scan(), site.demo)),
+        (Method::Get, "/api/launchpad") => {
+            respond_json(req, &launchpad_payload(&scan(), site.demo))
+        }
+        (Method::Get, "/api/standup") => {
+            let window = query_param(&url, "window");
+            respond_json(
+                req,
+                &standup_payload(&scan(), site.author_email.as_deref(), window.as_deref()),
+            )
+        }
         (Method::Post, "/api/action") => api_action(req, action),
         _ => serve_static(req, dist, &url),
     }
@@ -246,6 +269,41 @@ fn overview_payload(snapshots: &[RepoSnapshot], demo: bool) -> cohors_core::Over
     }
     let home = cohors_fleet::launchpad::launchpad_home();
     cohors_fleet::overview(snapshots, home.as_deref(), now_secs())
+}
+
+/// `GET /api/standup?window=today|week` — the configured author's commits
+/// across the fleet, grouped by repo (most active first), plus the same
+/// markdown digest the terminal UI copies to the clipboard. `window` defaults
+/// to `week`. With no `user.email` configured the list is empty and `author`
+/// is null, so the page can say why rather than show a blank.
+fn standup_payload(
+    snapshots: &[RepoSnapshot],
+    author: Option<&str>,
+    window: Option<&str>,
+) -> Value {
+    use cohors_core::StandupWindow;
+    let window = match window {
+        Some("today") => StandupWindow::Today,
+        _ => StandupWindow::Week,
+    };
+    let (since, until) = window.range(now_secs());
+    let commits = match author {
+        Some(email) => cohors_fleet::fleet_commits(snapshots, email, since, until),
+        None => Vec::new(),
+    };
+    let groups: Vec<Value> = cohors_core::group_commits(&commits)
+        .into_iter()
+        .map(|(repo, commits)| json!({ "repo": repo, "commits": commits }))
+        .collect();
+    json!({
+        "window": window.label(),
+        "since": since,
+        "until": until,
+        "author": author,
+        "total": commits.len(),
+        "groups": groups,
+        "markdown": cohors_core::to_markdown(&commits, window),
+    })
 }
 
 /// `GET /api/detail?path=…&url=…` — one repo's drill-in. `path` (the local repo
@@ -486,6 +544,21 @@ mod tests {
         // An empty fleet is a valid, empty overview.
         let empty = overview_payload(&[], false);
         assert!(empty.actions.is_empty() && empty.repos.is_empty());
+    }
+
+    #[test]
+    fn standup_without_an_author_is_empty_and_says_so() {
+        let v = standup_payload(&demo_fleet(), None, Some("today"));
+        assert_eq!(v["window"], "today");
+        assert_eq!(v["author"], Value::Null);
+        assert_eq!(v["total"], 0);
+        assert_eq!(v["groups"], json!([]));
+        assert!(v["markdown"].as_str().unwrap().contains("No commits"));
+        // An unknown window falls back to the week.
+        assert_eq!(
+            standup_payload(&[], None, Some("nope"))["window"],
+            "this week"
+        );
     }
 
     #[test]
