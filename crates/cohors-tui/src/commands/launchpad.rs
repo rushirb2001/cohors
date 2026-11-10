@@ -2,7 +2,7 @@
 //!
 //! - `cohors launchpad` reports what is waiting across the fleet: the focus
 //!   board, every repo's open tasks, and which repos have not opted in yet.
-//! - `cohors launchpad validate [PATH]` checks one repo's `.principia/repo.json`.
+//! - `cohors launchpad validate [PATH]` checks one repo's `.cohors/repo.json`.
 //! - `cohors launchpad contract` prints the contract an agent must satisfy.
 //! - `cohors launchpad record` appends an activity event; the Claude Code
 //!   plugin's session hooks call it.
@@ -225,7 +225,7 @@ pub(crate) fn render_report(
     if !broken.is_empty() {
         out.push_str(&section(
             "needs fixing",
-            "a .principia/repo.json that could not be read",
+            "a .cohors/repo.json that could not be read",
             color,
         ));
         let width = broken
@@ -300,7 +300,7 @@ fn validate(path: Option<&str>) -> Result<()> {
     let color = super::wants_color(std::io::stdout().is_terminal());
     let Some(validation) = lp::validate_repo(&root) else {
         bail!(
-            "no .principia/repo.json in {} — this repo has not been set up for the launchpad",
+            "no .cohors/repo.json in {} — this repo has not been set up for the launchpad",
             root.display()
         );
     };
@@ -308,14 +308,14 @@ fn validate(path: Option<&str>) -> Result<()> {
         println!("  {} {warning}", dim(color, "warning"));
     }
     if validation.is_ok() {
-        println!("  {} .principia/repo.json is valid", bold(color, "ok"));
+        println!("  {} .cohors/repo.json is valid", bold(color, "ok"));
         return Ok(());
     }
     for error in &validation.errors {
         println!("  {} {error}", bold(color, "error"));
     }
     bail!(
-        "{} problem(s) in .principia/repo.json",
+        "{} problem(s) in .cohors/repo.json",
         validation.errors.len()
     );
 }

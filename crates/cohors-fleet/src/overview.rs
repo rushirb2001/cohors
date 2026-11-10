@@ -114,9 +114,9 @@ mod tests {
     fn bundle_reads_each_repo_and_sorts_by_name() {
         let zed = tempfile::tempdir().unwrap();
         let app = tempfile::tempdir().unwrap();
-        std::fs::create_dir(app.path().join(".principia")).unwrap();
+        std::fs::create_dir(app.path().join(".cohors")).unwrap();
         std::fs::write(
-            app.path().join(".principia/repo.json"),
+            app.path().join(".cohors/repo.json"),
             r#"{"specVersion":1,"name":"app","flows":[],"agents":[],
                 "tasks":[{"id":"ship","title":"Ship it","priority":"high"}]}"#,
         )

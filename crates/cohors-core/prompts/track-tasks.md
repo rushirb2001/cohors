@@ -6,7 +6,7 @@ one part of the contract; the whole picture is in the `setup-repo` prompt
 wins over both.
 
 Your job: find the work this repo actually has in flight, and record it in
-`.principia/repo.json` under `tasks`.
+`.cohors/repo.json` under `tasks`.
 
 ---
 
@@ -33,7 +33,7 @@ agree are live work.
 
 ## Writing it
 
-**Update** `.principia/repo.json`; do not replace it. Preserve `flows`,
+**Update** `.cohors/repo.json`; do not replace it. Preserve `flows`,
 `agents`, and any key you do not understand. Critically: **preserve existing
 tasks the user may be part-way through** — match on `id` and leave their
 `status` alone unless you have evidence it changed.

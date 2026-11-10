@@ -6,8 +6,8 @@ one part of the contract; the whole picture is in the `setup-repo` prompt
 wins over both.
 
 Your job: decide whether this repo has a recurring job worth committing as an
-agent prompt, and if so write `.principia/agents/<id>.md` and reference it from
-`.principia/repo.json`.
+agent prompt, and if so write `.cohors/agents/<id>.md` and reference it from
+`.cohors/repo.json`.
 
 ---
 
@@ -44,7 +44,7 @@ agent to fill the slot.
 
 ## Writing it
 
-Create `.principia/agents/<id>.md`:
+Create `.cohors/agents/<id>.md`:
 
 ```markdown
 ---
@@ -68,19 +68,19 @@ Set `readOnly: true` unless the agent genuinely needs to write. Set
 `isolation: worktree` for anything that rewrites files, so it cannot disturb a
 dirty working tree. List only the runners you actually expect to work.
 
-Then reference it from `.principia/repo.json`, **updating** the file rather than
+Then reference it from `.cohors/repo.json`, **updating** the file rather than
 replacing it:
 
 ```json
 "agents": [
   { "id": "triage", "label": "Triage uncommitted work",
-    "file": ".principia/agents/triage.md",
+    "file": ".cohors/agents/triage.md",
     "supports": ["claude-code", "codex", "gemini-cli", "agy"] }
 ]
 ```
 
 Rules the validator enforces: ids are kebab-case and unique; `file` is relative,
-contains no `..`, lives under `.principia/`, and must actually exist.
+contains no `..`, lives under `.cohors/`, and must actually exist.
 
 If a task in `tasks[]` is exactly what this agent is for, set that task's
 `agent` to this agent's id so the task's action runs it directly.

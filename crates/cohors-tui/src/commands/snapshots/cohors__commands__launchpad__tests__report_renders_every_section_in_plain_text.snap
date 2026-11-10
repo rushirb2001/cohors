@@ -19,7 +19,7 @@ expression: "render_report(&fleet(), &board, 100, false)"
       ○ Task a  low
 
   Needs fixing
-  a .principia/repo.json that could not be read
+  a .cohors/repo.json that could not be read
     ▸ infra  repo.json is not valid JSON
 
   Not set up yet

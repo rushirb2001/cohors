@@ -249,7 +249,7 @@ pub enum Cmd {
     StandupNextWindow,
     /// Copy the standup markdown to the clipboard.
     CopyStandup,
-    /// Open the launchpad view (read every repo's `.principia/` contribution).
+    /// Open the launchpad view (read every repo's `.cohors/` contribution).
     OpenLaunchpad,
     /// Run the typed command across the target repos.
     RunCommand,

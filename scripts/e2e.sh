@@ -124,16 +124,16 @@ eq "afterwards nothing is left to push, publish or pull" \
 
 # ── 3. the launchpad and the agent commands ──────────────────────────────────
 echo; echo "launchpad and agents"
-mkdir -p "$FLEET/clean/.principia"
-cat > "$FLEET/clean/.principia/repo.json" <<'JSON'
+mkdir -p "$FLEET/clean/.cohors"
+cat > "$FLEET/clean/.cohors/repo.json" <<'JSON'
 {"specVersion": 1, "name": "clean", "summary": "The clean one",
  "flows": [{"id": "test", "label": "Tests", "run": "echo ok"}],
  "tasks": [{"id": "ship-it", "title": "Ship it", "priority": "high"}]}
 JSON
 check "a valid launchpad file validates" co launchpad validate "$FLEET/clean"
 eq "its task shows up in the overview" "$(co overview --json | json "d['figures']['open_tasks']")" "1"
-printf '{"specVersion":1,"name":"x","flows":[{"id":"t","label":"T","run":"echo ok\\nrm -rf ~"}]}' > "$FLEET/dirty/.principia.tmp"
-mkdir -p "$FLEET/dirty/.principia" && mv "$FLEET/dirty/.principia.tmp" "$FLEET/dirty/.principia/repo.json"
+printf '{"specVersion":1,"name":"x","flows":[{"id":"t","label":"T","run":"echo ok\\nrm -rf ~"}]}' > "$FLEET/dirty/.cohors.tmp"
+mkdir -p "$FLEET/dirty/.cohors" && mv "$FLEET/dirty/.cohors.tmp" "$FLEET/dirty/.cohors/repo.json"
 check "a flow hiding a second command is rejected" bash -c "! '$COHORS' launchpad validate '$FLEET/dirty'"
 eq "and is never offered" "$(co launchpad --json | json "[len(r['contribution']['flows']) for r in d['repos'] if r['name']=='x']")" "[0]"
 
@@ -147,8 +147,8 @@ check "and tells it which repository" grep -q "$FLEET/ahead" "$BOX/agent-got.txt
 plan="$(PATH="$BOX/bin:$PATH" SHELL=/bin/sh co agent command task --repo "$FLEET/clean" --task ship-it)"
 eq "a task launch is linked to a conversation" "$(printf '%s' "$plan" | json "d['linked']")" "True"
 session="$(printf '%s' "$plan" | json "d['session']")"
-eq "the link is recorded, gitignored" "$(json "d['threads']['ship-it']" < "$FLEET/clean/.principia/local.json")" "$session"
-check "local.json is in .gitignore" grep -q ".principia/local.json" "$FLEET/clean/.gitignore"
+eq "the link is recorded, gitignored" "$(json "d['threads']['ship-it']" < "$FLEET/clean/.cohors/local.json")" "$session"
+check "local.json is in .gitignore" grep -q ".cohors/local.json" "$FLEET/clean/.gitignore"
 eq "the same task resumes that conversation next time" \
   "$(PATH="$BOX/bin:$PATH" SHELL=/bin/sh co agent command task --repo "$FLEET/clean" --task ship-it | json "d['command']")" "claude --resume '$session'"
 eq "the launches are in the activity log" "$(co launchpad --json | json "len(d['recent_activity']) >= 3")" "True"

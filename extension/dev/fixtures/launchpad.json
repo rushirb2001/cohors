@@ -137,7 +137,7 @@
           {
             "id": "a11y-audit",
             "label": "Accessibility audit",
-            "file": ".principia/agents/a11y-audit.md",
+            "file": ".cohors/agents/a11y-audit.md",
             "supports": [
               "claude-code",
               "codex"

@@ -9,7 +9,7 @@
 //!   remembering which conversation a task belongs to, and logging the launch.
 //!
 //! Everything a repository supplies (an agent's prompt file, a task title) is
-//! treated as untrusted: file paths are confined to the repo's `.principia/`
+//! treated as untrusted: file paths are confined to the repo's `.cohors/`
 //! directory, ids must be kebab-case, and nothing repo-authored ever reaches a
 //! command line except as the *contents* of a prompt file.
 
@@ -122,7 +122,7 @@ pub fn detect_runners() -> Vec<RunnerStatus> {
 // ── Task ↔ conversation links ────────────────────────────────────────────────
 
 /// The conversations this machine has linked to a repo's tasks, from the
-/// gitignored `.principia/local.json` (`{"threads": {"<task id>": "<session id>"}}`).
+/// gitignored `.cohors/local.json` (`{"threads": {"<task id>": "<session id>"}}`).
 /// A session id is machine-specific, which is why it is never committed.
 pub fn read_threads(root: &Path) -> BTreeMap<String, String> {
     let Ok(body) = fs::read_to_string(root.join(LOCAL_FILE)) else {
@@ -271,7 +271,7 @@ pub fn read_prompt_file(home: &Path, file: &Path) -> Result<String, LaunchpadErr
 }
 
 /// Resolve a repo-declared agent file, refusing anything outside the repo's
-/// `.principia/` directory. The declaration comes from a repository we may not
+/// `.cohors/` directory. The declaration comes from a repository we may not
 /// have written, so `..` segments and symlinks must not lead out of it.
 fn resolve_agent_file(root: &Path, rel: &str) -> Result<PathBuf, LaunchpadError> {
     let refuse = || {
@@ -321,9 +321,9 @@ pub fn new_session_id() -> String {
 pub enum LaunchKind {
     /// One of the prompts cohors ships (`setup-repo`, `plan-day`, …).
     Prompt(String),
-    /// An agent the repo declares in its `.principia/repo.json`.
+    /// An agent the repo declares in its `.cohors/repo.json`.
     Agent(String),
-    /// A task from the repo's `.principia/repo.json` (or a focus-board item).
+    /// A task from the repo's `.cohors/repo.json` (or a focus-board item).
     Task(String),
     /// Just open a session in the repo.
     Start,
@@ -981,7 +981,7 @@ mod tests {
 
     const CONTRIBUTION: &str = r#"{
         "specVersion": 1, "name": "app", "flows": [],
-        "agents": [{"id": "triage", "label": "Triage", "file": ".principia/agents/triage.md",
+        "agents": [{"id": "triage", "label": "Triage", "file": ".cohors/agents/triage.md",
                     "supports": ["codex"]}],
         "tasks": [{"id": "ship", "title": "Ship it", "notes": "Behind the flag."},
                   {"id": "sort", "title": "Sort it", "agent": "triage"}]
@@ -991,10 +991,10 @@ mod tests {
     fn a_declared_agent_is_confined_and_honours_supports() {
         let home = tempfile::tempdir().unwrap();
         let repo = tempfile::tempdir().unwrap();
-        write(repo.path(), ".principia/repo.json", CONTRIBUTION);
+        write(repo.path(), ".cohors/repo.json", CONTRIBUTION);
         write(
             repo.path(),
-            ".principia/agents/triage.md",
+            ".cohors/agents/triage.md",
             "Triage {{REPO_NAME}} on {{BRANCH}}.",
         );
         let agent = || {
@@ -1020,7 +1020,7 @@ mod tests {
         // in either form: the argument and the file the terminal form reads.
         write(
             repo.path(),
-            ".principia/agents/triage.md",
+            ".cohors/agents/triage.md",
             "--dangerously-skip-permissions",
         );
         let plan = plan_launch(home.path(), &agent(), &all_installed(), NOW).unwrap();
@@ -1028,12 +1028,12 @@ mod tests {
         let on_disk = fs::read_to_string(plan.prompt_file.unwrap()).unwrap();
         assert!(!on_disk.starts_with('-'));
 
-        // An agent file that escapes .principia/ is refused.
+        // An agent file that escapes .cohors/ is refused.
         write(repo.path(), "secret.md", "nope");
         write(
             repo.path(),
-            ".principia/repo.json",
-            &CONTRIBUTION.replace(".principia/agents/triage.md", ".principia/../secret.md"),
+            ".cohors/repo.json",
+            &CONTRIBUTION.replace(".cohors/agents/triage.md", ".cohors/../secret.md"),
         );
         let err = plan_launch(home.path(), &agent(), &all_installed(), NOW).unwrap_err();
         assert!(err.to_string().contains("refusing agent file"), "{err}");
@@ -1050,7 +1050,7 @@ mod tests {
     fn a_task_starts_linked_then_resumes_its_conversation() {
         let home = tempfile::tempdir().unwrap();
         let repo = tempfile::tempdir().unwrap();
-        write(repo.path(), ".principia/repo.json", CONTRIBUTION);
+        write(repo.path(), ".cohors/repo.json", CONTRIBUTION);
         let task = || {
             request(
                 LaunchKind::Task("ship".to_string()),
@@ -1070,7 +1070,7 @@ mod tests {
         );
         assert_eq!(read_threads(repo.path()).get("ship"), Some(&session));
         let ignore = fs::read_to_string(repo.path().join(".gitignore")).unwrap();
-        assert!(ignore.contains(".principia/local.json"));
+        assert!(ignore.contains(".cohors/local.json"));
         let body = fs::read_to_string(first.prompt_file.unwrap()).unwrap();
         assert!(body.contains("Task: Ship it") && body.contains("Behind the flag."));
 
@@ -1085,7 +1085,7 @@ mod tests {
         assert!(fresh.command.starts_with("gemini --session-id "));
 
         // A task that names a shipped agent runs that agent with the task attached.
-        write(repo.path(), ".principia/agents/triage.md", "Triage.");
+        write(repo.path(), ".cohors/agents/triage.md", "Triage.");
         let sorted = plan_launch(
             home.path(),
             &request(
@@ -1135,7 +1135,7 @@ mod tests {
         let repo = tempfile::tempdir().unwrap();
         write(
             repo.path(),
-            ".principia/local.json",
+            ".cohors/local.json",
             r#"{"device":"pixel","threads":{"a":"1"}}"#,
         );
         write_thread(repo.path(), "b", "abcdef12", NOW).unwrap();

@@ -25,7 +25,7 @@ expression: "render_to_string(&app, 120, 30)"
 │ branch      main                    │ │ · Nothing needs attention            │ │ No launchpad file. Press a to have  │
 │ upstream    origin/main             │ │                                      │ │ your coding agent read this         │
 │ fetched     no remote               │ │ last commit                          │ │ repository and write                │
-│ staged      0                       │ │ content: Q2 launch landing page      │ │ .principia/repo.json; tasks appear  │
+│ staged      0                       │ │ content: Q2 launch landing page      │ │ .cohors/repo.json; tasks appear     │
 │ modified    0                       │ │                                      │ │ here once it exists.                │
 │ untracked   0                       │ │ path                                 │ │                                     │
 │ stashes     0                       │ │ ~/code/marketing-site                │ │                                     │

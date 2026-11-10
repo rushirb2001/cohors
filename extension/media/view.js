@@ -539,7 +539,7 @@
 
     if (!e.configured) {
       out.push(sec("d-setup", `<h3>Launchpad</h3><p class="dim">${e.invalid
-        ? `Its <code>.principia/repo.json</code> is not valid: ${esc(e.invalid)}.`
+        ? `Its <code>.cohors/repo.json</code> is not valid: ${esc(e.invalid)}.`
         : "This repository has no launchpad file, so it declares no flows, agents or tasks yet."}</p>
         <div class="dacts">${r.path ? agentBtn(m, e.invalid ? "Fix with an agent" : "Set up with an agent", Object.assign({ do: "prompt", kind: "setup-repo" }, id), { primary: true, icon: "sparkle" }) : ""}</div>`));
     }
@@ -607,7 +607,7 @@
         note: usable.length ? usable.map((r) => r.label).join(", ") : "None found on your PATH.",
         action: btn("Detect again", { do: "redetect" }, { link: true }) },
       { done: !!e.configured, title: `Let ${name} describe itself`,
-        note: e.configured ? "It has a launchpad file." : "An agent reads the repository and commits .principia/repo.json.",
+        note: e.configured ? "It has a launchpad file." : "An agent reads the repository and commits .cohors/repo.json.",
         action: ask(e.configured ? "Run setup again" : "Set up with an agent", "setup-repo") },
       { done: (c.flows || []).length > 0, title: "Declare a flow worth launching",
         note: (c.flows || []).length ? `${plural(c.flows.length, "flow")} declared.` : "Only what detection cannot infer: a label, a port, the main flow.",
@@ -686,7 +686,7 @@
           <td class="dim clip">${x.e.invalid ? `<span class="bad">Launchpad file is not valid: ${esc(x.e.invalid)}</span>` : `<span class="mono">${esc(tilde(x.r.path || "", m.home))}</span>`}</td>
           <td class="r w-setup">${x.r.path ? agentBtn(m, x.e.invalid ? "Fix with an agent" : "Set up with an agent", { do: "prompt", kind: "setup-repo", id: x.r.id }, { link: true }) : ""}</td></tr>`).join("")}</tbody></table>`
       : blank("Every repository has a launchpad file."),
-      unset.length ? "Setting up asks an agent to read the repository and commit .principia/repo.json: its flows, the agents it ships and its current tasks." : "")}`));
+      unset.length ? "Setting up asks an agent to read the repository and commit .cohors/repo.json: its flows, the agents it ships and its current tasks." : "")}`));
 
     // Recent agent activity.
     const acts = m.activity.slice(0, 12);

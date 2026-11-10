@@ -4,8 +4,8 @@ This is the canonical, runner-agnostic instruction. Claude Code, Codex, Gemini
 CLI, agy, and any future runner all follow this same file. `cohors agent run
 setup-repo` hands it to whichever runner you use.
 
-Your job: read the repository you are in, then write `.principia/repo.json` (and
-optionally `.principia/agents/*.md`) so the launchpad can show it properly.
+Your job: read the repository you are in, then write `.cohors/repo.json` (and
+optionally `.cohors/agents/*.md`) so the launchpad can show it properly.
 
 ---
 
@@ -17,7 +17,7 @@ optionally `.principia/agents/*.md`) so the launchpad can show it properly.
 2. **Look at the repo, do not guess.** Read in this order, whichever exist:
    `README.md`, `package.json`, `Cargo.toml`, `pyproject.toml`, `Makefile`,
    `settings.gradle[.kts]`, `*.xcodeproj`, `docker-compose.yml`, `CLAUDE.md`.
-3. **Check what already exists.** If `.principia/repo.json` is present you are
+3. **Check what already exists.** If `.cohors/repo.json` is present you are
    *updating*, not replacing. Preserve `tasks[]` the user may be mid-way through
    and preserve any keys you do not understand.
 
@@ -43,7 +43,7 @@ still gives the repo a name, a group and a one-line description in the dashboard
 
 ## Writing it
 
-Create `.principia/repo.json`:
+Create `.cohors/repo.json`:
 
 ```json
 {
@@ -64,7 +64,7 @@ Hard rules, all enforced by the validator:
 - Every `id` is kebab-case and unique within its array.
 - **No absolute paths.** `run` and `cwd` are relative to the repo root.
 - **No secrets, tokens, hostnames, or machine-specific values.** This file is
-  committed. Anything machine-local belongs in `.principia/local.json`, which is
+  committed. Anything machine-local belongs in `.cohors/local.json`, which is
   gitignored and which you should not write.
 - At most one flow may be `"primary": true`.
 - `summary` is 80 characters or fewer.
@@ -76,7 +76,7 @@ context. Good candidates: triaging uncommitted work, cutting a release,
 reviewing a diff against this repo's conventions. Bad candidates: anything
 generic, which belongs in the user's own agent set, not in this repo.
 
-Write `.principia/agents/<id>.md`:
+Write `.cohors/agents/<id>.md`:
 
 ```markdown
 ---
@@ -102,7 +102,7 @@ Then reference it from `repo.json`:
 ```json
 "agents": [
   { "id": "triage", "label": "Triage uncommitted work",
-    "file": ".principia/agents/triage.md",
+    "file": ".cohors/agents/triage.md",
     "supports": ["claude-code", "codex", "gemini-cli", "agy"] }
 ]
 ```
@@ -126,7 +126,7 @@ Write/Edit plus `cohors launchpad validate .` only when it is not connected.
 
 ## Finish
 
-1. Ensure `.gitignore` contains `.principia/local.json`.
+1. Ensure `.gitignore` contains `.cohors/local.json`.
 2. Validate:
 
    ```sh

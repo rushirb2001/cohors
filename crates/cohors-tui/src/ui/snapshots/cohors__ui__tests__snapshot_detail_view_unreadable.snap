@@ -40,7 +40,7 @@ expression: "render_to_string(&app, 120, 45)"
 │ This repository could not be read.  │ │ ▲ Could not be read                  │ │ No launchpad file. Press a to have  │
 │ could not read .git (permission     │ │                                      │ │ your coding agent read this         │
 │ denied)                             │ │ path                                 │ │ repository and write                │
-│                                     │ │ ~/code/legacy-billing                │ │ .principia/repo.json; tasks appear  │
+│                                     │ │ ~/code/legacy-billing                │ │ .cohors/repo.json; tasks appear     │
 │                                     │ │                                      │ │ here once it exists.                │
 │                                     │ │                                      │ │                                     │
 │                                     │ │                                      │ │                                     │

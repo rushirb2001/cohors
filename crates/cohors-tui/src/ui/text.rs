@@ -186,8 +186,8 @@ mod tests {
         assert_eq!(wrap("", 10), Vec::<String>::new());
         // A word longer than the line is kept whole.
         assert_eq!(
-            wrap("a .principia/repo.json b", 6),
-            ["a", ".principia/repo.json", "b"]
+            wrap("a .cohors/repo.json b", 6),
+            ["a", ".cohors/repo.json", "b"]
         );
     }
 }

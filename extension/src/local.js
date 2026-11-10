@@ -1,7 +1,7 @@
 // Machine-local extras cohors does not report yet.
 //
 // Three small things, all read from this machine and never sent anywhere:
-//   1. task -> conversation links in a repo's gitignored .principia/local.json,
+//   1. task -> conversation links in a repo's gitignored .cohors/local.json,
 //      so a task's button can say "Resume" instead of "Start";
 //   2. Claude Code session history for a repository that has opted in;
 //   3. the one-shot "open this folder, then start working there" intent that
@@ -26,7 +26,7 @@ const exists = (p) => { try { fs.accessSync(p); return true; } catch { return fa
  * cohors writes it when it starts a linked session; this only reads it.
  */
 function readThreads(repoPath) {
-  const d = readJson(path.join(repoPath, ".principia", "local.json"));
+  const d = readJson(path.join(repoPath, ".cohors", "local.json"));
   if (!d || d.specVersion !== 1 || !d.threads || typeof d.threads !== "object") return {};
   const out = {};
   for (const [task, session] of Object.entries(d.threads)) {
@@ -130,7 +130,7 @@ function takePending(dir, here) {
   return same ? (p.action || null) : null;
 }
 
-// A repo-declared file must stay inside that repo's .principia/ directory:
+// A repo-declared file must stay inside that repo's .cohors/ directory:
 // `..` segments in a committed path must not reach the rest of the disk.
 function resolveInside(repoPath, rel, sub) {
   if (typeof rel !== "string" || !rel) return null;

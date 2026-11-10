@@ -551,8 +551,8 @@ async function onMessage(m) {
     case "openAgentFile": {
       const repo = repoWithPath(m.id), entry = entryById(m.id);
       const decl = entry && ((entry.contribution || {}).agents || []).find((a) => a.id === m.agent);
-      const file = repo && decl && Local.resolveInside(repo.path, decl.file, ".principia");
-      if (!file || !Local.exists(file)) return void fail(new Error("that agent's prompt file is missing or outside .principia/."));
+      const file = repo && decl && Local.resolveInside(repo.path, decl.file, ".cohors");
+      if (!file || !Local.exists(file)) return void fail(new Error("that agent's prompt file is missing or outside .cohors/."));
       return void vscode.window.showTextDocument(vscode.Uri.file(file), { preview: true });
     }
 
@@ -785,10 +785,10 @@ function activate(context) {
     } catch (e) { console.error(`cohors: could not watch ${label}`, e); }
   };
   // A repository's launchpad file, in any open workspace folder.
-  watch("**/.principia/*.json", "workspace launchpad files");
+  watch("**/.cohors/*.json", "workspace launchpad files");
   // The cross-repo focus board, which lives in the home directory (or where
-  // PRINCIPIA_HOME says, the same override cohors itself honours).
-  const boardHome = process.env.PRINCIPIA_HOME || path.join(os.homedir(), ".principia");
+  // COHORS_HOME says, the same override cohors itself honours).
+  const boardHome = process.env.COHORS_HOME || path.join(os.homedir(), ".cohors");
   watch(new vscode.RelativePattern(vscode.Uri.file(boardHome), "*.json"), "the focus board");
   // Branch switches and commits move HEAD; staging and committing move the index.
   for (const f of vscode.workspace.workspaceFolders || []) {

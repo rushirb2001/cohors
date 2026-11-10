@@ -870,7 +870,7 @@ fn render_tasks(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focused
     if overview.work.is_empty() {
         let message = if f.configured_repos == 0 {
             "No launchpad files yet. Tasks appear here once a repository has \
-             .principia/repo.json."
+             .cohors/repo.json."
                 .to_string()
         } else {
             format!(

@@ -1,6 +1,6 @@
 # Plan focus across repositories
 
-Runner-agnostic. Writes the focus board, `~/.principia/board.json`, as the
+Runner-agnostic. Writes the focus board, `~/.cohors/board.json`, as the
 contract (`cohors launchpad contract`) describes it.
 
 ## Gather evidence first
@@ -12,9 +12,9 @@ Do not plan from memory. Look at:
    (Without cohors on the PATH: `git -C <repo> status --porcelain` and
    `git -C <repo> rev-list --count @{upstream}..HEAD` per repo.)
 2. **What was committed recently.** `cohors standup --json`.
-3. **Repo-declared tasks.** `.principia/repo.json` → `tasks[]` with status
+3. **Repo-declared tasks.** `.cohors/repo.json` → `tasks[]` with status
    `todo`, `doing` or `blocked`.
-4. **Recent sessions.** `~/.principia/history/*.jsonl`, newest first, to see what
+4. **Recent sessions.** `~/.cohors/history/*.jsonl`, newest first, to see what
    was actually being worked on and by which runner.
 
 ## Then write the board

@@ -70,7 +70,7 @@ When registering by hand, use the **absolute path**: an agent spawns the server 
 Status tells you what state a repo is in. The launchpad tells you what you can *do* there. A repository opts in by committing one small file, so its entry travels with the clone:
 
 ```text
-your-repo/.principia/
+your-repo/.cohors/
 ├── repo.json          # flows to run, agents it ships, short-lived tasks
 └── agents/release.md  # a prompt this repo ships for recurring work
 ```
@@ -79,12 +79,12 @@ You don't write it. In that repo, ask your agent to **"set up this repo for the 
 
 ```sh
 cohors launchpad              # your focus board + every open task across the fleet
-cohors launchpad validate .   # check this repo's .principia/repo.json
+cohors launchpad validate .   # check this repo's .cohors/repo.json
 ```
 
 Then ask your agent to **"plan my day"**: it reads every repo's tasks, the uncommitted and unpushed work nobody wrote a task for, and failing CI, and proposes a cross-repo focus board.
 
-The format is an open contract, written down in [spec/v1/SPEC.md](spec/v1/SPEC.md) (first published as the Principia contract, which is why the directory is called `.principia/`). Text inside a repo's launchpad files is treated as untrusted data: the agent is told so, and cohors never runs a declared flow on its own.
+The format is an open contract, written down in [spec/v1/SPEC.md](spec/v1/SPEC.md). Text inside a repo's launchpad files is treated as untrusted data: the agent is told so, and cohors never runs a declared flow on its own.
 
 ## For you: a fast fleet dashboard
 
@@ -195,7 +195,7 @@ A Rust workspace around a pure, I/O-free core with thin adapters, so the *same* 
 - `cohors-core`: pure, WASM-safe models and analysis (attention scoring, the selector language and its shorthand parser, search, the launchpad contract).
 - `cohors-config` · `cohors-git` ([gitoxide](https://github.com/GitoxideLabs/gitoxide)) · `cohors-github`: config, local git (bare repos included, history-memoized rescans), and GitHub (parallel, rate-limit-aware) adapters.
 - `cohors-actions`: the write layer, holding the git action primitives, the one action registry every surface wires from, and the `dispatch()` the machine surfaces share.
-- `cohors-launchpad`: the launchpad adapter, which reads each repo's `.principia/` contribution and does validated, symlink-safe writes of contributions, the focus board, and the activity log.
+- `cohors-launchpad`: the launchpad adapter, which reads each repo's `.cohors/` contribution and does validated, symlink-safe writes of contributions, the focus board, and the activity log.
 - `cohors-fleet`: the composition layer, with one `Scanner` (config + git + github wired once) and the read facade every front-end goes through, enforced by tests rather than convention.
 - `cohors-mcp`: the MCP server (hand-rolled JSON-RPC over stdio), launched by `cohors mcp`.
 - `cohors-tui` ([ratatui](https://ratatui.rs)): the `cohors` binary (dashboard and CLI).

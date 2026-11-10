@@ -6,7 +6,7 @@ picture is in the `setup-repo` prompt (`cohors agent run setup-repo`), and
 the contract (`cohors launchpad contract`) wins over both.
 
 Your job: decide which flows this repo should **declare**, and write only those
-into `.principia/repo.json` under `flows`.
+into `.cohors/repo.json` under `flows`.
 
 ---
 
@@ -41,7 +41,7 @@ them adds nothing and creates a file that goes stale. Do not write it.
 
 ## Writing it
 
-You are **updating** `.principia/repo.json`, not replacing it. Preserve
+You are **updating** `.cohors/repo.json`, not replacing it. Preserve
 `agents`, `tasks`, and any key you do not understand. If the file does not
 exist, follow the `setup-repo` prompt first (`cohors agent run setup-repo`).
 
@@ -53,7 +53,7 @@ Rules the validator enforces:
 - `kind` is one of `server`, `task`, `test`, `build`, `tool`.
 - No secrets, tokens, hostnames or machine-specific values. This file is
   committed; machine-local values belong in the gitignored
-  `.principia/local.json`, which you should not write.
+  `.cohors/local.json`, which you should not write.
 
 Refresh `updated` to now (ISO-8601 UTC) and `generatedFrom` to the current short
 HEAD SHA.

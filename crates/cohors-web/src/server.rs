@@ -244,7 +244,7 @@ fn api_repos(req: tiny_http::Request, url: &str, scan: &ScanFn, token: Option<&s
 }
 
 /// `GET /api/launchpad` — what each repo offers and what is waiting in it: the
-/// committed `.principia/` contribution, flows detected from manifests, the
+/// committed `.cohors/` contribution, flows detected from manifests, the
 /// user's cross-repo focus board and recent agent activity (ADR-054).
 ///
 /// The sample launchpad is served only when the server was started with
@@ -564,9 +564,9 @@ mod tests {
     #[test]
     fn launchpad_reads_a_real_repo() {
         let dir = std::env::temp_dir().join(format!("cohors-web-lp-{}", std::process::id()));
-        std::fs::create_dir_all(dir.join(".principia")).unwrap();
+        std::fs::create_dir_all(dir.join(".cohors")).unwrap();
         std::fs::write(
-            dir.join(".principia/repo.json"),
+            dir.join(".cohors/repo.json"),
             r#"{"specVersion":1,"name":"Svc","tasks":[{"id":"a","title":"Do it"}]}"#,
         )
         .unwrap();

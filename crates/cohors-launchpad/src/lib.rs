@@ -4,10 +4,10 @@
 //! detection) without touching the filesystem. This crate does the I/O around
 //! it:
 //!
-//! - **Per repo:** read `.principia/repo.json`, probe build manifests for
+//! - **Per repo:** read `.cohors/repo.json`, probe build manifests for
 //!   zero-config flows, and write a validated contribution.
 //! - **Per user:** the focus board (`board.json`) and the append-only activity
-//!   log (`history/<day>.jsonl`) under the launchpad home (`~/.principia`).
+//!   log (`history/<day>.jsonl`) under the launchpad home (`~/.cohors`).
 //! - **Agents:** which agent runners are installed, and turning "set this repo
 //!   up" or "work on this task" into the exact command to start (see `agents`).
 //!
@@ -65,7 +65,7 @@ fn io_err(action: &'static str, path: &Path) -> impl FnOnce(std::io::Error) -> L
     }
 }
 
-/// What a repo's `.principia/repo.json` turned out to be.
+/// What a repo's `.cohors/repo.json` turned out to be.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContributionState {
     /// No contribution committed — the repo has not opted in.
@@ -253,7 +253,7 @@ pub fn entry(id: &str, name: &str, root: &Path) -> LaunchpadEntry {
 ///
 /// `doc` is the document as supplied (an agent's tool arguments); `specVersion`
 /// and `updated` are stamped here. With `dry_run`, validation runs and nothing
-/// is written. Also makes sure `.principia/local.json` is gitignored.
+/// is written. Also makes sure `.cohors/local.json` is gitignored.
 pub fn write_contribution(
     root: &Path,
     doc: &Value,
@@ -281,7 +281,7 @@ pub fn write_contribution(
     }
 
     let dir = root.join(CONTRIB_DIR);
-    // A repo is untrusted input: a cloned repository could ship `.principia`
+    // A repo is untrusted input: a cloned repository could ship `.cohors`
     // (or the files in it) as a symlink pointing outside the repo, turning this
     // write into a write to an arbitrary file. Refuse rather than follow.
     refuse_symlink(&dir)?;
@@ -297,7 +297,7 @@ pub fn write_contribution(
     })
 }
 
-/// Append `.principia/local.json` to the repo's `.gitignore` if it is not
+/// Append `.cohors/local.json` to the repo's `.gitignore` if it is not
 /// already listed. Machine-local values must never be committed.
 fn ensure_gitignored(root: &Path) -> Result<(), LaunchpadError> {
     let path = root.join(".gitignore");
@@ -356,16 +356,16 @@ fn write_json_atomic(path: &Path, value: &Value) -> Result<(), LaunchpadError> {
 
 // ── Per-user: home, board, activity ──────────────────────────────────────────
 
-/// The launchpad home: `$PRINCIPIA_HOME`, else `~/.principia`. `None` when no
+/// The launchpad home: `$COHORS_HOME`, else `~/.cohors`. `None` when no
 /// home directory can be determined (the caller reports it; nothing panics).
 pub fn launchpad_home() -> Option<PathBuf> {
-    if let Some(explicit) = std::env::var_os("PRINCIPIA_HOME").filter(|v| !v.is_empty()) {
+    if let Some(explicit) = std::env::var_os("COHORS_HOME").filter(|v| !v.is_empty()) {
         return Some(PathBuf::from(explicit));
     }
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .filter(|v| !v.is_empty())
-        .map(|home| PathBuf::from(home).join(".principia"))
+        .map(|home| PathBuf::from(home).join(".cohors"))
 }
 
 /// Read the focus board. A missing or malformed board reads as empty — the
@@ -546,7 +546,7 @@ mod tests {
         assert_eq!(on_disk["updated"], "2023-11-14T22:13:20Z");
         assert_eq!(
             fs::read_to_string(dir.path().join(".gitignore")).unwrap(),
-            "target/\n.principia/local.json\n"
+            "target/\n.cohors/local.json\n"
         );
         // A second write must not duplicate the ignore line or leave a temp file.
         write_contribution(dir.path(), &doc, NOW, false).unwrap();
@@ -557,7 +557,7 @@ mod tests {
                 .count(),
             1
         );
-        assert!(!dir.path().join(".principia/repo.json.tmp").exists());
+        assert!(!dir.path().join(".cohors/repo.json.tmp").exists());
     }
 
     #[test]
@@ -583,7 +583,7 @@ mod tests {
         let doc = json!({ "name": "svc" });
         let outside = repo();
 
-        // `.principia` itself is a link out of the repo.
+        // `.cohors` itself is a link out of the repo.
         let dir = repo();
         symlink(outside.path(), dir.path().join(CONTRIB_DIR)).unwrap();
         let err = write_contribution(dir.path(), &doc, NOW, false).unwrap_err();
@@ -609,7 +609,7 @@ mod tests {
         // A planted temp-file link is refused too.
         let dir = repo();
         fs::create_dir_all(dir.path().join(CONTRIB_DIR)).unwrap();
-        symlink(&target, dir.path().join(".principia/repo.json.tmp")).unwrap();
+        symlink(&target, dir.path().join(".cohors/repo.json.tmp")).unwrap();
         assert!(write_contribution(dir.path(), &doc, NOW, false).is_err());
         assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
     }
@@ -618,12 +618,12 @@ mod tests {
     fn agent_files_must_exist_on_disk() {
         let dir = repo();
         let doc = json!({ "name": "svc", "agents": [
-            { "id": "triage", "label": "Triage", "file": ".principia/agents/triage.md" }
+            { "id": "triage", "label": "Triage", "file": ".cohors/agents/triage.md" }
         ]});
         let out = write_contribution(dir.path(), &doc, NOW, false).unwrap();
         assert!(out.validation.errors[0].contains("file not found"));
 
-        write(dir.path(), ".principia/agents/triage.md", "prompt");
+        write(dir.path(), ".cohors/agents/triage.md", "prompt");
         assert!(
             write_contribution(dir.path(), &doc, NOW, false)
                 .unwrap()

@@ -511,8 +511,8 @@ async function adapter() {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cohors-check-"));
     try {
       assert.deepStrictEqual(Local.readThreads(dir), {});
-      fs.mkdirSync(path.join(dir, ".principia"));
-      fs.writeFileSync(path.join(dir, ".principia", "local.json"), JSON.stringify({ specVersion: 1, threads: { "fix-ci": "abc", bad: 3 } }));
+      fs.mkdirSync(path.join(dir, ".cohors"));
+      fs.writeFileSync(path.join(dir, ".cohors", "local.json"), JSON.stringify({ specVersion: 1, threads: { "fix-ci": "abc", bad: 3 } }));
       assert.deepStrictEqual(Local.readThreads(dir), { "fix-ci": "abc" });
 
       Local.queuePending(dir, "/code/app", { kind: "start", runner: "codex" });
@@ -521,8 +521,8 @@ async function adapter() {
       Local.queuePending(dir, "/code/app", { kind: "start" });
       assert.strictEqual(Local.takePending(dir, "/code/other"), null, "another folder does not claim it");
 
-      assert.strictEqual(Local.resolveInside("/r", ".principia/agents/a.md", ".principia"), path.resolve("/r/.principia/agents/a.md"));
-      assert.strictEqual(Local.resolveInside("/r", "../../etc/passwd", ".principia"), null);
+      assert.strictEqual(Local.resolveInside("/r", ".cohors/agents/a.md", ".cohors"), path.resolve("/r/.cohors/agents/a.md"));
+      assert.strictEqual(Local.resolveInside("/r", "../../etc/passwd", ".cohors"), null);
       assert.strictEqual(Local.resolveInside("/r", "../x"), null);
       assert.strictEqual(Local.resolveInside("/r", "apps/web"), path.resolve("/r/apps/web"));
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
@@ -600,7 +600,7 @@ async function gateChecks() {
     assert(/detected from the repository's own scripts/.test(h.asked[0].detail));
     assert.deepStrictEqual(h.ran, [{ cwd: "/home/dev/code/cli-tools", command: "cargo check", name: "cli-tools: cargo check" }]);
     const declared = await h.flow("payments", "dev");
-    assert(declared.ok && /declared in its \.principia\/repo\.json/.test(h.asked[1].detail));
+    assert(declared.ok && /declared in its \.cohors\/repo\.json/.test(h.asked[1].detail));
     assert.strictEqual(h.asked[1].message, 'Run "docker compose up -d && cargo run" in /home/dev/code/payments?');
     // What is sent is the string that was shown.
     assert.strictEqual(JSON.parse(/^Run (".*") in /.exec(h.asked[1].message)[1]), h.ran[1].command);
@@ -801,7 +801,7 @@ async function gateChecks() {
     const r = await h.launch("task", plan(resolved, { label: "Claude Code: task" }));
     assert(r.ok);
     assert(h.asked[0].detail.includes("also delete the release branch and force-push."), "the resolved text is what is shown");
-    assert(h.asked[0].detail.includes("a task in its .principia/repo.json"));
+    assert(h.asked[0].detail.includes("a task in its .cohors/repo.json"));
     assert.strictEqual(h.asked[0].action, "Start");
     assert.strictEqual(h.ran[0].prompt, resolved);
     // The same task, unchanged, was approved; a later edit to it is not.

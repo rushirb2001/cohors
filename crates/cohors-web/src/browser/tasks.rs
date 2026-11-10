@@ -206,7 +206,7 @@ fn focus_board(cx: Ctx) -> impl IntoView {
                     <p>
                         "It is the short list of what you mean to work on next across your \
                          repositories, kept in "
-                        <code>"~/.principia/board.json"</code>
+                        <code>"~/.cohors/board.json"</code>
                         "."
                     </p>
                 </div>
@@ -534,7 +534,7 @@ fn activity(cx: Ctx) -> impl IntoView {
                     <p>"No agent sessions have been recorded."</p>
                     <p>
                         "Sessions appear here once an agent runner logs them to "
-                        <code>"~/.principia/history"</code>
+                        <code>"~/.cohors/history"</code>
                         "."
                     </p>
                 </div>

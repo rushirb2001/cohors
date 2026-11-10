@@ -44,7 +44,7 @@ enum Arg {
 /// two has `None` there; cohors never pretends a capability a tool lacks.
 #[derive(Debug, Clone, Copy)]
 pub struct Runner {
-    /// Stable id used in `.principia/repo.json` (`supports`) and on the CLI.
+    /// Stable id used in `.cohors/repo.json` (`supports`) and on the CLI.
     pub id: &'static str,
     /// Name shown to people.
     pub label: &'static str,
@@ -348,7 +348,7 @@ pub const PROMPTS: [Prompt; 5] = [
     Prompt {
         id: "setup-repo",
         title: "Set up this repo",
-        summary: "Read the repository and write its .principia/repo.json: flows, agents and tasks.",
+        summary: "Read the repository and write its .cohors/repo.json: flows, agents and tasks.",
         needs_repo: true,
         body: include_str!("../prompts/setup-repo.md"),
     },
@@ -464,7 +464,7 @@ pub fn task_prompt(ctx: &PromptContext<'_>, task: &Task) -> String {
         out.push_str(&format!("Notes: {notes}\n"));
     }
     out.push_str(
-        "\nWork on this task. Only mark it \"done\" in .principia/repo.json with real evidence \
+        "\nWork on this task. Only mark it \"done\" in .cohors/repo.json with real evidence \
          (a commit, a merged PR, or the user confirming) — never invent completion.\n\
          Validate any repo.json edit with: cohors launchpad validate .\n",
     );
@@ -656,11 +656,7 @@ mod tests {
                 "{} names the old validator",
                 p.id
             );
-            assert!(
-                !p.body.contains("Principia"),
-                "{} names the old product",
-                p.id
-            );
+            assert!(p.body.contains("cohors"), "{} never names cohors", p.id);
         }
         assert!(
             prompt("setup-repo")

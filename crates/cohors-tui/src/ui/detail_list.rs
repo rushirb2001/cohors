@@ -352,7 +352,7 @@ fn task_lines(entry: Option<&LaunchpadEntry>, width: usize, theme: &Theme) -> Ve
     let Some(entry) = entry.filter(|entry| entry.configured || entry.invalid.is_some()) else {
         return text::wrap(
             "No launchpad file. Press a to have your coding agent read this \
-             repository and write .principia/repo.json; tasks appear here \
+             repository and write .cohors/repo.json; tasks appear here \
              once it exists.",
             width,
         )

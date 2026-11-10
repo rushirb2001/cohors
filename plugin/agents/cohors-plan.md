@@ -18,7 +18,7 @@ is at risk and what to do next), `launchpad` (every repo's open tasks),
 was actually committed). Save with `write_board`, which validates before
 writing and reports exactly what is wrong if it rejects your input. Fall back
 to `cohors overview --json`, `cohors launchpad --json` and editing
-`~/.principia/board.json` only when the server is not connected.
+`~/.cohors/board.json` only when the server is not connected.
 
 Never invent progress. Only mark a focus item `"status": "done"` with
 evidence: a commit, a merged PR, or the user saying so. Carry forward anything

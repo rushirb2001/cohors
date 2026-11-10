@@ -136,7 +136,7 @@ function flowRequest(repoPath, flow, declared, cwd) {
     // JSON-quoted: every character of the command is visible and delimited.
     message: `Run ${JSON.stringify(flow.run)} in ${cwd}?`,
     detail: `This command comes from the repository, not from cohors: ${declared
-      ? "it is declared in its .principia/repo.json."
+      ? "it is declared in its .cohors/repo.json."
       : "it was detected from the repository's own scripts (package.json, Makefile, Cargo and the like)."}`
       + " It runs in a terminal exactly as shown between the quotes. You are asked once for each command in each repository, until this window closes.",
     action: "Run",
@@ -166,7 +166,7 @@ function promptRequest(repoPath, kind, plan, text, runnerLabel) {
     // the command, and the instructions themselves.
     key: sha256([repoPath, plan.cwd, plan.runner, commandShape(plan), text].join("\n")),
     message: `Hand these instructions to ${who} in ${repoPath}?`,
-    detail: `They come from the repository, not from cohors: ${kind === "task" ? "a task in its .principia/repo.json" : "an agent prompt it committed"}.`
+    detail: `They come from the repository, not from cohors: ${kind === "task" ? "a task in its .cohors/repo.json" : "an agent prompt it committed"}.`
       + ` ${who} receives exactly this text and can read and change files in that folder.\n\n${excerpt(text)}\n\n`
       + `You are asked once for each distinct set of instructions in each repository, until this window closes.`,
     action: kind === "task" ? "Start" : "Run",

@@ -178,7 +178,7 @@ pub enum Command {
     },
     /// What each repo offers and what work is waiting: flows, agents, tasks.
     ///
-    /// A repo opts in by committing `.principia/repo.json` (ask your agent to
+    /// A repo opts in by committing `.cohors/repo.json` (ask your agent to
     /// "set up this repo for the launchpad"). Bare, this reports the focus
     /// board and every open task across the fleet; piped or with `--json` it
     /// prints the same data as JSON.
@@ -305,13 +305,13 @@ pub struct AgentLaunch {
 
 #[derive(Debug, Subcommand)]
 pub enum LaunchpadCmd {
-    /// Check a repo's `.principia/repo.json` against the contract.
+    /// Check a repo's `.cohors/repo.json` against the contract.
     Validate {
         /// The repository to check (default: the current directory).
         #[arg(value_name = "PATH")]
         path: Option<String>,
     },
-    /// Print the contract a `.principia/repo.json` must satisfy, as JSON.
+    /// Print the contract a `.cohors/repo.json` must satisfy, as JSON.
     Contract,
     /// Append an agent-session event to the activity log (used by hooks).
     Record {

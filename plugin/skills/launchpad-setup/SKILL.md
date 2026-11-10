@@ -2,15 +2,15 @@
 name: launchpad-setup
 description: >
   Teach a repository to describe itself to the cohors launchpad by writing its
-  committed .principia/repo.json (flows, agents, tasks). Use when the user asks
+  committed .cohors/repo.json (flows, agents, tasks). Use when the user asks
   to "set up this repo for the launchpad", "add this repo to the launchpad",
-  "configure principia here", or when `launchpad` reports the repo as
+  "configure the launchpad here", or when `launchpad` reports the repo as
   configured: false.
 ---
 
 # Set up a repo for the launchpad
 
-A repository opts in by committing `.principia/repo.json`. The file travels
+A repository opts in by committing `.cohors/repo.json`. The file travels
 with the clone, so a teammate or a second machine gets the entry for free.
 
 ## Before writing
@@ -42,7 +42,7 @@ and `group` still gives the repo a real entry.
 
 **Agents:** add one only for recurring work that needs this repo's context
 (cutting a release, checking a repo-specific invariant). Write the prompt to
-`.principia/agents/<id>.md` first, then reference it; the write is rejected if
+`.cohors/agents/<id>.md` first, then reference it; the write is rejected if
 the file does not exist. Most repos need none.
 
 **Tasks:** short-lived and drawn from evidence — uncommitted work, unpushed
@@ -62,7 +62,7 @@ SHA so staleness can be shown later.
 The plugin starts the server **read-only**, so the real write is refused
 until the user opts in. When that happens, do one of:
 
-- Write `.principia/repo.json` yourself with your normal file tools (the user
+- Write `.cohors/repo.json` yourself with your normal file tools (the user
   approves the edit like any other), stamping `"specVersion": 1` and an
   ISO-8601 UTC `"updated"`, then check it:
 

@@ -22,11 +22,9 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 ### Added
 
 - **The launchpad.** cohors now reads what each repository says about itself:
-  a committed `.principia/repo.json` listing its flows (what to run), the agent
-  prompts it ships, and its short-lived tasks. This is the
-  [Principia](https://github.com/rushirb2001/principia) contract, spec v1,
-  implemented natively, so repos that already carry a `.principia/` directory
-  work with no migration. Flows are also detected with zero config from
+  a committed `.cohors/repo.json` listing its flows (what to run), the agent
+  prompts it ships, and its short-lived tasks. The format is an open
+  contract, written down in `spec/v1/SPEC.md`. Flows are also detected with zero config from
   npm/pnpm/yarn/bun scripts, cargo, uv, Makefile targets, and gradle.
 - **`cohors launchpad`** reports the focus board and every open task across the
   fleet (JSON when piped). `cohors launchpad validate [PATH]` checks one repo's
@@ -61,8 +59,7 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   started this way is linked to its conversation and resumes there next time.
   The five prompts are also served to MCP clients as prompts, and in the
   dashboard `a` on a repo does the same after asking.
-- **A VS Code extension** (`extension/`), formerly the separate Principia
-  extension: the same overview, repositories, tasks and standup in an editor
+- **A VS Code extension** (`extension/`): the same overview, repositories, tasks and standup in an editor
   tab that follows your theme, reading everything from the `cohors` binary.
 - **The launchpad contract is in this repository**, at `spec/v1/SPEC.md`, with
   its JSON Schemas.
@@ -150,7 +147,7 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Security
 
-- Text read from a repo's `.principia/` files is labelled as untrusted data to
+- Text read from a repo's `.cohors/` files is labelled as untrusted data to
   the agent, and control characters are stripped before it is printed.
 - Launchpad writes refuse symbolic links at every path they touch.
 - A flow command a repo declares must be one readable line: printable ASCII

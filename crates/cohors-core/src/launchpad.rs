@@ -2,14 +2,13 @@
 //!
 //! The rest of the core answers "what state is each repo in?". This module
 //! answers "what can I *do* in each repo, and what work is waiting there?". A
-//! repository opts in by committing a `.principia/repo.json` describing its
+//! repository opts in by committing a `.cohors/repo.json` describing its
 //! **flows** (things to run), **agents** (prompt files it ships), and **tasks**
 //! (short-lived, evidence-backed work). A user-level **board** carries focus
 //! across repos, and an append-only **activity** log records agent sessions.
 //!
-//! This is the Principia contract, spec v1, implemented natively so one binary
-//! serves both the fleet and the launchpad (ADR-054). The on-disk format is
-//! unchanged, so repos already carrying a `.principia/` directory keep working.
+//! This is the launchpad contract, spec v1 (`spec/v1/SPEC.md`), implemented
+//! here so one binary serves both the fleet and the launchpad (ADR-054).
 //!
 //! Everything here is pure: models, validation, and flow detection take data
 //! in and return data out. Reading and writing the files is the job of the
@@ -28,11 +27,11 @@ use serde_json::{Value, json};
 /// The contract version this build reads and writes.
 pub const SPEC_VERSION: u64 = 1;
 /// The per-repo directory a contribution lives in (committed).
-pub const CONTRIB_DIR: &str = ".principia";
+pub const CONTRIB_DIR: &str = ".cohors";
 /// The committed contribution file, relative to the repo root.
-pub const CONTRIB_FILE: &str = ".principia/repo.json";
+pub const CONTRIB_FILE: &str = ".cohors/repo.json";
 /// The machine-local file that must never be committed.
-pub const LOCAL_FILE: &str = ".principia/local.json";
+pub const LOCAL_FILE: &str = ".cohors/local.json";
 
 /// Agent runners a repo-declared agent may claim to support.
 pub const RUNNERS: [&str; 4] = ["claude-code", "codex", "gemini-cli", "agy"];
@@ -85,7 +84,7 @@ pub struct Flow {
 pub struct AgentDecl {
     pub id: String,
     pub label: String,
-    /// Path under `.principia/`, relative to the repo root.
+    /// Path under `.cohors/`, relative to the repo root.
     pub file: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub supports: Vec<String>,
@@ -136,7 +135,7 @@ impl Task {
     }
 }
 
-/// A repository's committed `.principia/repo.json`.
+/// A repository's committed `.cohors/repo.json`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Contribution {
@@ -168,7 +167,7 @@ pub struct Contribution {
 pub struct LaunchpadEntry {
     pub id: String,
     pub name: String,
-    /// True when a valid `.principia/repo.json` is committed.
+    /// True when a valid `.cohors/repo.json` is committed.
     pub configured: bool,
     /// Why an existing contribution could not be used (bad JSON, wrong version).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -223,7 +222,7 @@ pub struct FocusItem {
     pub thread: Option<String>,
 }
 
-/// The user-level focus board (`~/.principia/board.json`).
+/// The user-level focus board (`~/.cohors/board.json`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Board {
@@ -233,7 +232,7 @@ pub struct Board {
     pub focus: Vec<FocusItem>,
 }
 
-/// One line of the activity log (`~/.principia/history/<day>.jsonl`).
+/// One line of the activity log (`~/.cohors/history/<day>.jsonl`).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ActivityEvent {
@@ -399,7 +398,7 @@ fn check_enum(item: &Value, key: &str, allowed: &[&str], at: &str, errors: &mut 
     }
 }
 
-/// Validate a `.principia/repo.json` document against spec v1.
+/// Validate a `.cohors/repo.json` document against spec v1.
 ///
 /// `file_exists` answers whether a repo-relative path exists, so the "agent
 /// file must exist" rule can be checked without this crate touching the disk.
@@ -486,8 +485,8 @@ pub fn validate_contribution(doc: &Value, file_exists: &dyn Fn(&str) -> bool) ->
             errors.push(format!("{at}: file must be relative to the repo root"));
         } else if file.split(['/', '\\']).any(|seg| seg == "..") {
             errors.push(format!("{at}: file must not contain \"..\""));
-        } else if !(file.starts_with(".principia/") || file.starts_with(".principia\\")) {
-            errors.push(format!("{at}: file must live under .principia/"));
+        } else if !(file.starts_with(".cohors/") || file.starts_with(".cohors\\")) {
+            errors.push(format!("{at}: file must live under .cohors/"));
         } else if !file_exists(file) {
             errors.push(format!("{at}: file not found: {file}"));
         }
@@ -527,7 +526,7 @@ pub fn validate_contribution(doc: &Value, file_exists: &dyn Fn(&str) -> bool) ->
     Validation { errors, warnings }
 }
 
-/// Validate a board document (`~/.principia/board.json`).
+/// Validate a board document (`~/.cohors/board.json`).
 pub fn validate_board(doc: &Value) -> Validation {
     let mut errors = Vec::new();
     if !doc.is_object() {
@@ -570,7 +569,7 @@ pub fn contract() -> Value {
             "every id (flows/agents/tasks) is unique and kebab-case",
             "flows[].run and flows[].cwd must be relative, never absolute",
             "at most one flow may be primary",
-            "agents[].file must live under .principia/ and must exist",
+            "agents[].file must live under .cohors/ and must exist",
             format!("agents[].supports may only contain: {}", RUNNERS.join(", ")),
             format!("flows[].kind is one of: {}", FLOW_KINDS.join(", ")),
             format!("tasks[].status is one of: {}", STATUSES.join(", ")),
@@ -818,7 +817,7 @@ mod tests {
             "summary": "Payments service",
             "updated": "2026-01-01T00:00:00Z",
             "flows": [{ "id": "dev", "label": "Dev server", "run": "npm run dev", "primary": true }],
-            "agents": [{ "id": "triage", "label": "Triage", "file": ".principia/agents/triage.md",
+            "agents": [{ "id": "triage", "label": "Triage", "file": ".cohors/agents/triage.md",
                          "supports": ["claude-code"] }],
             "tasks": [{ "id": "retry-webhooks", "title": "Retry webhooks", "status": "todo",
                         "priority": "high", "agent": "triage" }],
@@ -884,9 +883,9 @@ mod tests {
                     "agents": [{ "id": "a", "label": "A", "file": file }] })
         };
         assert!(errors(&with_file("/etc/passwd"))[0].contains("relative to the repo root"));
-        assert!(errors(&with_file(".principia/../x.md"))[0].contains("\"..\""));
-        assert!(errors(&with_file("docs/a.md"))[0].contains("under .principia/"));
-        let missing = validate_contribution(&with_file(".principia/agents/a.md"), &|_| false);
+        assert!(errors(&with_file(".cohors/../x.md"))[0].contains("\"..\""));
+        assert!(errors(&with_file("docs/a.md"))[0].contains("under .cohors/"));
+        let missing = validate_contribution(&with_file(".cohors/agents/a.md"), &|_| false);
         assert!(missing.errors[0].contains("file not found"));
     }
 
@@ -894,7 +893,7 @@ mod tests {
     fn unknown_runner_and_dangling_task_agent() {
         let doc = json!({
             "specVersion": 1, "name": "x", "updated": "t",
-            "agents": [{ "id": "a", "label": "A", "file": ".principia/a.md", "supports": ["cursor"] }],
+            "agents": [{ "id": "a", "label": "A", "file": ".cohors/a.md", "supports": ["cursor"] }],
             "tasks": [{ "id": "t", "title": "T", "agent": "ghost" }],
         });
         let v = validate_contribution(&doc, &|_| true);

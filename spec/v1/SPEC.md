@@ -3,11 +3,9 @@
 This is the contract between a repository and the cohors launchpad. Any AI
 agent, in any repo, can read this file and know exactly what to write.
 
-It was first published as the Principia contract. The on-disk names keep that
-word (`.principia/` in a repository, `~/.principia/` for the user), so
-repositories that already carry one need no migration. `cohors launchpad
-contract` prints the same rules as JSON, and that output is authoritative if
-the two ever disagree.
+A repository's part lives in `.cohors/` at its root; the user's part lives in
+`~/.cohors/`. `cohors launchpad contract` prints the same rules as JSON, and
+that output is authoritative if the two ever disagree.
 
 It is deliberately agent-agnostic. Claude Code, Codex, agy, Gemini CLI, or a
 human with an editor all produce the same artifact.
@@ -18,7 +16,7 @@ human with an editor all produce the same artifact.
 
 The launchpad ships **empty**. cohors discovers the git repositories under the
 user's configured roots, then asks each one what it offers. A repository
-answers by committing a `.principia/` directory. cohors aggregates every answer
+answers by committing a `.cohors/` directory. cohors aggregates every answer
 into one dashboard, shown identically in the terminal, the browser, the editor
 extension and over MCP. Nothing about the user is stored in cohors itself, so a
 fresh install on a new machine behaves identically to a stranger's first run.
@@ -31,24 +29,24 @@ The unit of enrichment is **the repository**, not the dashboard.
 
 | Path | Scope | Committed? | Written by |
 | --- | --- | --- | --- |
-| `<repo>/.principia/repo.json` | One repository | **Yes** | Agent |
-| `<repo>/.principia/agents/*.md` | One repository | **Yes** | Agent |
-| `<repo>/.principia/local.json` | One repo, one machine | **No** (gitignored) | cohors |
-| `~/.principia/board.json` | User, all repos | Optional | Agent |
-| `~/.principia/history/*.jsonl` | User, all repos | Optional | cohors + session hooks |
+| `<repo>/.cohors/repo.json` | One repository | **Yes** | Agent |
+| `<repo>/.cohors/agents/*.md` | One repository | **Yes** | Agent |
+| `<repo>/.cohors/local.json` | One repo, one machine | **No** (gitignored) | cohors |
+| `~/.cohors/board.json` | User, all repos | Optional | Agent |
+| `~/.cohors/history/*.jsonl` | User, all repos | Optional | cohors + session hooks |
 
 Committed files are the point: clone the repo on another machine and its
 launchpad entry comes with it. Machine-local values (absolute paths, chosen
 ports, device ids) never enter a committed file.
 
-`~/.principia/` is the launchpad home; set `$PRINCIPIA_HOME` to put it
+`~/.cohors/` is the launchpad home; set `$COHORS_HOME` to put it
 somewhere else. There is one copy and it is authoritative. Agents reach it
 through the cohors MCP tools (`read_board`, `write_board`, `record_activity`)
 rather than by knowing the user's home layout.
 
 ---
 
-## 3. `.principia/repo.json`
+## 3. `.cohors/repo.json`
 
 The only required file. Minimal valid example:
 
@@ -92,7 +90,7 @@ Full shape:
     {
       "id": "triage",
       "label": "Triage uncommitted work",
-      "file": ".principia/agents/triage.md",
+      "file": ".cohors/agents/triage.md",
       "supports": ["claude-code", "codex", "gemini-cli", "agy"]
     }
   ],
@@ -141,7 +139,7 @@ tasks that recur often enough to warrant tailored instructions.
 
 ## 4. Repo-declared agents
 
-`.principia/agents/<id>.md` is a prompt with YAML frontmatter. It is
+`.cohors/agents/<id>.md` is a prompt with YAML frontmatter. It is
 **agent-runner agnostic**: the frontmatter declares intent, and each runner maps
 it to its own flags.
 
@@ -233,7 +231,7 @@ something detection could not infer.
 
 ---
 
-## 6. `~/.principia/board.json`
+## 6. `~/.cohors/board.json`
 
 Cross-repo focus. Optional; the dashboard works without it.
 
@@ -260,7 +258,7 @@ machines where checkouts live in different places.
 
 ---
 
-## 6b. `<repo>/.principia/local.json`
+## 6b. `<repo>/.cohors/local.json`
 
 Machine-local, gitignored, written by cohors. Never commit it.
 

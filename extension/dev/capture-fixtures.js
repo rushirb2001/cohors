@@ -72,7 +72,7 @@ const web = entryOf("web-app");
 if (web) {
   web.contribution.agents = [{
     id: "a11y-audit", label: "Accessibility audit",
-    file: ".principia/agents/a11y-audit.md", supports: ["claude-code", "codex"],
+    file: ".cohors/agents/a11y-audit.md", supports: ["claude-code", "codex"],
   }];
   web.contribution.tasks[0].agent = "a11y-audit";
   web.contribution.tasks[0].notes = "Tab order skips the card number field. Reproduce with the keyboard only.";
