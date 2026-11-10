@@ -730,7 +730,12 @@ fn render_at_risk(
         .map(|action| action.label.chars().count())
         .max()
         .unwrap_or(0);
-    let columns = RiskColumns::for_width(inner.width(), longest_step);
+    let longest_branch = lines
+        .iter()
+        .map(|line| text::safe(&line.branch).chars().count())
+        .max()
+        .unwrap_or(0);
+    let columns = RiskColumns::for_width(inner.width(), longest_step, longest_branch);
     let window = list_window(
         app.scrolls.risk.get(),
         app.cursors.risk,
@@ -759,11 +764,17 @@ pub(crate) struct RiskColumns {
 impl RiskColumns {
     /// `longest_step` is the width of the longest suggested-step label among
     /// the rows, so that column is exactly as wide as it needs to be.
-    pub(crate) fn for_width(width: usize, longest_step: usize) -> Self {
+    /// `longest_branch` widens the branch column past its designed 15 (up to
+    /// 22) when a branch name needs it, so a name never runs into the reasons.
+    pub(crate) fn for_width(width: usize, longest_step: usize, longest_branch: usize) -> Self {
         const MARK: usize = BLOCK_WIDTH + 1; // the severity block and a space
         const AGE: usize = 5;
         let name = if width >= 100 { 22 } else { 18 }.min(width / 3);
-        let branch = if width >= 90 { 15 } else { 0 };
+        let branch = if width >= 90 {
+            (longest_branch + 2).clamp(15, 22)
+        } else {
+            0
+        };
         // Two columns of gap, then the label.
         let step = if width >= 64 && longest_step > 0 {
             2 + longest_step
@@ -1470,7 +1481,7 @@ mod tests {
         // The designed width, with "Publish branch" (14) as the longest step:
         // the severity block and its space (7), name 22, branch 15, and 50
         // columns of reasons, as drawn.
-        let wide = RiskColumns::for_width(115, 14);
+        let wide = RiskColumns::for_width(115, 14, 13);
         assert_eq!((wide.name, wide.branch, wide.age), (22, 15, 5));
         assert_eq!((wide.reasons, wide.step), (50, 16));
         assert_eq!(
@@ -1478,13 +1489,16 @@ mod tests {
             115
         );
         // Narrow: the branch goes first, then the suggested step.
-        let medium = RiskColumns::for_width(76, 14);
+        // A long branch name gets the room it needs, within reason.
+        assert_eq!(RiskColumns::for_width(115, 14, 14).branch, 16);
+        assert_eq!(RiskColumns::for_width(115, 14, 40).branch, 22);
+        let medium = RiskColumns::for_width(76, 14, 13);
         assert_eq!(medium.branch, 0);
         assert!(medium.step > 0);
-        let narrow = RiskColumns::for_width(44, 14);
+        let narrow = RiskColumns::for_width(44, 14, 13);
         assert_eq!((narrow.branch, narrow.step), (0, 0));
         assert!(narrow.reasons >= 16);
         // No row suggests a step: the column is not there at all.
-        assert_eq!(RiskColumns::for_width(115, 0).step, 0);
+        assert_eq!(RiskColumns::for_width(115, 0, 13).step, 0);
     }
 }

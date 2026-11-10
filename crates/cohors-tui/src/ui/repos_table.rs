@@ -209,9 +209,11 @@ pub(crate) fn columns(kind: TableKind, text_width: usize, wanted: Wanted) -> Vec
     let commit = result.iter().position(|c| c.id == ColumnId::Commit);
     let lendable = commit.map_or(0, |i| result[i].width.saturating_sub(COMMIT_COMFORT));
     let mut room = spare + lendable;
+    // The branch first: it needs little, and one very long repository name
+    // would otherwise take all the room and leave branches cut short.
     for (id, want, cap) in [
-        (ColumnId::Name, wanted.name, NAME_CAP),
         (ColumnId::Branch, wanted.branch, BRANCH_CAP),
+        (ColumnId::Name, wanted.name, NAME_CAP),
     ] {
         let Some(index) = result.iter().position(|c| c.id == id) else {
             continue;
