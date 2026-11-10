@@ -3,21 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>cohors — your git fleet at a glance</title>
-    <!-- Branded favicon: the cohors pixel-invader mark in brand violet. Trunk
-         copies it into the dist bundle; the local server serves it. -->
+    <title>cohors</title>
+    <!-- Favicon: the cohors spider mark. Trunk copies it into the dist bundle;
+         the local server serves it. -->
     <link data-trunk rel="copy-file" href="favicon.svg" />
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <meta name="theme-color" content="#7a2e69" />
+    <!-- The browser chrome takes the page colour of whichever theme is active. -->
+    <meta name="theme-color" content="#f7f7f5" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1b1a" media="(prefers-color-scheme: dark)" />
+    <!-- Pick the theme before first paint, so a dark-mode visitor never sees a
+         flash of the light page while the WebAssembly bundle loads. A saved
+         choice wins; otherwise the system preference decides. -->
+    <script>
+      (function () {
+        var theme = null;
+        try { theme = localStorage.getItem("cohors_theme"); } catch (e) {}
+        if (theme !== "dark" && theme !== "light") {
+          theme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        document.documentElement.setAttribute("data-theme", theme);
+      })();
+    </script>
     <!-- Fonts (Google Fonts CDN): Google Sans for the UI, Google Sans Code for
-         data, and Cormorant Garamond for the wordmark only. Fetched dynamically
-         so distribution stays a single static bundle (no font files to ship);
-         the family stacks in style.css fall back to system fonts if offline. -->
+         data. Fetched at runtime so the bundle ships no font files; the stacks
+         in style.css fall back to system fonts when offline. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;1,600&family=Google+Sans:wght@400;500;600;700&family=Google+Sans+Code:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;600;700&family=Google+Sans+Code:wght@400;500;600&display=swap"
     />
     <link data-trunk rel="css" href="style.css" />
   </head>
