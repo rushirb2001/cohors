@@ -278,14 +278,27 @@ class Screen:
                 if ch is not None:
                     run.append(ch)
             out.append("".join(line).rstrip())
-        body = "\n".join(out)
+        # One block per screen row, each cell-run an inline block of the full
+        # row height: backgrounds then meet edge to edge, as they do in a
+        # terminal, instead of leaving the gaps a plain <pre> leaves between
+        # lines.
+        body = "".join("<div class=r>%s</div>" % (line or " ") for line in out)
         return (
             "<!doctype html><meta charset=utf-8><title>%s</title>"
-            "<body style='margin:0;background:%s'>"
-            "<pre style=\"margin:0;padding:14px 16px;background:%s;color:%s;"
-            "font:13px/1.22 'SF Mono',Menlo,'DejaVu Sans Mono',Consolas,monospace;"
-            "width:max-content\">%s</pre></body>\n"
-        ) % (html.escape(title), t["bg"], t["bg"], t["fg"], body)
+            "<style>.t{margin:0;padding:14px 16px;background:%s;color:%s;"
+            "font:13px/16px 'SF Mono',Menlo,'DejaVu Sans Mono',Consolas,monospace;"
+            "width:max-content}.r{height:16px;white-space:pre}"
+            ".r span{display:inline-block;height:16px;vertical-align:top}</style>"
+            "<body style='margin:0;background:%s'><div class=t>%s</div></body>\n"
+        ) % (html.escape(title), t["bg"], t["fg"], t["bg"], body)
+
+    @staticmethod
+    def mix(a, b, share):
+        """Blend two #rrggbb colours: `share` of `a`, the rest of `b`."""
+        if not (isinstance(a, str) and isinstance(b, str) and len(a) == 7 and len(b) == 7):
+            return a
+        parts = [round(int(a[i:i + 2], 16) * share + int(b[i:i + 2], 16) * (1 - share)) for i in (1, 3, 5)]
+        return "#%02x%02x%02x" % tuple(parts)
 
     @staticmethod
     def span(text, key, theme):
@@ -293,6 +306,10 @@ class Screen:
         fg, bg = fg or theme["fg"], bg or theme["bg"]
         if reverse:
             fg, bg = bg, fg
+        if dim:
+            # Dim fades the text towards its background and leaves the
+            # background alone, which is what a terminal does.
+            fg = Screen.mix(fg, bg, 0.55)
         css = []
         if fg != theme["fg"]:
             css.append("color:%s" % fg)
@@ -300,14 +317,12 @@ class Screen:
             css.append("background:%s" % bg)
         if bold:
             css.append("font-weight:700")
-        if dim:
-            css.append("opacity:.55")
         if italic:
             css.append("font-style:italic")
         if underline:
             css.append("text-decoration:underline")
         safe = html.escape(text)
-        return "<span style='%s'>%s</span>" % (";".join(css), safe) if css else safe
+        return "<span style='%s'>%s</span>" % (";".join(css), safe) if css else "<span>%s</span>" % safe
 
 
 def main():
