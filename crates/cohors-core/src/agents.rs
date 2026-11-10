@@ -114,13 +114,22 @@ pub fn runner(id: &str) -> Option<&'static Runner> {
     RUNNERS.iter().find(|r| r.id == id)
 }
 
-/// Which shell a command line is written for. The two differ in how a quoted
-/// string and "the contents of this file" are spelled.
+/// Which shell a command line is written for.
+///
+/// The two differ in more than spelling. A POSIX shell can hand a file's
+/// contents to a program as exactly one argument (`"$(cat 'file')"`), whatever
+/// the text contains. PowerShell cannot be trusted to: when it starts a native
+/// program it rebuilds the command line, and in the versions most people have
+/// a double quote inside an argument splits it in two. Prompt text containing
+/// `" --some-flag "` would then reach the runner as a flag. So under
+/// PowerShell the prompt text is never put on a command line; the terminal is
+/// given [`exec_command`] instead, which has cohors read the file and start
+/// the runner itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shell {
-    /// sh, bash, zsh, fish: `'…'` and `"$(cat '…')"`.
+    /// sh, bash, zsh, fish.
     Posix,
-    /// PowerShell: `'…'` and `(Get-Content -Raw '…')`.
+    /// PowerShell (Windows).
     PowerShell,
 }
 
@@ -144,15 +153,45 @@ impl Shell {
         }
     }
 
-    /// An expression that expands to the contents of `file` as one argument.
-    fn file_contents(self, file: &str) -> String {
+    /// An expression that expands to the contents of `file` as one argument,
+    /// or `None` when this shell has no safe way to do that (see [`Shell`]).
+    fn file_contents(self, file: &str) -> Option<String> {
         match self {
             // The command substitution is inside double quotes, so its output is
             // one argument and is never re-expanded: prompt text cannot break out.
-            Shell::Posix => format!("\"$(cat {})\"", self.quote(file)),
-            Shell::PowerShell => format!("(Get-Content -Raw {})", self.quote(file)),
+            Shell::Posix => Some(format!("\"$(cat {})\"", self.quote(file))),
+            Shell::PowerShell => None,
         }
     }
+}
+
+/// A terminal line that has cohors itself start the runner: cohors reads the
+/// prompt file and spawns the runner with the text as one properly passed
+/// argument, so no shell ever sees the prompt. Every value on this line is
+/// cohors's own (its path, a runner id, the prompt file it wrote, a validated
+/// session id), single-quoted. This is the form used under PowerShell.
+pub fn exec_command(
+    shell: Shell,
+    cohors_exe: &str,
+    runner_id: &str,
+    prompt_file: &str,
+    session: Option<&str>,
+) -> String {
+    // PowerShell needs the call operator to run a quoted path.
+    let call = match shell {
+        Shell::Posix => "",
+        Shell::PowerShell => "& ",
+    };
+    let mut line = format!(
+        "{call}{} agent exec --runner {} --prompt-file {}",
+        shell.quote(cohors_exe),
+        shell.quote(runner_id),
+        shell.quote(prompt_file)
+    );
+    if let Some(session) = session {
+        line.push_str(&format!(" --session {}", shell.quote(session)));
+    }
+    line
 }
 
 /// Make sure a prompt cannot be mistaken for a command-line flag.
@@ -220,8 +259,11 @@ impl Runner {
 
     /// One line to type into a terminal running `shell`. The prompt is read
     /// from `prompt_file` when the line runs, so the file's contents must have
-    /// been passed through [`guard_prompt`] before they were written. `None` when this runner cannot do
-    /// that kind of launch.
+    /// been passed through [`guard_prompt`] before they were written.
+    ///
+    /// `None` when this runner cannot do that kind of launch, or when `shell`
+    /// cannot safely pass a file's contents as one argument (PowerShell) — the
+    /// caller then uses [`exec_command`].
     pub fn shell_command(
         &self,
         shell: Shell,
@@ -234,7 +276,7 @@ impl Runner {
             line.push(' ');
             match arg {
                 Arg::Lit(text) => line.push_str(text),
-                Arg::Prompt => line.push_str(&shell.file_contents(prompt_file)),
+                Arg::Prompt => line.push_str(&shell.file_contents(prompt_file)?),
                 Arg::Session => line.push_str(&shell.quote(session.as_deref().unwrap_or(""))),
             }
         }
@@ -480,12 +522,41 @@ mod tests {
                 .unwrap(),
             "claude --resume 'abc-123'"
         );
+    }
+
+    #[test]
+    fn powershell_never_gets_prompt_text_on_its_command_line() {
+        // No runner offers a PowerShell line that would carry the prompt…
+        for r in &RUNNERS {
+            assert!(
+                r.shell_command(Shell::PowerShell, Launch::Start, "C:\\t\\p.md")
+                    .is_none(),
+                "{} would put prompt text on a PowerShell command line",
+                r.id
+            );
+        }
+        // …resuming (no prompt involved) is still a plain line…
         assert_eq!(
-            runner("gemini-cli")
+            runner("claude-code")
                 .unwrap()
-                .shell_command(Shell::PowerShell, Launch::Start, "C:\\t\\p.md")
+                .shell_command(Shell::PowerShell, Launch::Resume { session: "abc-123" }, "")
                 .unwrap(),
-            "gemini -i (Get-Content -Raw 'C:\\t\\p.md')"
+            "claude --resume 'abc-123'"
+        );
+        // …and starting a prompt goes through cohors, which reads the file.
+        assert_eq!(
+            exec_command(
+                Shell::PowerShell,
+                "C:\\Tools\\co'hors.exe",
+                "gemini-cli",
+                "C:\\t\\p.md",
+                Some("abc-123")
+            ),
+            "& 'C:\\Tools\\co''hors.exe' agent exec --runner 'gemini-cli' --prompt-file 'C:\\t\\p.md' --session 'abc-123'"
+        );
+        assert_eq!(
+            exec_command(Shell::Posix, "/bin/cohors", "codex", "/tmp/p.md", None),
+            "'/bin/cohors' agent exec --runner 'codex' --prompt-file '/tmp/p.md'"
         );
     }
 

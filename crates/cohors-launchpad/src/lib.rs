@@ -27,7 +27,7 @@ mod agents;
 
 pub use agents::{
     LaunchKind, LaunchPlan, LaunchRequest, RepoTarget, detect_runners, find_on_path,
-    new_session_id, plan_launch, read_threads, write_prompt_file, write_thread,
+    new_session_id, plan_launch, read_prompt_file, read_threads, write_prompt_file, write_thread,
 };
 
 use std::fs;

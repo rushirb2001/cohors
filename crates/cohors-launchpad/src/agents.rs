@@ -210,6 +210,25 @@ fn prune_prompts(dir: &Path, now_secs: i64) {
     }
 }
 
+/// Read a prompt file cohors wrote earlier, for `cohors agent exec`. Only files
+/// inside the launchpad home's `prompts/` directory are accepted, so the
+/// command cannot be pointed at an arbitrary file.
+pub fn read_prompt_file(home: &Path, file: &Path) -> Result<String, LaunchpadError> {
+    let refuse = || {
+        LaunchpadError::Invalid(format!(
+            "refusing prompt file {}: it must be one cohors wrote under {}",
+            file.display(),
+            home.join("prompts").display()
+        ))
+    };
+    let dir = fs::canonicalize(home.join("prompts")).map_err(|_| refuse())?;
+    let target = fs::canonicalize(file).map_err(|_| refuse())?;
+    if !target.starts_with(&dir) || !target.is_file() {
+        return Err(refuse());
+    }
+    fs::read_to_string(&target).map_err(io_err("reading", &target))
+}
+
 /// Resolve a repo-declared agent file, refusing anything outside the repo's
 /// `.principia/` directory. The declaration comes from a repository we may not
 /// have written, so `..` segments and symlinks must not lead out of it.
@@ -643,9 +662,22 @@ pub fn plan_launch(
             Some(session) => Launch::Linked { session },
             None => Launch::Start,
         };
-        plan.command = runner
-            .shell_command(shell, launch, &file_text)
-            .ok_or_else(|| invalid("runner cannot start a prompt"))?;
+        plan.command = match runner.shell_command(shell, launch, &file_text) {
+            Some(line) => line,
+            // This shell cannot safely pass a file's contents as one argument
+            // (PowerShell): have cohors read the file and start the runner.
+            None => {
+                let exe = std::env::current_exe()
+                    .map_err(|e| invalid(format!("locating the cohors binary: {e}")))?;
+                agents::exec_command(
+                    shell,
+                    &exe.display().to_string(),
+                    runner.id,
+                    &file_text,
+                    chosen.as_deref(),
+                )
+            }
+        };
         plan.args = runner.argv(launch, body).unwrap_or_default();
         plan.prompt_file = Some(file);
         if let (Some(session), Some(task_id), Some(repo)) = (&chosen, &step.link_task, request.repo)
@@ -1071,6 +1103,11 @@ mod tests {
                 .to_string_lossy()
                 .starts_with("etcpasswd-")
         );
+        // Only prompt files cohors wrote can be read back for `agent exec`.
+        assert_eq!(read_prompt_file(home.path(), &file).unwrap(), "x");
+        let outside = repo.path().join(LOCAL_FILE);
+        let err = read_prompt_file(home.path(), &outside).unwrap_err();
+        assert!(err.to_string().contains("refusing prompt file"));
         // A file "written" far in the future's past is cleared on the next write.
         let later = NOW + 10 * PROMPT_TTL_SECS + 4_000_000_000;
         write_prompt_file(home.path(), "next", "y", later).unwrap();

@@ -259,6 +259,21 @@ pub enum AgentCmd {
     /// Print the command that would start an agent, as JSON (for editors and
     /// scripts). Writes the prompt file and logs the launch, like `run`.
     Command(AgentLaunch),
+    /// Start a runner on a prompt file cohors already wrote. This is what the
+    /// printed command calls on shells that cannot pass a file's contents to
+    /// a program safely; it is not meant to be typed by hand.
+    #[command(hide = true)]
+    Exec {
+        /// The runner id.
+        #[arg(long)]
+        runner: String,
+        /// A prompt file under the launchpad home's `prompts/` directory.
+        #[arg(long, value_name = "PATH")]
+        prompt_file: String,
+        /// Start the conversation under this session id.
+        #[arg(long)]
+        session: Option<String>,
+    },
 }
 
 /// What to start and where. Shared by `agent run` and `agent command`.

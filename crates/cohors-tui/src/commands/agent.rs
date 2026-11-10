@@ -47,7 +47,44 @@ pub fn run(cli: &Cli, action: &AgentCmd) -> Result<()> {
             let plan = plan(cli, launch)?;
             start(&plan)
         }
+        AgentCmd::Exec {
+            runner,
+            prompt_file,
+            session,
+        } => exec(runner, prompt_file, session.as_deref()),
     }
+}
+
+/// `cohors agent exec` — start `runner_id` on a prompt file cohors wrote, in
+/// the current directory. The prompt text goes from the file straight into the
+/// runner's argument list: no shell handles it, so nothing in it can be read
+/// as a second argument or a flag.
+fn exec(runner_id: &str, prompt_file: &str, session: Option<&str>) -> Result<()> {
+    use cohors_core::agents::{Launch, is_session_id, runner};
+    let home = lp::launchpad_home().context("no home directory for the launchpad")?;
+    let body = lp::read_prompt_file(&home, Path::new(prompt_file))?;
+    let found = runner(runner_id).with_context(|| format!("unknown runner `{runner_id}`"))?;
+    let launch = match session {
+        Some(id) if !is_session_id(id) => bail!("that does not look like a session id"),
+        Some(session) => Launch::Linked { session },
+        None => Launch::Start,
+    };
+    let args = found
+        .argv(launch, &body)
+        .with_context(|| format!("{} cannot start that kind of session", found.label))?;
+    let status = lp::detect_runners()
+        .into_iter()
+        .find(|s| s.id == runner_id && s.available)
+        .with_context(|| format!("{} is not installed", found.label))?;
+    let program = status.path.unwrap_or_else(|| found.bin.to_string());
+    let exit = std::process::Command::new(&program)
+        .args(&args)
+        .status()
+        .with_context(|| format!("starting {program}"))?;
+    if !exit.success() {
+        std::process::exit(exit.code().unwrap_or(1));
+    }
+    Ok(())
 }
 
 /// `cohors agent runners`.
