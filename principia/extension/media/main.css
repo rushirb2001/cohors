@@ -27,7 +27,9 @@ code { font-family: var(--vscode-editor-font-family); font-size: 11.5px;
 html, body { height: 100%; overflow: hidden; }
 #app { height: 100vh; display: grid; outline: none;
   grid-template-columns: 172px minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto; }
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  transition: grid-template-columns 180ms var(--ease); }
+#app.sidebar-collapsed { grid-template-columns: 0px minmax(0, 1fr); }
 
 .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: nowrap;
   height: 30px; padding: 0 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
@@ -50,7 +52,17 @@ kbd { font: inherit; font-size: 9.5px; padding: 0 4px; border-radius: 3px; line-
 
 /* ── left rail ── */
 .side { grid-row: 2; border-right: 1px solid var(--line); background: var(--panel);
-  overflow-y: auto; overflow-x: hidden; padding: 5px 0 6px; display: flex; flex-direction: column; }
+  overflow-y: auto; overflow-x: hidden; padding: 5px 0 6px; display: flex; flex-direction: column;
+  transition: opacity 180ms var(--ease), visibility 0ms 0ms; }
+#app.sidebar-collapsed .side { opacity: 0; visibility: hidden; pointer-events: none;
+  transition: opacity 180ms var(--ease), visibility 0ms 180ms; }
+
+.sidebar-toggle { display: flex; align-items: center; gap: 4px; border: 0; background: transparent;
+  cursor: pointer; font: inherit; font-size: 11px; color: var(--vscode-descriptionForeground);
+  padding: 2px 6px; border-radius: 4px; flex: none;
+  transition: color var(--t) var(--ease), background var(--t) var(--ease); }
+.sidebar-toggle:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
+.sidebar-toggle .codicon { font-size: 14px; }
 .ov { padding: 2px 12px 5px; margin-bottom: 3px; border-bottom: 1px solid var(--line); }
 .ovg { display: flex; gap: 12px; }
 .ovi { display: flex; flex-direction: column; }

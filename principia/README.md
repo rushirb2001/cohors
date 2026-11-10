@@ -40,7 +40,7 @@ your-repo/
 └── .principia/
     ├── repo.json          # flows, agents, tasks this repo offers
     ├── agents/triage.md   # prompts this repo ships
-    └── local.json         # machine-local, gitignored
+    └── local.json         # machine-local (e.g. task → session links), gitignored
 ```
 
 **3. An agent writes it.** In that repo, ask any supported runner:
@@ -54,6 +54,24 @@ runner-agnostic. Claude Code gets a plugin with a skill and an agent; Codex,
 Gemini CLI and agy read the same prompt files. A runner you have not installed is
 shown disabled with a reason, never silently hidden.
 
+## What the launchpad shows
+
+- **Today**: your cross-repo focus board and a "pick up where you left off" feed.
+- **Repos**: every recent repo, grouped by its declared `group`, with labelled
+  git state (uncommitted / unpushed / behind), the last commit, and its flows.
+  One action opens the workspace, a terminal, and resumes the latest session.
+- **Tasks**: repo tasks and board focus items together. Each can be run by an
+  agent; a task started from here is linked to the session it opened, so it
+  shows **Resume** afterwards. Toggles hide finished tasks and descriptions.
+- **Agents**: agents repos ship, plus real Claude Code session history. Only
+  for repos that opted in with a committed `.principia/`.
+- **Setup**: an ordered getting-started walkthrough, each step with a prompt
+  any runner can execute.
+
+It stays live without a manual refresh: file watchers on `.principia/`,
+`~/.principia/board.json` and git, with a slow poll as a backstop. Two
+columns when the panel is wide, one when it is not.
+
 ## The contract
 
 [`spec/v1/SPEC.md`](spec/v1/SPEC.md) is authoritative and is what agents read.
@@ -61,6 +79,7 @@ JSON Schemas sit beside it, and a zero-dependency validator checks any repo:
 
 ```sh
 node scripts/validate.js .
+node scripts/check-runners.js   # the runner list agrees everywhere it is named
 ```
 
 It enforces the rules that matter: kebab-case stable ids, no absolute paths, no
@@ -117,6 +136,19 @@ first and is skipped (not fatal) if unmet; re-running is safe; nothing
 outside `.principia/`, `.claude/`, `AGENTS.md`, and `.gitignore` in the target
 repo, plus `~/.principia/` and the plugin/extension registration, is ever
 touched.
+
+## Developing
+
+Runners are defined once in `shared/runners.js`; the extension and CLI
+re-export it.
+
+Open this repo in VS Code with the extension installed from the checkout (the
+dev symlink `init` offers) and the launchpad hot-reloads: CSS swaps in place,
+`extension/media/main.js` reloads the panel with its state kept, and host code
+(`extension/src`, `shared/`) restarts the extension host. Only in the window
+that has this repo open; nothing reloads anywhere else. Or press `F5` for a
+clean Extension Development Host. For CSS, right-click the panel → *Open
+Webview Developer Tools*.
 
 ## Status
 

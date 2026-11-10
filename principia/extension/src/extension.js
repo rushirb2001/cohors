@@ -550,7 +550,40 @@ async function onMessage(m) {
 
 /* ───────── lifecycle ───────── */
 
+// Running from a checkout AND this window has that checkout open, so editing
+// principia never reloads anything in the windows you use for other repos.
+const fromSource = (context) => {
+  if (context.extensionMode !== vscode.ExtensionMode.Development && !fs.existsSync(path.join(REPO_ROOT, ".git"))) return false;
+  const real = (p) => { try { return fs.realpathSync(p); } catch { return p; } };
+  const src = real(REPO_ROOT);
+  return (vscode.workspace.workspaceFolders || []).some((f) => real(f.uri.fsPath) === src);
+};
+
+// CSS hot-swaps in place; main.js reloads the webview (state survives via
+// getState); host code restarts the extension host. Dev-only: this is the one
+// place a wholesale reload is acceptable.
+function devReload(context) {
+  const w = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(vscode.Uri.file(REPO_ROOT), "{extension/media,extension/src,shared}/*.{css,js}"));
+  let t = null;
+  const pending = new Set();
+  const flush = () => {
+    const files = [...pending]; pending.clear();
+    if (files.some((f) => !f.includes(`${path.sep}media${path.sep}`))) {
+      // Every window runs this watcher; only the one you are looking at restarts.
+      if (!vscode.window.state.focused) return;
+      return vscode.commands.executeCommand("workbench.action.restartExtensionHost");
+    }
+    if (!panel) return;
+    if (files.some((f) => f.endsWith(".js"))) { panel.webview.html = html(panel.webview); return; }
+    files.forEach((f) => panel.webview.postMessage({ type: "dev-css", file: path.basename(f) }));
+  };
+  w.onDidChange((u) => { pending.add(u.fsPath); clearTimeout(t); t = setTimeout(flush, 150); });
+  context.subscriptions.push(w);
+}
+
 function activate(context) {
+  if (fromSource(context)) devReload(context);
   context.subscriptions.push(
     vscode.commands.registerCommand("principia.show", show),
     vscode.commands.registerCommand("principia.refresh", () => refresh(true)),

@@ -18,6 +18,7 @@
   let q = saved.q || "";
   let hideDone = saved.hideDone === true;
   let hideNotes = saved.hideNotes === true;
+  let sidebarOpen = saved.sidebarOpen !== false;
   let focus = -1;
   let built = false;
   const painted = new Map();
@@ -37,7 +38,7 @@
   ];
 
   const send = (m) => vscode.postMessage(m);
-  const persist = () => vscode.setState({ D, tab, q, hideDone, hideNotes });
+  const persist = () => vscode.setState({ D, tab, q, hideDone, hideNotes, sidebarOpen });
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ico = (n, cls = "") => {
@@ -60,6 +61,7 @@
         <span class="stat" id="mem"></span>
         <span class="stat" id="load"></span>
         <button class="ib" data-act="refresh" title="Refresh (r)">${ico("refresh")}</button>
+        <button class="sidebar-toggle" data-act="toggle-sidebar" title="Toggle sidebar (b)">${ico("layout-sidebar-left")}<span class="lb">${sidebarOpen ? "" : "Open"}</span></button>
       </header>
 
       <aside class="side">
@@ -80,6 +82,7 @@
       </footer>
       <div class="note" id="note" hidden></div>`;
     document.getElementById("q").value = q;
+    if (!sidebarOpen) app.classList.add("sidebar-collapsed");
     wire();
     built = true;
   }
@@ -869,6 +872,7 @@
       if (d.ui === "hide-done") { hideDone = !hideDone; persist(); return paintBody(false); }
       if (d.ui === "hide-notes") { hideNotes = !hideNotes; persist(); return paintBody(false); }
       if (d.act === "refresh") { spin(); return send({ type: "refresh" }); }
+      if (d.act === "toggle-sidebar") return toggleSidebar();
       if (d.act) return send({ type: d.act });
       if (d.setup) return send({ type: "setup", root: d.setup });
       if (d.plan) return send({ type: "plan" });
@@ -926,16 +930,33 @@
     const cur = items()[focus];
     if (ev.key === "Enter" && cur && cur.dataset.root) return send({ type: "open", root: cur.dataset.root, newWindow: ev.shiftKey });
     if (ev.key === "r") { spin(); send({ type: "refresh" }); }
+    if (ev.key === "b") toggleSidebar();
   });
 
   window.addEventListener("message", (ev) => {
     const m = ev.data;
     if (m.type === "data") { D = m; D.error = null; persist(); render(false); }
+    if (m.type === "dev-css") {
+      document.querySelectorAll('link[rel="stylesheet"]').forEach((l) => {
+        if (l.href.includes(m.file)) l.href = l.href.split("?")[0] + "?v=" + Date.now();
+      });
+    }
     if (m.type === "error") {
       D = D || { repos: [], runners: [], board: [], history: [], recents: [], ports: [], android: {}, ios: {}, counts: {}, machine: {} };
       D.error = m.message; render(false);
     }
   });
+
+  function toggleSidebar() {
+    sidebarOpen = !sidebarOpen;
+    app.classList.toggle("sidebar-collapsed", !sidebarOpen);
+    const btn = app.querySelector('[data-act="toggle-sidebar"]');
+    if (btn) {
+      const lb = btn.querySelector('.lb');
+      if (lb) lb.textContent = sidebarOpen ? '' : 'Open';
+    }
+    persist();
+  }
 
   render(true);
   send({ type: "ready" });
