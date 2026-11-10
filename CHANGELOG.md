@@ -39,28 +39,59 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   the MCP server (found on your machine by a launcher, so the stripped-`PATH`
   problem goes away), skills for fleet work, setting a repo up, and planning
   focus, and hooks that log each session.
-- **The launchpad in the dashboard and the browser.** In the terminal, `t` (or
-  `:tasks`) opens the focus board and every repo's open tasks. In the browser, a
-  Launchpad tab lays the same work out in three lanes: doing, blocked, to do.
+- **One overview, the same everywhere.** cohors now works out a single
+  briefing for the fleet: what to do next and why (most urgent first, each step
+  naming the repos it applies to), six key figures (work not backed up, stashes,
+  uncommitted files, stale fetches, open tasks, commits this week), every repo
+  with its reasons in plain words, open tasks per repo, and the last seven days
+  of commits. The terminal, the browser, the editor extension and the MCP
+  server all render that one model, so their numbers cannot disagree.
+- **`cohors overview`** prints the briefing at a terminal, with the exact
+  command that carries out each step, and the whole model as JSON when piped or
+  given `--json`. An MCP `overview` tool returns the same thing to an agent.
+- **`cohors standup`** prints your commits across every repo for the last seven
+  days (or `--today`) as a paste-ready digest. Standup used to exist only inside
+  the dashboard; it is now also an MCP `standup` tool and a page in the browser
+  and the editor extension.
+- **`cohors agent`** starts a coding agent on a repo, a task, or the whole
+  fleet, with whichever of Claude Code, Codex, Gemini CLI or agy is installed.
+  `cohors agent run setup-repo` asks it to read the current repo and write its
+  launchpad file; `plan-day` plans your focus across every repo; `agent
+  runners` shows what is installed and why a runner is unavailable. A task
+  started this way is linked to its conversation and resumes there next time.
+  The five prompts are also served to MCP clients as prompts, and in the
+  dashboard `a` on a repo does the same after asking.
+- **A VS Code extension** (`extension/`), formerly the separate Principia
+  extension: the same overview, repositories, tasks and standup in an editor
+  tab that follows your theme, reading everything from the `cohors` binary.
+- **The launchpad contract is in this repository**, at `spec/v1/SPEC.md`, with
+  its JSON Schemas.
+- **`push` publishes a branch that was never pushed** (`git push -u origin
+  HEAD`) instead of skipping it. Nothing is forced.
 - **ARM Linux** release binaries and pip wheels.
 - **`server.json`**, the manifest for the official MCP Registry.
 
 ### Changed
 
-- **A new look, shared by every surface.** Tyrian purple for what you act on,
-  bronze for structure, double-rule frames around every terminal panel and
-  overlay, and a solid RISK or WARN badge leading the status of the repos that
-  need you. Colours still follow your terminal's palette, and `NO_COLOR` falls
-  back to reverse video.
-- **The browser dashboard was redesigned around the work.** It now uses the
-  whole window and scrolls as a page: a slim top bar, a briefing that opens on
-  your focus items (or the most urgent open tasks), then the fleet table with a
-  Work column counting each repo's open tasks. Selecting a repo shows its
-  launchpad in the drawer: what the repo is, its tasks, the commands to run it,
-  and the agents and links it ships. A Board tab lays every open task out by
-  status. The toolbar and column headers stay pinned as you scroll. Light by
-  default, with a dark theme behind a button that remembers your choice. The
-  Stash column made way for Work; stashes still show in Status and the drawer.
+- **Every surface was rebuilt around what to do next.** A quiet neutral
+  palette with purple kept for the brand mark and focus; severity is a shape
+  (triangle, diamond, ring) as well as a colour, so it reads without colour and
+  under `NO_COLOR`.
+  - **Terminal:** the dashboard opens on cards (Do next, Work at risk, Open
+    tasks, Commits, Repositories). `1`–`5` focus a card and each card's border
+    lists the keys that act on it. Enter on the repositories card opens a
+    detail view: every repo in a two-line list, with state, signals and tasks
+    for the one selected. Narrow terminals degrade in a fixed order instead of
+    garbling.
+  - **Browser:** a sidebar and one column, with four pages (Overview,
+    Repositories, Tasks, Standup), saved views, and a drawer with a repo's full
+    detail. Every action previews its targets first. On a read-only server the
+    buttons stay and say how to enable them.
+- **The browser no longer shows sample data unless asked.** A failed load is an
+  error with a Retry button, an empty fleet says so, and the demo fleet appears
+  only with `--demo`, labelled as demo data. The guided tour is gone.
+- **`cohors scan`** calls its last group "clean" (repos with nothing to report),
+  the same definition every other surface uses.
 
 ### Fixed
 
@@ -73,6 +104,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 - Text read from a repo's `.principia/` files is labelled as untrusted data to
   the agent, and control characters are stripped before it is printed.
 - Launchpad writes refuse symbolic links at every path they touch.
+- A flow command a repo declares must be one readable line: printable ASCII
+  plus letters and digits of left-to-right scripts, at most 400 characters.
+  Control characters, invisible characters, line breaks and right-to-left text
+  are refused, because they let a command display as one thing and run as
+  another. Such a flow is rejected by the validator and never offered.
+- A prompt handed to an agent runner can never be read as a command-line flag,
+  and on PowerShell prompt text is never placed on a command line at all.
+  Prompt files are private to the user.
+- The editor extension runs nothing a repository supplies (a flow, a declared
+  agent, a task) without Workspace Trust and a confirmation that shows exactly
+  what will run, resolved first and re-checked just before it starts.
+- Copyable commands in the browser quote repo paths, so a hostile folder name
+  cannot inject a command when pasted.
 
 ## [0.6.0] — 2026-07-23
 
