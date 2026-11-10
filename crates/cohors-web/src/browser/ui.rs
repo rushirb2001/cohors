@@ -175,13 +175,21 @@ pub fn severity_mark(severity: Severity) -> impl IntoView {
     mark(severity_class(severity), severity_word(severity))
 }
 
-/// The mark for a "Do next" action. Anything below a warning gets the ring:
-/// a step still to take is not "calm", whatever its level.
-pub fn action_mark(severity: Severity) -> impl IntoView {
-    match severity {
-        Severity::Risk | Severity::Warn => mark(severity_class(severity), severity_word(severity)),
-        Severity::Notice | Severity::Info | Severity::Ok => mark("note", "Worth doing"),
-    }
+/// The severity block that leads a row in the lists a person scans for
+/// trouble (Do next, Work at risk, the repository table): a filled `RISK` or
+/// `WARN`, a quiet outlined `NOTE` or `INFO`, and an empty slot of the same
+/// width for a clean repository, so names stay in one column. The word is the
+/// signal; the colour only reinforces it. The terminal dashboard and the
+/// editor extension draw the same block.
+pub fn severity_block(severity: Severity) -> impl IntoView {
+    let (class, word) = match severity {
+        Severity::Risk => ("risk", "RISK"),
+        Severity::Warn => ("warn", "WARN"),
+        Severity::Notice => ("note", "NOTE"),
+        Severity::Info => ("info", "INFO"),
+        Severity::Ok => ("none", ""),
+    };
+    view! { <span class=format!("blk {class}") title=severity_word(severity)>{word}</span> }
 }
 
 // ── Copyable commands ────────────────────────────────────────────────────────

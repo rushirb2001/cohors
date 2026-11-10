@@ -147,7 +147,7 @@ fn do_next(cx: Ctx) -> impl IntoView {
                 let class = if index == 0 { "small primary" } else { "small" };
                 view! {
                     <div class="todo">
-                        {ui::action_mark(action.severity)}
+                        {ui::severity_block(action.severity)}
                         <span class="t">{action.title.clone()}</span>
                         {action_button(cx, action.clone(), class)}
                         <span class="d">{action.why}</span>
@@ -474,10 +474,10 @@ fn risk_row(cx: Ctx, line: RepoLine, now: i64) -> impl IntoView {
         <tr class="open-row" class:sel=is_open tabindex="0" on:click=move |_| open() on:keydown=on_enter>
             <td>
                 <div class="clip" title=line.name.clone()>
-                    {ui::severity_mark(line.severity)}
+                    {ui::severity_block(line.severity)}
                     <span class="name">{line.name.clone()}</span>
                 </div>
-                <div class="sub clip">{ui::icon(Icon::Branch)} {line.branch.clone()}</div>
+                <div class="sub clip under-blk">{ui::icon(Icon::Branch)} {line.branch.clone()}</div>
             </td>
             <td class="wrap">{wrong}</td>
             <td class="n r">{age}</td>

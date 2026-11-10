@@ -21,6 +21,8 @@
   --ink: #1f1e1c; --ink-2: #5e5c57; --ink-3: #8a877f;
   --tyrian: #7d5a75;
   --btn: #1f1e1c; --btn-ink: #ffffff;
+  /* Text on a filled severity block or tile. */
+  --on-fill: #ffffff;
   --risk: #b4483f; --warn: #9a6a22; --calm: #4d8a62;
   --shadow: rgba(0, 0, 0, 0.08); --scrim: rgba(31, 30, 28, 0.32);
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
@@ -38,6 +40,7 @@
   --ink: #ecebe8; --ink-2: #aba8a2; --ink-3: #85827b;
   --tyrian: #c3a2bb;
   --btn: #ecebe8; --btn-ink: #1c1b1a;
+  --on-fill: #1c1b1a;
   --risk: #d9776e; --warn: #cfa255; --calm: #8cba99;
   --shadow: rgba(0, 0, 0, 0.4); --scrim: rgba(0, 0, 0, 0.5);
   color-scheme: dark;
@@ -216,8 +219,13 @@ main > section, main > .lead { margin-top: var(--s6); }
 .fig .k .ic { width: 14px; height: 14px; margin-right: 4px; }
 .fig .v { display: block; font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: -0.02em; }
 .fig .q { display: block; font-size: 12.5px; line-height: 1.45; color: var(--ink-2); }
-.fig.risk .v { color: var(--risk); }
-.fig.warn .v { color: var(--warn); }
+/* A figure that needs attention is a filled tile, not just a tinted number:
+   brick for work that exists only on this machine, ochre for stashes going
+   stale. Everything on it takes the fill's contrasting text colour. */
+.fig.risk, .fig.risk:hover { background: var(--risk); }
+.fig.warn, .fig.warn:hover { background: var(--warn); }
+.fig.risk :is(.k, .v, .q), .fig.warn :is(.k, .v, .q) { color: var(--on-fill); }
+.fig.risk:hover, .fig.warn:hover { filter: brightness(1.06); }
 
 /* Do next: one row per action, most urgent first. Sentence, why, one button. */
 .todo {
@@ -225,7 +233,7 @@ main > section, main > .lead { margin-top: var(--s6); }
   align-items: center; padding: var(--s3) var(--s4); border-top: 1px solid var(--line-soft);
 }
 .todo:first-child { border-top: none; }
-.todo .mark { margin: 0; grid-row: 1; }
+.todo .mark, .todo .blk { margin: 0; grid-row: 1; }
 .todo .t { grid-column: 2; font-weight: 600; font-size: 14px; }
 .todo .d { grid-column: 2; color: var(--ink-2); font-size: 12.5px; }
 .todo .btn { grid-column: 3; grid-row: 1 / span 2; }
@@ -257,6 +265,21 @@ main > section, main > .lead { margin-top: var(--s6); }
 .notice > span { flex: 1; min-width: 0; }
 
 /* ── 7. State marks: shape carries severity, colour reinforces it ───────── */
+/* Severity blocks: the word in a small filled rectangle. Filled only where
+   work could be lost (risk, warning); a note or an info is an outline, so it
+   never competes; a clean row keeps an empty slot so names line up. */
+.blk {
+  display: inline-block; flex: none; box-sizing: border-box; width: 42px; margin-right: var(--s2);
+  padding: 1px 0; border: 1px solid transparent; border-radius: 3px;
+  font: 600 10.5px/1.45 var(--mono); letter-spacing: 0.05em; text-align: center; vertical-align: 1px;
+}
+.blk.risk { background: var(--risk); color: var(--on-fill); }
+.blk.warn { background: var(--warn); color: var(--on-fill); }
+.blk.note, .blk.info { border-color: var(--line); color: var(--ink-3); }
+.blk.none { visibility: hidden; }
+/* The line under a name starts where the name does, past the block. */
+.under-blk { padding-left: calc(42px + var(--s2)); }
+
 .mark { display: inline-block; flex: none; width: 9px; height: 9px; margin-right: var(--s2); vertical-align: baseline; }
 .mark.risk { background: var(--risk); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .mark.warn { background: var(--warn); transform: rotate(45deg) scale(0.82); }

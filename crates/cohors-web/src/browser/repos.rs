@@ -410,7 +410,8 @@ pub fn repo_table(cx: Ctx, full: bool) -> impl IntoView {
             <table class="repos">
                 <colgroup>
                     <col style="width:34px" />
-                    <col style="width:20%" />
+                    // The name column also holds the severity block (about 50px).
+                    <col style="width:26%" />
                     <col />
                     <col style="width:134px" />
                     <col style="width:184px" />
@@ -588,10 +589,10 @@ fn repo_row(cx: Ctx, line: RepoLine, now: i64) -> impl IntoView {
             </td>
             <td>
                 <div class="clip" title=line.name.clone()>
-                    {ui::severity_mark(line.severity)}
+                    {ui::severity_block(line.severity)}
                     <span class="name">{line.name.clone()}</span>
                 </div>
-                <div class="sub clip" title=line.branch.clone()>
+                <div class="sub clip under-blk" title=line.branch.clone()>
                     {ui::icon(Icon::Branch)}
                     {line.branch.clone()}
                 </div>
