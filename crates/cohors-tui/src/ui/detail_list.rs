@@ -151,7 +151,7 @@ fn render_repo_cards(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: 
                     }
                     title
                 },
-                vec![hint("t", "board"), hint("!", "run")],
+                vec![hint("t", "board"), hint("!", "run"), hint("a", "agent")],
             ),
         };
         let card = CardFrame {
@@ -343,8 +343,9 @@ fn task_lines(entry: Option<&LaunchpadEntry>, width: usize, theme: &Theme) -> Ve
     let dim = |text: String| Line::from(Span::styled(text, theme.dim()));
     let Some(entry) = entry.filter(|entry| entry.configured || entry.invalid.is_some()) else {
         return text::wrap(
-            "No launchpad file. Tasks appear here once this repository has \
-             .principia/repo.json.",
+            "No launchpad file. Press a to have your coding agent read this \
+             repository and write .principia/repo.json; tasks appear here \
+             once it exists.",
             width,
         )
         .into_iter()

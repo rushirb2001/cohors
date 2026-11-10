@@ -297,6 +297,10 @@ pub enum ConfirmAction {
     BulkStash(Vec<RepoId>),
     /// `git add -A && git commit -m <message>` across these repos.
     BulkCommit { ids: Vec<RepoId>, message: String },
+    /// Hand this repo to the user's coding agent with the `setup-repo` prompt
+    /// (`cohors agent run setup-repo`). Not destructive, but it starts an agent
+    /// session with a prompt already submitted, so it asks first.
+    AgentSetup(RepoId),
 }
 
 /// One repo's slot in a command run.
@@ -1264,6 +1268,10 @@ impl App {
                 self.request_bulk_stash();
                 Cmd::None
             }
+            KeyCode::Char('a') => {
+                self.request_agent_setup();
+                Cmd::None
+            }
             KeyCode::Char('o') => Cmd::OpenWith,
             KeyCode::Char('L') => Cmd::Lazygit,
             KeyCode::Char('y') => Cmd::CopyPath,
@@ -1693,6 +1701,31 @@ impl App {
                 Cmd::None
             }
         }
+    }
+
+    /// Ask before handing the repository under the cursor to the user's
+    /// coding agent to write (or update) its launchpad file. One repository at
+    /// a time: an agent session is interactive, so it cannot be a bulk action.
+    fn request_agent_setup(&mut self) {
+        let Some(repo) = self.selected_repo() else {
+            self.status = Some("no repo selected".to_string());
+            return;
+        };
+        if repo.has_error() || repo.path.is_none() {
+            self.status = Some(format!(
+                "{} cannot be read, so it cannot be set up",
+                repo.name
+            ));
+            return;
+        }
+        self.confirm = Some(Pending {
+            prompt: format!(
+                "Start your coding agent in {} to set it up for the launchpad?",
+                repo.name
+            ),
+            action: ConfirmAction::AgentSetup(repo.id.clone()),
+        });
+        self.mode = Mode::Confirm;
     }
 
     /// Open the confirmation modal for stashing the target repos' changes.
@@ -2318,18 +2351,39 @@ mod tests {
     }
 
     #[test]
-    fn the_key_a_is_left_free_on_both_screens() {
-        // `a` is reserved for a feature that is wired separately; until then it
-        // must do nothing at all, on any card.
+    fn the_key_a_asks_before_starting_an_agent_on_the_selected_repo() {
         let mut app = demo_app();
-        for card in ['1', '2', '3', '4', '5'] {
+        // On the cards that are not a list of repositories, `a` does nothing.
+        for card in ['1', '2', '3', '4'] {
             app.on_key(key(card));
             assert_eq!(app.on_key(key('a')), Cmd::None);
+            assert_eq!(app.mode, Mode::Normal, "card {card}");
         }
-        app.screen = Screen::Repos;
+        // On the repositories card it asks, naming the repository, and starts
+        // nothing by itself.
+        app.on_key(key('5'));
+        let name = app.selected_repo().unwrap().name.clone();
         assert_eq!(app.on_key(key('a')), Cmd::None);
-        assert!(app.selection.is_empty());
-        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.mode, Mode::Confirm);
+        let pending = app.confirm.clone().unwrap();
+        assert!(pending.prompt.contains(&name), "{}", pending.prompt);
+        assert!(matches!(pending.action, ConfirmAction::AgentSetup(_)));
+        // Anything but y cancels and forgets it.
+        assert_eq!(app.on_key(key('n')), Cmd::None);
+        assert!(app.confirm.is_none() && app.mode == Mode::Normal);
+        // y hands the pending action to the event loop.
+        app.on_key(key('a'));
+        assert_eq!(app.on_key(key('y')), Cmd::ConfirmAccept);
+        assert!(matches!(
+            app.confirm.as_ref().unwrap().action,
+            ConfirmAction::AgentSetup(_)
+        ));
+        // The detail view offers the same key.
+        app.confirm = None;
+        app.screen = Screen::Repos;
+        app.on_key(key('a'));
+        assert_eq!(app.mode, Mode::Confirm);
+        assert!(app.selection.is_empty(), "it never marks repositories");
     }
 
     #[test]

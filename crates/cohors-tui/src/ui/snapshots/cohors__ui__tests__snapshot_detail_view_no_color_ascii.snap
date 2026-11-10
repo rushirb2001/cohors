@@ -45,5 +45,5 @@ expression: screen
 | untracked   0                       | |                                      | |                                     |
 | stashes     0                       | | path                                 | |                                     |
 | commit      abc1234, 2h ago         | | ~/code/payments                      | |                                     |
-+-  d  changes  ----------------------+ +-  f  fetch  -------------------------+ +-  t  board   !  run  ---------------+
++-  d  changes  ----------------------+ +-  f  fetch  -------------------------+ +-  t  board   !  run   a  agent  ----+
   up/dn  move    enter  full detail    tab  next card    :  command    ?  help    q  quit

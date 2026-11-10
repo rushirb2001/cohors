@@ -403,6 +403,9 @@ fn run_loop(
                                 ConfirmAction::BulkCommit { ids, message } => {
                                     start_bulk_commit(&mut app, &tx, ids, message, &mut batch)
                                 }
+                                ConfirmAction::AgentSetup(id) => {
+                                    run_agent_setup(terminal, &mut app, &scanner, &tx, &id)?
+                                }
                             }
                         }
                     }
@@ -1099,6 +1102,62 @@ fn open_lazygit(
         path.as_str().to_string(),
     ];
     run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
+}
+
+/// Hand the terminal to the user's coding agent with the `setup-repo` prompt,
+/// then come back and rescan.
+///
+/// This runs `cohors agent run setup-repo --repo <path>` — this same binary —
+/// rather than calling the launch code directly, so the dashboard starts an
+/// agent exactly the way the command line does (runner choice, prompt file,
+/// activity log) with no second implementation to keep in step.
+fn run_agent_setup(
+    terminal: &mut Tui,
+    app: &mut App,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
+    id: &RepoId,
+) -> Result<()> {
+    let Some(path) = app
+        .repos
+        .iter()
+        .find(|r| &r.id == id)
+        .and_then(|r| r.path.clone())
+    else {
+        app.status = Some("that repo has no local path".to_string());
+        return Ok(());
+    };
+    let exe = match std::env::current_exe() {
+        Ok(exe) => exe,
+        Err(e) => {
+            app.status = Some(format!("could not find the cohors binary: {e}"));
+            return Ok(());
+        }
+    };
+    suspend_terminal(terminal)?;
+    let outcome = std::process::Command::new(exe)
+        .args(["agent", "run", "setup-repo", "--repo", path.as_str()])
+        .status();
+    let started = matches!(&outcome, Ok(status) if status.success());
+    if !started {
+        // The reason (no runner installed, say) is on the plain screen right
+        // now and would vanish when the dashboard repaints. Let it be read.
+        eprintln!("\n  press Enter to return to cohors");
+        let mut line = String::new();
+        let _ = std::io::stdin().read_line(&mut line);
+    }
+    resume_terminal(terminal)?;
+    match outcome {
+        Ok(_) if started => start_refresh(app, scanner, tx),
+        Ok(_) => {
+            app.status = Some(
+                "the agent did not start; `cohors agent runners` shows what is installed"
+                    .to_string(),
+            );
+        }
+        Err(e) => app.status = Some(format!("could not start the agent: {e}")),
+    }
+    Ok(())
 }
 
 /// Suspend the TUI, run an interactive child to completion, then resume and

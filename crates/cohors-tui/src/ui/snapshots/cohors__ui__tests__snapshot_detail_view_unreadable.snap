@@ -37,13 +37,13 @@ expression: "render_to_string(&app, 120, 45)"
 │                                                                                                                      │
 ╰─  ␣  select   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort   esc  overview  ──╯
 ╭─ legacy-billing  state ─────────────╮ ╭─ signals ────────────────────────────╮ ╭─ tasks  0 ──────────────────────────╮
-│ This repository could not be read.  │ │ ▲ Could not be read                  │ │ No launchpad file. Tasks appear     │
-│ could not read .git (permission     │ │                                      │ │ here once this repository has       │
-│ denied)                             │ │ path                                 │ │ .principia/repo.json.               │
-│                                     │ │ ~/code/legacy-billing                │ │                                     │
+│ This repository could not be read.  │ │ ▲ Could not be read                  │ │ No launchpad file. Press a to have  │
+│ could not read .git (permission     │ │                                      │ │ your coding agent read this         │
+│ denied)                             │ │ path                                 │ │ repository and write                │
+│                                     │ │ ~/code/legacy-billing                │ │ .principia/repo.json; tasks appear  │
+│                                     │ │                                      │ │ here once it exists.                │
 │                                     │ │                                      │ │                                     │
 │                                     │ │                                      │ │                                     │
 │                                     │ │                                      │ │                                     │
-│                                     │ │                                      │ │                                     │
-╰─  d  changes  ──────────────────────╯ ╰─  f  fetch  ─────────────────────────╯ ╰─  t  board   !  run  ───────────────╯
+╰─  d  changes  ──────────────────────╯ ╰─  f  fetch  ─────────────────────────╯ ╰─  t  board   !  run   a  agent  ────╯
   ↑↓  move    ⏎  full detail    tab  next card    :  command    ?  help    q  quit

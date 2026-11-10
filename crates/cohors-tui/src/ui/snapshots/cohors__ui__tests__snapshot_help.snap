@@ -38,6 +38,7 @@ expression: "render_to_string(&app, 120, 50)"
 │               ║    f  F  p  P         fetch / fetch all / pull (ff only) / push                      ║               │
 │               ║    c  S               commit / stash; both ask before changing anything              ║               │
 │               ║    o  L  y            open with… / lazygit / copy the path                           ║               │
+│               ║    a                  ask your coding agent to set the repo up (asks first)          ║               │
 │               ║    >                  change the sort order                                          ║               │
 │               ║    ⏎                  the detail view; there, the full drill-in                      ║               │
 │               ║    esc                clear marks, a narrowing, the filter; or go back               ║               │
@@ -47,7 +48,6 @@ expression: "render_to_string(&app, 120, 50)"
 │               ║                                     ? / Esc close                                    ║               │
 │               ║                                                                                      ║               │
 │               ╚══════════════════════════════════════════════════════════════════════════════════════╝               │
-│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯

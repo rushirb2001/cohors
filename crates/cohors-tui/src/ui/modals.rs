@@ -99,6 +99,10 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
             "commit / stash; both ask before changing anything",
         ),
         row(key("o  L  y"), "open with… / lazygit / copy the path"),
+        row(
+            key("a"),
+            "ask your coding agent to set the repo up (asks first)",
+        ),
         row(key(">"), "change the sort order"),
         row(key(enter), "the detail view; there, the full drill-in"),
         row(
@@ -1108,8 +1112,9 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
         return;
     };
     let ids = match &pending.action {
-        ConfirmAction::BulkStash(ids) => ids,
-        ConfirmAction::BulkCommit { ids, .. } => ids,
+        ConfirmAction::BulkStash(ids) => ids.as_slice(),
+        ConfirmAction::BulkCommit { ids, .. } => ids.as_slice(),
+        ConfirmAction::AgentSetup(id) => std::slice::from_ref(id),
     };
     let names: Vec<&str> = ids
         .iter()
