@@ -421,7 +421,15 @@ pub(crate) fn path_line(
             theme.risk(),
         )),
         (None, Some(commit)) => {
-            let sha = text::cell(&text::safe(&commit.short_id), SHA_WIDTH, ell);
+            // Git's own abbreviation can be longer than seven characters in a
+            // big repository. Any prefix of a hash is still a valid short id,
+            // so cut it rather than mark it with an ellipsis ("eee44f…" reads
+            // as damage and shows less of the hash).
+            let short: String = text::safe(&commit.short_id)
+                .chars()
+                .take(SHA_WIDTH)
+                .collect();
+            let sha = format!("{short:<SHA_WIDTH$}");
             let subject_width = rest.saturating_sub(SHA_WIDTH + 2);
             spans.push(Span::styled(sha, theme.ahead()));
             spans.push(Span::raw("  "));
