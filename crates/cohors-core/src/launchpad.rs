@@ -281,8 +281,14 @@ pub const MAX_COMMAND_CHARS: usize = 400;
 /// try to list the bad ones. It lists what is allowed instead:
 ///
 /// - printable ASCII (space through `~`), which covers every shell command, and
-/// - letters and digits of other scripts, so a path or argument in any
-///   language still works.
+/// - letters and digits of other left-to-right scripts, so a path or argument
+///   in most languages still works.
+///
+/// Right-to-left scripts (Hebrew, Arabic and the others in [`is_rtl`]) are
+/// refused even though they are ordinary letters. Mixed into a left-to-right
+/// command they make a display reorder the pieces around them — with no
+/// special character involved — so the command a person reads would not be
+/// the command that runs.
 ///
 /// Everything else is refused: all control and format characters, non-ASCII
 /// spaces and punctuation, combining marks, variation selectors, private-use
@@ -296,9 +302,26 @@ pub fn is_plain_command(run: &str) -> bool {
         c if c.is_ascii() => false,
         // The Hangul fillers are classed as letters but render as nothing.
         '\u{115F}' | '\u{1160}' | '\u{3164}' | '\u{FFA0}' => false,
+        c if is_rtl(c) => false,
         c => c.is_alphanumeric(),
     };
     !run.trim().is_empty() && run.chars().count() <= MAX_COMMAND_CHARS && run.chars().all(allowed)
+}
+
+/// Whether `c` belongs to a right-to-left script. These are the blocks the
+/// Unicode bidirectional algorithm treats as right-to-left by default (Hebrew,
+/// Arabic, Syriac, Thaana, N'Ko and the rest of U+0590–U+08FF; the Hebrew and
+/// Arabic presentation forms; and the right-to-left planes of the supplementary
+/// range), so new characters added to them are covered without a code change.
+fn is_rtl(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0590}'..='\u{08FF}'
+            | '\u{FB1D}'..='\u{FDFF}'
+            | '\u{FE70}'..='\u{FEFF}'
+            | '\u{10800}'..='\u{10FFF}'
+            | '\u{1E800}'..='\u{1EFFF}'
+    )
 }
 
 /// `^[a-z0-9]+(-[a-z0-9]+)*$`, written out by hand to avoid a regex dependency
@@ -688,8 +711,10 @@ pub fn demo() -> (Vec<LaunchpadEntry>, Board) {
         primary: true,
         ..Flow::default()
     };
+    // Entry ids must equal the demo fleet's repo ids (`demo/<name>`, see
+    // `crate::demo`), because the overview matches entries to repos by id.
     let entry = |name: &str, summary: &str, flows: Vec<Flow>, tasks: Vec<Task>| LaunchpadEntry {
-        id: name.to_string(),
+        id: format!("demo/{name}"),
         name: name.to_string(),
         configured: true,
         contribution: Some(Contribution {
@@ -757,12 +782,12 @@ pub fn demo() -> (Vec<LaunchpadEntry>, Board) {
             )],
         ),
         LaunchpadEntry {
-            id: "mobile-app".to_string(),
+            id: "demo/mobile-app".to_string(),
             name: "mobile-app".to_string(),
             ..LaunchpadEntry::default()
         },
         LaunchpadEntry {
-            id: "infra".to_string(),
+            id: "demo/infra".to_string(),
             name: "infra".to_string(),
             ..LaunchpadEntry::default()
         },
@@ -922,8 +947,17 @@ mod tests {
                 hidden as u32
             );
         }
-        // Letters and digits of other scripts are fine.
-        assert!(is_plain_command("make 테스트 проверка 試験 ٣"));
+        // Letters and digits of other left-to-right scripts are fine.
+        assert!(is_plain_command("make 테스트 проверка 試験 ३"));
+        // Right-to-left letters and digits reorder the text around them on
+        // screen, so what is read is not what runs: Hebrew, Arabic, an
+        // Arabic-Indic digit, Syriac, N'Ko, a presentation form, Adlam.
+        for rtl in ["אבג", "عربى", "٣", "ܐ", "ߊ", "ﭐ", "𞤀"] {
+            assert!(
+                !is_plain_command(&format!("make {rtl} && echo ok")),
+                "{rtl} should be refused"
+            );
+        }
         assert!(!is_plain_command("   "));
         assert!(!is_plain_command(&"x".repeat(MAX_COMMAND_CHARS + 1)));
 
@@ -936,6 +970,26 @@ mod tests {
                 .any(|e| e.contains("flows[dev]") && e.contains("one line")),
             "{errs:?}"
         );
+    }
+
+    #[test]
+    fn the_demo_launchpad_lines_up_with_the_demo_fleet() {
+        // The overview joins entries to repos by id; a mismatch would show a
+        // demo fleet with no tasks at all.
+        let fleet = crate::demo::fleet(1_700_000_000);
+        let (entries, board) = demo();
+        for entry in &entries {
+            assert!(
+                fleet.iter().any(|r| r.id.0 == entry.id),
+                "{} is not a demo repo id",
+                entry.id
+            );
+        }
+        let o = crate::overview(&fleet, &entries, &board, 1_700_000_000);
+        assert_eq!(o.figures.open_tasks, 5);
+        assert_eq!(o.work[0].focus + o.work[1].focus + o.work[2].focus, 1);
+        let payments = o.repos.iter().find(|r| r.name == "payments").unwrap();
+        assert_eq!((payments.tasks_open, payments.configured), (2, true));
     }
 
     #[test]
