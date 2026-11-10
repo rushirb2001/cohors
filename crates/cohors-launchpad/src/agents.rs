@@ -169,14 +169,27 @@ pub fn write_thread(
 /// Write `body` to a fresh prompt file under the launchpad home and return its
 /// path. A file (rather than an argument) keeps the command line short and
 /// identical across runners. Old prompt files are cleared as a side effect.
+///
+/// The terminal command reads this file when it runs, so nothing else may be
+/// able to change it in between. On Unix the directory is private to the user
+/// (mode 700) and the file is created new, never overwriting, readable and
+/// writable by the user only (mode 600). It can also hold task notes, which
+/// are nobody else's business on a shared machine.
 pub fn write_prompt_file(
     home: &Path,
     tag: &str,
     body: &str,
     now_secs: i64,
 ) -> Result<PathBuf, LaunchpadError> {
+    use std::io::Write;
+    use std::sync::atomic::{AtomicU32, Ordering};
+    // Distinguishes files written in the same second by the same process.
+    static SEQUENCE: AtomicU32 = AtomicU32::new(0);
+
     let dir = home.join("prompts");
     fs::create_dir_all(&dir).map_err(io_err("creating", &dir))?;
+    refuse_symlink(&dir)?;
+    restrict_to_owner(&dir, 0o700)?;
     prune_prompts(&dir, now_secs);
     // Repo-supplied text must never reach a file name: keep letters, digits,
     // dash and underscore only.
@@ -186,10 +199,38 @@ pub fn write_prompt_file(
         .take(60)
         .collect();
     let safe = if safe.is_empty() { "prompt" } else { &safe };
-    let path = dir.join(format!("{safe}-{now_secs}-{}.md", std::process::id()));
-    refuse_symlink(&path)?;
-    fs::write(&path, body).map_err(io_err("writing", &path))?;
+    let path = dir.join(format!(
+        "{safe}-{now_secs}-{}-{}.md",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    // `create_new` fails if anything (a symlink included) is already there.
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options
+        .open(&path)
+        .and_then(|mut file| file.write_all(body.as_bytes()))
+        .map_err(io_err("writing", &path))?;
     Ok(path)
+}
+
+/// Limit `path` to its owner on Unix (a no-op elsewhere, where the user's
+/// profile directory is already private).
+fn restrict_to_owner(path: &Path, mode: u32) -> Result<(), LaunchpadError> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+            .map_err(io_err("restricting", path))?;
+    }
+    #[cfg(not(unix))]
+    let _ = (path, mode);
+    Ok(())
 }
 
 /// Delete prompt files older than [`PROMPT_TTL_SECS`]. Best-effort.
@@ -1113,6 +1154,18 @@ mod tests {
                 .to_string_lossy()
                 .starts_with("etcpasswd-")
         );
+        // The file and its directory are the user's alone.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = |p: &Path| fs::metadata(p).unwrap().permissions().mode() & 0o777;
+            assert_eq!(mode(&file), 0o600);
+            assert_eq!(mode(file.parent().unwrap()), 0o700);
+        }
+        // Two prompts written in the same second never share a file.
+        let twin = write_prompt_file(home.path(), "../../etc/passwd", "z", NOW).unwrap();
+        assert_ne!(twin, file);
+        assert_eq!(fs::read_to_string(&file).unwrap(), "x");
         // Only prompt files cohors wrote can be read back for `agent exec`.
         assert_eq!(read_prompt_file(home.path(), &file).unwrap(), "x");
         let outside = repo.path().join(LOCAL_FILE);
