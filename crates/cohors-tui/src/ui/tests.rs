@@ -671,7 +671,7 @@ fn the_overview_at_119_columns_matches_the_approved_frame() {
     // The key bar: two columns in, hints four apart.
     let keys = rows.last().unwrap();
     assert_eq!(column_of(keys, "1-5"), 2);
-    assert_eq!(column_of(keys, "tab"), 21);
+    assert_eq!(column_of(keys, "tab"), 15);
 }
 
 #[test]
@@ -766,7 +766,7 @@ fn severity_blocks_are_filled_only_where_work_could_be_lost() {
     let ochre = Color::Rgb(0xCF, 0xA2, 0x55);
     let mut app = fleet_app();
     app.dark = true;
-    let colour = draw(&app, 119, 53, true);
+    let colour = draw(&app, 119, 60, true);
 
     // Do next, Work at risk and the repository table all lead with the block.
     assert_eq!(cell_at(&colour, &["Push 4 commits"], "RISK").bg, brick);
@@ -809,14 +809,14 @@ fn severity_blocks_are_filled_only_where_work_could_be_lost() {
 
     // A light terminal gets the deeper tones.
     app.dark = false;
-    let light = draw(&app, 119, 53, true);
+    let light = draw(&app, 119, 60, true);
     assert_eq!(
         cell_at(&light, &["Push 4 commits"], "RISK").bg,
         Color::Rgb(0xB4, 0x48, 0x3F)
     );
 
     // Without colour the block is reverse video, and the word still says it.
-    let plain = draw(&app, 119, 53, false);
+    let plain = draw(&app, 119, 60, false);
     let block = cell_at(&plain, &["Push 4 commits"], "RISK");
     assert_eq!(block.bg, Color::Reset);
     assert!(block.modifier.contains(Modifier::REVERSED));
@@ -1388,4 +1388,103 @@ fn header_roots_lead_with_the_busiest_root() {
     // A tie (here, no repo under either root) keeps the first configured root.
     app.repos = vec![repo_at("x", "/elsewhere/x")];
     assert_eq!(overview::header_roots(&app), "/srv/projects (+1 more)");
+}
+
+// ── Panels: the look with colour ─────────────────────────────────────────────
+
+/// The screen with cards as filled panels, which is what a colour terminal
+/// gets (the other tests draw line frames so they can measure them).
+fn draw_panels(app: &App, w: u16, h: u16) -> Terminal<TestBackend> {
+    let theme = Theme::new(app.icons, app.dark, true).with_panels();
+    let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+    terminal.draw(|f| render_with(f, app, NOW, &theme)).unwrap();
+    terminal
+}
+
+/// Panels change what cards are made of and nothing else: every word is where
+/// the line-framed layout puts it, no frame lines are left, each card's title
+/// sits on a band in its own colour, and the focused card's band is the loud one.
+#[test]
+fn panels_keep_the_layout_and_colour_each_section() {
+    use ratatui::style::Color;
+    let mut app = fleet_app();
+    app.dark = true;
+    let panels = draw_panels(&app, 119, 53);
+    let lines = draw(&app, 119, 53, true);
+
+    // Same text in the same cells, once the frames are taken out of both.
+    let strip = |text: String| -> String {
+        text.chars()
+            .map(|c| {
+                if "╭╮╰╯│─▄▀".contains(c) {
+                    ' '
+                } else {
+                    c
+                }
+            })
+            .collect()
+    };
+    assert_eq!(strip(buffer_text(&panels)), strip(buffer_text(&lines)));
+    assert!(!buffer_text(&panels).contains('│'));
+
+    // The five title bands are five different colours.
+    let band = |title: &[&str], word: &str| cell_at(&panels, title, word).bg;
+    let bands = [
+        band(&["Do next"], "Do next"),
+        band(&["Work at risk", "6"], "Work at risk"),
+        band(&["Open tasks", "Commits, last"], "Open tasks"),
+        band(&["Open tasks", "Commits, last"], "Commits, last"),
+        band(&["Repositories", "12"], "Repositories"),
+    ];
+    for (i, colour) in bands.iter().enumerate() {
+        assert!(matches!(colour, Color::Rgb(..)), "band {i} is not filled");
+        assert!(!bands[..i].contains(colour), "band {i} repeats a colour");
+    }
+
+    // "Do next" has the focus when the dashboard opens: its band is the
+    // section's full colour, and moving the focus hands that to another card.
+    let purple = Color::Rgb(0xB5, 0x5C, 0xA4);
+    assert_eq!(bands[0], purple);
+    app.focus = Card::AtRisk;
+    let moved = draw_panels(&app, 119, 53);
+    assert_ne!(cell_at(&moved, &["Do next"], "Do next").bg, purple);
+    assert_eq!(
+        cell_at(&moved, &["Work at risk", "6"], "Work at risk").bg,
+        Color::Rgb(0xD9, 0x77, 0x6E)
+    );
+}
+
+/// An overlay is a panel too, with its title on the colour of the section it
+/// belongs to (the launchpad is the tasks card's sage).
+#[test]
+fn an_overlay_is_a_panel_in_its_sections_colour() {
+    use ratatui::style::Color;
+    let mut app = fleet_app();
+    app.dark = true;
+    app.mode = Mode::Help;
+    let help = draw_panels(&app, 119, 53);
+    let text = buffer_text(&help);
+    assert!(!text.contains('║') && !text.contains('╔'), "{text}");
+    assert_eq!(
+        cell_at(&help, &["Help"], "Help").bg,
+        Color::Rgb(0xB5, 0x5C, 0xA4)
+    );
+}
+
+/// A card lists its keys only while it has the focus, because that is the
+/// only time they work.
+#[test]
+fn a_card_lists_its_keys_only_while_it_has_the_focus() {
+    let mut app = fleet_app();
+    let text = render_to_string(&app, 119, 53);
+    assert!(!text.contains("copy as markdown"));
+    assert!(!text.contains("pull   P"));
+    // The keys that work everywhere are on the key bar.
+    let keys = text.lines().last().unwrap().to_string();
+    assert!(keys.contains("standup") && keys.contains("tasks"), "{keys}");
+
+    app.focus = Card::Commits;
+    assert!(render_to_string(&app, 119, 53).contains("copy as markdown"));
+    app.focus = Card::Repos;
+    assert!(render_to_string(&app, 119, 53).contains("pull   P"));
 }

@@ -14,15 +14,15 @@ expression: "render_to_string(&app, 100, 24)"
 │  RIS║ ✓ payments             │ exit 1                                                      ║     │
 │  WAR║ ✗ web-app 1            │                                                             ║Push │
 │  WAR║                        │ running 3 tests                                             ║Pull │
-╰─  ⏎ ║                        │ ── stderr ──                                                ║─────╯
+╰─────║                        │ ── stderr ──                                                ║─────╯
 ╭─  3 ║                        │ test cart::total failed                                     ║─────╮
 │ No l║                        │ error: 1 test failed                                        ║     │
 │ here╟────────────────────────┴─────────────────────────────────────────────────────────────╢     │
-╰─  t ║                ↑/↓ repo · PgUp/PgDn scroll output · y copy · Esc close               ║─────╯
+╰─────║                ↑/↓ repo · PgUp/PgDn scroll output · y copy · Esc close               ║─────╯
 ╭─  5 ╚══════════════════════════════════════════════════════════════════════════════════════╝─────╮
 │        repository        branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
 │  RISK  legacy-billing    unreadable                                                 could not r… │
 │  WARN  payments          main      ↑2              ·    3    1      1      ·    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

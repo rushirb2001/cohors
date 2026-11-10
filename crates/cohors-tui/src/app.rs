@@ -1051,6 +1051,10 @@ impl App {
         match key.code {
             KeyCode::Char('q') => return Some(Cmd::Quit),
             KeyCode::Char('r') => return Some(Cmd::Refresh),
+            // The standup and the launchpad open from anywhere, not only
+            // from the cards that summarise them.
+            KeyCode::Char('s') => return Some(self.open_standup()),
+            KeyCode::Char('t') => return Some(self.open_launchpad()),
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char(':') => {
                 self.mode = Mode::Command;
@@ -1476,9 +1480,17 @@ impl App {
             }
             KeyCode::Enter => {
                 let parsed = crate::command::parse(&self.command_line);
+                // A line that is not a command says why, not just "unknown".
+                let rejected = parsed
+                    .is_none()
+                    .then(|| crate::command::explain(&self.command_line));
                 self.command_line.clear();
                 self.mode = Mode::Normal;
-                return self.apply_command(parsed);
+                let cmd = self.apply_command(parsed);
+                if let Some(why) = rejected {
+                    self.status = Some(why);
+                }
+                return cmd;
             }
             KeyCode::Backspace => {
                 self.command_line.pop();
@@ -1546,7 +1558,9 @@ impl App {
                 self.focus = Card::Repos;
                 self.pane = Pane::List;
             }
-            None => self.status = Some(format!("no repo matching '{name}'")),
+            // A bare word is tried as a repository name, so a mistyped
+            // command lands here too: say both.
+            None => self.status = Some(format!("no command or repository matches '{name}'")),
         }
     }
 

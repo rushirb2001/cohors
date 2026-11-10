@@ -96,6 +96,25 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   only with `--demo`, labelled as demo data. The guided tour is gone.
 - **`cohors scan`** calls its last group "clean" (repos with nothing to report),
   the same definition every other surface uses.
+- **The terminal dashboard is made of panels.** On a colour terminal every card
+  and every overlay is a filled surface instead of a box of lines, with its title
+  on a band in its section's colour: purple for Do next, brick for Work at risk,
+  sage for Open tasks, slate blue for Commits, teal for Repositories. The focused
+  card has the one bright band. Overlays take the colour of the section they
+  belong to, and the dashboard behind an open overlay fades, fills included.
+  When the terminal is tall enough a blank row separates the header, the figures
+  and each band of cards; smaller terminals keep every row for content. Without
+  colour (`NO_COLOR`), or with `COHORS_CARDS=lines`, cards keep their line frames.
+- **Quieter rows.** A count of zero is a small dot rather than a `0`, and a branch
+  level with its upstream says nothing rather than `level`, so the only numbers
+  on a row are the ones that mean something. On a wide terminal the repository
+  name and branch columns grow to show long names whole.
+- **Keys.** `s` opens the standup and `t` the launchpad from anywhere, not only
+  from their cards. A card lists its keys only while it has the focus, which is
+  the only time they work; the keys that work everywhere are on the key bar.
+- **Command line.** A line that is not a command says what was wrong with it
+  (`commit needs a message: :commit <message>`) instead of `unknown command`, and
+  is marked as a failure rather than with a tick.
 
 ### Fixed
 

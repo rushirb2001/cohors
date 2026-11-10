@@ -34,8 +34,8 @@ expression: "render_to_string(&detail_app(), 120, 45)"
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
-│                                                                                                                      │
 ╰─  ␣  select   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort   esc  overview  ──╯
+                                                                                                                        
 ╭─ payments  state ───────────────────╮ ╭─ signals ────────────────────────────╮ ╭─ tasks  2 ──────────────────────────╮
 │ branch      main                    │ │ ◆ 2 commits not pushed               │ │ · Idempotency keys on charge retri… │
 │ upstream    origin/main             │ │ ○ 3 uncommitted files                │ │ · Back off webhook redelivery       │

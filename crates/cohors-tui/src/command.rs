@@ -85,6 +85,20 @@ pub fn parse(input: &str) -> Option<Command> {
     }
 }
 
+/// What to tell the user about a line [`parse`] turned down: which command it
+/// was and what it is missing, rather than a bare "unknown command".
+pub fn explain(input: &str) -> String {
+    let body = input.trim().trim_start_matches(':').trim();
+    let verb = body.split_whitespace().next().unwrap_or("").to_lowercase();
+    match verb.as_str() {
+        "" => "nothing typed".to_string(),
+        "commit" | "ci" => "commit needs a message: :commit <message>".to_string(),
+        "sort" => "sort needs a mode: :sort name, :sort dirty or :sort recent".to_string(),
+        _ if body.starts_with('!') => "nothing to run after !".to_string(),
+        _ => format!("unknown command: {verb}  (? lists them)"),
+    }
+}
+
 /// Map a human-friendly sort word to a [`SortMode`], or `None` if unrecognized.
 fn parse_sort(arg: &str) -> Option<SortMode> {
     match arg.trim().to_lowercase().as_str() {
@@ -119,6 +133,20 @@ mod tests {
         assert_eq!(parse(":tasks"), Some(Command::Launchpad));
         assert_eq!(parse("   "), None);
         assert_eq!(parse("sort sideways"), None);
+    }
+
+    #[test]
+    fn a_rejected_line_says_what_was_wrong_with_it() {
+        for (line, says) in [
+            (":commit", "needs a message"),
+            ("sort", "needs a mode"),
+            ("sort sideways", "needs a mode"),
+            ("frobnicate now", "unknown command: frobnicate"),
+            ("!", "nothing to run"),
+        ] {
+            assert_eq!(parse(line), None, "{line}");
+            assert!(explain(line).contains(says), "{line}: {}", explain(line));
+        }
     }
 
     #[test]

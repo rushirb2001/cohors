@@ -14,15 +14,15 @@ expression: "render_to_string(&app, 100, 24)"
 │  RISK ║                                                                                  ║       │
 │  WARN ║                                                                                  ║  Push │
 │  WARN ║                                                                                  ║  Pull │
-╰─  ⏎  o║                                                                                  ║───────╯
+╰───────║                                                                                  ║───────╯
 ╭─  3  ✓║                                                                                  ║───────╮
 │ No lau║                                                                                  ║       │
 │ here o║                                                                                  ║       │
-╰─  t  b║                                                                                  ║───────╯
+╰───────║                                                                                  ║───────╯
 ╭─  5  ▤║                                                                                  ║───────╮
 │       ║                                                                                  ║ommit  │
 │  RISK ╚══════════════════════════════════════════════════════════════════════════════════╝not r… │
 │  WARN  payments          main      ↑2              ·    3    1      1      ·    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

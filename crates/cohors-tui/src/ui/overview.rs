@@ -13,7 +13,7 @@ use cohors_core::{ActionKind, KeyFigures, NextAction, Overview};
 
 use super::cards::{
     BLOCK_WIDTH, CardFrame, Hint, Item, draw_card, draw_card_filled, draw_lines, draw_list,
-    draw_message, hint, severity_block,
+    draw_message, hint, hints_when, severity_block,
 };
 use super::layout::{Figures, OverviewPlan, Wants, list_window, plan_overview};
 use super::repos_table::render_repos_card;
@@ -28,9 +28,13 @@ const HEADER_SIDE_WIDTH: usize = 39;
 /// Draw the overview into `area`.
 pub(crate) fn render_overview(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
     let plan = plan_overview(area.width, area.height, &wants(app), app.focus);
-    let [header, figures, body, keys] = Layout::vertical([
+    // `plan.gap` is a blank row between one band and the next, when the
+    // screen has room for it (zero otherwise, which takes no space).
+    let [header, _, figures, _, body, keys] = Layout::vertical([
         Constraint::Length(plan.header),
+        Constraint::Length(plan.gap),
         Constraint::Length(plan.figures.height()),
+        Constraint::Length(plan.gap),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
@@ -97,14 +101,17 @@ fn render_cards(
 ) {
     let focused = |card: Card| app.screen == Screen::Overview && app.focus == card;
     let middle = if plan.stacked {
-        plan.tasks + plan.commits
+        plan.tasks + plan.gap + plan.commits
     } else {
         plan.tasks.max(plan.commits)
     };
-    let [next, risk, mid, repos] = Layout::vertical([
+    let [next, _, risk, _, mid, _, repos] = Layout::vertical([
         Constraint::Length(plan.next),
+        Constraint::Length(plan.gap),
         Constraint::Length(plan.risk),
+        Constraint::Length(plan.gap),
         Constraint::Length(middle),
+        Constraint::Length(plan.gap),
         Constraint::Length(plan.repos),
     ])
     .areas(area);
@@ -132,8 +139,9 @@ fn render_cards(
 /// columns in the design).
 fn split_middle(area: Rect, plan: &OverviewPlan) -> (Rect, Rect) {
     if plan.stacked {
-        let [tasks, commits] = Layout::vertical([
+        let [tasks, _, commits] = Layout::vertical([
             Constraint::Length(plan.tasks),
+            Constraint::Length(plan.gap),
             Constraint::Length(plan.commits),
         ])
         .areas(area);
@@ -543,6 +551,7 @@ pub(crate) fn computing(theme: &Theme) -> String {
 fn render_do_next(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focused: bool) {
     let card = CardFrame {
         number: Some(1),
+        hue: None,
         title: vec![Span::styled("Do next", Style::new().bold())],
         hints: Vec::new(),
         focused,
@@ -614,13 +623,7 @@ fn do_next_line(
         Span::raw("  "),
         Span::styled(
             text::cell(&title, title_width, ell),
-            // In a scheme that quiets rows, only a step that guards work is
-            // bold; a note reads at normal weight.
-            if theme.quiets_rows() && action.severity < Severity::Warn {
-                Style::new()
-            } else {
-                Style::new().add_modifier(Modifier::BOLD)
-            },
+            Style::new().add_modifier(Modifier::BOLD),
         ),
     ];
     if why_width > 0 {
@@ -677,12 +680,15 @@ fn render_at_risk(
     }
     let card = CardFrame {
         number: Some(2),
+        hue: None,
         title,
-        hints: app
-            .overview
-            .as_ref()
-            .map(|o| at_risk_hints(o, theme))
-            .unwrap_or_default(),
+        hints: hints_when(
+            focused,
+            app.overview
+                .as_ref()
+                .map(|o| at_risk_hints(o, theme))
+                .unwrap_or_default(),
+        ),
         focused,
     };
     let inner = draw_card(frame, area, &card, theme);
@@ -818,8 +824,12 @@ fn render_tasks(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focused
     }
     let card = CardFrame {
         number: Some(3),
+        hue: None,
         title,
-        hints: vec![hint("t", "board"), hint(theme.glyphs.key_enter(), "tasks")],
+        hints: hints_when(
+            focused,
+            vec![hint("t", "board"), hint(theme.glyphs.key_enter(), "tasks")],
+        ),
         focused,
     };
     let inner = draw_card(frame, area, &card, theme);
@@ -970,8 +980,12 @@ fn render_commits(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
     }
     let card = CardFrame {
         number: Some(4),
+        hue: None,
         title,
-        hints: vec![hint("s", "standup"), hint("y", "copy as markdown")],
+        hints: hints_when(
+            focused,
+            vec![hint("s", "standup"), hint("y", "copy as markdown")],
+        ),
         focused,
     };
     let inner = draw_card(frame, area, &card, theme);
@@ -1036,7 +1050,8 @@ fn render_commits(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
         let filled = bar_cells(repo.count, max, bar_width);
         Item::line(Line::from(vec![
             Span::raw(text::column(&text::safe(&repo.name), name_width, ell)),
-            Span::styled(theme.glyphs.bar_cell().repeat(filled), theme.accent()),
+            // The bars take the commits card's own colour.
+            Span::styled(theme.glyphs.bar_cell().repeat(filled), theme.section(4)),
             Span::raw(" ".repeat(bar_width - filled)),
             Span::raw(format!("{:>COUNT$}", repo.count)),
         ]))
@@ -1074,6 +1089,7 @@ fn render_no_repositories(frame: &mut Frame, area: Rect, app: &App, theme: &Them
     };
     let card = CardFrame {
         number: None,
+        hue: None,
         title: vec![Span::styled(title, bold)],
         hints: Vec::new(),
         focused: false,
@@ -1215,9 +1231,11 @@ fn key_bar_hints(app: &App, theme: &Theme) -> Vec<Hint> {
     }
     match app.screen {
         Screen::Overview => vec![
-            hint("1-5", "focus card"),
-            hint("tab", "next card"),
+            hint("1-5", "card"),
+            hint("tab", "next"),
             hint(g.key_updown(), "move"),
+            hint("s", "standup"),
+            hint("t", "tasks"),
             hint(":", "command"),
             hint("r", "rescan"),
             hint("?", "help"),

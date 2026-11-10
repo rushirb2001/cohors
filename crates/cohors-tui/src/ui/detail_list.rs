@@ -41,8 +41,12 @@ pub(crate) fn render_detail_view(
         h if h >= 18 => CARDS_SHORT,
         _ => 0,
     };
-    let [list, cards, keys] = Layout::vertical([
+    // A blank row between the list and the cards, on a screen tall enough
+    // to give one up.
+    let gap = u16::from(area.height >= 40);
+    let [list, _, cards, keys] = Layout::vertical([
         Constraint::Min(0),
+        Constraint::Length(gap),
         Constraint::Length(cards_height),
         Constraint::Length(1),
     ])
@@ -60,6 +64,7 @@ fn render_list(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
     let view = app.view();
     let card = CardFrame {
         number: Some(5),
+        hue: None,
         title: table_title(app, view.len(), theme),
         hints: table_hints(TableKind::Detail, theme),
         focused: app.pane == Pane::List,
@@ -156,6 +161,13 @@ fn render_repo_cards(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: 
         };
         let card = CardFrame {
             number: None,
+            // The three cards take the colours of the overview cards they
+            // expand on: the repository's row, work at risk, open tasks.
+            hue: Some(match pane {
+                Pane::State => 5,
+                Pane::Signals => 2,
+                _ => 3,
+            }),
             title,
             hints,
             focused,

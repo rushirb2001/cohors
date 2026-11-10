@@ -18,11 +18,11 @@ expression: "render_to_string(&app, 110, 34)"
 │  RISK  ║     run docker compose up -d && cargo run                                                ║        │
 │  WARN  ║                                                                                          ║h  Push │
 │  WARN  ║   ▸ web-app  Customer-facing storefront                                                  ║m  Pull │
-╰─  ⏎  op║     ✕ Checkout form fails keyboard-only pass   high   blocked                            ║────────╯
+╰────────║     ✕ Checkout form fails keyboard-only pass   high   blocked                            ║────────╯
 ╭─  3  ✓ ║     ○ Remove the legacy cart endpoint  low                                               ║────────╮
 │ No laun║     run pnpm dev                                                                         ║        │
 │ once a ║                                                                                          ║        │
-╰─  t  bo║   ▸ data-pipeline  Nightly ingest and reporting jobs                                     ║────────╯
+╰────────║   ▸ data-pipeline  Nightly ingest and reporting jobs                                     ║────────╯
 ╭─  5  ▤ ║     ○ Nightly ingest job is red on main   high                                           ║────────╮
 │        ║                                                                                          ║commit  │
 │  RISK  ║ Not set up yet                                                                           ║ not r… │
@@ -34,5 +34,5 @@ expression: "render_to_string(&app, 110, 34)"
 │                                                                                                            │
 │                                                                                                            │
 │                                                                                                            │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter  ──────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

@@ -278,24 +278,14 @@ fn count_cell(n: u32, width: usize, style: Style, theme: &Theme) -> Span<'static
     Span::styled(text::cell_right(&n.to_string(), width, ell), style)
 }
 
-/// In a scheme that quiets rows, a repository that needs nothing (a note at
-/// most) has its name and branch drawn dim, so the ones at risk are the ones
-/// that read.
-fn is_quiet(row: &RepoRow, theme: &Theme) -> bool {
-    theme.quiets_rows() && row.line.is_some_and(|line| line.severity < Severity::Warn)
-}
-
 /// The repository name as a padded cell, with the characters that matched the
 /// filter picked out.
 fn name_spans(row: &RepoRow, width: usize, theme: &Theme) -> Vec<Span<'static>> {
     let at_risk = row.line.is_some_and(|line| line.at_risk);
-    let quiet = is_quiet(row, theme);
     let base = if row.snap.has_error() {
         theme.error()
     } else if at_risk {
         Style::new().add_modifier(Modifier::BOLD)
-    } else if quiet {
-        theme.dim()
     } else {
         Style::new()
     };
@@ -346,7 +336,6 @@ fn cell_spans(row: &RepoRow, column: Column, now: i64, theme: &Theme) -> Vec<Spa
         ColumnId::Name => name_spans(row, width, theme),
         ColumnId::Branch => {
             let style = match snap.branch {
-                Branch::Named(_) if is_quiet(row, theme) => theme.dim(),
                 Branch::Named(_) => Style::new(),
                 Branch::Detached(_) | Branch::Unborn => theme.detached(),
             };
@@ -636,8 +625,9 @@ pub(crate) fn render_repos_card(
     let view = app.view();
     let card = CardFrame {
         number: Some(5),
+        hue: None,
         title: table_title(app, view.len(), theme),
-        hints: table_hints(TableKind::Overview, theme),
+        hints: super::cards::hints_when(focused, table_hints(TableKind::Overview, theme)),
         focused,
     };
     let inner = draw_card(frame, area, &card, theme);
@@ -681,21 +671,6 @@ fn draw_rows(
     app.scrolls.table.set(window.offset);
     // The cursor only shows while the card has the focus.
     let cursor = focused.then_some(app.selected);
-    // A striping scheme tints every other row, so the eye can follow one
-    // across a wide table. Drawn first; the text and the cursor go over it.
-    if let Some(stripe) = theme.stripe() {
-        for slot in (0..window.shown).filter(|slot| (window.offset + slot) % 2 == 1) {
-            let row = Rect {
-                x: body.gutter_x,
-                y: body.text.y + slot as u16,
-                width: body.text.width + 2,
-                height: 1,
-            };
-            if row.y < body.text.y + body.text.height {
-                frame.buffer_mut().set_style(row, stripe);
-            }
-        }
-    }
     draw_list(frame, body, window, 1, cursor, theme, |index| {
         let row = RepoRow::new(app, &view[index]);
         Item {

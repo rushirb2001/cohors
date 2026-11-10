@@ -7,6 +7,7 @@ expression: "render_to_string(&app, 100, 30)"
 │ ▟██▌█▐██▙   ~/projects                                                                           │
 │ ▀▐▖▀█▀▗▌▀   No repositories found.                                                               │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                    
 ╭─ No repositories found ──────────────────────────────────────────────────────────────────────────╮
 │ cohors found no git repositories under ~/projects.                                               │
 │                                                                                                  │
@@ -28,7 +29,6 @@ expression: "render_to_string(&app, 100, 30)"
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+                                                                                                    
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

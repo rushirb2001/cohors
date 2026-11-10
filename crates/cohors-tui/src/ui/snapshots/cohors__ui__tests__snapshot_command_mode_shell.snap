@@ -14,15 +14,15 @@ expression: "render_to_string(&app, 100, 24)"
 │  RISK  lega╟────────────────────────────────────────────────────────────────────────╢            │
 │  WARN  paym║ : !git checkout main▏                                                  ║   2h  Push │
 │  WARN  web-╟────────────────────────────┬───────────────────────────────────────────╢  20m  Pull │
-╰─  ⏎  open  ║ :!<cmd>                    │ run any shell command across the targets  ║────────────╯
+╰────────────║ :!<cmd>                    │ run any shell command across the targets  ║────────────╯
 ╭─  3  ✓ Open╟────────────────────────────┴───────────────────────────────────────────╢────────────╮
 │ No launchpa║                           ⏎ run · Esc cancel                           ║            │
 │ here once a╚════════════════════════════════════════════════════════════════════════╝            │
-╰─  t  board   ⏎  tasks  ────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────╯
+╰────────────────────────────────────────╯ ╰───────────────────────────────────────────────────────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────╮
 │        repository        branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
 │  RISK  legacy-billing    unreadable                                                 could not r… │
 │  WARN  payments          main      ↑2              ·    3    1      1      ·    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

@@ -14,15 +14,15 @@ expression: "render_to_string(&app, 100, 24)"
 │  RISK  legacy-billing ╟──────────────────────────────────────────────────╢                       │
 │  WARN  payments       ║ No editor CLI found on your PATH.                ║d files, …    2h  Push │
 │  WARN  web-app        ║ Install its shell command to list it here.       ║les          20m  Pull │
-╰─  ⏎  open   e  unreada║ Reveal in file manager                           ║───────────────────────╯
+╰───────────────────────║ Reveal in file manager                           ║───────────────────────╯
 ╭─  3  ✓ Open tasks  0 ─║ Open in lazygit                                  ║───────────────────────╮
 │ No launchpad files yet╟──────────────────────────────────────────────────╢                       │
 │ here once a repository║ ↑/↓ choose · ⏎ open · d set default · Esc cancel ║                       │
-╰─  t  board   ⏎  tasks ╚══════════════════════════════════════════════════╝own  ──────────────────╯
+╰───────────────────────╚══════════════════════════════════════════════════╝───────────────────────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────╮
 │        repository        branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
 │  RISK  legacy-billing    unreadable                                                 could not r… │
 │  WARN  payments          main      ↑2              ·    3    1      1      ·    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

@@ -15,7 +15,8 @@ pub(crate) fn ellipsize(s: &str, max: usize) -> String {
 pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let bold = Style::new().add_modifier(Modifier::BOLD);
     let g = &theme.glyphs;
-    let mark = |sev: Severity| Span::styled(g.severity_mark(sev), severity_style(sev, theme));
+    // The legend shows the severity blocks exactly as the rows draw them.
+    let mark = |sev: Severity| super::cards::severity_block(sev, theme);
 
     // One shared two-column grid for the whole overlay: a 2-space-indented left
     // cell (a colored glyph example, or a key) is padded so *every* description
@@ -44,8 +45,8 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
             "work at risk: it exists only on this machine",
         ),
         row(
-            vec![mark(Severity::Notice), Span::raw(" "), mark(Severity::Ok)],
-            "worth a look / clean",
+            vec![mark(Severity::Notice), Span::raw(" "), mark(Severity::Info)],
+            "worth a look; a row with no block is clean",
         ),
         row(
             vec![Span::styled(g.marked(), theme.ahead())],
@@ -66,6 +67,7 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
         ),
         row(key("!"), "run a shell command in the marked repositories"),
         row(key("/"), "filter the repository table by name"),
+        row(key("s  t"), "the standup / the launchpad (tasks and flows)"),
         row(
             key("r  ?  q"),
             "rescan / this help / quit (Ctrl-C also quits)",
@@ -80,10 +82,10 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
         Line::from(""),
         head("3 Open tasks and 4 Commits"),
         row(
-            key(&format!("t  {enter}")),
-            "the launchpad board / that repository's tasks",
+            key(enter),
+            "that repository's tasks / its commits in the standup",
         ),
-        row(key("s  y"), "the standup / copy the standup as markdown"),
+        row(key("y"), "on 4 Commits: copy the standup as markdown"),
         Line::from(""),
         head("5 Repositories, and the detail view"),
         row(
@@ -413,7 +415,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     // A solid rule between the description and the columns, plus a solid vertical
     // divider that ties into it: the two read as one framed table. The vertical line
     // joins the rule above with `┬` and the footer rule below with `┴`.
-    modal_rule(frame, area, mid_rule_area.y);
+    modal_rule(frame, area, mid_rule_area.y, theme);
     let cell = |ch: &'static str, x: u16, y: u16| {
         (
             Paragraph::new(Span::raw(ch)),

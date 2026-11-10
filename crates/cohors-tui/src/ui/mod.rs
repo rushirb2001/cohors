@@ -43,65 +43,55 @@ pub(crate) struct Theme {
     /// tint (letting the native accent colours read) instead of a light one.
     dark: bool,
     glyphs: Glyphs,
-    /// Which styling of the same layout to draw (see [`Scheme`]).
-    scheme: Scheme,
+    /// Cards are filled surfaces rather than frames of lines (see
+    /// [`Theme::surface`]). On whenever there is colour to fill them with.
+    panels: bool,
+    /// The section the open overlay belongs to, which colours its title
+    /// band: the launchpad is the tasks card's colour, the standup the
+    /// commits card's, and so on. Set once per frame by [`render_with`]; a
+    /// `Cell` because the theme is shared by reference with every renderer.
+    overlay: std::cell::Cell<Option<u8>>,
 }
 
-/// A styling of the dashboard. Every scheme draws the SAME layout (the same
-/// cards in the same places with the same text); only colour, weight and what
-/// the card frames are made of differ.
-///
-/// TRIAL: these exist side by side so they can be compared on a real terminal
-/// (`COHORS_STYLE=ink|panels|keyed|bands`). Once one is chosen the others go.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub(crate) enum Scheme {
-    /// The frames and weights as shipped.
-    #[default]
-    Current,
-    /// Frames recede to a faint grey, titles take the bronze, and rows that
-    /// need nothing are drawn quietly so the ones that do stand out.
-    Ink,
-    /// No lines at all: every card is a filled surface a shade off the
-    /// terminal's background, with half a row of space between them.
-    Panels,
-    /// Each section has its own muted hue on its frame and title.
-    Keyed,
-    /// Faint frames, each title on a solid label, and a striped table.
-    Bands,
-}
-
-impl Scheme {
-    fn from_env() -> Self {
-        match std::env::var("COHORS_STYLE").as_deref() {
-            Ok("ink") => Self::Ink,
-            Ok("panels") => Self::Panels,
-            Ok("keyed") => Self::Keyed,
-            Ok("bands") => Self::Bands,
-            _ => Self::Current,
-        }
-    }
+/// Blend two colours: `share` of `a`, the rest of `b`. Anything that is not
+/// a 24-bit colour is returned as it is.
+fn mix(a: Color, b: Color, share: f32) -> Color {
+    let (Color::Rgb(ar, ag, ab), Color::Rgb(br, bg, bb)) = (a, b) else {
+        return a;
+    };
+    let blend = |x: u8, y: u8| (f32::from(x) * share + f32::from(y) * (1.0 - share)).round() as u8;
+    Color::Rgb(blend(ar, br), blend(ag, bg), blend(ab, bb))
 }
 
 impl Theme {
-    /// The theme for this run: colour is on unless `NO_COLOR` is set.
+    /// The theme for this run: colour is on unless `NO_COLOR` is set, and
+    /// with colour the cards are filled panels. `COHORS_CARDS=lines` keeps the
+    /// line frames, for a terminal whose palette makes the fills hard to read.
     fn from_env(icons: cohors_config::IconMode, dark: bool) -> Self {
         let mut theme = Self::new(icons, dark, std::env::var_os("NO_COLOR").is_none());
-        // Every scheme is made of colour; without it there is only one look.
-        if theme.color {
-            theme.scheme = Scheme::from_env();
-        }
+        let lines = std::env::var("COHORS_CARDS").is_ok_and(|value| value == "lines");
+        theme.panels = theme.color && !lines;
         theme
     }
 
     /// A theme with colour explicitly on or off (tests use this to render the
-    /// `NO_COLOR` variant without touching the environment).
+    /// `NO_COLOR` variant without touching the environment). Cards are line
+    /// frames; [`Theme::with_panels`] turns the fills on.
     pub(crate) fn new(icons: cohors_config::IconMode, dark: bool, color: bool) -> Self {
         Self {
             color,
             dark,
             glyphs: Glyphs::resolve(icons, !color),
-            scheme: Scheme::Current,
+            panels: false,
+            overlay: std::cell::Cell::new(None),
         }
+    }
+
+    /// The same theme with cards drawn as filled panels (needs colour).
+    #[cfg(test)]
+    pub(crate) fn with_panels(mut self) -> Self {
+        self.panels = self.color;
+        self
     }
 
     /// One of two colours, by whether the terminal is dark or light.
@@ -110,101 +100,65 @@ impl Theme {
         Color::Rgb(r, g, b)
     }
 
-    /// A faint grey for frames that should recede behind their content.
-    fn faint(&self) -> Style {
-        Style::new().fg(self.tone((0x4E, 0x4B, 0x47), (0xC4, 0xBF, 0xB5)))
-    }
-
-    /// The hue of a section in the keyed scheme: purple for what to do, brick
-    /// for work at risk, sage for tasks, slate for commits, grey for the rest.
+    /// The colour of a section, by its card number, so each of the five is
+    /// told apart at a glance: purple for what to do next, brick for work at
+    /// risk, sage for tasks, slate blue for commits, teal for the repository
+    /// table. Anything without a number (the header, the figures, the detail
+    /// view's cards, an overlay) is a neutral grey.
     fn section_hue(&self, number: Option<u8>) -> Color {
         match number {
-            Some(1) => SPIDER_PURPLE,
+            Some(1) => self.tone((0xB5, 0x5C, 0xA4), (0x8E, 0x3F, 0x7E)),
             Some(2) => self.tone((0xD9, 0x77, 0x6E), (0xB4, 0x48, 0x3F)),
             Some(3) => self.tone((0x7F, 0xB0, 0x8C), (0x4D, 0x8A, 0x62)),
             Some(4) => self.tone((0x7E, 0x9C, 0xC2), (0x4A, 0x6A, 0x94)),
-            _ => self.tone((0x8A, 0x86, 0x80), (0x8A, 0x84, 0x78)),
+            Some(5) => self.tone((0x5F, 0xAE, 0xA6), (0x2F, 0x7F, 0x78)),
+            _ => self.tone((0x9A, 0x96, 0x8F), (0x6E, 0x69, 0x60)),
         }
     }
 
-    /// The style of a card's frame.
-    fn card_line(&self, number: Option<u8>, focused: bool) -> Style {
-        if focused && self.scheme != Scheme::Keyed {
-            return self.accent().add_modifier(Modifier::BOLD);
-        }
-        match self.scheme {
-            Scheme::Current => self.dim(),
-            Scheme::Ink | Scheme::Bands | Scheme::Panels => self.faint(),
-            Scheme::Keyed if focused => Style::new()
-                .fg(self.section_hue(number))
-                .add_modifier(Modifier::BOLD),
-            Scheme::Keyed if number.is_some() => Style::new()
-                .fg(self.section_hue(number))
-                .add_modifier(Modifier::DIM),
-            Scheme::Keyed => self.faint(),
-        }
+    /// A section's colour as a text style (plain under `NO_COLOR`).
+    fn section(&self, number: u8) -> Style {
+        self.fg(self.section_hue(Some(number)))
     }
 
-    /// What to lay over a card's title (its number, icon and words), or
-    /// `None` to leave the title as each card styled it.
-    fn card_title(&self, number: Option<u8>, focused: bool) -> Option<Style> {
-        match self.scheme {
-            Scheme::Current => None,
-            // A panel's title sits on its own band, which says enough.
-            Scheme::Panels => None,
-            Scheme::Ink if focused => Some(self.accent()),
-            Scheme::Ink => Some(self.bronze()),
-            Scheme::Keyed => Some(Style::new().fg(self.section_hue(number))),
-            // A solid label: the brand purple when focused, a light neutral
-            // otherwise, with dark text either way.
-            Scheme::Bands => {
-                let ground = if focused {
-                    SPIDER_PURPLE
-                } else {
-                    self.tone((0xB8, 0xB3, 0xAA), (0x5E, 0x5A, 0x54))
-                };
-                let ink = self.tone((0x1C, 0x1B, 0x1A), (0xFF, 0xFF, 0xFF));
-                Some(Style::new().bg(ground).fg(ink))
-            }
-        }
-    }
-
-    /// The fill of a card in the panels scheme (`None` in every other scheme:
-    /// there the card is a frame of lines).
-    fn surface(&self) -> Option<Color> {
-        (self.scheme == Scheme::Panels).then(|| self.tone((0x2D, 0x2B, 0x29), (0xEE, 0xEA, 0xE3)))
-    }
-
-    /// The strip across the top of a panel that carries its title: a shade
-    /// lighter than the panel, or a purple tint on the focused card.
-    fn band(&self, focused: bool) -> Color {
+    /// The style of a line-framed card's border: the accent when it has the
+    /// focus, dim otherwise.
+    fn card_line(&self, focused: bool) -> Style {
         if focused {
-            self.tone((0x5A, 0x33, 0x55), (0xE3, 0xC3, 0xDC))
+            self.accent().add_modifier(Modifier::BOLD)
         } else {
-            self.tone((0x45, 0x41, 0x3D), (0xDD, 0xD7, 0xCC))
+            self.dim()
         }
     }
 
-    /// The base style of the key hints on a card's bottom edge. Text drawn on
-    /// a border takes the border's colour unless it names its own, so where
-    /// a scheme makes the frame faint the hints ask for the terminal's normal
-    /// text colour, or they would fade away with it.
-    fn hint_base(&self) -> Style {
-        match self.scheme {
-            Scheme::Current => Style::new(),
-            _ => Style::new().fg(Color::Reset),
+    /// The fill of a card: a shade off the terminal's background, so each
+    /// card is a surface of its own with no lines around it. `None` when
+    /// cards are line frames (no colour, or `COHORS_CARDS=lines`).
+    fn surface(&self) -> Option<Color> {
+        self.panels
+            .then(|| self.tone((0x2D, 0x2B, 0x29), (0xEE, 0xEA, 0xE3)))
+    }
+
+    /// The fill of an overlay: a shade lighter than a card, so it stands
+    /// clear of the dashboard behind it. `None` when overlays are line frames.
+    fn overlay_surface(&self) -> Option<Color> {
+        self.panels
+            .then(|| self.tone((0x38, 0x35, 0x32), (0xF8, 0xF5, 0xEF)))
+    }
+
+    /// The strip across the top of a panel that carries its title, as the
+    /// strip's ground and the colour of the title on it. An unfocused card
+    /// has a quiet tint of its section's colour with the title in that
+    /// colour; the focused card has the colour itself, with the title in the
+    /// opposite tone, so focus is the one loud band on the screen.
+    fn band(&self, number: Option<u8>, focused: bool) -> (Color, Color) {
+        let hue = self.section_hue(number);
+        let surface = self.tone((0x2D, 0x2B, 0x29), (0xEE, 0xEA, 0xE3));
+        if focused {
+            (hue, self.tone((0x1C, 0x1B, 0x1A), (0xFF, 0xFF, 0xFF)))
+        } else {
+            (mix(hue, surface, 0.30), hue)
         }
-    }
-
-    /// Whether rows that need nothing are drawn quietly.
-    fn quiets_rows(&self) -> bool {
-        matches!(self.scheme, Scheme::Ink | Scheme::Keyed)
-    }
-
-    /// The ground of every other table row, where the scheme stripes tables.
-    fn stripe(&self) -> Option<Style> {
-        (self.scheme == Scheme::Bands)
-            .then(|| Style::new().bg(self.tone((0x24, 0x23, 0x21), (0xF0, 0xEC, 0xE5))))
     }
 
     fn fg(&self, c: Color) -> Style {
@@ -352,8 +306,18 @@ pub(crate) fn render_with(frame: &mut Frame, app: &App, now: i64, theme: &Theme)
     // the overlay stands out. The overlays `Clear` their own area, so they
     // render crisp on top of the dimmed background.
     let overlay_open = !matches!(app.mode, Mode::Normal | Mode::Filter);
+    // An overlay takes the colour of the section it belongs to.
+    theme.overlay.set(match app.mode {
+        Mode::Normal | Mode::Filter => None,
+        Mode::Help | Mode::Command | Mode::CommandRun => Some(1),
+        Mode::Confirm => Some(2),
+        Mode::Launchpad => Some(3),
+        Mode::Standup => Some(4),
+        Mode::Detail | Mode::OpenWith | Mode::PushBranch => Some(5),
+    });
     if overlay_open {
-        dim_area(frame.buffer_mut(), area);
+        let ground = theme.tone((0x1C, 0x1B, 0x1A), (0xFF, 0xFF, 0xFF));
+        dim_area(frame.buffer_mut(), area, ground);
     }
 
     match app.mode {
@@ -404,14 +368,20 @@ fn render_too_small(frame: &mut Frame, area: Rect, theme: &Theme) {
     );
 }
 
-/// Dim every cell in `area` (keeps its colours, adds the DIM attribute) — used
-/// to fade the background behind a modal overlay.
-pub(crate) fn dim_area(buf: &mut Buffer, area: Rect) {
+/// Fade every cell in `area`, to push the dashboard back behind an overlay.
+/// Text gets the DIM attribute. DIM does nothing to a background, so a filled
+/// tile or title band would stay as loud as before; those fills are blended
+/// most of the way towards `ground`, a stand-in for the terminal's own
+/// background.
+pub(crate) fn dim_area(buf: &mut Buffer, area: Rect, ground: Color) {
     let dim = Style::new().add_modifier(Modifier::DIM);
     for y in area.top()..area.bottom() {
         for x in area.left()..area.right() {
             if let Some(cell) = buf.cell_mut((x, y)) {
                 cell.set_style(dim);
+                if matches!(cell.bg, Color::Rgb(..)) {
+                    cell.bg = mix(cell.bg, ground, 0.35);
+                }
             }
         }
     }

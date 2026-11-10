@@ -14,15 +14,15 @@ expression: "render_to_string(&app, 100, 24)"
 │  RISK ║ payments            24 │ aa00010  feat: payments work item 10                  ║ ║       │
 │  WARN ║ web-app              5 │ aa00011  feat: payments work item 11                  ║ ║  Push │
 │  WARN ║                        │ aa00012  feat: payments work item 12                  ║ ║  Pull │
-╰─  ⏎  o║                        │ aa00013  feat: payments work item 13                  █ ║───────╯
+╰───────║                        │ aa00013  feat: payments work item 13                  █ ║───────╯
 ╭─  3  ✓║                        │ aa00014  feat: payments work item 14                  █ ║───────╮
 │ No lau║                        │ aa00015  feat: payments work item 15                  █ ║       │
 │ here o║                        │ aa00016  feat: payments work item 16                  █ ║       │
-╰─  t  b║                        │ aa00017  feat: payments work item 17                  ║ ║───────╯
+╰───────║                        │ aa00017  feat: payments work item 17                  ║ ║───────╯
 ╭─  5  ▤║                        │ aa00018  feat: payments work item 18                  ║ ║───────╮
 │       ║                        │ aa00019  feat: payments work item 19                  ║ ║ommit  │
 │  RISK ║                        │ aa00020  feat: payments work item 20                  ║ ║not r… │
 │  WARN ╟────────────────────────┴─────────────────────────────────────────────────────────╢etry … │
 │   ↓ 3 ║        ↑/↓ scroll commits · ← back to repos · w window · y copy · q close        ║       │
-╰─  ␣  s╚══════════════════════════════════════════════════════════════════════════════════╝───────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰───────╚══════════════════════════════════════════════════════════════════════════════════╝───────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

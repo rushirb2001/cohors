@@ -39,6 +39,9 @@ const FIGURE_GRID_MIN_HEIGHT: u16 = 50;
 /// one line. The table also needs its column header.
 const CARD_MIN: u16 = 3;
 const TABLE_MIN: u16 = 4;
+/// Blank rows are put between the cards only while the table can still show
+/// this many rows (or all it wants, if that is fewer).
+const AIRY_TABLE_MIN: u16 = 10;
 
 /// Whether the terminal is big enough to draw the dashboard at all.
 pub(crate) fn fits(width: u16, height: u16) -> bool {
@@ -86,6 +89,9 @@ pub(crate) struct OverviewPlan {
     pub figures: Figures,
     /// Cards 3 and 4 are stacked rather than side by side.
     pub stacked: bool,
+    /// Blank rows between one band and the next (after the header, after the
+    /// figures, between the cards): 1 when the screen has room, else 0.
+    pub gap: u16,
     pub next: u16,
     pub risk: u16,
     pub tasks: u16,
@@ -152,6 +158,46 @@ pub(crate) fn plan_overview(width: u16, height: u16, wants: &Wants, focus: Card)
     // the one-line key bar at the bottom.
     let available = height.saturating_sub(header + figures.height() + 1);
 
+    // First try with a blank row after the header, after the figures and
+    // between the bands of cards. That is worth its rows only when every
+    // card still gets all it asked for and the table keeps a useful number;
+    // otherwise the cards sit edge to edge, as they do on a small screen.
+    let band_count: u16 = if stacked { 5 } else { 4 };
+    let gaps = 2 + (band_count - 1);
+    let airy = plan_bands(wants, stacked, available.saturating_sub(gaps), focus);
+    let roomy = available > gaps
+        && airy.iter().all(Band::shown)
+        && airy.split_last().is_some_and(|(table, cards)| {
+            cards.iter().all(|band| band.height >= band.want)
+                && table.height >= AIRY_TABLE_MIN.min(table.want)
+        });
+    let (bands, gap) = if roomy {
+        (airy, 1)
+    } else {
+        (plan_bands(wants, stacked, available, focus), 0)
+    };
+
+    let height_of = |card: Card| {
+        bands
+            .iter()
+            .find(|band| band.cards.contains(&card))
+            .map_or(0, |band| band.height)
+    };
+    OverviewPlan {
+        header,
+        figures,
+        stacked,
+        gap,
+        next: height_of(Card::DoNext),
+        risk: height_of(Card::AtRisk),
+        tasks: height_of(Card::Tasks),
+        commits: height_of(Card::Commits),
+        repos: height_of(Card::Repos),
+    }
+}
+
+/// Share `available` rows between the bands of cards.
+fn plan_bands(wants: &Wants, stacked: bool, available: u16, focus: Card) -> Vec<Band> {
     let mut bands = vec![
         Band::new(&[Card::DoNext], wants.next),
         Band::new(&[Card::AtRisk], wants.risk),
@@ -169,23 +215,7 @@ pub(crate) fn plan_overview(width: u16, height: u16, wants: &Wants, focus: Card)
 
     hide_until_minimums_fit(&mut bands, available, focus);
     grow_toward_wants(&mut bands, available);
-
-    let height_of = |card: Card| {
-        bands
-            .iter()
-            .find(|band| band.cards.contains(&card))
-            .map_or(0, |band| band.height)
-    };
-    OverviewPlan {
-        header,
-        figures,
-        stacked,
-        next: height_of(Card::DoNext),
-        risk: height_of(Card::AtRisk),
-        tasks: height_of(Card::Tasks),
-        commits: height_of(Card::Commits),
-        repos: height_of(Card::Repos),
-    }
+    bands
 }
 
 /// Hide bands, in [`HIDE_ORDER`], until the ones still shown fit at their
@@ -331,22 +361,39 @@ mod tests {
 
     /// Rows the plan uses, key bar included. Must never exceed the screen.
     fn used(p: &OverviewPlan) -> u16 {
-        let middle = if p.stacked {
-            p.tasks + p.commits
+        let (middle, bands) = if p.stacked {
+            (p.tasks + p.commits, 5)
         } else {
-            p.tasks.max(p.commits)
+            (p.tasks.max(p.commits), 4)
         };
-        p.header + p.figures.height() + p.next + p.risk + middle + p.repos + 1
+        // With gaps: one after the header, one after the figures, and one
+        // between each band of cards and the next.
+        let gaps = p.gap * (2 + bands - 1);
+        p.header + p.figures.height() + p.next + p.risk + middle + p.repos + gaps + 1
     }
 
     #[test]
     fn the_designed_size_gets_the_designed_layout() {
         let p = plan(119, 53);
         assert_eq!((p.header, p.figures, p.stacked), (5, Figures::Cards, false));
-        // Every card gets what it asked for and the table takes the rest.
+        // Every card gets what it asked for, a blank row separates each
+        // band from the next (five of them), and the table takes the rest.
+        assert_eq!(p.gap, 1);
         assert_eq!((p.next, p.risk, p.tasks, p.commits), (7, 9, 10, 10));
-        assert_eq!(p.repos, 53 - 5 - 5 - 7 - 9 - 10 - 1);
+        assert_eq!(p.repos, 53 - 5 - 5 - 7 - 9 - 10 - 5 - 1);
         assert_eq!(used(&p), 53);
+    }
+
+    #[test]
+    fn gaps_are_given_up_before_any_card_loses_a_row() {
+        // Tall: gaps. A little shorter: the same cards, edge to edge.
+        assert_eq!(plan(119, 53).gap, 1);
+        let tight = plan(119, 46);
+        assert_eq!(tight.gap, 0);
+        assert_eq!((tight.next, tight.risk), (7, 9));
+        assert_eq!(used(&tight), 46);
+        // A small terminal never spends rows on gaps.
+        assert_eq!(plan(80, 24).gap, 0);
     }
 
     #[test]

@@ -14,15 +14,15 @@ expression: "render_to_string(&app, 100, 24)"
 │  RISK  lega║ :fetch :pull :push         │ sync the targets with their remotes       ║            │
 │  WARN  paym║ :commit <message>          │ commit every change in the targets (asks  ║   2h  Push │
 │  WARN  web-║ :!<cmd>                    │ run any shell command across the targets  ║  20m  Pull │
-╰─  ⏎  open  ║ :sort <name·dirty·recent>  │ change the sort order                     ║────────────╯
+╰────────────║ :sort <name·dirty·recent>  │ change the sort order                     ║────────────╯
 ╭─  3  ✓ Open║ :dirty   /<text>           │ needs-attention · fuzzy filter            ║────────────╮
 │ No launchpa║ :jump <repo>               │ move the cursor to a repo                 ║            │
 │ here once a║ :standup  :tasks           │ your commits · the launchpad              ║            │
-╰─  t  board ║ :refresh  :quit            │ rescan · exit                             ║────────────╯
+╰────────────║ :refresh  :quit            │ rescan · exit                             ║────────────╯
 ╭─  5  ▤ Repo╟────────────────────────────┴───────────────────────────────────────────╢────────────╮
 │        repo║                           ⏎ run · Esc cancel                           ║ast commit  │
 │  RISK  lega╚════════════════════════════════════════════════════════════════════════╝ould not r… │
 │  WARN  payments          main      ↑2              ·    3    1      1      ·    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

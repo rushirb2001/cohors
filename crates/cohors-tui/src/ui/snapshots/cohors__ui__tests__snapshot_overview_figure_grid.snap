@@ -7,6 +7,7 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 │ ▟██▌█▐██▙   ~/code                                   ▅ ▇ ▆ ▇ ▇ ▅ ▆ ▄ ▇ ▅ █ ▆                 │
 │ ▀▐▖▀█▀▗▌▀   12 repositories. 6 have work at risk, …  scanned 2m ago                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                
 ╭─────────────────────────────╮ ╭──────────────────────────────╮ ╭─────────────────────────────╮
 │ Not backed up               │ │ Stashes                      │ │ Uncommitted                 │
 │ 4                           │ │ 3                            │ │ 26                          │
@@ -17,6 +18,7 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 │ 0                           │ │ 5                            │ │ 44                          │
 │ all recent                  │ │ 3 high, 1 doing              │ │ prev week 61                │
 ╰─────────────────────────────╯ ╰──────────────────────────────╯ ╰─────────────────────────────╯
+                                                                                                
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────╮
 │▸ RISK   e  Check 1 repository that could not be read    Nothing else is known about legacy-… │
 │  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: pa… │
@@ -24,6 +26,7 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 │  NOTE   p  Pull 2 repositories that are behind          A fast-forward pull cannot lose wor… │
 │  NOTE   c  Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app… │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────────────────────────────────────────╮
 │  RISK  analytics         main           1 commit not pushed, older than 2 …    4d  Push      │
 │  RISK  legacy-billing    (no commits)   Could not be read                                    │
@@ -31,7 +34,8 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 │  WARN  mobile-app        release/2.0    Diverged, 4 ahead and 1 behind, 4 …    9h  Reconcile │
 │  WARN  payments          main           2 commits not pushed, 3 uncommitte…    2h  Push      │
 │  WARN  web-app           feat/checkout  5 commits behind, 7 uncommitted fi…   20m  Pull      │
-╰─  ⏎  open   e  unreadable   P  push 3   d  diverged   p  pull 2   c  review changes  ────────╯
+╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                
 ╭─  3  ✓ Open tasks  5 ────────────────╮ ╭─  4  ● Commits, last 7 days  44 ────────────────────╮
 │ repository      open  high  focus    │ │ auth-service          █████████████████████      8  │
 │ payments           2     1      1    │ │ marketing-site        ██████████████████         7  │
@@ -41,7 +45,8 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 │                                      │ │ analytics             ████████                   3  │
 │ 1 in progress, 1 blocked.            │ │   ↓ 5 more                                          │
 │ 9 repositories have no launchpad fi… │ │ 1 repository had no commits this week.              │
-╰─  t  board   ⏎  tasks  ──────────────╯ ╰─  s  standup   y  copy as markdown  ────────────────╯
+╰──────────────────────────────────────╯ ╰─────────────────────────────────────────────────────╯
+                                                                                                
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────╮
 │        repository    branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
 │  RISK  analytics     main      ↑1              ·    ·    ·      2      ·    4d  perf: preco… │
@@ -54,11 +59,6 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 │  NOTE  data-pipeline main      ↓3              ·    ·    ·      ·      1    5h  fix: backfi… │
 │  NOTE  experiments   @9f8e7d6… no remote       ·    4    3      ·      ·    1y  spike: try … │
 │  NOTE  infra         @a1b2c3d… no remote       ·    2    2      ·      ·    1w  build: pin … │
-│        auth-service  main                      ·    ·    ·      ·      ·    3d  chore: bump… │
-│        marketing-si… main                      ·    ·    ·      ·      ·   1mo  content: Q2… │
-│                                                                                              │
-│                                                                                              │
-│                                                                                              │
-│                                                                                              │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+│   ↓ 2 more                                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

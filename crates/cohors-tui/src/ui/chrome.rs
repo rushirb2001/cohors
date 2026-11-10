@@ -17,6 +17,8 @@ pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
     let failed = msg.contains("fail")
         || msg.contains("error")
         || msg.contains("reject")
+        || msg.contains("needs a ")
+        || msg.starts_with("unknown ")
         || msg.starts_with("no ");
     let style = if failed {
         theme.risk()
@@ -115,7 +117,10 @@ pub(crate) fn render_modal_hints(
     }
     let rule_y = inner.y + inner.height - 2;
     let hint_y = inner.y + inner.height - 1;
-    modal_rule(frame, area, rule_y);
+    // A panel needs no rule: the row above the hints is left empty instead.
+    if theme.overlay_surface().is_none() {
+        modal_rule(frame, area, rule_y, theme);
+    }
     frame.render_widget(
         Paragraph::new(modal_hint_line(app, theme).centered()),
         Rect {
@@ -144,6 +149,23 @@ pub(crate) fn render_modal_header(
     if inner.height < 3 {
         return inner;
     }
+    if let Some(surface) = theme.overlay_surface() {
+        // A panel: the title sits on a band in its section's colour.
+        let (band, ink) = theme.band(theme.overlay.get(), true);
+        paint_overlay_panel(frame, area, inner, surface, band);
+        for (index, span) in title.spans.iter_mut().enumerate() {
+            span.style = span.style.fg(ink);
+            if index == 0 {
+                span.style = span.style.add_modifier(Modifier::BOLD);
+            }
+        }
+        frame.render_widget(Paragraph::new(title), Rect { height: 1, ..inner });
+        return Rect {
+            y: inner.y + 2,
+            height: inner.height - 2,
+            ..inner
+        };
+    }
     // Every overlay's title speaks in the same voice: bold bronze. Only the
     // first span is the title proper; anything after it (counts, context)
     // keeps the style its caller chose.
@@ -153,7 +175,7 @@ pub(crate) fn render_modal_header(
             .patch(theme.bronze().add_modifier(Modifier::BOLD));
     }
     frame.render_widget(Paragraph::new(title), Rect { height: 1, ..inner });
-    modal_rule(frame, area, inner.y + 1);
+    modal_rule(frame, area, inner.y + 1, theme);
     Rect {
         y: inner.y + 2,
         height: inner.height - 2,
@@ -161,10 +183,66 @@ pub(crate) fn render_modal_header(
     }
 }
 
-/// A solid, full-strength horizontal rule across a modal at row `y`, joined into
-/// its double side borders with `╟`/`╢`. Full strength (the default border style, not
-/// dim) so it reads as a real structural line, matching the box borders.
-pub(crate) fn modal_rule(frame: &mut Frame, area: Rect, y: u16) {
+/// Turn an overlay that has just been drawn as a box of lines into a panel,
+/// the same way cards are panels: a filled surface with no lines around it and
+/// the title on a coloured band.
+///
+/// Every overlay draws its own frame and then calls [`render_modal_header`],
+/// so repainting here restyles all of them in one place. The frame's cells are
+/// reused rather than removed, so nothing inside the overlay moves: the top
+/// border and the rule under the title become the upper and lower half of the
+/// band, the side borders become surface, and the bottom border becomes the
+/// surface's lower edge (half a row, like a card's).
+fn paint_overlay_panel(frame: &mut Frame, area: Rect, inner: Rect, surface: Color, band: Color) {
+    if area.width < 2 || area.height < 2 {
+        return;
+    }
+    let buffer = frame.buffer_mut();
+    let right = area.x + area.width - 1;
+    let bottom = area.y + area.height - 1;
+    buffer.set_style(area, Style::new().bg(surface));
+    for y in area.y..=bottom {
+        buffer[(area.x, y)].set_symbol(" ");
+        buffer[(right, y)].set_symbol(" ");
+    }
+    // Half blocks drawn on the terminal's own background.
+    let edge = |colour: Color| Style::new().fg(colour).bg(Color::Reset);
+    for x in area.x..=right {
+        buffer[(x, area.y)].set_symbol("▄").set_style(edge(band));
+        buffer[(x, bottom)].set_symbol("▀").set_style(edge(surface));
+    }
+    // The title row is the band; the row under it is the band's lower half.
+    let title_row = Rect {
+        y: inner.y,
+        height: 1,
+        ..area
+    };
+    buffer.set_style(title_row, Style::new().bg(band));
+    for x in area.x..=right {
+        buffer[(x, inner.y + 1)]
+            .set_symbol("▀")
+            .set_style(Style::new().fg(band).bg(surface));
+    }
+}
+
+/// A horizontal rule across a modal at row `y`. In a box of lines it is solid
+/// and joined into the double side borders with `╟`/`╢`, so it reads as part
+/// of the frame; in a panel, which has no side borders, it is a quiet line
+/// that stops short of the edges.
+pub(crate) fn modal_rule(frame: &mut Frame, area: Rect, y: u16, theme: &Theme) {
+    if theme.overlay_surface().is_some() {
+        let line = "─".repeat(area.width.saturating_sub(4) as usize);
+        frame.render_widget(
+            Paragraph::new(Span::styled(line, theme.dim())),
+            Rect {
+                x: area.x + 2,
+                y,
+                width: area.width.saturating_sub(4),
+                height: 1,
+            },
+        );
+        return;
+    }
     let style = Style::new();
     frame.render_widget(
         Paragraph::new(Line::from(Span::styled(
@@ -320,7 +398,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
 
     // The solid rule under the prompt, and the solid vertical divider joined into
     // it (`┬`) and the footer rule below (`┴`).
-    modal_rule(frame, area, mid_rule_area.y);
+    modal_rule(frame, area, mid_rule_area.y, theme);
     for y in div_col.y..div_col.y + div_col.height {
         frame.render_widget(
             Paragraph::new(Span::raw("│")),

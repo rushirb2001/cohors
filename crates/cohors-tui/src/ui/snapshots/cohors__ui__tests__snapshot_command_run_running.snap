@@ -14,15 +14,15 @@ expression: "render_to_string(&app, 100, 24)"
 │  RIS║ Repos                  │ payments                                                    ║     │
 │  WAR║ ✓ payments             │ exit 0                                                      ║Push │
 │  WAR║ ⠋ web-app              │                                                             ║Pull │
-╰─  ⏎ ║ ⠋ auth-service         │  M src/lib.rs                                               ║─────╯
+╰─────║ ⠋ auth-service         │  M src/lib.rs                                               ║─────╯
 ╭─  3 ║                        │ ?? notes.txt                                                ║─────╮
 │ No l╟────────────────────────┴─────────────────────────────────────────────────────────────╢     │
 │ here║                ↑/↓ repo · PgUp/PgDn scroll output · y copy · Esc close               ║     │
-╰─  t ╚══════════════════════════════════════════════════════════════════════════════════════╝─────╯
+╰─────╚══════════════════════════════════════════════════════════════════════════════════════╝─────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────╮
 │        repository        branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
 │  RISK  legacy-billing    unreadable                                                 could not r… │
 │  WARN  payments          main      ↑2              ·    3    1      1      ·    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

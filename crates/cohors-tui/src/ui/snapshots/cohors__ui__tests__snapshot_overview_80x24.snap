@@ -13,16 +13,16 @@ expression: "render_to_string(&fleet_app(), 80, 24)"
 │  RISK  analytics         1 commit not pushed, older than 2…    4d  Push      │
 │  RISK  legacy-billing    Could not be read                                   │
 │   ↓ 4 more                                                                   │
-╰─  ⏎  open   e  unreadable   P  push 3   d  diverged   p  pull 2  ────────────╯
+╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─  3  ✓ Open tasks  5 ──────────────╮ ╭─  4  ● Commits, last 7 days  44 ──────╮
 │ repository    open  high  focus    │ │ auth-service      ███████████      8  │
 │ payments         2     1      1    │ │   ↓ 10 more                           │
 │   ↓ 2 more                         │ │ 1 repository had no commits this wee… │
-╰─  t  board   ⏎  tasks  ────────────╯ ╰─  s  standup   y  copy as markdown  ──╯
+╰────────────────────────────────────╯ ╰───────────────────────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────╮
 │        repository         branch    upstream      stg  mod  new  stash   age │
 │  RISK  analytics          main      ↑1              ·    ·    ·      2    4d │
 │  RISK  legacy-billing     unreadable                                         │
 │   ↓ 10 more                                                                  │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit  ─────────╯
-  1-5  focus card  tab  next card  ↑↓  move  :  command  ?  help  q  quit
+╰──────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  ?  help  q  quit

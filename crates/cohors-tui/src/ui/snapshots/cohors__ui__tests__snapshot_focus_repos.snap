@@ -26,7 +26,7 @@ expression: "render_to_string(&app, 120, 45)"
 │  WARN  mobile-app            release/2.0    Diverged, 4 ahead and 1 behind, 4 uncommitted files        9h  Reconcile │
 │  WARN  payments              main           2 commits not pushed, 3 uncommitted files                  2h  Push      │
 │  WARN  web-app               feat/checkout  5 commits behind, 7 uncommitted files                     20m  Pull      │
-╰─  ⏎  open   e  unreadable   P  push 3   d  diverged   p  pull 2   c  review changes  ────────────────────────────────╯
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─  3  ✓ Open tasks  5 ──────────────────────────╮ ╭─  4  ● Commits, last 7 days  44 ──────────────────────────────────╮
 │ repository                open  high  focus    │ │ auth-service          ███████████████████████████████████      8  │
 │ payments                     2     1      1    │ │ marketing-site        ███████████████████████████████          7  │
@@ -35,7 +35,7 @@ expression: "render_to_string(&app, 120, 45)"
 │                                                │ │ web-app               ██████████████████                       4  │
 │ 1 in progress, 1 blocked.                      │ │   ↓ 6 more                                                        │
 │ 9 repositories have no launchpad file.         │ │ 1 repository had no commits this week.                            │
-╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
+╰────────────────────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────────────────────────────╮
 │        repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit           │
 │  NOTE  cli-tools               main                           ·    ·    1      ·      ·   12h  docs: add shell-comp… │
@@ -46,4 +46,4 @@ expression: "render_to_string(&app, 120, 45)"
 │▸       marketing-site          main                           ·    ·    ·      ·      ·   1mo  content: Q2 launch l… │
 │   ↑ 6 above                                                                                                          │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+  1-5  card    tab  next    ↑↓  move    s  standup    t  tasks    :  command    r  rescan    ?  help    q  quit

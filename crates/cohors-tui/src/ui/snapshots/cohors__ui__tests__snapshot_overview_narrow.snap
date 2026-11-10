@@ -30,25 +30,25 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 │  WARN  design-system     1 commit not pushed, 1 s…    6h │
 │  WARN  mobile-app        Diverged, 4 ahead and 1 …    9h │
 │   ↓ 2 more                                               │
-╰─  ⏎  open   e  unreadable   P  push 3   d  diverged  ────╯
+╰──────────────────────────────────────────────────────────╯
 ╭─  3  ✓ Open tasks  5 ────────────────────────────────────╮
 │ repository                          open  high  focus    │
 │ payments                               2     1      1    │
 │ web-app                                2     1      0    │
 │ data-pipeline                          1     1      0    │
 │                                                          │
-╰─  t  board   ⏎  tasks  ──────────────────────────────────╯
+╰──────────────────────────────────────────────────────────╯
 ╭─  4  ● Commits, last 7 days  44 ─────────────────────────╮
 │ auth-service          ██████████████████████████      8  │
 │ marketing-site        ███████████████████████         7  │
 │   ↓ 9 more                                               │
 │ 1 repository had no commits this week.                   │
-╰─  s  standup   y  copy as markdown  ─────────────────────╯
+╰──────────────────────────────────────────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────╮
 │        repository        branch      stg  mod  new   age │
 │  RISK  analytics         main          ·    ·    ·    4d │
 │  RISK  legacy-billing    unreadable                      │
 │  WARN  design-system     main          ·    ·    ·    6h │
 │   ↓ 9 more                                               │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push  ─╯
-  1-5  focus card  tab  next card  ?  help  q  quit
+╰──────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  ?  help  q  quit

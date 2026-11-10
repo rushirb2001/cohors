@@ -14,11 +14,11 @@ expression: "render_to_string(&app, 100, 28)"
 │  RISK ║ 1 stash                               █ │ d4e5f60    3d  feat: idempotency keys o║       │
 │  WARN ║                                       █ │ e5f6071    4d  chore: bump stripe sdk t║  Push │
 │  WARN ║ Checks                                █ │                                        ║  Pull │
-╰─  ⏎  o║ CI passing  ·  2 open pull requests   ║ │                                        ║───────╯
+╰───────║ CI passing  ·  2 open pull requests   ║ │                                        ║───────╯
 ╭─  3  ✓║                                       ║ │                                        ║───────╮
 │ No lau║ Changes (3)                           ║ │                                        ║       │
 │ here o║  M src/charge.rs                      ║ │                                        ║       │
-╰─  t  b║  M src/refund.rs                      ║ │                                        ║───────╯
+╰───────║  M src/refund.rs                      ║ │                                        ║───────╯
 ╭─  5  ▤║ ?? notes.md                           ║ │                                        ║───────╮
 │       ║                                       ║ │                                        ║ommit  │
 │  RISK ║ Branches (3)                          ║ │                                        ║not r… │
@@ -28,5 +28,5 @@ expression: "render_to_string(&app, 100, 28)"
 │       ║                     ↑/↓ scroll · g/G top / bottom · Esc close                    ║ bump… │
 │       ╚══════════════════════════════════════════════════════════════════════════════════╝       │
 │                                                                                                  │
-╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
-  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit
