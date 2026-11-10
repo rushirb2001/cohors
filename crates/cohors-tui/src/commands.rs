@@ -281,6 +281,10 @@ fn scan_report(
     });
     let n_risk = rows.iter().filter(|(_, a)| a.severity == S::Risk).count();
     let n_urgent = rows.iter().filter(|(_, a)| a.severity >= S::Warn).count();
+    // Everything with a reason is listed by name, informational ones included
+    // (a fresh stash, a detached HEAD, a stale fetch). What is left has no
+    // reason at all: that is "clean", the same definition as the overview's
+    // `figures.clean`, so this count matches every other surface.
     let n_minor = rows
         .iter()
         .filter(|(_, a)| matches!(a.severity, S::Notice | S::Info))
@@ -336,11 +340,11 @@ fn scan_report(
         }
         out.push('\n');
     }
-    // The calm ones collapse to a count: listing a dozen "up to date" rows is the
+    // The clean ones collapse to a count: listing a dozen "up to date" rows is the
     // noise this report exists to remove.
     if n_calm > 0 {
         out.push_str(&section(
-            "calm",
+            "clean",
             &format!("{n_calm} up to date, nothing to do"),
             color,
         ));
@@ -383,6 +387,193 @@ fn scan_report(
         out.push('\n');
     }
     out
+}
+
+/// `cohors overview` — the briefing, without the dashboard.
+///
+/// Renders the shared [`cohors_core::Overview`] (built once by the fleet
+/// facade): what to do next, the key figures, and the work at risk. A pipe, a
+/// redirect or `--json` gets the whole model as JSON, which is how the editor
+/// extension and scripts read it.
+pub fn overview(cli: &Cli, json: bool) -> Result<()> {
+    let human = !json && std::io::stdout().is_terminal();
+    let color = wants_color(human);
+    let scanner = crate::scan::from_cli(cli)?;
+    let snapshots = scanner.scan();
+    let home = cohors_fleet::launchpad::launchpad_home();
+    let overview = cohors_fleet::overview(&snapshots, home.as_deref(), now_secs());
+
+    if !human {
+        // The roots travel with the model so a consumer can show where it
+        // looked (and explain an empty fleet) without a second call.
+        let mut value = serde_json::to_value(&overview).context("serializing the overview")?;
+        if let serde_json::Value::Object(map) = &mut value {
+            map.insert("roots".to_string(), serde_json::json!(scanner.roots()));
+        }
+        println!("{}", serde_json::to_string_pretty(&value)?);
+        return Ok(());
+    }
+    print!(
+        "{}",
+        overview_report(&overview, &scanner.roots(), now_secs(), color)
+    );
+    Ok(())
+}
+
+/// A severity as a shape, so it still reads with colour off: `▲` at risk, `◆`
+/// warning, `○` everything quieter.
+fn severity_mark(severity: cohors_core::Severity, color: bool) -> String {
+    use cohors_core::Severity as S;
+    match severity {
+        S::Risk => sgr(color, "31", "▲"),
+        S::Warn => sgr(color, "33", "◆"),
+        S::Notice | S::Info | S::Ok => dim(color, "○"),
+    }
+}
+
+/// The human-facing `cohors overview` report. Pure (given the model, the
+/// roots and a clock) so it is unit-testable; `color` gates the ANSI.
+fn overview_report(o: &cohors_core::Overview, roots: &[String], now: i64, color: bool) -> String {
+    let where_at = roots
+        .iter()
+        .map(|r| crate::ui::abbrev_home(r))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut out = masthead(&o.headline, &where_at, color);
+    if o.repos.is_empty() {
+        out.push_str(&format!(
+            "  {}\n\n",
+            dim(
+                color,
+                "run `cohors init` to detect your repos, or pass --root <dir>"
+            )
+        ));
+        return out;
+    }
+
+    // ── Do next.
+    if o.actions.is_empty() {
+        out.push_str(&section("do next", "nothing needs you right now", color));
+    } else {
+        out.push_str(&section(
+            "do next",
+            "most urgent first; the command on the right carries it out",
+            color,
+        ));
+        for action in &o.actions {
+            // A step with a registry verb is one command away; say which.
+            let how = match action.verb.as_deref() {
+                Some(verb) => format!("cohors {verb} --select '{}'", ids_selector(&action.repos)),
+                None => String::new(),
+            };
+            out.push_str(&format!(
+                "    {} {}\n      {}\n",
+                severity_mark(action.severity, color),
+                bold(color, &action.title),
+                dim(color, &action.why),
+            ));
+            if !how.is_empty() {
+                out.push_str(&format!("      {}\n", sgr(color, "36", &clip(&how, 96))));
+            }
+        }
+    }
+    out.push('\n');
+
+    // ── At a glance: the same six figures every surface leads with.
+    let f = &o.figures;
+    let figures: [(String, &str, String); 6] = [
+        (
+            f.not_backed_up.to_string(),
+            "not backed up",
+            format!(
+                "{} never pushed, {} with unpushed commits",
+                f.unpublished, f.unpushed_repos
+            ),
+        ),
+        (
+            f.stashes.to_string(),
+            "stashes",
+            format!(
+                "in {} repos, {} older than a week",
+                f.stash_repos, f.stale_stash_repos
+            ),
+        ),
+        (
+            f.uncommitted_files.to_string(),
+            "uncommitted files",
+            format!("across {} repos", f.dirty_repos),
+        ),
+        (
+            f.stale_fetch_repos.to_string(),
+            "stale fetches",
+            if f.stale_fetch_repos == 0 {
+                "every remote fetched recently".to_string()
+            } else {
+                format!("oldest {} days", f.oldest_fetch_days)
+            },
+        ),
+        (
+            f.open_tasks.to_string(),
+            "open tasks",
+            format!(
+                "{} high priority, {} in progress",
+                f.high_tasks, f.doing_tasks
+            ),
+        ),
+        (
+            f.commits_week.to_string(),
+            "commits, 7 days",
+            format!("{} the week before", f.commits_prev_week),
+        ),
+    ];
+    out.push_str(&section("at a glance", "the fleet in six numbers", color));
+    let num_w = figures.iter().map(|(n, _, _)| n.len()).max().unwrap_or(1);
+    for (number, label, detail) in &figures {
+        out.push_str(&format!(
+            "    {}  {}  {}\n",
+            bold(color, &format!("{number:>num_w$}")),
+            format_args!("{label:<18}"),
+            dim(color, detail),
+        ));
+    }
+    out.push('\n');
+
+    // ── Work at risk.
+    let risky: Vec<&cohors_core::RepoLine> = o.at_risk().collect();
+    if !risky.is_empty() {
+        out.push_str(&section(
+            "work at risk",
+            &format!("{} where local work could be lost", risky.len()),
+            color,
+        ));
+        let name_w = risky
+            .iter()
+            .map(|r| r.name.chars().count())
+            .max()
+            .unwrap_or(4)
+            .clamp(4, 28);
+        for repo in risky {
+            let age = repo
+                .commit
+                .as_ref()
+                .map(|c| cohors_core::time::relative(c.timestamp, now))
+                .unwrap_or_default();
+            out.push_str(&format!(
+                "    {} {}  {}  {}\n",
+                severity_mark(repo.severity, color),
+                bold(color, &format!("{:<name_w$}", clip(&repo.name, name_w))),
+                clip(&repo.reasons.join(", "), 64),
+                dim(color, &age),
+            ));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// A JSON selector naming exactly these repos, for a copy-pasteable command.
+fn ids_selector(ids: &[String]) -> String {
+    serde_json::json!({ "ids": ids }).to_string()
 }
 
 /// A bulk git action issued from the CLI. Mirrors the TUI verbs and the MCP
@@ -1042,6 +1233,7 @@ pub fn run_web(
         caps,
         actions_config.run_allowlist,
         actions_config.max_action_targets,
+        demo,
     );
     let _ = watcher.kill();
     result
@@ -1747,6 +1939,38 @@ mod tests {
 
         let run = action_guide("run", "\"your command\"", "does", "safe", false);
         assert!(run.contains("cohors run \"your command\" --select all"));
+    }
+
+    /// The overview report leads with what to do, names the command that does
+    /// it, and stays free of ANSI when colour is off.
+    #[test]
+    fn overview_report_leads_with_actions_and_names_the_command() {
+        let now = 1_700_000_000;
+        let fleet = cohors_core::demo::fleet(now);
+        let (entries, board) = cohors_core::launchpad::demo();
+        let o = cohors_core::overview(&fleet, &entries, &board, now);
+        let plain = overview_report(&o, &["/code".to_string()], now, false);
+        assert!(!plain.contains('\x1b'), "no ANSI without colour");
+        let do_next = plain.find("do next").expect("a do-next section");
+        let glance = plain.find("at a glance").expect("an at-a-glance section");
+        assert!(do_next < glance, "actions come before figures");
+        assert!(plain.contains(&o.headline));
+        assert!(plain.contains(&o.actions[0].title));
+        assert!(plain.contains("not backed up") && plain.contains("commits, 7 days"));
+        // A step with a registry verb shows the exact command for it.
+        if let Some(action) = o.actions.iter().find(|a| a.verb.is_some()) {
+            let verb = action.verb.as_deref().unwrap();
+            assert!(plain.contains(&format!("cohors {verb} --select '{{\"ids\":")));
+        }
+        assert!(overview_report(&o, &[], now, true).contains('\x1b'));
+    }
+
+    #[test]
+    fn overview_report_handles_an_empty_fleet() {
+        let o = cohors_core::overview(&[], &[], &Default::default(), 0);
+        let plain = overview_report(&o, &["/code".to_string()], 0, false);
+        assert!(plain.contains("No repositories found."));
+        assert!(plain.contains("cohors init"));
     }
 
     #[test]

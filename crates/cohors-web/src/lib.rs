@@ -95,6 +95,7 @@ pub mod standalone {
             caps,
             mcp.run_allowlist,
             mcp.max_action_targets,
+            false,
         )
     }
 }

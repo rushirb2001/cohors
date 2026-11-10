@@ -12,6 +12,9 @@
 //! - `GET  /api/repos[?enrich=1]` — the local scan (optionally GitHub-enriched).
 //! - `GET  /api/detail?path=…&url=…` — one repo's drill-in (local + remote).
 //! - `GET  /api/meta` — the roots being scanned + whether `--watch` is on.
+//! - `GET  /api/overview` — the shared overview model (`cohors_core::Overview`):
+//!   "Do next", key figures, one line per repo, tasks and commits. The same
+//!   struct the terminal UI, the editor extension and the MCP server render.
 //! - `GET  /api/launchpad` — every repo's launchpad entry + the focus board.
 //! - `POST /api/action` — run a registry verb across a selector (gated by [`Caps`]).
 //!
@@ -59,6 +62,13 @@ const DETAIL_PATCH_BYTES: usize = 20_000;
 struct MetaResponse {
     roots: Vec<String>,
     watch: bool,
+    /// True when the server was started with `--demo`: the page says so in
+    /// plain sight, so sample data is never mistaken for a real fleet.
+    demo: bool,
+    /// Which mutating tiers are enabled, so the page can explain a disabled
+    /// button before the user clicks it rather than after.
+    allow_writes: bool,
+    allow_run: bool,
 }
 
 /// Serve `dist_dir` on `127.0.0.1:port`, exposing the local scan under `/api` and
@@ -74,6 +84,7 @@ pub fn serve(
     caps: Caps,
     allowlist: Vec<String>,
     max_targets: usize,
+    demo: bool,
 ) -> Result<()> {
     let server = Server::http(("127.0.0.1", port))
         .map_err(|e| anyhow!("could not start web server: {e}"))?;
@@ -100,7 +111,16 @@ pub fn serve(
         let action = action.clone();
         workers.push(thread::spawn(move || {
             while let Ok(req) = server.recv() {
-                handle(req, &dist, &*scan, &roots, token.as_deref(), watch, &action);
+                handle(
+                    req,
+                    &dist,
+                    &*scan,
+                    &roots,
+                    token.as_deref(),
+                    watch,
+                    demo,
+                    &action,
+                );
             }
         }));
     }
@@ -118,6 +138,7 @@ fn handle(
     roots: &[String],
     token: Option<&str>,
     watch: bool,
+    demo: bool,
     action: &ActionCtx,
 ) {
     let url = req.url().to_string();
@@ -151,9 +172,13 @@ fn handle(
             &MetaResponse {
                 roots: roots.to_vec(),
                 watch,
+                demo,
+                allow_writes: action.caps.allow_writes,
+                allow_run: action.caps.allow_run,
             },
         ),
-        (Method::Get, "/api/launchpad") => respond_json(req, &launchpad_payload(&scan())),
+        (Method::Get, "/api/overview") => respond_json(req, &overview_payload(&scan(), demo)),
+        (Method::Get, "/api/launchpad") => respond_json(req, &launchpad_payload(&scan(), demo)),
         (Method::Post, "/api/action") => api_action(req, action),
         _ => serve_static(req, dist, &url),
     }
@@ -196,33 +221,31 @@ fn api_repos(req: tiny_http::Request, url: &str, scan: &ScanFn, token: Option<&s
 }
 
 /// `GET /api/launchpad` — what each repo offers and what is waiting in it: the
-/// committed `.principia/` contribution, flows detected from manifests, and the
-/// user's cross-repo focus board (ADR-054).
+/// committed `.principia/` contribution, flows detected from manifests, the
+/// user's cross-repo focus board and recent agent activity (ADR-054).
 ///
-/// When no repo in the scan exists on disk the fleet is the built-in demo, so
-/// the sample launchpad is served to match it.
-fn launchpad_payload(snapshots: &[RepoSnapshot]) -> Value {
-    use cohors_fleet::launchpad as lp;
-    let on_disk: Vec<&RepoSnapshot> = snapshots
-        .iter()
-        .filter(|s| s.path.as_ref().is_some_and(|p| p.as_std_path().is_dir()))
-        .collect();
-    if on_disk.is_empty() && !snapshots.is_empty() {
+/// The sample launchpad is served only when the server was started with
+/// `--demo`. A real fleet with nothing set up gets an honest empty launchpad,
+/// never invented tasks.
+fn launchpad_payload(snapshots: &[RepoSnapshot], demo: bool) -> Value {
+    if demo {
         let (entries, board) = cohors_core::launchpad::demo();
-        return json!({ "entries": entries, "board": board });
+        return json!({ "entries": entries, "board": board, "recent_activity": [] });
     }
-    let mut entries: Vec<_> = on_disk
-        .iter()
-        .filter_map(|s| {
-            let path = s.path.as_ref()?;
-            Some(lp::entry(&s.id.0, &s.name, path.as_std_path()))
-        })
-        .collect();
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
-    let board = lp::launchpad_home()
-        .map(|home| lp::read_board(&home))
-        .unwrap_or_default();
-    json!({ "entries": entries, "board": board })
+    let home = cohors_fleet::launchpad::launchpad_home();
+    json!(cohors_fleet::launchpad_bundle(snapshots, home.as_deref()))
+}
+
+/// `GET /api/overview` — the one model every front-end draws (see
+/// `cohors_core::overview`). Built by the fleet facade so the numbers match
+/// the terminal UI, the editor extension and the MCP `overview` tool exactly.
+fn overview_payload(snapshots: &[RepoSnapshot], demo: bool) -> cohors_core::Overview {
+    if demo {
+        let (entries, board) = cohors_core::launchpad::demo();
+        return cohors_core::overview(snapshots, &entries, &board, now_secs());
+    }
+    let home = cohors_fleet::launchpad::launchpad_home();
+    cohors_fleet::overview(snapshots, home.as_deref(), now_secs())
 }
 
 /// `GET /api/detail?path=…&url=…` — one repo's drill-in. `path` (the local repo
@@ -436,14 +459,33 @@ mod tests {
     }
 
     #[test]
-    fn launchpad_serves_the_sample_for_the_demo_fleet_and_empty_for_no_fleet() {
-        // The demo fleet's paths don't exist on disk ⇒ the sample launchpad.
-        let demo = launchpad_payload(&demo_fleet());
+    fn the_sample_launchpad_is_served_only_in_demo_mode() {
+        let demo = launchpad_payload(&demo_fleet(), true);
         assert_eq!(demo["entries"][0]["name"], "payments");
         assert_eq!(demo["board"]["focus"][0]["repo"], "payments");
-        // No repos at all ⇒ an empty launchpad, not the sample.
-        let empty = launchpad_payload(&[]);
-        assert_eq!(empty["entries"], json!([]));
+        // The same fleet without `--demo` reads the disk: its paths do not
+        // exist, so nothing is configured and no task is invented.
+        let real = launchpad_payload(&demo_fleet(), false);
+        assert!(
+            real["entries"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|e| e["configured"] == false)
+        );
+        // No repos at all ⇒ an empty launchpad.
+        assert_eq!(launchpad_payload(&[], false)["entries"], json!([]));
+    }
+
+    #[test]
+    fn overview_is_the_shared_model() {
+        let o = overview_payload(&demo_fleet(), true);
+        assert_eq!(o.figures.repos, demo_fleet().len());
+        assert_eq!(o.repos.len(), demo_fleet().len());
+        assert!(!o.actions.is_empty(), "the demo fleet has work to do");
+        // An empty fleet is a valid, empty overview.
+        let empty = overview_payload(&[], false);
+        assert!(empty.actions.is_empty() && empty.repos.is_empty());
     }
 
     #[test]
@@ -457,7 +499,7 @@ mod tests {
         .unwrap();
         let mut snap = demo_fleet().remove(0);
         snap.path = Some(dir.to_str().unwrap().into());
-        let payload = launchpad_payload(&[snap]);
+        let payload = launchpad_payload(&[snap], false);
         let _ = std::fs::remove_dir_all(&dir);
         assert_eq!(payload["entries"][0]["name"], "Svc");
         assert_eq!(payload["entries"][0]["configured"], true);

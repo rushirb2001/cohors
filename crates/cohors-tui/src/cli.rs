@@ -88,6 +88,18 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// What to do next across every repo, and why (no TUI).
+    ///
+    /// The briefing the dashboard opens with, as a report: the actions worth
+    /// taking (most urgent first), the key figures, and the repos where local
+    /// work could be lost. Piped or with `--json` it prints the full overview
+    /// model as JSON — the same one the web dashboard, the editor extension
+    /// and the MCP `overview` tool use.
+    Overview {
+        /// Print JSON instead of the human report.
+        #[arg(long)]
+        json: bool,
+    },
     /// Launch the dashboard on a built-in sample fleet: no config, no scanning.
     ///
     /// A zero-setup way to try cohors: every column and view is populated with

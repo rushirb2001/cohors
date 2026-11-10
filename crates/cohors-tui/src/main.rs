@@ -40,6 +40,7 @@ fn main() -> anyhow::Result<()> {
     match &cli.command {
         Some(Command::Init { force }) => commands::init(&cli, *force),
         Some(Command::Scan { select, json }) => commands::scan(&cli, select.as_deref(), *json),
+        Some(Command::Overview { json }) => commands::overview(&cli, *json),
         Some(Command::Demo) => commands::run_demo(),
         Some(Command::Fetch(a)) => commands::run_action(
             &cli,
