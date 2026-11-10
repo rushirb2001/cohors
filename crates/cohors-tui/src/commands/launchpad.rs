@@ -89,7 +89,10 @@ fn report(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
         println!("{}", serde_json::to_string_pretty(&out)?);
         return Ok(());
     }
-    print!("{}", render_report(&entries, &board, color));
+    print!(
+        "{}",
+        render_report(&entries, &board, super::term_width(), color)
+    );
     Ok(())
 }
 
@@ -108,15 +111,23 @@ fn safe(text: &str) -> String {
     text.chars().filter(|c| !c.is_control()).collect()
 }
 
-/// One task line: a status mark, the title, and a priority tag when it is not
-/// the default. Shape carries the status so it still reads without colour.
-fn task_row(task: &Task, color: bool) -> String {
-    let mark = match task.status() {
+/// A task or focus item's status as a shape, so it reads without colour:
+/// `◆` doing, `✕` blocked, `○` to do.
+fn status_mark(status: &str) -> &'static str {
+    match status {
         "doing" => "◆",
         "blocked" => "✕",
         _ => "○",
-    };
-    let mut line = format!("      {} {}", mark, clip(&safe(&task.title), 78));
+    }
+}
+
+/// One task line: a status mark, the title, and a priority tag when it is not
+/// the default. Shape carries the status so it still reads without colour.
+fn task_row(task: &Task, width: usize, color: bool) -> String {
+    let mark = status_mark(task.status());
+    // indent + mark, then room for the "  high" / "  blocked" tags after it.
+    let title_w = width.saturating_sub(6 + 2 + 18).max(16);
+    let mut line = format!("      {} {}", mark, clip(&safe(&task.title), title_w));
     match task.priority.as_deref() {
         Some("high") => line.push_str(&format!("  {}", bold(color, "high"))),
         Some("low") => line.push_str(&format!("  {}", dim(color, "low"))),
@@ -133,15 +144,19 @@ fn task_row(task: &Task, color: bool) -> String {
 pub(crate) fn render_report(
     entries: &[LaunchpadEntry],
     board: &cohors_core::launchpad::Board,
+    width: usize,
     color: bool,
 ) -> String {
     let configured = entries.iter().filter(|e| e.configured).count();
     let open: usize = entries.iter().map(|e| e.open_tasks().len()).sum();
+    let plural =
+        |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
     let mut out = masthead(
-        "launchpad · what each repo offers, and what is waiting in it",
+        "launchpad: flows, agents and tasks across your repos",
         &format!(
-            "{} repos · {configured} set up · {open} open tasks",
-            entries.len()
+            "{}, {configured} set up, {}",
+            plural(entries.len(), "repository", "repositories"),
+            plural(open, "open task", "open tasks")
         ),
         color,
     );
@@ -157,14 +172,25 @@ pub(crate) fn render_report(
             "your cross-repo board, the short list you chose",
             color,
         ));
+        // Status as the same shape the task rows use; then the title; then
+        // which repo it lives in.
+        let title_w = focus
+            .iter()
+            .map(|f| safe(&f.title).chars().count())
+            .max()
+            .unwrap_or(0)
+            // indent + mark + gaps, leaving room for the repo name after it.
+            .min(width.saturating_sub(4 + 2 + 2 + 24).max(16));
         for item in focus {
-            let repo = safe(item.repo.as_deref().unwrap_or("—"));
-            let status = safe(item.status.as_deref().unwrap_or("todo"));
+            let repo = safe(item.repo.as_deref().unwrap_or(""));
             out.push_str(&format!(
                 "    {} {}  {}\n",
-                dim(color, "▸"),
-                bold(color, &clip(&safe(&item.title), 70)),
-                dim(color, &format!("{repo} · {status}")),
+                status_mark(item.status.as_deref().unwrap_or("todo")),
+                bold(
+                    color,
+                    &format!("{:<title_w$}", clip(&safe(&item.title), title_w))
+                ),
+                dim(color, &clip(&repo, 22)),
             ));
         }
         out.push('\n');
@@ -177,7 +203,7 @@ pub(crate) fn render_report(
     if !with_tasks.is_empty() {
         out.push_str(&section(
             "open tasks",
-            "◆ doing · ✕ blocked · ○ todo, most urgent first",
+            "◆ doing, ✕ blocked, ○ to do; most urgent first",
             color,
         ));
         for entry in with_tasks {
@@ -189,7 +215,7 @@ pub(crate) fn render_report(
                 dim(color, &format!("{} open", tasks.len())),
             ));
             for task in tasks {
-                out.push_str(&task_row(task, color));
+                out.push_str(&task_row(task, width, color));
             }
         }
         out.push('\n');
@@ -226,13 +252,36 @@ pub(crate) fn render_report(
     if !unset.is_empty() {
         out.push_str(&section(
             "not set up yet",
-            "in any of these, ask your agent: \"set up this repo for the launchpad\"",
+            &format!(
+                "{} with no launchpad file",
+                plural(unset.len(), "repository", "repositories")
+            ),
             color,
         ));
+        // Every name, wrapped: clipping the list would hide which repos they are.
+        let mut line = String::new();
+        for name in &unset {
+            if !line.is_empty()
+                && line.chars().count() + name.chars().count() + 2 > width.saturating_sub(6)
+            {
+                out.push_str(&format!("    {}\n", dim(color, &format!("{line},"))));
+                line.clear();
+            }
+            if !line.is_empty() {
+                line.push_str(", ");
+            }
+            line.push_str(name);
+        }
+        out.push_str(&format!("    {}\n", dim(color, &line)));
+        // The command on its own line, its explanation under it, so neither
+        // is cut on a narrow terminal.
         out.push_str(&format!(
-            "    {}\n\n",
-            dim(color, &clip(&unset.join(" · "), 96))
+            "    {} {}\n      {}\n",
+            dim(color, "▸"),
+            bold(color, "cohors agent run setup-repo"),
+            dim(color, "run it inside one; your agent writes the file"),
         ));
+        out.push('\n');
     }
 
     if entries.is_empty() {
@@ -374,7 +423,7 @@ mod tests {
             }],
             ..Board::default()
         };
-        insta::assert_snapshot!(render_report(&fleet(), &board, false));
+        insta::assert_snapshot!(render_report(&fleet(), &board, 100, false));
     }
 
     #[test]
@@ -395,15 +444,38 @@ mod tests {
             ..Board::default()
         };
         // Colour off, so any ESC in the output could only have come from data.
-        let out = render_report(&entries, &board, false);
+        let out = render_report(&entries, &board, 100, false);
         assert!(!out.contains('\x1b') && !out.contains('\x07') && !out.contains('\r'));
         assert!(out.contains("pay[2Japi"));
     }
 
+    /// No line of the report is wider than the terminal, at any width.
+    #[test]
+    fn report_fits_the_terminal_width() {
+        let board = Board {
+            focus: vec![FocusItem {
+                id: "f".into(),
+                title: "A focus item with a deliberately long title that would not fit a narrow terminal".into(),
+                repo: Some("pay-api".into()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        for width in [60, 80, 100, 140] {
+            for line in render_report(&fleet(), &board, width, false).lines() {
+                assert!(
+                    line.chars().count() <= width,
+                    "{} columns at width {width}: {line}",
+                    line.chars().count()
+                );
+            }
+        }
+    }
+
     #[test]
     fn empty_fleet_says_how_to_start() {
-        let out = render_report(&[], &Board::default(), false);
-        assert!(out.contains("no repositories"));
+        let out = render_report(&[], &Board::default(), 100, false);
+        assert!(out.contains("No repositories"));
         assert!(out.contains("cohors init"));
     }
 

@@ -109,7 +109,7 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
     }
     print!(
         "{}",
-        scan_report(&snapshots, &roots, took, now_secs(), color)
+        scan_report(&snapshots, &roots, took, now_secs(), term_width(), color)
     );
     Ok(())
 }
@@ -134,31 +134,87 @@ fn clip(s: &str, max: usize) -> String {
     out
 }
 
-/// A repo's sync cell: `↑2`, `↓5`, `↑2 ↓5`, `ok` when level with upstream, and
-/// `local` when there is no upstream at all.
-fn sync_label(s: &cohors_core::RepoSnapshot) -> String {
-    match &s.upstream {
-        None => "local".to_string(),
-        Some(u) if u.ahead == 0 && u.behind == 0 => "ok".to_string(),
-        Some(u) => {
-            let mut t = String::new();
-            if u.ahead > 0 {
-                t.push_str(&format!("↑{}", u.ahead));
-            }
-            if u.ahead > 0 && u.behind > 0 {
-                t.push(' ');
-            }
-            if u.behind > 0 {
-                t.push_str(&format!("↓{}", u.behind));
-            }
-            t
+/// Break `text` into lines of at most `width` columns at spaces. A single
+/// word longer than the width is clipped rather than left to overflow.
+fn wrap(text: &str, width: usize) -> Vec<String> {
+    let width = width.max(8);
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    for word in text.split_whitespace() {
+        let word = clip(word, width);
+        if !line.is_empty() && line.chars().count() + 1 + word.chars().count() > width {
+            lines.push(std::mem::take(&mut line));
         }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(&word);
     }
+    if !line.is_empty() {
+        lines.push(line);
+    }
+    lines
+}
+
+/// Where a repo stands against its upstream, in words: `level`, `2 ahead`,
+/// `3 behind`, `2 ahead, 3 behind`, `no upstream` (a remote exists but the
+/// branch was never pushed) or `no remote`. Blank for a repo that could not be
+/// read, since nothing is known about it.
+fn sync_words(line: &cohors_core::RepoLine) -> String {
+    if line.error.is_some() {
+        return String::new();
+    }
+    match (&line.upstream, line.ahead, line.behind) {
+        (None, _, _) if !line.has_remote => "no remote".to_string(),
+        (None, _, _) => "no upstream".to_string(),
+        (Some(_), 0, 0) => "level".to_string(),
+        (Some(_), ahead, 0) => format!("{ahead} ahead"),
+        (Some(_), 0, behind) => format!("{behind} behind"),
+        (Some(_), ahead, behind) => format!("{ahead} ahead, {behind} behind"),
+    }
+}
+
+/// `7 repositories` / `1 repository`.
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// The shortest command that starts a "Do next" step: the verb that carries it
+/// out when there is one, otherwise the listing to look at first.
+fn action_command(action: &cohors_core::NextAction) -> &'static str {
+    use cohors_core::ActionKind as K;
+    match action.kind {
+        K::Unreadable => "cohors scan --select error",
+        K::Resolve => "cohors scan --select conflicted",
+        // Diverged branches are left out: a plain push would be rejected.
+        K::Push => "cohors push --select 'ahead,!diverged'",
+        K::Reconcile => "cohors scan --select diverged",
+        K::Publish => "cohors push --select unpublished",
+        K::ReviewStash => "cohors scan --select stash",
+        // Diverged branches are left out: a fast-forward pull cannot apply.
+        K::Pull => "cohors pull --select 'behind,!diverged'",
+        K::Commit => "cohors scan --select dirty",
+        K::Fetch => "cohors fetch --select stale-fetch",
+        K::StartTask => "cohors launchpad",
+    }
+}
+
+/// A key bar in the dashboard's grammar: `enter  open the dashboard    q  quit`.
+fn key_bar(keys: &[(&str, &str)], color: bool) -> String {
+    let parts: Vec<String> = keys
+        .iter()
+        .map(|(key, what)| format!("{}  {}", bold(color, key), dim(color, what)))
+        .collect();
+    format!("  {}\n", parts.join("    "))
 }
 
 /// The report's masthead: the mark beside the wordmark, mirroring the launch
 /// screen so both surfaces open the same way.
 fn masthead(scanned: &str, where_at: &str, color: bool) -> String {
+    // Keep both lines inside the terminal: the mark and its gutter take 14
+    // columns when it is drawn, the plain form only the 2-column indent.
+    let room = term_width().saturating_sub(if color { 15 } else { 3 });
+    let (scanned, where_at) = (&clip(scanned, room), &clip(where_at, room));
     let mut out = String::from("\n");
     if color {
         let m = &crate::ui::SPIDER_MARK;
@@ -188,6 +244,13 @@ fn masthead(scanned: &str, where_at: &str, color: bool) -> String {
 /// One report section, in the launch screen's grammar: a brand-purple heading
 /// over a dim one-line descriptor.
 fn section(heading: &str, descriptor: &str, color: bool) -> String {
+    // Sentence case, like every heading in the dashboard and the browser.
+    let mut chars = heading.chars();
+    let heading: String = match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    };
+    let heading = heading.as_str();
     format!(
         "  {}\n  {}\n",
         brand(color, heading),
@@ -195,57 +258,122 @@ fn section(heading: &str, descriptor: &str, color: bool) -> String {
     )
 }
 
-/// One repo line: `▸ name  branch  sync  status`. Colour is spent only on what is
-/// genuinely urgent, so a long list of ordinary dirty repos reads calm instead of
-/// turning the screen into a wall of red.
-fn scan_row(
-    s: &cohors_core::RepoSnapshot,
-    a: &cohors_core::Assessment,
-    widths: (usize, usize, usize),
-    color: bool,
-) -> String {
-    use cohors_core::Severity as S;
-    let (name_w, branch_w, sync_w) = widths;
-    let status = a
-        .primary
+/// How wide the terminal is, for reports that lay out columns. A report that
+/// is wider than the terminal wraps, and a wrapped table cannot be read, so
+/// every column report sizes itself to this. Falls back to 100 when the width
+/// cannot be read (output piped into a pager, say).
+fn term_width() -> usize {
+    ratatui::crossterm::terminal::size()
+        .map(|(cols, _)| cols as usize)
+        .unwrap_or(100)
+        .clamp(60, 200)
+}
+
+/// The column widths of a repo listing: name, branch (0 = column dropped),
+/// sync, and what is left for the reasons.
+#[derive(Clone, Copy)]
+struct RowWidths {
+    name: usize,
+    branch: usize,
+    sync: usize,
+    why: usize,
+}
+
+/// The age column is always this wide (`12mo`, `3w`), right-aligned.
+const AGE_W: usize = 4;
+
+impl RowWidths {
+    /// Fit the columns of `lines` into `width` terminal columns. The reasons
+    /// are the point of the report, so they get the room: the branch column is
+    /// dropped first when the terminal is too narrow to show both properly.
+    fn fit<'a>(
+        lines: impl Iterator<Item = &'a cohors_core::RepoLine> + Clone,
+        width: usize,
+    ) -> Self {
+        let widest = |of: &dyn Fn(&cohors_core::RepoLine) -> usize, min: usize, max: usize| {
+            lines.clone().map(of).max().unwrap_or(min).clamp(min, max)
+        };
+        // A narrow terminal cannot afford a 28-column name.
+        let name_cap = if width < 100 { 22 } else { 28 };
+        let mut name = widest(&|r| r.name.chars().count(), 4, name_cap);
+        let branch = widest(&|r| r.branch.chars().count(), 6, 20);
+        let sync = widest(&|r| sync_words(r).chars().count(), 5, 18);
+        // indent + mark + name + sync + age, each followed by a two-space gap.
+        let fixed = |name: usize| 4 + 2 + name + 2 + sync + 2 + AGE_W + 2;
+        // Reasons want at least this much to be worth reading…
+        const WHY_WANTED: usize = 48;
+        // …and below this they say nothing, so the name gives up room instead.
+        const WHY_MIN: usize = 16;
+        let branch = if fixed(name) + branch + 2 + WHY_WANTED <= width {
+            branch
+        } else {
+            0
+        };
+        let branch_cols = if branch > 0 { branch + 2 } else { 0 };
+        // One spare column, so the last character never touches the edge.
+        let room = |name: usize| width.saturating_sub(fixed(name) + branch_cols + 1);
+        if room(name) < WHY_MIN {
+            name = name.saturating_sub(WHY_MIN - room(name)).max(8);
+        }
+        RowWidths {
+            name,
+            branch,
+            sync,
+            why: room(name).max(1),
+        }
+    }
+}
+
+/// One repo line: `mark name  [branch]  sync  age  why`. The mark is a shape
+/// (triangle, diamond, ring), so urgency reads with colour off; colour is spent
+/// only on what is genuinely urgent, so a long list of ordinary dirty repos
+/// reads calm instead of turning the screen into a wall of red.
+fn scan_row(line: &cohors_core::RepoLine, w: RowWidths, now: i64, color: bool) -> String {
+    let age = line
+        .commit
         .as_ref()
-        .map(|r| r.label())
-        .unwrap_or_else(|| "up to date".to_string());
-    let status = match a.severity {
-        S::Risk => sgr(color, "31", &status),
-        S::Warn => sgr(color, "33", &status),
-        S::Notice => status,
-        S::Ok | S::Info => dim(color, &status),
-    };
+        .map(|c| cohors_core::time::relative(c.timestamp, now))
+        .unwrap_or_default();
+    // Every reason, not only the first: a repo with a never-pushed branch AND
+    // an old stash should say both.
+    let why = clip(&line.reasons.join("; "), w.why);
     // Pad before painting: ANSI escapes have no width, so colouring first would
     // throw the column alignment off.
-    let sync_cell = format!("{:<sync_w$}", sync_label(s));
-    let sync_cell = match &s.upstream {
-        Some(u) if u.ahead > 0 || u.behind > 0 => sgr(color, "36", &sync_cell),
-        _ => dim(color, &sync_cell),
+    let branch = if w.branch > 0 {
+        format!(
+            "{}  ",
+            dim(
+                color,
+                &format!("{:<width$}", clip(&line.branch, w.branch), width = w.branch)
+            )
+        )
+    } else {
+        String::new()
     };
     format!(
-        "    {} {}  {}  {}  {}\n",
-        dim(color, "▸"),
-        bold(color, &format!("{:<name_w$}", clip(&s.name, name_w))),
-        dim(
+        "    {} {}  {branch}{}  {}  {}\n",
+        severity_mark(line.severity, color),
+        bold(
             color,
-            &format!("{:<branch_w$}", clip(&s.branch.label(), branch_w))
+            &format!("{:<width$}", clip(&line.name, w.name), width = w.name)
         ),
-        sync_cell,
-        status,
+        format_args!("{:<width$}", sync_words(line), width = w.sync),
+        dim(color, &format!("{age:>AGE_W$}")),
+        why,
     )
 }
 
-/// The human-facing `cohors scan` report: a branded header, one line per repo in
-/// the dashboard's colour language, then the fleet's headline counts and the
-/// commands that would actually clear them. `color` gates the ANSI; otherwise
-/// pure so it's unit-testable.
+/// The human-facing `cohors scan` report: every repo that has something to
+/// say, most urgent first, then the commands that start each next step. It is
+/// drawn from the same [`cohors_core::Overview`] the dashboard uses, so a repo
+/// is "at risk" here exactly when it is there. `color` gates the ANSI;
+/// otherwise pure so it's unit-testable.
 fn scan_report(
     snaps: &[cohors_core::RepoSnapshot],
     roots: &[String],
     took: std::time::Duration,
     now: i64,
+    width: usize,
     color: bool,
 ) -> String {
     let where_at = roots
@@ -255,9 +383,8 @@ fn scan_report(
         .join(", ");
     let mut out = masthead(
         &format!(
-            "scanned {} repo{} in {}",
-            snaps.len(),
-            if snaps.len() == 1 { "" } else { "s" },
+            "scanned {} in {}",
+            plural(snaps.len(), "repository", "repositories"),
             took_label(took)
         ),
         &where_at,
@@ -268,121 +395,73 @@ fn scan_report(
         return out;
     }
 
-    // Most urgent first, then alphabetical so the order is stable run to run.
-    // Sorted descending by severity, the three buckets are contiguous slices.
-    use cohors_core::Severity as S;
-    let mut rows: Vec<(&cohors_core::RepoSnapshot, cohors_core::Assessment)> = snaps
+    // The scan needs no launchpad: tasks have their own report.
+    let overview = cohors_core::overview(snaps, &[], &Default::default(), now);
+    let risky: Vec<&cohors_core::RepoLine> = overview.at_risk().collect();
+    let look: Vec<&cohors_core::RepoLine> = overview
+        .repos
         .iter()
-        .map(|s| (s, cohors_core::assess(s, now)))
+        .filter(|r| !r.at_risk && !r.reasons.is_empty())
         .collect();
-    rows.sort_by(|a, b| {
-        b.1.severity
-            .cmp(&a.1.severity)
-            .then_with(|| a.0.name.cmp(&b.0.name))
-    });
-    let n_risk = rows.iter().filter(|(_, a)| a.severity == S::Risk).count();
-    let n_urgent = rows.iter().filter(|(_, a)| a.severity >= S::Warn).count();
-    // Everything with a reason is listed by name, informational ones included
-    // (a fresh stash, a detached HEAD, a stale fetch). What is left has no
-    // reason at all: that is "clean", the same definition as the overview's
-    // `figures.clean`, so this count matches every other surface.
-    let n_minor = rows
-        .iter()
-        .filter(|(_, a)| matches!(a.severity, S::Notice | S::Info))
-        .count();
-    let n_calm = rows.len() - n_urgent - n_minor;
 
-    // Size the columns to the rows actually printed (capped), so a short fleet
-    // stays tight and one long branch name cannot push Status off the screen.
-    let listed = &rows[..n_urgent + n_minor];
-    let widths = (
-        listed
-            .iter()
-            .map(|(s, _)| s.name.chars().count())
-            .max()
-            .unwrap_or(4)
-            .clamp(4, 28),
-        listed
-            .iter()
-            .map(|(s, _)| s.branch.label().chars().count())
-            .max()
-            .unwrap_or(6)
-            .clamp(6, 22),
-        listed
-            .iter()
-            .map(|(s, _)| sync_label(s).chars().count())
-            .max()
-            .unwrap_or(5)
-            .clamp(5, 8),
-    );
+    // Size the columns to the rows actually printed and to the terminal, so a
+    // short fleet stays tight and no row is ever wider than the screen.
+    let widths = RowWidths::fit(risky.iter().chain(look.iter()).copied(), width);
 
-    if n_urgent > 0 {
-        let mut what = Vec::new();
-        if n_risk > 0 {
-            what.push(format!("{n_risk} at risk"));
-        }
-        if n_urgent - n_risk > 0 {
-            what.push(format!("{} warning", n_urgent - n_risk));
-        }
-        out.push_str(&section("needs you", &what.join(" · "), color));
-        for (s, a) in &rows[..n_urgent] {
-            out.push_str(&scan_row(s, a, widths, color));
+    if !risky.is_empty() {
+        out.push_str(&section(
+            "work at risk",
+            &format!("{} where local work could be lost", risky.len()),
+            color,
+        ));
+        for line in &risky {
+            out.push_str(&scan_row(line, widths, now, color));
         }
         out.push('\n');
     }
-    if n_minor > 0 {
+    if !look.is_empty() {
         out.push_str(&section(
-            "minor",
-            &format!("{n_minor} with uncommitted work or small drift"),
+            "needs a look",
+            &format!("{} with uncommitted work or small drift", look.len()),
             color,
         ));
-        for (s, a) in &rows[n_urgent..n_urgent + n_minor] {
-            out.push_str(&scan_row(s, a, widths, color));
+        for line in &look {
+            out.push_str(&scan_row(line, widths, now, color));
         }
         out.push('\n');
     }
     // The clean ones collapse to a count: listing a dozen "up to date" rows is the
     // noise this report exists to remove.
-    if n_calm > 0 {
+    if overview.figures.clean > 0 {
         out.push_str(&section(
             "clean",
-            &format!("{n_calm} up to date, nothing to do"),
+            &format!("{} up to date, nothing to do", overview.figures.clean),
             color,
         ));
         out.push('\n');
     }
 
-    let sum = cohors_core::fleet_summary(snaps, now);
-
-    // Turn the counts into the commands that clear them, listing only what is
-    // actually true right now. Both are safe verbs (pull is fast-forward-only,
-    // push never force-pushes).
-    let mut next: Vec<(String, String)> = Vec::new();
-    if sum.behind > 0 {
-        next.push((
-            "cohors pull --select behind".to_string(),
-            format!("fast-forward {} behind", sum.behind),
+    // What to do about it, as the command that starts each step.
+    if !overview.actions.is_empty() {
+        out.push_str(&section(
+            "do next",
+            "most urgent first; each command starts that step",
+            color,
         ));
-    }
-    if sum.unpushed > 0 {
-        next.push((
-            "cohors push --select ahead".to_string(),
-            format!("send {} with unpushed commits", sum.unpushed),
-        ));
-    }
-    if !next.is_empty() {
-        out.push_str(&section("next", "the commands that clear this", color));
-        let cmd_w = next
+        let cmd_w = overview
+            .actions
             .iter()
-            .map(|(c, _)| c.chars().count())
+            .map(|a| action_command(a).chars().count())
             .max()
             .unwrap_or(0);
-        for (cmd, why) in next {
+        // indent + mark + command + gap, then the title in what is left.
+        let title_w = width.saturating_sub(4 + 2 + cmd_w + 2 + 1).max(8);
+        for action in &overview.actions {
             out.push_str(&format!(
                 "    {} {}  {}\n",
-                dim(color, "▸"),
-                bold(color, &format!("{cmd:<cmd_w$}")),
-                dim(color, &why),
+                severity_mark(action.severity, color),
+                bold(color, &format!("{:<cmd_w$}", action_command(action))),
+                dim(color, &clip(&action.title, title_w)),
             ));
         }
         out.push('\n');
@@ -416,7 +495,7 @@ pub fn overview(cli: &Cli, json: bool) -> Result<()> {
     }
     print!(
         "{}",
-        overview_report(&overview, &scanner.roots(), now_secs(), color)
+        overview_report(&overview, &scanner.roots(), now_secs(), term_width(), color)
     );
     Ok(())
 }
@@ -472,7 +551,13 @@ fn severity_mark(severity: cohors_core::Severity, color: bool) -> String {
 
 /// The human-facing `cohors overview` report. Pure (given the model, the
 /// roots and a clock) so it is unit-testable; `color` gates the ANSI.
-fn overview_report(o: &cohors_core::Overview, roots: &[String], now: i64, color: bool) -> String {
+fn overview_report(
+    o: &cohors_core::Overview,
+    roots: &[String],
+    now: i64,
+    width: usize,
+    color: bool,
+) -> String {
     let where_at = roots
         .iter()
         .map(|r| crate::ui::abbrev_home(r))
@@ -496,24 +581,23 @@ fn overview_report(o: &cohors_core::Overview, roots: &[String], now: i64, color:
     } else {
         out.push_str(&section(
             "do next",
-            "most urgent first; the command on the right carries it out",
+            "most urgent first; the command under each step starts it",
             color,
         ));
         for action in &o.actions {
-            // A step with a registry verb is one command away; say which.
-            let how = match action.verb.as_deref() {
-                Some(verb) => format!("cohors {verb} --select '{}'", ids_selector(&action.repos)),
-                None => String::new(),
-            };
+            // The command that starts this step.
+            let how = action_command(action);
             out.push_str(&format!(
-                "    {} {}\n      {}\n",
+                "    {} {}\n",
                 severity_mark(action.severity, color),
-                bold(color, &action.title),
-                dim(color, &action.why),
+                bold(color, &clip(&action.title, width.saturating_sub(7))),
             ));
-            if !how.is_empty() {
-                out.push_str(&format!("      {}\n", sgr(color, "36", &clip(&how, 96))));
+            // The reason can be a full sentence: wrap it under the title
+            // rather than let the terminal break it mid-word.
+            for line in wrap(&action.why, width.saturating_sub(7)) {
+                out.push_str(&format!("      {}\n", dim(color, &line)));
             }
+            out.push_str(&format!("      {}\n", sgr(color, "36", how)));
         }
     }
     out.push('\n');
@@ -567,7 +651,10 @@ fn overview_report(o: &cohors_core::Overview, roots: &[String], now: i64, color:
     ];
     out.push_str(&section("at a glance", "the fleet in six numbers", color));
     let num_w = figures.iter().map(|(n, _, _)| n.len()).max().unwrap_or(1);
+    // indent + number + label column, then the detail in what is left.
+    let detail_w = width.saturating_sub(4 + num_w + 2 + 18 + 2 + 1).max(8);
     for (number, label, detail) in &figures {
+        let detail = &clip(detail, detail_w);
         out.push_str(&format!(
             "    {}  {}  {}\n",
             bold(color, &format!("{number:>num_w$}")),
@@ -585,34 +672,14 @@ fn overview_report(o: &cohors_core::Overview, roots: &[String], now: i64, color:
             &format!("{} where local work could be lost", risky.len()),
             color,
         ));
-        let name_w = risky
-            .iter()
-            .map(|r| r.name.chars().count())
-            .max()
-            .unwrap_or(4)
-            .clamp(4, 28);
+        // The same row as `cohors scan`, sized to this terminal.
+        let widths = RowWidths::fit(risky.iter().copied(), width);
         for repo in risky {
-            let age = repo
-                .commit
-                .as_ref()
-                .map(|c| cohors_core::time::relative(c.timestamp, now))
-                .unwrap_or_default();
-            out.push_str(&format!(
-                "    {} {}  {}  {}\n",
-                severity_mark(repo.severity, color),
-                bold(color, &format!("{:<name_w$}", clip(&repo.name, name_w))),
-                clip(&repo.reasons.join(", "), 64),
-                dim(color, &age),
-            ));
+            out.push_str(&scan_row(repo, widths, now, color));
         }
         out.push('\n');
     }
     out
-}
-
-/// A JSON selector naming exactly these repos, for a copy-pasteable command.
-fn ids_selector(ids: &[String]) -> String {
-    serde_json::json!({ "ids": ids }).to_string()
 }
 
 /// A bulk git action issued from the CLI. Mirrors the TUI verbs and the MCP
@@ -721,8 +788,8 @@ pub fn help_decorations() -> (String, String) {
         before.pop();
     }
 
-    // A flag list tells a new reader what exists, not what to do next. These four
-    // are the shortest paths to actually seeing their own fleet.
+    // A flag list tells a new reader what exists, not what to do next. These
+    // are the shortest paths to actually seeing, and acting on, their own fleet.
     let rows = [
         (
             "cohors demo",
@@ -736,7 +803,14 @@ pub fn help_decorations() -> (String, String) {
             "cohors init",
             "write a starter config, then just run `cohors`",
         ),
-        ("cohors scan", "the same sweep as a one-shot report, no TUI"),
+        (
+            "cohors overview",
+            "what to do next across every repo, and why, as a report",
+        ),
+        (
+            "cohors agent run setup-repo",
+            "have your coding agent set the current repo up for the launchpad",
+        ),
     ];
     let w = rows
         .iter()
@@ -756,10 +830,12 @@ pub fn help_decorations() -> (String, String) {
 }
 
 /// The selector vocabulary, shared by every action's guide.
-const SELECTORS: [(&str, &str); 6] = [
+const SELECTORS: [(&str, &str); 8] = [
     ("dirty", "repos with uncommitted work"),
     ("behind", "repos behind their upstream"),
     ("ahead", "repos with unpushed commits"),
+    ("unpublished", "branches that were never pushed"),
+    ("stash", "repos holding stashes"),
     ("attention", "anything that wants you"),
     ("name:pay*", "by name, globs allowed"),
     ("all", "the whole fleet, deliberately"),
@@ -770,7 +846,7 @@ const SELECTORS: [(&str, &str); 6] = [
 /// action never silently hits every repo you own, and a missing one is a question
 /// to answer, not an error to punish.
 fn action_guide(verb: &str, arg: &str, does: &str, safety: &str, color: bool) -> String {
-    let mut out = masthead(&format!("{verb} · {does}"), safety, color);
+    let mut out = masthead(&format!("{verb}: {does}"), safety, color);
 
     // Verbs needing more than a selector (`commit -m`, `run <cmd>`) carry it into
     // every example, so the shape of a real invocation is never guesswork.
@@ -870,7 +946,7 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
     let targets = action_targets(&snapshots, select)?;
-    print!("{}", masthead(&format!("{verb} · {does}"), safety, color));
+    print!("{}", masthead(&format!("{verb}: {does}"), safety, color));
 
     if targets.is_empty() {
         out_nothing_matched(verb, select, color);
@@ -942,7 +1018,7 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
     }
     let mut tail = format!("{ok} of {n} ok");
     if skipped > 0 {
-        tail.push_str(&format!(" · {skipped} skipped"));
+        tail.push_str(&format!(", {skipped} skipped"));
     }
     println!("\n  {}\n", bold(color, &tail));
     Ok(())
@@ -1011,7 +1087,7 @@ pub fn run_command_action(
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
     let targets = action_targets(&snapshots, select)?;
-    print!("{}", masthead(&format!("run · {does}"), safety, color));
+    print!("{}", masthead(&format!("run: {does}"), safety, color));
 
     if targets.is_empty() {
         out_nothing_matched("run", select, color);
@@ -1173,7 +1249,7 @@ pub fn run_web(
     print!(
         "{}",
         masthead(
-            "web · the dashboard in your browser",
+            "web: the dashboard in your browser",
             "building the WASM bundle, this takes a moment",
             color
         )
@@ -1313,65 +1389,47 @@ fn dim(color: bool, s: &str) -> String {
     sgr(color, "2", s)
 }
 
-/// The shared brand header: the spider mark beside a greeting + tagline (the same
-/// mark the TUI header draws). The block-glyph mark appears only with colour on;
-/// plain/piped output keeps a clean text greeting.
-fn welcome_header(color: bool) -> String {
-    let mut out = String::from("\n");
-    if color {
-        let m = &crate::ui::SPIDER_MARK;
-        out.push_str(&format!(
-            "  {}   Welcome to {}\n",
-            brand(color, m[0]),
-            brand(color, "cohors")
-        ));
-        out.push_str(&format!(
-            "  {}   {}\n",
-            brand(color, m[1]),
-            dim(color, "All your git repositories at a glance")
-        ));
-        out.push_str(&format!("  {}\n\n", brand(color, m[2])));
-    } else {
-        out.push_str("  Welcome to cohors\n");
-        out.push_str("  All your git repositories at a glance\n\n");
-    }
-    out
-}
-
-/// The shared super-fleet note: by default cohors gathers every folder it
-/// detects into one fleet; `--root` scopes it to a single folder.
-fn super_fleet_note(color: bool) -> String {
-    let mut out = String::new();
-    out.push_str(&dim(
-        color,
-        "  By default cohors gathers every folder it detects into one super fleet;",
-    ));
-    out.push('\n');
-    out.push_str(&dim(
-        color,
-        "  pass --root <dir> to scope it to a single folder instead.",
-    ));
-    out.push('\n');
-    out
-}
-
-/// The guidance a front-end prints when it finds no repos anywhere: the shared
-/// welcome header, a "nothing found under <roots>" line, a nudge to point at a
-/// folder, and the super-fleet note. `cmd` is the invoking command (`cohors` or
-/// `cohors web`) so the sample line matches. `color` gates the ANSI; otherwise
-/// pure so it's unit-testable.
+/// The guidance a front-end prints when it finds no repos anywhere: where it
+/// looked, then the three shortest ways to get a fleet on screen. `cmd` is the
+/// invoking command (`cohors` or `cohors web`) so the sample line matches.
+/// `color` gates the ANSI; otherwise pure so it's unit-testable.
 fn nothing_found_hint(cmd: &str, roots: &[String], color: bool) -> String {
-    let mut out = welcome_header(color);
-    out.push_str(&format!(
-        "  {} found no git repositories under {}.\n\n",
-        cmd,
-        bold(color, &roots.join(", "))
+    let mut out = masthead(
+        "No git repositories found",
+        &format!("looked under {}", roots.join(", ")),
+        color,
+    );
+    let rows = [
+        (format!("{cmd} --root ~/code"), "look in one folder"),
+        (
+            "cohors init".to_string(),
+            "detect where your repos live and save it",
+        ),
+        (
+            "cohors demo".to_string(),
+            "try the dashboard on sample data first",
+        ),
+    ];
+    let w = rows
+        .iter()
+        .map(|(c, _)| c.chars().count())
+        .max()
+        .unwrap_or(0);
+    out.push_str(&section(
+        "point cohors at your code",
+        "any of these puts a fleet on screen",
+        color,
     ));
+    for (cmd, why) in &rows {
+        out.push_str(&guide_row(cmd, why, w, color));
+    }
     out.push_str(&format!(
-        "  Create a repo, or point cohors at a folder:   {}\n\n",
-        bold(color, &format!("{cmd} --root ~/code"))
+        "\n  {}\n",
+        dim(
+            color,
+            "With no --root, cohors gathers every folder it detects into one super fleet."
+        )
     ));
-    out.push_str(&super_fleet_note(color));
     out
 }
 
@@ -1401,67 +1459,74 @@ fn config_path(cli: &Cli) -> Result<Utf8PathBuf> {
     }
 }
 
-/// One block of a launch screen: a brand-purple heading, a dim descriptor, then
-/// the items (each behind a brand `▸`, bold).
-fn welcome_block(heading: &str, descriptor: &str, items: &[String], color: bool) -> String {
-    let mut out = format!(
-        "  {}\n  {}\n",
-        brand(color, heading),
-        dim(color, descriptor)
-    );
-    for it in items {
-        out.push_str(&format!("    {}  {}\n", brand(color, "▸"), bold(color, it)));
+/// How many "Do next" steps the launch screen shows before pointing at the
+/// dashboard for the rest.
+const LAUNCH_STEPS: usize = 4;
+
+/// The launch screen: what cohors found and the first things worth doing,
+/// shown in the plain terminal before the dashboard takes the screen. It is
+/// the dashboard's own headline and "Do next" list, so the two never disagree.
+///
+/// `first_run` is the bare `cohors` with no config: it also lists the folders
+/// that were gathered and how to look in just one. `color` gates the ANSI;
+/// otherwise pure so it's unit-testable.
+fn launch_screen(
+    overview: &cohors_core::Overview,
+    roots: &[String],
+    first_run: bool,
+    color: bool,
+) -> String {
+    // On a first run the folders get their own section; the masthead only
+    // counts them, so one long list cannot push the headline off the line.
+    let where_at = if first_run && roots.len() > 1 {
+        format!("gathered from {}", plural(roots.len(), "folder", "folders"))
+    } else {
+        roots.join(", ")
+    };
+    let mut out = masthead(&overview.headline, &where_at, color);
+
+    if overview.actions.is_empty() {
+        out.push_str(&section("do next", "nothing needs you right now", color));
+    } else {
+        out.push_str(&section("do next", "most urgent first", color));
+        for action in overview.actions.iter().take(LAUNCH_STEPS) {
+            out.push_str(&format!(
+                "    {}  {}\n",
+                severity_mark(action.severity, color),
+                bold(color, &action.title),
+            ));
+        }
+        let more = overview.actions.len().saturating_sub(LAUNCH_STEPS);
+        if more > 0 {
+            out.push_str(&format!(
+                "       {}\n",
+                dim(color, &format!("and {more} more in the dashboard"))
+            ));
+        }
     }
     out.push('\n');
-    out
-}
 
-/// The Enter/quit line shared by every launch screen.
-fn launch_prompt(color: bool) -> String {
-    format!(
-        "  {} launch   {}   {} quit\n",
-        bold(color, "[enter]"),
-        dim(color, "·"),
-        bold(color, "[q]")
-    )
-}
+    if first_run {
+        out.push_str(&section(
+            "looking in",
+            "every folder where repositories were found",
+            color,
+        ));
+        for root in roots {
+            out.push_str(&format!("    {} {}\n", dim(color, "▸"), bold(color, root)));
+        }
+        out.push_str(&format!(
+            "    {} {}  {}\n\n",
+            dim(color, "▸"),
+            bold(color, "cohors --root <dir>"),
+            dim(color, "to look in one folder only"),
+        ));
+    }
 
-/// The bare-`cohors` greeting: the two ways to fly, side by side — the whole super
-/// fleet (Enter launches it), or scoping to a single folder with `--root`. `color`
-/// gates the ANSI; otherwise pure so it's unit-testable.
-fn super_fleet_welcome(detected: &[String], color: bool) -> String {
-    let mut out = welcome_header(color);
-    out.push_str(&welcome_block(
-        "your super fleet",
-        "every repo it found, gathered from",
-        detected,
+    out.push_str(&key_bar(
+        &[("enter", "open the dashboard"), ("q", "quit")],
         color,
     ));
-    // The scoped alternative, kept front and centre: not the super fleet? point it
-    // at one folder instead. `<dir>` stays dim, a placeholder to fill in.
-    out.push_str(&format!(
-        "  {}\n  {}\n    {}  {} {}\n\n",
-        brand(color, "or a single folder"),
-        dim(color, "scope the dashboard to just one"),
-        brand(color, "▸"),
-        bold(color, "cohors --root"),
-        dim(color, "<dir>"),
-    ));
-    out.push_str(&launch_prompt(color));
-    out
-}
-
-/// The `cohors --root <dir>` greeting: the dashboard scoped to the folder(s) you
-/// pointed it at.
-fn scoped_welcome(roots: &[String], color: bool) -> String {
-    let mut out = welcome_header(color);
-    out.push_str(&welcome_block(
-        "a scoped view",
-        "just the repos under",
-        roots,
-        color,
-    ));
-    out.push_str(&launch_prompt(color));
     out
 }
 
@@ -1490,37 +1555,45 @@ fn prompt_launch() -> Result<bool> {
     Ok(launch)
 }
 
-/// First-run onboarding, in the plain terminal *before* the alt-screen. cohors
-/// auto-detects where the user keeps repos (the super fleet). When repos are
-/// found we greet, list the folders, and prompt to launch (Enter) or quit; when
-/// nothing is found we greet + guide instead of launching an empty dashboard.
-/// Detection is a shallow probe, so no full scan happens until the dashboard.
+/// The launch sequence, in the plain terminal *before* the dashboard takes the
+/// screen: scan, show what was found and what to do next, then wait for Enter
+/// (open the dashboard) or `q` (quit).
 ///
-/// `watch` skips the greeting *and* the prompt. `--watch` is a live-monitoring
-/// mode people re-run in a loop, so a "press Enter" gate there is a keypress on
-/// every iteration and the greeting is a flash before the dashboard paints over
-/// it. The empty-fleet guard still applies: watching nothing is worse than being
-/// told why.
-fn onboard(scanner: &Arc<crate::scan::Scanner>, watch: bool) -> Result<Onboard> {
-    let home = cohors_config::paths::home_dir().ok();
-    let detected = cohors_fleet::detect_roots(home.as_deref());
+/// Scanning first is what makes the screen worth reading: it reports real
+/// counts instead of only naming a folder. The scan is also written to the
+/// cache, so the dashboard opens already populated rather than scanning again
+/// from nothing.
+///
+/// An empty scan skips the screen: the dashboard's own empty state explains
+/// what to do (and offers to adopt the folders it detected).
+fn launch(scanner: &crate::scan::Scanner, roots: &[String], first_run: bool) -> Result<Onboard> {
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
     let color = wants_color(std::io::stdout().is_terminal());
 
-    if detected.is_empty() {
-        print!("{}", tui_welcome(&scanner.roots(), color));
-        let _ = std::io::stdout().flush();
-        return Ok(Onboard::Quit);
+    // Discovery walks the disk, which on a large fleet is a beat or two of
+    // silence. Say what is happening, then wipe the line.
+    let announce = interactive && std::io::stderr().is_terminal();
+    if announce {
+        eprint!("  {} {}…", dim(color, "scanning"), roots.join(", "));
+        let _ = std::io::stderr().flush();
     }
-    if watch {
+    let repos = scanner.scan();
+    if announce {
+        eprint!("\r\x1b[2K"); // carriage return, then erase the line
+        let _ = std::io::stderr().flush();
+    }
+    crate::cache::save(&repos);
+    if repos.is_empty() {
         return Ok(Onboard::Proceed);
     }
 
-    print!("{}", super_fleet_welcome(&detected, color));
+    let home = cohors_fleet::launchpad::launchpad_home();
+    let overview = cohors_fleet::overview(&repos, home.as_deref(), now_secs());
+    print!("{}", launch_screen(&overview, roots, first_run, color));
     let _ = std::io::stdout().flush();
 
-    // A real terminal is needed both to read the prompt and to run the TUI at
-    // all; without one we've printed the welcome as guidance and stop.
-    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    // A real terminal is needed both to read the key and to run the dashboard
+    // at all; without one the screen was printed as a report and we stop.
     if interactive && prompt_launch()? {
         Ok(Onboard::Proceed)
     } else {
@@ -1528,32 +1601,43 @@ fn onboard(scanner: &Arc<crate::scan::Scanner>, watch: bool) -> Result<Onboard> 
     }
 }
 
-/// The `--root` counterpart to [`onboard`]: greet with the scoped-view launch
-/// screen (the roots the scanner will actually walk), then prompt to launch or
-/// quit. The dashboard needs a terminal anyway, so a non-interactive run just
-/// prints the greeting and stops.
+/// First run of a bare `cohors` (no `--root`, no config). cohors auto-detects
+/// where the user keeps repos (the super fleet). When nothing is found it
+/// prints guidance instead of launching an empty dashboard.
 ///
-/// `watch` goes straight to the dashboard, for the same reason as in [`onboard`]:
-/// `--root … --watch` is a deliberate, repeated invocation that already names the
-/// folder on the command line, so there is nothing left to confirm.
+/// `watch` skips the launch screen. `--watch` is a live-monitoring mode people
+/// re-run in a loop, so a "press Enter" gate there is a keypress on every
+/// iteration. The empty-fleet guard still applies: watching nothing is worse
+/// than being told why.
+fn onboard(scanner: &Arc<crate::scan::Scanner>, watch: bool) -> Result<Onboard> {
+    let home = cohors_config::paths::home_dir().ok();
+    let detected = cohors_fleet::detect_roots(home.as_deref());
+
+    if detected.is_empty() {
+        let color = wants_color(std::io::stdout().is_terminal());
+        print!("{}", tui_welcome(&scanner.roots(), color));
+        let _ = std::io::stdout().flush();
+        return Ok(Onboard::Quit);
+    }
+    if watch {
+        return Ok(Onboard::Proceed);
+    }
+    let roots: Vec<String> = detected.iter().map(|r| crate::ui::abbrev_home(r)).collect();
+    launch(scanner, &roots, true)
+}
+
+/// `cohors --root <dir>`: the launch screen for the folder(s) named. As with
+/// [`onboard`], `--watch` skips it and goes straight to the live dashboard.
 fn scoped_onboard(scanner: &Arc<crate::scan::Scanner>, watch: bool) -> Result<Onboard> {
     if watch {
         return Ok(Onboard::Proceed);
     }
-    let color = wants_color(std::io::stdout().is_terminal());
     let roots: Vec<String> = scanner
         .roots()
         .iter()
         .map(|r| crate::ui::abbrev_home(r))
         .collect();
-    print!("{}", scoped_welcome(&roots, color));
-    let _ = std::io::stdout().flush();
-    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
-    if interactive && prompt_launch()? {
-        Ok(Onboard::Proceed)
-    } else {
-        Ok(Onboard::Quit)
-    }
+    launch(scanner, &roots, false)
 }
 
 /// Make sure Trunk (the WASM bundler) is available, installing it via Cargo when
@@ -1715,7 +1799,7 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, color: bool) -> String {
         caps.allow_launchpad,
     );
     let mut out = masthead(
-        "mcp · your fleet, exposed to a coding agent",
+        "mcp: your fleet, for a coding agent",
         "it speaks JSON-RPC over stdio, so a client spawns it, not you",
         color,
     );
@@ -1755,12 +1839,16 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, color: bool) -> String {
     }
     out.push('\n');
 
-    let state = |on: bool| if on { "on now" } else { "opt-in" };
+    let state = |on: bool| if on { "on now" } else { "off, opt-in" };
     let rows: Vec<(String, String)> = vec![
         (
             "reads".to_string(),
-            "list_repos, get_repo, fleet_summary, search, changes, repo_path, list_prs, ci_status"
+            "overview, list_repos, get_repo, fleet_summary, standup, search, changes, repo_path, list_prs, ci_status"
                 .to_string(),
+        ),
+        (
+            "prompts".to_string(),
+            "setup-repo, declare-flows, add-agent, track-tasks, plan-day".to_string(),
         ),
         (
             "launchpad reads".to_string(),
@@ -1769,21 +1857,21 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, color: bool) -> String {
         (
             "--allow-launchpad".to_string(),
             format!(
-                "write_repo_contribution, write_board, record_activity · {}",
+                "write_repo_contribution, write_board, record_activity ({})",
                 state(launchpad)
             ),
         ),
         (
             "--allow-writes".to_string(),
-            format!("fetch, pull, push, commit, stash · {}", state(writes)),
+            format!("fetch, pull, push, commit, stash ({})", state(writes)),
         ),
         (
             "--allow-run".to_string(),
-            format!("run shell commands across repos · {}", state(run)),
+            format!("run shell commands across repos ({})", state(run)),
         ),
         (
             "--allow-open".to_string(),
-            format!("the local-only open tool · {}", state(open)),
+            format!("the local-only open tool ({})", state(open)),
         ),
     ];
     let w = rows
@@ -1793,7 +1881,7 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, color: bool) -> String {
         .unwrap_or(0);
     out.push_str(&section(
         "what an agent gets",
-        "reads are always on, anything that writes is opt-in",
+        "reads and prompts are always on, anything that writes is opt-in",
         color,
     ));
     for (what, why) in &rows {
@@ -1858,9 +1946,10 @@ mod tests {
     fn web_setup_hint_guides_to_root_and_super_fleet() {
         // Plain (color = false) so we assert on content, not escapes.
         let hint = web_setup_hint(&["/home/me/projects".to_string()], false);
-        assert!(hint.contains("Welcome to cohors"));
-        assert!(hint.contains("cohors web found no git repositories under /home/me/projects"));
+        assert!(hint.contains("No git repositories found"));
+        assert!(hint.contains("looked under /home/me/projects")); // where it looked
         assert!(hint.contains("cohors web --root ~/code")); // the sample command
+        assert!(hint.contains("cohors init") && hint.contains("cohors demo"));
         assert!(hint.contains("super fleet")); // the model note
         assert!(!hint.contains('\x1b')); // no ANSI when color is off
     }
@@ -1868,7 +1957,8 @@ mod tests {
     #[test]
     fn tui_welcome_guides_to_root_and_super_fleet() {
         let w = tui_welcome(&["/home/me/projects".to_string()], false);
-        assert!(w.contains("cohors found no git repositories under /home/me/projects"));
+        assert!(w.contains("No git repositories found"));
+        assert!(w.contains("looked under /home/me/projects"));
         assert!(!w.contains("cohors web")); // the bare-cohors variant, not web
         assert!(w.contains("cohors --root ~/code"));
         assert!(w.contains("super fleet"));
@@ -1881,18 +1971,62 @@ mod tests {
         assert!(!web_setup_hint(&["p".to_string()], false).contains('\x1b')); // …only when asked
     }
 
+    /// The launch screen reports what the scan found and the first things
+    /// worth doing, in the dashboard's own words, before any key is pressed.
     #[test]
-    fn super_fleet_welcome_lists_roots_and_prompts_to_launch() {
-        let w = super_fleet_welcome(&["~/projects".to_string(), "~/code".to_string()], false);
-        assert!(w.contains("Welcome to cohors"));
-        assert!(w.contains("super fleet")); // state 1: the fleet heading
-        assert!(w.contains("~/projects")); // each detected folder is listed
-        assert!(w.contains("~/code"));
-        assert!(w.contains("single folder")); // state 2: the scoped alternative
-        assert!(w.contains("cohors --root")); // …kept, not removed
-        assert!(w.contains("[enter]")); // launch key
-        assert!(w.contains("[q]")); // quit key
+    fn launch_screen_shows_the_headline_next_steps_and_keys() {
+        let now = 1_700_000_000;
+        let fleet = cohors_core::demo::fleet(now);
+        let (entries, board) = cohors_core::launchpad::demo();
+        let o = cohors_core::overview(&fleet, &entries, &board, now);
+        let roots = ["~/Main/code".to_string()];
+
+        let w = launch_screen(&o, &roots, false, false);
+        assert!(w.contains(&o.headline)); // real counts, not just a folder name
+        assert!(w.contains("~/Main/code")); // where it looked
+        assert!(w.contains("Do next"));
+        // The first steps are listed, most urgent first, with a shape mark…
+        for action in o.actions.iter().take(LAUNCH_STEPS) {
+            assert!(w.contains(&action.title), "{}", action.title);
+        }
+        assert!(w.find(&o.actions[0].title) < w.find(&o.actions[1].title));
+        assert!(w.contains('▲'));
+        // …and the rest are counted, not dumped.
+        let more = o.actions.len() - LAUNCH_STEPS;
+        assert!(w.contains(&format!("and {more} more in the dashboard")));
+        assert!(w.contains("enter  open the dashboard") && w.contains("q  quit"));
+        assert!(!w.contains("Looking in")); // only the first run lists folders
         assert!(!w.contains('\x1b'));
+        assert!(launch_screen(&o, &roots, false, true).contains('\x1b'));
+    }
+
+    /// A first run (no config) also says which folders were gathered and how
+    /// to look in just one of them.
+    #[test]
+    fn first_run_launch_screen_lists_the_folders_it_gathered() {
+        let now = 1_700_000_000;
+        let o = cohors_core::overview(
+            &cohors_core::demo::fleet(now),
+            &[],
+            &Default::default(),
+            now,
+        );
+        let roots = ["~/projects".to_string(), "~/code".to_string()];
+        let w = launch_screen(&o, &roots, true, false);
+        assert!(w.contains("gathered from 2 folders"));
+        assert!(w.contains("Looking in"));
+        assert!(w.contains("~/projects") && w.contains("~/code")); // each folder listed
+        assert!(w.contains("cohors --root <dir>")); // the scoped alternative
+        assert!(w.contains("enter  open the dashboard"));
+    }
+
+    /// A fleet with nothing to do still gets a launch screen that says so.
+    #[test]
+    fn launch_screen_with_nothing_to_do_says_so() {
+        let o = cohors_core::overview(&[], &[], &Default::default(), 0);
+        let w = launch_screen(&o, &["~/code".to_string()], false, false);
+        assert!(w.contains("nothing needs you right now"));
+        assert!(w.contains("enter  open the dashboard"));
     }
 
     /// The report groups by urgency: anything wanting attention is listed by
@@ -1905,11 +2039,11 @@ mod tests {
         let took = std::time::Duration::from_millis(840);
         let snaps = cohors_core::demo::fleet(now);
         let roots = ["/home/me/projects".to_string()];
-        let r = scan_report(&snaps, &roots, took, now, false);
+        let r = scan_report(&snaps, &roots, took, now, 140, false);
 
         assert!(r.contains("cohors")); // branded masthead
         // The report says what it actually did, not just what it found.
-        assert!(r.contains(&format!("scanned {} repos in 840ms", snaps.len())));
+        assert!(r.contains(&format!("scanned {} repositories in 840ms", snaps.len())));
         let mut calm = 0;
         for s in &snaps {
             let a = cohors_core::assess(s, now);
@@ -1926,20 +2060,80 @@ mod tests {
         // Calm repos collapse instead of repeating "up to date" a dozen times.
         assert_eq!(r.contains("up to date, nothing to do"), calm > 0);
 
-        // Next steps appear exactly when the fleet actually has that problem.
-        let sum = cohors_core::fleet_summary(&snaps, now);
+        // Each "Do next" step from the shared model appears as the command
+        // that starts it, and only the steps this fleet actually has.
+        let overview = cohors_core::overview(&snaps, &[], &Default::default(), now);
+        assert!(!overview.actions.is_empty());
+        for action in &overview.actions {
+            assert!(r.contains(action_command(action)), "{}", action.title);
+            assert!(r.contains(&action.title));
+        }
+        use cohors_core::ActionKind as K;
+        let has = |kind: K| overview.actions.iter().any(|a| a.kind == kind);
         assert_eq!(
-            r.contains("cohors pull --select behind"),
-            sum.behind > 0,
-            "pull suggestion should track the behind count"
+            r.contains("cohors pull --select 'behind,!diverged'"),
+            has(K::Pull)
         );
         assert_eq!(
-            r.contains("cohors push --select ahead"),
-            sum.unpushed > 0,
-            "push suggestion should track the unpushed count"
+            r.contains("cohors push --select 'ahead,!diverged'"),
+            has(K::Push)
         );
+
+        // The command a step suggests selects exactly the repos the step
+        // counted: no more (a repo with no remote must not be "published"),
+        // no fewer.
+        for action in &overview.actions {
+            let Some(query) = action_command(action).split("--select ").nth(1) else {
+                continue; // a step with no selector, e.g. `cohors launchpad`
+            };
+            if action.verb.is_none() {
+                continue; // a listing to look at, not an exact target set
+            }
+            let selector = parse_selector(query.trim_matches('\'')).unwrap();
+            let mut picked: Vec<String> =
+                cohors_core::resolve(&snaps, &selector, SortMode::Name, now)
+                    .into_iter()
+                    .map(|id| id.0)
+                    .collect();
+            let mut wanted = action.repos.clone();
+            picked.sort();
+            wanted.sort();
+            assert_eq!(picked, wanted, "`{query}` vs the step \"{}\"", action.title);
+        }
+        // The sync column says what is true in words (the old report printed
+        // "local" for anything without an upstream).
+        for line in overview.repos.iter().filter(|l| !l.reasons.is_empty()) {
+            let words = sync_words(line);
+            assert!(words.is_empty() || r.contains(&words), "{words}");
+        }
+        assert!(r.contains("level") || r.contains("ahead") || r.contains("behind"));
+        assert!(r.contains("Work at risk") && r.contains("Do next"));
+        // A repo with several reasons lists all of them.
+        let busy = overview.repos.iter().find(|l| l.reasons.len() > 1).unwrap();
+        assert!(r.contains(&busy.reasons.join("; ")));
+
+        // No line is ever wider than the terminal, at any width: a wrapped
+        // table cannot be read. Narrow terminals drop the branch column.
+        for width in [60, 80, 100, 110, 140, 200] {
+            let report = scan_report(&snaps, &roots, took, now, width, false);
+            for line in report.lines() {
+                assert!(
+                    line.chars().count() <= width,
+                    "{} columns at width {width}: {line}",
+                    line.chars().count()
+                );
+            }
+        }
+        let branch = &overview
+            .repos
+            .iter()
+            .find(|l| l.branch.contains('/'))
+            .unwrap()
+            .branch;
+        assert!(scan_report(&snaps, &roots, took, now, 200, false).contains(branch.as_str()));
+        assert!(!scan_report(&snaps, &roots, took, now, 80, false).contains(branch.as_str()));
         assert!(!r.contains('\x1b')); // no ANSI when colour is off
-        assert!(scan_report(&snaps, &roots, took, now, true).contains('\x1b')); // …and some when it is
+        assert!(scan_report(&snaps, &roots, took, now, 140, true).contains('\x1b')); // …and some when it is
     }
 
     /// A missing selector teaches instead of erroring: what the verb does, the
@@ -1954,7 +2148,8 @@ mod tests {
             false,
         );
         assert!(g.contains("cohors")); // masthead
-        assert!(g.contains("fetch · git fetch across the repos you pick"));
+        assert!(g.contains("fetch: git fetch across the repos you pick"));
+        assert!(g.contains("Pick what to act on")); // sentence-case headings
         assert!(g.contains("never touches your working tree")); // the safety note
         for (sel, _) in SELECTORS {
             assert!(
@@ -1987,26 +2182,37 @@ mod tests {
         let fleet = cohors_core::demo::fleet(now);
         let (entries, board) = cohors_core::launchpad::demo();
         let o = cohors_core::overview(&fleet, &entries, &board, now);
-        let plain = overview_report(&o, &["/code".to_string()], now, false);
+        let plain = overview_report(&o, &["/code".to_string()], now, 120, false);
         assert!(!plain.contains('\x1b'), "no ANSI without colour");
-        let do_next = plain.find("do next").expect("a do-next section");
-        let glance = plain.find("at a glance").expect("an at-a-glance section");
+        let do_next = plain.find("Do next").expect("a do-next section");
+        let glance = plain.find("At a glance").expect("an at-a-glance section");
         assert!(do_next < glance, "actions come before figures");
         assert!(plain.contains(&o.headline));
         assert!(plain.contains(&o.actions[0].title));
         assert!(plain.contains("not backed up") && plain.contains("commits, 7 days"));
-        // A step with a registry verb shows the exact command for it.
-        if let Some(action) = o.actions.iter().find(|a| a.verb.is_some()) {
-            let verb = action.verb.as_deref().unwrap();
-            assert!(plain.contains(&format!("cohors {verb} --select '{{\"ids\":")));
+        // Every step shows the command that starts it.
+        for action in &o.actions {
+            assert!(plain.contains(action_command(action)), "{}", action.title);
         }
-        assert!(overview_report(&o, &[], now, true).contains('\x1b'));
+        // It fits the terminal at any width: long reasons wrap, nothing spills.
+        for width in [60, 80, 100, 140] {
+            for line in overview_report(&o, &["/code".to_string()], now, width, false).lines() {
+                assert!(
+                    line.chars().count() <= width,
+                    "{} columns at width {width}: {line}",
+                    line.chars().count()
+                );
+            }
+        }
+        assert_eq!(wrap("one two three four", 9), ["one two", "three", "four"]);
+        assert_eq!(wrap("", 9), Vec::<String>::new());
+        assert!(overview_report(&o, &[], now, 120, true).contains('\x1b'));
     }
 
     #[test]
     fn overview_report_handles_an_empty_fleet() {
         let o = cohors_core::overview(&[], &[], &Default::default(), 0);
-        let plain = overview_report(&o, &["/code".to_string()], 0, false);
+        let plain = overview_report(&o, &["/code".to_string()], 0, 120, false);
         assert!(plain.contains("No repositories found."));
         assert!(plain.contains("cohors init"));
     }
@@ -2014,21 +2220,10 @@ mod tests {
     #[test]
     fn scan_report_handles_an_empty_fleet() {
         let took = std::time::Duration::from_millis(3);
-        let r = scan_report(&[], &["/home/me/projects".to_string()], took, 0, false);
-        assert!(r.contains("scanned 0 repos in 3ms"));
+        let r = scan_report(&[], &["/home/me/projects".to_string()], took, 0, 140, false);
+        assert!(r.contains("scanned 0 repositories in 3ms"));
         assert!(r.contains("nothing to report"));
-        assert!(!r.contains("needs you")); // no sections at all for an empty fleet
+        assert!(!r.contains("Do next")); // no sections at all for an empty fleet
         assert!(!r.contains('\x1b'));
-    }
-
-    #[test]
-    fn scoped_welcome_names_the_scoped_folder_and_prompts() {
-        let w = scoped_welcome(&["~/Main/code".to_string()], false);
-        assert!(w.contains("Welcome to cohors"));
-        assert!(w.contains("scoped")); // the mode heading
-        assert!(w.contains("~/Main/code")); // the single folder in focus
-        assert!(w.contains("[enter]"));
-        assert!(w.contains("[q]"));
-        assert!(!w.contains('\x1b'));
     }
 }

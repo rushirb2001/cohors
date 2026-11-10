@@ -1,27 +1,29 @@
 ---
 source: crates/cohors-tui/src/commands/launchpad.rs
-expression: "render_report(&fleet(), &board, false)"
+expression: "render_report(&fleet(), &board, 100, false)"
 ---
 
   cohors
-  launchpad · what each repo offers, and what is waiting in it
-  3 repos · 1 set up · 3 open tasks
+  launchpad: flows, agents and tasks across your repos
+  3 repositories, 1 set up, 3 open tasks
 
-  focus
+  Focus
   your cross-repo board, the short list you chose
-    ▸ Ship retries  pay-api · doing
+    ◆ Ship retries  pay-api
 
-  open tasks
-  ◆ doing · ✕ blocked · ○ todo, most urgent first
+  Open tasks
+  ◆ doing, ✕ blocked, ○ to do; most urgent first
     ▸ pay-api  3 open
       ◆ Task b  high  doing
       ✕ Task d  blocked
       ○ Task a  low
 
-  needs fixing
+  Needs fixing
   a .principia/repo.json that could not be read
     ▸ infra  repo.json is not valid JSON
 
-  not set up yet
-  in any of these, ask your agent: "set up this repo for the launchpad"
+  Not set up yet
+  1 repository with no launchpad file
     web
+    ▸ cohors agent run setup-repo
+      run it inside one; your agent writes the file
