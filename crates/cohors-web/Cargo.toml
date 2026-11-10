@@ -42,12 +42,13 @@ console_error_panic_hook = "0.1"
 # The page fetches the server's JSON (same `cohors-core` models) over WASM HTTP.
 gloo-net = { version = "0.6", features = ["http"] }
 gloo-timers = { version = "0.3", features = ["futures"] } # `--watch` poll interval
-js-sys = "0.3"                 # Date: a real clock for relative ages
-wasm-bindgen = "0.2"           # JsCast for measuring elements from events
-wasm-bindgen-futures = "0.4"   # spawn the async fetch
-# DOM measurement for the guided tour: find a target element and read its
-# on-screen rect so the spotlight lands on it.
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "DomRect", "Storage", "Location"] }
+js-sys = "0.3"                 # Date: a real clock, shown in local time
+wasm-bindgen = "0.2"           # JsValue, to hand a timestamp to Date
+wasm-bindgen-futures = "0.4"   # spawn the async fetches; await the clipboard
+# The few browser APIs the page calls directly: the theme attribute and its
+# saved choice (Document, Element, Storage), the route in the URL hash
+# (Location), and copy-to-clipboard (Navigator, Clipboard).
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "Storage", "Location", "Navigator", "Clipboard"] }
 
 # ── Native server half (host target only) ────────────────────────────────────
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

