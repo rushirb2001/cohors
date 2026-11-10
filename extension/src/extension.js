@@ -212,6 +212,8 @@ function runVisible(name, bin, args) {
         out(`Could not start cohors: ${e.message}\n${dim("Press any key to close this terminal.")}\n`);
         return;
       }
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
       child.stdout.on("data", out);
       child.stderr.on("data", out);
       child.on("error", (e) => {
@@ -322,14 +324,43 @@ function openRepo(repoPath, newWindow) {
 
 /* ───────── agents ───────── */
 
+// The full text of a prompt awaiting approval, as a read-only document. It
+// is served from memory, so what is read is exactly the text that was
+// resolved and will be approved, not whatever is on disk a moment later.
+const PROMPT_SCHEME = "cohors-prompt";
+const promptTexts = new Map();   // uri path -> text
+let promptCounter = 0;
+const promptProvider = { provideTextDocumentContent: (uri) => promptTexts.get(uri.path) || "" };
+
+async function showPromptText(prompt) {
+  const name = path.basename(prompt.file || "prompt.md").replace(/[^A-Za-z0-9._-]/g, "_");
+  const uri = vscode.Uri.from({ scheme: PROMPT_SCHEME, path: `/${++promptCounter}/${name}` });
+  promptTexts.set(uri.path, prompt.text);
+  if (promptTexts.size > 20) promptTexts.delete(promptTexts.keys().next().value);
+  const doc = await vscode.workspace.openTextDocument(uri);
+  await vscode.window.showTextDocument(doc, { preview: true });
+}
+
+// How the gate asks. A flow is a yes or no. For an agent or a task the
+// dialog shows the start of the prompt and offers the whole of it; choosing
+// that opens it read-only and asks again without covering it.
+async function confirmWithUser({ message, detail, action, prompt }) {
+  if (!prompt) return (await vscode.window.showWarningMessage(message, { modal: true, detail }, action)) === action;
+  const SHOW = "Show full prompt";
+  const pick = await vscode.window.showWarningMessage(message, { modal: true, detail }, action, SHOW);
+  if (pick === action) return true;
+  if (pick !== SHOW) return false;
+  await showPromptText(prompt);
+  return (await vscode.window.showInformationMessage(message, action, "Cancel")) === action;
+}
+
 // Anything a repository supplies (a flow's command line, a declared agent's
-// prompt, a task's text) passes through this gate first: the window must be
-// trusted, and the user must have been shown what runs and where. Approvals
-// live in memory for this session only. See src/gate.js.
+// prompt, a task's text) passes through this gate: the window must be
+// trusted, and the user must have been shown what actually runs, and where.
+// Approvals live in memory for this session only. See src/gate.js.
 const gate = Gate.create({
   isTrusted: () => vscode.workspace.isTrusted,
-  confirm: async ({ message, detail, action }) =>
-    (await vscode.window.showWarningMessage(message, { modal: true, detail }, action)) === action,
+  confirm: confirmWithUser,
 });
 
 // Report why the gate said no. A declined prompt needs no second message.
@@ -343,19 +374,38 @@ const runnerLabel = (id) => {
   return r ? r.label : "";
 };
 
-// Ask cohors for the command, open a terminal where it says, type it in.
-// The command string is cohors's: it is sent exactly as returned.
-// `request` is the gate request when what is being started was declared by a
-// repository (an agent or a task); cohors's own prompts pass none.
-async function launch(kind, opts, request) {
-  if (request) {
-    const allowed = await gate.permit(request);
-    if (!allowed.ok) return void refused(allowed);
-  }
+// cohors's own launches: its shipped prompts (setup-repo, plan-day, …),
+// starting work in a repository, resuming a session. Ask cohors for the
+// command, open a terminal where it says, and type the command exactly as
+// returned. Nothing a repository wrote is involved, so there is no gate; a
+// repository's agents and tasks go through `launchDeclared` instead.
+async function launch(kind, opts) {
+  if (kind === "agent" || kind === "task") throw new Error("declared agents and tasks must go through the gate");
   try {
     const r = await agent.command(kind, opts);
     terminal(r.cwd, r.command, r.label);
-    nudge(1500);   // the launch is recorded, and a task may now be linked
+    nudge(1500);   // the launch is recorded
+  } catch (e) { fail(e); }
+}
+
+// A repository's declared agent or task: resolve, show, run (src/gate.js).
+// cohors is asked for the launch first (that writes the prompt and starts
+// nothing); the user is shown the text in that answer; and the command from
+// that same answer is what is typed. Nothing is resolved twice.
+async function launchDeclared(kind, opts) {
+  try {
+    const result = await gate.launch({
+      repo: opts.repo,
+      kind,
+      resolve: () => agent.command(kind, opts),
+      readFile: (file) => fs.readFileSync(file, "utf8"),
+      runnerLabel,
+      run: (plan) => {
+        terminal(plan.cwd, plan.command, plan.label);
+        nudge(1500);   // a task may now be linked to its conversation
+      },
+    });
+    if (!result.ok) refused(result);
   } catch (e) { fail(e); }
 }
 
@@ -386,19 +436,14 @@ async function runFlow(id, flowId) {
 
 // A repository's declared agent, through the gate.
 function runAgent(id, agentId, runner) {
-  const repo = repoWithPath(id), entry = entryById(id);
-  const decl = entry && ((entry.contribution || {}).agents || []).find((a) => a.id === agentId);
-  if (!repo || !decl) return void fail(new Error("that agent is no longer declared by this repository."));
-  return launch("agent", { repo: repo.path, agent: decl.id, runner }, Gate.agentRequest(repo.path, decl, runnerLabel(runner)));
+  const repo = repoWithPath(id);
+  if (!repo) return undefined;
+  return launchDeclared("agent", { repo: repo.path, agent: String(agentId || ""), runner });
 }
 
-// A repository's task, through the gate. `fallback` describes it when the
-// task is named by the focus board but not listed in the launchpad file.
-function runTask(repo, taskId, runner, fallback) {
-  const entry = entryById(repo.id);
-  const task = (entry && ((entry.contribution || {}).tasks || []).find((t) => t.id === taskId)) || fallback;
-  if (!task) return void fail(new Error("that task is no longer listed by this repository."));
-  return launch("task", { repo: repo.path, task: taskId, runner }, Gate.taskRequest(repo.path, task, runnerLabel(runner)));
+// A repository's task, through the gate.
+function runTask(repo, taskId, runner) {
+  return launchDeclared("task", { repo: repo.path, task: String(taskId || ""), runner });
 }
 
 // For the command palette, where there is no picker on screen: choose a
@@ -490,10 +535,6 @@ async function onMessage(m) {
       const repo = repoWithPath(m.id);
       return repo ? void terminal(repo.path, "", repo.name) : undefined;
     }
-    case "reveal": {
-      const repo = repoWithPath(m.id);
-      return repo ? vscode.commands.executeCommand("revealFileInOS", vscode.Uri.file(repo.path)) : undefined;
-    }
     case "verb":
       return runVerb(String(m.verb), m.all ? { all: true } : { ids: (m.ids || []).map(String) });
     case "act":
@@ -539,8 +580,7 @@ async function onMessage(m) {
       const item = ((lastData && lastData.launchpad && lastData.launchpad.board.focus) || []).find((f) => f.id === m.item);
       const repo = item && lastData.overview.repos.find((r) => r.name === item.repo && r.path && path.isAbsolute(r.path));
       if (!item || !repo) return void fail(new Error("that focus item does not point at a repository cohors knows."));
-      const taskId = item.ref || item.id;
-      return runTask(repo, taskId, m.runner, { id: taskId, title: item.title, agent: item.agent });
+      return runTask(repo, item.ref || item.id, m.runner);
     }
     case "resume": {
       const repo = repoWithPath(m.id);
@@ -693,6 +733,7 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider("cohors.fleet", tree),
+    vscode.workspace.registerTextDocumentContentProvider(PROMPT_SCHEME, promptProvider),
     vscode.commands.registerCommand("cohors.show", show),
     vscode.commands.registerCommand("cohors.refresh", () => refresh(true)),
     vscode.commands.registerCommand("cohors.fetchAll", () => runVerb("fetch", { all: true })),
@@ -745,8 +786,10 @@ function activate(context) {
   };
   // A repository's launchpad file, in any open workspace folder.
   watch("**/.principia/*.json", "workspace launchpad files");
-  // The cross-repo focus board, which lives in the home directory.
-  watch(new vscode.RelativePattern(vscode.Uri.file(path.join(os.homedir(), ".principia")), "*.json"), "the focus board");
+  // The cross-repo focus board, which lives in the home directory (or where
+  // PRINCIPIA_HOME says, the same override cohors itself honours).
+  const boardHome = process.env.PRINCIPIA_HOME || path.join(os.homedir(), ".principia");
+  watch(new vscode.RelativePattern(vscode.Uri.file(boardHome), "*.json"), "the focus board");
   // Branch switches and commits move HEAD; staging and committing move the index.
   for (const f of vscode.workspace.workspaceFolders || []) {
     watch(new vscode.RelativePattern(f, ".git/{HEAD,index}"), `${f.name} git state`);

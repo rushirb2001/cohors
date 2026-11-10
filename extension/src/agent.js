@@ -11,10 +11,17 @@
 //     {"prompts":[{"id","title","summary","needs_repo"}]}
 //   cohors agent command <kind> [--runner <id>] [--repo <path>] [--agent <id>]
 //                               [--task <id>] [--session <id>]
-//     {"command","cwd","runner","label","prompt_file","linked","session"}
-//     Non-zero exit with a one-line reason on stderr when it cannot.
+//     {"command","cwd","runner","label","prompt_file","prompt","linked","session"}
+//     `--repo` takes a path or a fleet repository name. `prompt` is the exact
+//     text the runner will receive (null for start/resume). `command` is
+//     ready to type into a terminal on every platform and must not be built,
+//     edited or re-quoted here. On failure: non-zero exit, `Error: <reason>`
+//     on stderr.
 //
-// `cohors agent command` writes the prompt file and records the launch itself.
+// `cohors agent command` writes the prompt file, links a task to its
+// conversation and records the launch itself. It starts nothing: the
+// extension types `command` into a terminal, and for anything a repository
+// wrote it does so only after showing `prompt` to the user (src/gate.js).
 
 const { CohorsError } = require("./cohors");
 
@@ -96,6 +103,9 @@ function create(cli) {
       runner: str(r.runner),
       label: str(r.label) || "cohors agent",
       prompt_file: str(r.prompt_file) || null,
+      // The exact text the runner will receive. Older cohors builds do not
+      // send it; the gate then reads `prompt_file` instead (src/gate.js).
+      prompt: typeof r.prompt === "string" ? r.prompt : null,
       linked: r.linked === true,
       session: str(r.session) || null,
     };

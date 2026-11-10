@@ -77,6 +77,8 @@ switch (command) {
       runner: runner.id,
       label: `${runner.label}: ${what}`,
       prompt_file: kind === "resume" || kind === "start" ? null : `/tmp/cohors/${what}.md`,
+      // The exact text the runner would receive; null where there is none.
+      prompt: kind === "resume" || kind === "start" ? null : `Stand-in prompt for ${what}.\nThe real cohors puts the full instructions here.`,
       linked: !!session && kind !== "resume",
       session,
     });
