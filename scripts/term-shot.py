@@ -53,6 +53,15 @@ ANSI16 = [
 THEMES = {
     "dark": {"bg": "#1c1b1a", "fg": "#d9d6d0", "osc": "1c1c/1b1b/1a1a"},
     "light": {"bg": "#f7f7f5", "fg": "#1f1e1c", "osc": "f7f7/f7f7/f5f5"},
+    # A colour scheme that is neither grey nor black, to check that fills are
+    # derived from the real background.
+    "solarized": {"bg": "#002b36", "fg": "#93a1a1", "osc": "0000/2b2b/3636"},
+    # Terminals that do not answer "what is your background colour?" at all
+    # (some embedded ones do not). The program must not guess.
+    "dark-silent": {"bg": "#1c1b1a", "fg": "#d9d6d0", "osc": None},
+    "light-silent": {"bg": "#f7f7f5", "fg": "#1f1e1c", "osc": None},
+    # A terminal that answers, but only a second and a half after being asked.
+    "dark-late": {"bg": "#1c1b1a", "fg": "#d9d6d0", "osc": "1c1c/1b1b/1a1a", "delay": 1.5},
 }
 
 
@@ -93,6 +102,7 @@ class Screen:
         self.blank = (" ", Style().key())
         self.grid = [[self.blank] * cols for _ in range(rows)]
         self.replies = []  # answers to queries the program made
+        self.late = []  # (when, answer) for a terminal that is slow to answer
 
     # ── writing ──────────────────────────────────────────────────────────────
     def put(self, ch):
@@ -228,9 +238,16 @@ class Screen:
                     if j >= n:
                         return text[i:]
                     body = text[i + 2:j]
+                    silent = THEMES[theme]["osc"] is None
                     if body.startswith("11;?"):  # "what is your background colour?"
-                        self.replies.append("\x1b]11;rgb:%s\x1b\\" % THEMES[theme]["osc"])
-                    elif body.startswith("10;?"):
+                        if not silent:
+                            answer = "\x1b]11;rgb:%s\x1b\\" % THEMES[theme]["osc"]
+                            delay = THEMES[theme].get("delay")
+                            if delay:
+                                self.late.append((time.time() + delay, answer))
+                            else:
+                                self.replies.append(answer)
+                    elif body.startswith("10;?") and not silent:
                         self.replies.append("\x1b]10;rgb:d9d9/d6d6/d0d0\x1b\\")
                     i = j + (1 if text[j] == "\x07" else 2)
                 elif nxt == "7":
@@ -360,6 +377,9 @@ def main():
         nonlocal pending, alive, screen
         deadline = time.time() + ms / 1000
         while alive and time.time() < deadline:
+            for due, answer in [item for item in screen.late if item[0] <= time.time()]:
+                os.write(fd, answer.encode())
+                screen.late.remove((due, answer))
             ready, _, _ = select.select([fd], [], [], max(0, min(0.05, deadline - time.time())))
             if not ready:
                 continue
