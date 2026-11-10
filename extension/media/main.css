@@ -202,6 +202,28 @@ input[type="checkbox"]:checked::after {
 
 /* ── Severity mark: the shape carries it ───────────────────────────────── */
 
+/* Severity blocks: the word in a small filled rectangle. Filled only where
+   work could be lost (risk, warning); a note or an info is an outline, so it
+   never competes; a clean row keeps an empty slot so names line up.
+   The fills are the same muted brick and ochre the terminal and the browser
+   use, lighter on a dark theme and deeper on a light one. A high-contrast
+   theme uses its own error and warning colours instead. */
+body { --fill-risk: #b4483f; --fill-warn: #a8742a; --on-fill: #ffffff; }
+body.vscode-dark { --fill-risk: #d9776e; --fill-warn: #cfa255; --on-fill: #1c1b1a; }
+body.vscode-high-contrast, body.vscode-high-contrast-light { --fill-risk: var(--risk); --fill-warn: var(--warn); --on-fill: var(--bg); }
+.blk {
+  display: inline-block; flex: none; box-sizing: border-box; width: 3.4em; margin-right: 8px;
+  padding: 0; border: 1px solid transparent; border-radius: 2px;
+  font: 600 0.8em/1.5 var(--vscode-editor-font-family, monospace); letter-spacing: 0.05em;
+  text-align: center; vertical-align: 1px; forced-color-adjust: none;
+}
+.blk.risk { background: var(--fill-risk); color: var(--on-fill); }
+.blk.warn { background: var(--fill-warn); color: var(--on-fill); }
+.blk.note, .blk.info { border-color: var(--line); color: var(--fg-2); }
+.blk.none { visibility: hidden; }
+/* The line under a name starts where the name does, past the block. */
+.under-blk { padding-left: calc(3.4em * 0.8 + 8px); }
+
 .mark { display: inline-block; flex: none; width: 9px; height: 9px; margin-right: 8px; vertical-align: baseline; forced-color-adjust: none; }
 .mark.risk { background: var(--risk); clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .mark.warn { background: var(--warn); transform: rotate(45deg) scale(0.82); }
@@ -222,8 +244,10 @@ input[type="checkbox"]:checked::after {
 .fig { background: var(--bg); padding: 10px 12px; min-width: 0; }
 .fig .k, .fig .q { font-size: 0.94em; color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fig .v { margin-top: 2px; font-size: 2em; font-weight: 600; line-height: 1.15; letter-spacing: -0.02em; }
-.fig.risk .v { color: var(--risk); }
-.fig.warn .v { color: var(--warn); }
+/* A figure that needs attention is a filled tile, not just a tinted number. */
+.fig.risk { background: var(--fill-risk); }
+.fig.warn { background: var(--fill-warn); }
+.fig.risk :is(.k, .v, .q), .fig.warn :is(.k, .v, .q) { color: var(--on-fill); }
 
 /* ── Tables ────────────────────────────────────────────────────────────── */
 

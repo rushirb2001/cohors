@@ -208,11 +208,23 @@ async function view() {
     assert.strictEqual(n("stale"), f.stale_fetch_repos);
   });
 
-  await check("severity is a shape with a label, on every row", () => {
+  await check("severity is a worded block on every row, and a labelled shape elsewhere", () => {
     const all = V.page(state, demoUi()).find((s) => s.id === "all").html;
-    const marks = all.match(/<span class="mark (risk|warn|note|ok)" role="img" aria-label="[^"]+"/g) || [];
-    assert.strictEqual(marks.length, state.overview.repos.length);
+    // Every repository row leads with a severity block: a word for anything
+    // that has something to say, an empty slot for a clean repository.
+    const blocks = all.match(/<span class="blk (risk|warn|note|info|none)" title="[^"]+">(RISK|WARN|NOTE|INFO|)<\/span>/g) || [];
+    assert.strictEqual(blocks.length, state.overview.repos.length);
+    const worded = blocks.filter((b) => !b.includes("blk none")).length;
+    assert.strictEqual(worded, state.overview.repos.filter((r) => r.severity !== "ok").length);
     for (const sev of Object.keys(V.SEVERITY)) assert(/class="mark (risk|warn|note|ok)"/.test(V.mark(sev)));
+    // The severity block: filled words for risk and warning, quiet ones for
+    // the rest, and an empty slot of the same width for a clean repository.
+    assert.strictEqual(V.sevBlock("risk"), '<span class="blk risk" title="' + V.SEVERITY.risk.label + '">RISK</span>');
+    assert(/class="blk warn"[^>]*>WARN</.test(V.sevBlock("warn")));
+    assert(/class="blk note"[^>]*>NOTE</.test(V.sevBlock("notice")));
+    assert(/class="blk info"[^>]*>INFO</.test(V.sevBlock("info")));
+    assert(/class="blk none"[^>]*><\/span>/.test(V.sevBlock("ok")));
+    assert(/class="blk none"/.test(V.sevBlock("something-new")), "an unknown severity is treated as clean");
   });
 
   await check("the Repositories filter, views and pick narrow the table", () => {

@@ -107,6 +107,20 @@
     return `<span class="mark ${s.cls}" role="img" aria-label="${s.label}" title="${s.label}"></span>`;
   }
 
+  // The severity block that leads a row in the lists a person scans for
+  // trouble (Do next, Work at risk, the repository tables): a filled RISK or
+  // WARN, a quiet outlined NOTE or INFO, and an empty slot of the same width
+  // for a clean repository, so names stay in one column. The word is the
+  // signal; the colour only reinforces it. The terminal dashboard and the
+  // browser draw the same block.
+  const BLOCK = { risk: "RISK", warn: "WARN", notice: "NOTE", info: "INFO" };
+  function sevBlock(sev) {
+    const word = BLOCK[sev] || "";
+    const s = SEVERITY[sev] || SEVERITY.ok;
+    const cls = word ? (sev === "notice" ? "note" : sev) : "none";
+    return `<span class="blk ${cls}" title="${s.label}">${word}</span>`;
+  }
+
   /* ───────── buttons ───────── */
 
   // Every control carries `data-do` (what it does) plus plain data arguments;
@@ -321,7 +335,7 @@
   function repoTable(m, list) {
     const rows = list.map((r) => `<tr data-repo="${esc(r.id)}">
       <td class="chk"><input type="checkbox" data-select="${esc(r.id)}" aria-label="Select ${esc(r.name)}"></td>
-      <td class="clip">${mark(r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(r.id)}">${esc(r.name)}</button></td>
+      <td class="clip">${sevBlock(r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(r.id)}">${esc(r.name)}</button></td>
       <td class="dim clip c-branch">${ico("git-branch")}${esc(r.branch)}</td>
       <td class="clip">${upstreamCell(r)}</td>
       ${numCell(r.staged)}${numCell(r.modified)}${numCell(r.untracked)}
@@ -369,7 +383,7 @@
 
     const actions = m.o.actions || [];
     out.push(sec("next", `${heading("zap", "Do next")}${block(actions.length
-      ? actions.map((a, i) => `<div class="todo">${mark(a.severity)}<span class="t">${esc(a.title)}</span>${nextButton(a, i)}<span class="d">${esc(a.why)}</span></div>`).join("")
+      ? actions.map((a, i) => `<div class="todo">${sevBlock(a.severity)}<span class="t">${esc(a.title)}</span>${nextButton(a, i)}<span class="d">${esc(a.why)}</span></div>`).join("")
       : blank("Nothing needs doing. Every repository is pushed, fetched and clean."))}`));
 
     out.push(sec("figs", figures(m)));
@@ -377,7 +391,7 @@
     const risky = m.repos.filter((r) => r.at_risk);
     out.push(sec("risk", `${heading("warning", "Work at risk", risky.length)}${block(risky.length
       ? `<table class="risk"><thead class="hid"><tr><th class="w-risk">Repository</th><th>Why</th><th class="w-age">Last commit</th><th class="w-act">Next step</th></tr></thead><tbody>${risky.map((r) => `<tr data-repo="${esc(r.id)}">
-          <td class="w-risk"><div class="clip">${mark(r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(r.id)}">${esc(r.name)}</button></div><div class="sub clip">${ico("git-branch")}${esc(r.branch)}</div></td>
+          <td class="w-risk"><div class="clip">${sevBlock(r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(r.id)}">${esc(r.name)}</button></div><div class="sub clip under-blk">${ico("git-branch")}${esc(r.branch)}</div></td>
           <td class="wrap">${esc(cap((r.reasons || []).join(", ")))}</td>
           <td class="n r w-age">${esc(r.commit ? age(r.commit.timestamp, m.now) : "")}</td>
           <td class="r w-act">${r.action ? btn(r.action.label, { do: "repo-action", id: r.id }, { link: true }) : ""}</td></tr>`).join("")}</tbody></table>`
@@ -668,7 +682,7 @@
     const unset = (m.l.repos || []).filter((e) => !e.configured).map((e) => ({ e, r: m.byId.get(e.id) })).filter((x) => x.r);
     out.push(sec("unset", `${heading("repo", "Not set up", unset.length)}${block(unset.length
       ? `<table><thead class="hid"><tr><th class="w-name">Repository</th><th>Path</th><th class="w-setup">Set up</th></tr></thead><tbody>${unset.map((x) => `<tr data-repo="${esc(x.r.id)}">
-          <td class="clip w-name">${mark(x.r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(x.r.id)}">${esc(x.r.name)}</button></td>
+          <td class="clip w-name">${sevBlock(x.r.severity)}<button type="button" class="link name" data-do="detail" data-id="${esc(x.r.id)}">${esc(x.r.name)}</button></td>
           <td class="dim clip">${x.e.invalid ? `<span class="bad">Launchpad file is not valid: ${esc(x.e.invalid)}</span>` : `<span class="mono">${esc(tilde(x.r.path || "", m.home))}</span>`}</td>
           <td class="r w-setup">${x.r.path ? agentBtn(m, x.e.invalid ? "Fix with an agent" : "Set up with an agent", { do: "prompt", kind: "setup-repo", id: x.r.id }, { link: true }) : ""}</td></tr>`).join("")}</tbody></table>`
       : blank("Every repository has a launchpad file."),
@@ -763,7 +777,7 @@
   }
 
   return {
-    esc, ico, age, ago, tilde, plural, count, cap, mark, markSvg, markRects, btn,
+    esc, ico, age, ago, tilde, plural, count, cap, mark, sevBlock, markSvg, markRects, btn,
     model, filterRepos, agentState, VIEWS, PAGES, SEVERITY,
     shell, rail, page, detail, problem,
     overview, repositories, tasks, standup, devices,
