@@ -507,6 +507,39 @@ async function adapter() {
     await assert.rejects(cli.json(["--version"]), (e) => e.kind === "parse");
   });
 
+  await check("with two installs, the one that can do the job is used, not the first on the PATH", async () => {
+    if (process.platform === "win32") return; // the stand-ins are shell scripts
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cohors-two-"));
+    try {
+      // An old cohors (no `overview`) in the first directory, a current one
+      // in the second, both calling themselves the same version.
+      const install = (name, body) => {
+        fs.mkdirSync(path.join(dir, name));
+        const file = path.join(dir, name, "cohors");
+        fs.writeFileSync(file, `#!/bin/sh\n${body}\n`, { mode: 0o755 });
+        return file;
+      };
+      const old = install("old", `case "$1" in --version) echo "cohors 0.6.0";; *) echo "error: unrecognized subcommand '$1'" >&2; exit 2;; esac`);
+      const current = install("new", `case "$1" in --version) echo "cohors 0.6.0";; overview) echo '{}';; *) exit 0;; esac`);
+      const dirs = async () => [path.join(dir, "old"), path.join(dir, "new"), path.join(dir, "new")];
+
+      const picked = await Cohors.create(() => ({ roots: [] }), { searchDirs: dirs }).locate();
+      assert.strictEqual(picked.path, current);
+      assert.deepStrictEqual(picked.passedOver, [old]);
+
+      // Only the old one installed: it is used, and the error names the file
+      // instead of a bare "update cohors".
+      const onlyOld = Cohors.create(() => ({ roots: [] }), { searchDirs: async () => [path.join(dir, "old")] });
+      assert.strictEqual((await onlyOld.locate()).outdated, true);
+      await assert.rejects(onlyOld.json(["overview", "--json"]),
+        (e) => e.kind === "unsupported" && e.message.includes(old) && e.message.includes("cohors.binaryPath"));
+
+      // None installed at all.
+      const none = await Cohors.create(() => ({ roots: [] }), { searchDirs: async () => [dir] }).locate();
+      assert(none.path === null && /not found/.test(none.reason));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
   await check("machine-local extras: threads, the pending intent, path containment", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cohors-check-"));
     try {

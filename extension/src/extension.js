@@ -29,10 +29,15 @@ let refreshing = false, lastRefresh = 0, lastData = null;
 let pendingReveal = null;   // a page/repo to show once the webview is ready
 
 const cfg = () => vscode.workspace.getConfiguration("cohors");
+// What the extension ran and what came back, in the Output panel under
+// "cohors". When the dashboard shows something unexpected, this says which
+// cohors binary is in use and what each command returned.
+const output = vscode.window.createOutputChannel("cohors", { log: true });
+
 const cli = Cohors.create(() => ({
   binaryPath: cfg().get("binaryPath", ""),
   roots: cfg().get("roots", []),
-}));
+}), { log: (line) => output.info(line) });
 const agent = Agent.create(cli);
 
 const workspaceFolders = () => (vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath);
@@ -735,6 +740,13 @@ function activate(context) {
     vscode.window.registerTreeDataProvider("cohors.fleet", tree),
     vscode.workspace.registerTextDocumentContentProvider(PROMPT_SCHEME, promptProvider),
     vscode.commands.registerCommand("cohors.show", show),
+    // vscode://rushirb2001.cohors/show opens the dashboard, so a terminal, a
+    // README or an installer can link straight to it. Any page can open such a
+    // link, so it does exactly one harmless thing: show the view. It never
+    // runs a command, and it ignores every other path and all parameters.
+    vscode.window.registerUriHandler({
+      handleUri(uri) { if (uri.path === "/show") show(); },
+    }),
     vscode.commands.registerCommand("cohors.refresh", () => refresh(true)),
     vscode.commands.registerCommand("cohors.fetchAll", () => runVerb("fetch", { all: true })),
     vscode.commands.registerCommand("cohors.setupRepo", async () => {

@@ -61,6 +61,12 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   dashboard `a` on a repo does the same after asking.
 - **A VS Code extension** (`extension/`): the same overview, repositories, tasks and standup in an editor
   tab that follows your theme, reading everything from the `cohors` binary.
+- **The extension says what it is doing.** The Output panel has a "cohors"
+  channel with the binary in use and each command it ran, how long it took and
+  whether it worked. `vscode://rushirb2001.cohors/show` opens the dashboard from
+  a terminal or a link (it only ever opens the view).
+- **`scripts/package-extension.py`** builds the extension's `.vsix` with nothing
+  but Python, so a release needs no Node tooling.
 - **The launchpad contract is in this repository**, at `spec/v1/SPEC.md`, with
   its JSON Schemas.
 - **`push` publishes a branch that was never pushed** (`git push -u origin
@@ -135,6 +141,11 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Fixed
 
+- The VS Code extension used the first `cohors` on the PATH, which on a machine
+  with two installs (an older Homebrew or pip one ahead of a newer cargo one,
+  both reporting the same version) was the one without `cohors overview`, so the
+  dashboard could not read anything. It now uses the first one that can do the
+  job, and when none can, the message names the file that is too old.
 - A terminal that did not say what its background was used to be treated as
   light, which could put light fills on a dark terminal. Not knowing is now its
   own case, and nothing is painted that depends on the answer.

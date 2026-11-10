@@ -79,15 +79,53 @@ function usualDirs() {
   ];
 }
 
+// Can this binary do what the dashboard needs? `overview` is the command the
+// whole view is built from, and it did not exist in the first release. Asking
+// for its help text is quick, scans nothing, and fails on a cohors too old to
+// have it.
+function supportsOverview(file) {
+  return new Promise((resolve) => {
+    cp.execFile(file, ["overview", "--help"], { timeout: 5000, windowsHide: true },
+      (err) => resolve(!err));
+  });
+}
+
 /**
  * @param {() => {binaryPath?: string, roots?: string[], configPath?: string}} getConfig
  *   Read on every call, so a settings change takes effect on the next refresh.
+ * @param {{searchDirs?: () => Promise<string[]>, log?: (line: string) => void}} [opts]
+ *   `searchDirs` replaces where the binary is looked for (the checks use it).
+ *   `log` is told which binary was chosen and what each call did.
  */
-function create(getConfig) {
-  let located = null;   // { path } | { path: null, reason, configured }
+function create(getConfig, opts = {}) {
+  let located = null;   // { path, ... } | { path: null, reason, configured }
+  const log = (line) => { try { if (opts.log) opts.log(line); } catch { /* a log must never break a call */ } };
+
+  // Every directory a cohors could be in, most likely first.
+  async function searchDirs() {
+    if (opts.searchDirs) return opts.searchDirs();
+    const sep = WINDOWS ? ";" : ":";
+    return [
+      ...(await loginPath()).split(":"),
+      ...String(process.env.PATH || "").split(sep),
+      ...usualDirs(),
+    ].filter(Boolean);
+  }
 
   async function locate() {
     if (located) return located;
+    await find();
+    if (located.path) {
+      log(`using ${located.path}${located.configured ? " (the cohors.binaryPath setting)" : ""}`
+        + (located.passedOver && located.passedOver.length ? `; passed over ${located.passedOver.join(", ")}: too old to have \`cohors overview\`` : "")
+        + (located.outdated ? "; it is too old to have `cohors overview`, and no newer cohors was found" : ""));
+    } else {
+      log(`no cohors to run: ${located.reason}`);
+    }
+    return located;
+  }
+
+  async function find() {
     const configured = String((getConfig().binaryPath || "")).trim();
     if (configured) {
       const p = expandHome(configured);
@@ -96,17 +134,34 @@ function create(getConfig) {
         : { path: null, configured: true, reason: `The cohors.binaryPath setting points at ${configured}, which is not an executable file.` };
       return located;
     }
-    const sep = WINDOWS ? ";" : ":";
-    const dirs = [
-      ...(await loginPath()).split(":"),
-      ...String(process.env.PATH || "").split(sep),
-      ...usualDirs(),
-    ].filter(Boolean);
-    for (const d of dirs) {
+    // Every cohors on the machine, each once (a directory can be listed twice,
+    // and two directories can link to the same file).
+    const found = [];
+    const seen = new Set();
+    for (const d of await searchDirs()) {
       const p = path.join(d, BIN_NAME);
-      if (isExecutable(p)) { located = { path: p, configured: false }; return located; }
+      if (!isExecutable(p)) continue;
+      let real = p;
+      try { real = fs.realpathSync(p); } catch { /* keep the path as given */ }
+      if (seen.has(real)) continue;
+      seen.add(real);
+      found.push(p);
     }
-    located = { path: null, configured: false, reason: "cohors was not found on your PATH." };
+    if (!found.length) {
+      located = { path: null, configured: false, reason: "cohors was not found on your PATH." };
+      return located;
+    }
+    // The first one on the PATH is not always the one to use: a machine can
+    // have an old cohors from one installer ahead of a new one from another,
+    // both reporting the same version. Take the first that can do the job.
+    for (const p of found) {
+      if (await supportsOverview(p)) {
+        located = { path: p, configured: false, passedOver: found.slice(0, found.indexOf(p)) };
+        return located;
+      }
+    }
+    // None can: use the first, and let the error say which file is too old.
+    located = { path: found[0], configured: false, outdated: true };
     return located;
   }
 
@@ -129,10 +184,12 @@ function create(getConfig) {
     const bin = await locate();
     if (!bin.path) throw new CohorsError("missing", bin.reason, { configured: bin.configured });
     const full = [...globalArgs(), ...args];
+    const started = Date.now();
     return new Promise((resolve, reject) => {
       cp.execFile(bin.path, full,
         { encoding: "utf8", timeout: opts.timeout || 60000, maxBuffer: 64 << 20, cwd: opts.cwd, windowsHide: true },
         (err, stdout, stderr) => {
+          log(`cohors ${full.join(" ")}: ${err ? `failed (${String(stderr || err.message).trim().split("\n")[0]})` : `ok, ${String(stdout).length} bytes`} in ${Date.now() - started} ms`);
           if (!err) return resolve(String(stdout));
           const text = String(stderr || "").trim();
           if (err.code === "ENOENT") {
@@ -143,9 +200,11 @@ function create(getConfig) {
             return reject(new CohorsError("timeout", `cohors ${args[0]} did not finish in time.`, { args: full }));
           }
           if (/unrecognized subcommand|unexpected argument/.test(text)) {
+            // Name the file: with two installs on one machine, "update cohors"
+            // does not say which one is being run.
             return reject(new CohorsError("unsupported",
-              `This version of cohors does not have \`cohors ${args.slice(0, 2).join(" ")}\`. Update cohors.`,
-              { stderr: text, args: full }));
+              `${bin.path} is an older cohors without \`cohors ${args.slice(0, 2).join(" ")}\`. Update it, or point the cohors.binaryPath setting at a newer one.`,
+              { stderr: text, args: full, path: bin.path }));
           }
           // The first line is the reason; the rest is usage noise.
           const first = text.split("\n").map((l) => l.trim()).find(Boolean) || `cohors ${args[0]} exited with code ${err.code}.`;
