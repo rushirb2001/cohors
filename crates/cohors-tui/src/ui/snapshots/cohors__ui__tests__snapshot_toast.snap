@@ -23,10 +23,10 @@ expression: "render_to_string(&app, 120, 40)"
 │ ◆ payments              main           2 commits not pushed, 4 uncommitted files, 1 stash                   2h  Push │
 │ ◆ web-app               feat/checkout  5 commits behind, 7 uncommitted files                               20m  Pull │
 ╰─  ⏎  open   e  unreadable   P  push 1   p  pull 1   c  review changes  ──────────────────────────────────────────────╯
-╭─  3  ✓ Open tasks  0 ─────────────────────────╮ ╭─  4  ● Commits, last 7 days  0 ────────────────────────────────────╮
-│ No launchpad files yet. Tasks appear here     │ │ No commits in the last 7 days.                                     │
-│ once a repository has .principia/repo.json.   │ │                                                                    │
-╰─  t  board   ⏎  tasks  ───────────────────────╯ ╰─  s  standup   y  copy as markdown  ───────────────────────────────╯
+╭─  3  ✓ Open tasks  0 ──────────────────────────╮ ╭─  4  ● Commits, last 7 days  0 ───────────────────────────────────╮
+│ No launchpad files yet. Tasks appear here once │ │ No commits in the last 7 days.                                    │
+│ a repository has .principia/repo.json.         │ │                                                                   │
+╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────────────────────────╮
 │   repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit                │
 │ ▲ legacy-billing          unreadable                                                      could not read .git (perm… │

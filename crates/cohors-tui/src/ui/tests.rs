@@ -565,6 +565,145 @@ fn snapshot_detail_view_no_color_ascii() {
     insta::assert_snapshot!(screen);
 }
 
+// ── Geometry: the approved frames, measured ──────────────────────────────────
+//
+// The approved design is a text file drawn at 119 columns. These tests pin the
+// column each element starts at to the column it has in that file, so a layout
+// change that drifts from the design fails here rather than being noticed (or
+// not) by eye in a snapshot.
+
+/// The screen as rows of characters, so a column number means a terminal
+/// column (not a byte offset).
+fn rows_of(screen: &str) -> Vec<Vec<char>> {
+    screen.lines().map(|line| line.chars().collect()).collect()
+}
+
+/// The first row that contains every one of `words`.
+fn row_with<'a>(rows: &'a [Vec<char>], words: &[&str]) -> &'a Vec<char> {
+    rows.iter()
+        .find(|row| {
+            let text: String = row.iter().collect();
+            words.iter().all(|word| text.contains(word))
+        })
+        .unwrap_or_else(|| panic!("no row with {words:?}"))
+}
+
+/// The column `word` starts at in `row`.
+fn column_of(row: &[char], word: &str) -> usize {
+    let text: String = row.iter().collect();
+    let byte = text
+        .find(word)
+        .unwrap_or_else(|| panic!("{word:?} not in {text:?}"));
+    text[..byte].chars().count()
+}
+
+/// Every column in `row` holding one of the card-frame characters.
+fn frame_columns(row: &[char]) -> Vec<usize> {
+    row.iter()
+        .enumerate()
+        .filter(|(_, c)| ['│', '╭', '╮', '╰', '╯'].contains(c))
+        .map(|(i, _)| i)
+        .collect()
+}
+
+#[test]
+fn the_overview_at_119_columns_matches_the_approved_frame() {
+    let rows = rows_of(&render_to_string(&fleet_app(), 119, 53));
+
+    // Header: the mark, the wordmark, and the right-hand block.
+    let top = row_with(&rows, &["cohors", "your git fleet"]);
+    assert_eq!(column_of(top, "▜"), 2);
+    assert_eq!(column_of(top, "cohors"), 14);
+    assert_eq!(column_of(top, "commits,"), 85);
+    assert_eq!(column_of(row_with(&rows, &["scanned"]), "scanned"), 78);
+    assert_eq!(column_of(&rows[2], "▅"), 78); // the sparkline's first bar
+
+    // Six figure cards, 19 columns each, one column apart.
+    let figures = row_with(&rows, &["Not backed up", "Commits 7d"]);
+    assert_eq!(
+        frame_columns(figures),
+        [0, 18, 20, 38, 40, 58, 60, 78, 80, 98, 100, 118]
+    );
+
+    // Card 1: mark, key, title.
+    let step = row_with(&rows, &["Push 4 commits"]);
+    assert_eq!(column_of(step, "▲"), 2);
+    assert_eq!(column_of(step, "P"), 5);
+    assert_eq!(column_of(step, "Push"), 8);
+
+    // Card 2: name, branch, reasons; the age and the step sit at the right.
+    let risk = row_with(&rows, &["design-system", "1 stash"]);
+    assert_eq!(column_of(risk, "design-system"), 4);
+    assert_eq!(column_of(risk, "main"), 26);
+    assert_eq!(column_of(risk, "1 commit"), 41);
+    assert_eq!(frame_columns(risk), [0, 118]);
+
+    // Cards 3 and 4 side by side: 50 columns, a gap, then 68.
+    let tasks = row_with(&rows, &["repository", "open", "high", "focus"]);
+    assert_eq!(frame_columns(tasks), [0, 49, 51, 118]);
+    assert_eq!(column_of(tasks, "open"), 28);
+    assert_eq!(column_of(tasks, "high"), 34);
+    assert_eq!(column_of(tasks, "focus"), 40);
+    // The commit bars start 22 columns into card 4.
+    assert_eq!(column_of(tasks, "█"), 75);
+
+    // Card 5: the table's columns.
+    let header = row_with(&rows, &["repository", "upstream", "last commit"]);
+    for (label, column) in [
+        ("repository", 4),
+        ("branch", 28),
+        ("upstream", 43),
+        ("stg", 57),
+        ("mod", 62),
+        ("new", 67),
+        ("stash", 72),
+        ("tasks", 79),
+        ("age", 87),
+        ("last commit", 92),
+    ] {
+        assert_eq!(column_of(header, label), column, "{label}");
+    }
+
+    // The key bar: two columns in, hints four apart.
+    let keys = rows.last().unwrap();
+    assert_eq!(column_of(keys, "1-5"), 2);
+    assert_eq!(column_of(keys, "tab"), 21);
+}
+
+#[test]
+fn the_detail_view_at_119_columns_matches_the_approved_frame() {
+    let rows = rows_of(&render_to_string(&detail_app(), 119, 40));
+
+    let header = row_with(&rows, &["repository", "fetched", "commit"]);
+    for (label, column) in [
+        ("repository", 4),
+        ("branch", 34),
+        ("upstream", 54),
+        ("stg", 70),
+        ("mod", 75),
+        ("new", 80),
+        ("stash", 85),
+        ("tasks", 92),
+        ("fetched", 100),
+        ("commit", 109),
+    ] {
+        assert_eq!(column_of(header, label), column, "{label}");
+    }
+
+    // Second line of an entry: the path under the name, then id and subject.
+    let path = row_with(&rows, &["~/code/payments", "abc1234"]);
+    assert_eq!(column_of(path, "~/code/payments"), 4);
+    assert_eq!(column_of(path, "abc1234"), 54);
+    assert_eq!(column_of(path, "fix:"), 63);
+
+    // Three cards of 39 columns, one column apart.
+    let cards = row_with(&rows, &["staged", "last commit"]);
+    assert_eq!(frame_columns(cards), [0, 38, 40, 78, 80, 118]);
+    let state = row_with(&rows, &["upstream", "origin/main"]);
+    assert_eq!(column_of(state, "upstream"), 2);
+    assert_eq!(column_of(state, "origin/main"), 14);
+}
+
 // ── Style: what a text snapshot cannot show ──────────────────────────────────
 
 /// The cell at the top-left corner of the first card whose title contains

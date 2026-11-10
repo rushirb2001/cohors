@@ -15,8 +15,8 @@ expression: "render_to_string(&fleet_app(), 80, 24)"
 │   ↓ 4 more                                                                   │
 ╰─  ⏎  open   e  unreadable   P  push 3   d  diverged   p  pull 2  ────────────╯
 ╭─  3  ✓ Open tasks  5 ──────────────╮ ╭─  4  ● Commits, last 7 days  44 ──────╮
-│ repository     open  high  focus   │ │ auth-service      ██████████      8   │
-│ payments          2     1      1   │ │   ↓ 10 more                           │
+│ repository    open  high  focus    │ │ auth-service      ███████████      8  │
+│ payments         2     1      1    │ │   ↓ 10 more                           │
 │   ↓ 2 more                         │ │ 1 repository had no commits this wee… │
 ╰─  t  board   ⏎  tasks  ────────────╯ ╰─  s  standup   y  copy as markdown  ──╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────╮

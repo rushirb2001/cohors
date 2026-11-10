@@ -27,15 +27,15 @@ expression: "render_to_string(&app, 120, 45)"
 │ ◆ payments              main           2 commits not pushed, 3 uncommitted files                       2h  Push      │
 │ ◆ web-app               feat/checkout  5 commits behind, 7 uncommitted files                          20m  Pull      │
 ╰─  ⏎  open   e  unreadable   P  push 3   d  diverged   p  pull 2   c  review changes  ────────────────────────────────╯
-╭─  3  ✓ Open tasks  5 ─────────────────────────╮ ╭─  4  ● Commits, last 7 days  44 ───────────────────────────────────╮
-│ repository                open  high  focus   │ │ auth-service          ███████████████████████████████████      8   │
-│ payments                     2     1      1   │ │ marketing-site        ███████████████████████████████          7   │
-│▸web-app                      2     1      0   │ │ data-pipeline         ██████████████████████████               6   │
-│ data-pipeline                1     1      0   │ │ payments              ██████████████████                       4   │
-│                                               │ │ web-app               ██████████████████                       4   │
-│ 1 in progress, 1 blocked.                     │ │   ↓ 6 more                                                         │
-│ 9 repositories have no launchpad file.        │ │ 1 repository had no commits this week.                             │
-╰─  t  board   ⏎  tasks  ───────────────────────╯ ╰─  s  standup   y  copy as markdown  ───────────────────────────────╯
+╭─  3  ✓ Open tasks  5 ──────────────────────────╮ ╭─  4  ● Commits, last 7 days  44 ──────────────────────────────────╮
+│ repository                open  high  focus    │ │ auth-service          ███████████████████████████████████      8  │
+│ payments                     2     1      1    │ │ marketing-site        ███████████████████████████████          7  │
+│▸web-app                      2     1      0    │ │ data-pipeline         ██████████████████████████               6  │
+│ data-pipeline                1     1      0    │ │ payments              ██████████████████                       4  │
+│                                                │ │ web-app               ██████████████████                       4  │
+│ 1 in progress, 1 blocked.                      │ │   ↓ 6 more                                                        │
+│ 9 repositories have no launchpad file.         │ │ 1 repository had no commits this week.                            │
+╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────────────────────────────╮
 │   repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit                │
 │ ▲ analytics               main           ↑1              0    0    0      2      0    4d  perf: precompute funnel r… │

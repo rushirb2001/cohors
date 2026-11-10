@@ -18,9 +18,9 @@ expression: "render_to_string(&app, 120, 40)"
 ╭─  2  ▲ Work at risk ─────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Working out what needs you…                                                                                          │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─  3  ✓ Open tasks ────────────────────────────╮ ╭─  4  ● Commits, last 7 days ───────────────────────────────────────╮
-│ Working out what needs you…                   │ │ Working out what needs you…                                        │
-╰─  t  board   ⏎  tasks  ───────────────────────╯ ╰─  s  standup   y  copy as markdown  ───────────────────────────────╯
+╭─  3  ✓ Open tasks ─────────────────────────────╮ ╭─  4  ● Commits, last 7 days ──────────────────────────────────────╮
+│ Working out what needs you…                    │ │ Working out what needs you…                                       │
+╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────────────────────────╮
 │   repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit                │
 │   legacy-billing          unreadable                                                      could not read .git (perm… │

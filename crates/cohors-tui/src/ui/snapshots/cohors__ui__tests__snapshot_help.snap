@@ -25,7 +25,7 @@ expression: "render_to_string(&app, 120, 50)"
 ╰─  ⏎  open   e ║    /                  filter the repository table by name                            ║───────────────╯
 ╭─  3  ✓ Open ta║    r  ?  q            rescan / this help / quit (Ctrl-C also quits)                  ║───────────────╮
 │ No launchpad f║                                                                                      ║               │
-│ once a reposit║  1 Do next and 2 Work at risk                                                        ║               │
+│ a repository h║  1 Do next and 2 Work at risk                                                        ║               │
 ╰─  t  board   ⏎║    a step's key       do that step for the repositories it lists                     ║───────────────╯
 ╭─  5  ▤ Reposit║    ⏎                  do the highlighted step / open the repository                  ║───────────────╮
 │   repository  ║                                                                                      ║               │

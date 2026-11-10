@@ -18,7 +18,7 @@ expression: "render_to_string(&app, 100, 24)"
 ╭─  3  ✓ Open tasks  0╟──────────────────────────────────────────────────────╢─────────────────────╮
 │ No launchpad files y║           ↑/↓ choose · ⏎ push · Esc cancel           ║                     │
 │ here once a reposito╚══════════════════════════════════════════════════════╝                     │
-╰─  t  board   ⏎  tasks  ───────────────╯ ╰─  s  standup   y  copy as markdown  ───────────────────╯
+╰─  t  board   ⏎  tasks  ────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────╯
 ╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────╮
 │   repository             branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
 │ ▲ legacy-billing         unreadab…                                                  could not r… │

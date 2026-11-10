@@ -127,7 +127,7 @@ fn render_cards(
 }
 
 /// Split the middle band between cards 3 and 4: stacked when narrow, else
-/// side by side with the tasks card taking about two fifths (49 of 119
+/// side by side with the tasks card taking about two fifths (50 of 119
 /// columns in the design).
 fn split_middle(area: Rect, plan: &OverviewPlan) -> (Rect, Rect) {
     if plan.stacked {
@@ -138,8 +138,8 @@ fn split_middle(area: Rect, plan: &OverviewPlan) -> (Rect, Rect) {
         .areas(area);
         return (tasks, commits);
     }
-    let tasks_width = ((u32::from(area.width) * 41 + 50) / 100) as u16;
-    let tasks_width = tasks_width.clamp(38.min(area.width / 2), 49);
+    let tasks_width = ((u32::from(area.width) * 42 + 50) / 100) as u16;
+    let tasks_width = tasks_width.clamp(38.min(area.width / 2), 50);
     let [tasks, _, commits] = Layout::horizontal([
         Constraint::Length(tasks_width),
         Constraint::Length(1),
@@ -819,11 +819,11 @@ fn render_tasks(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focused
     }
 
     let ell = theme.glyphs.ellipsis();
-    // open, high, focus, then two columns of margin.
-    const NUMBERS: usize = 6 + 6 + 7 + 2;
+    // open (4), high (6), focus (7), then three columns of margin.
+    const NUMBERS: usize = 4 + 6 + 7 + 3;
     let name_width = inner.width().saturating_sub(NUMBERS);
     let header = format!(
-        "{}{:>6}{:>6}{:>7}",
+        "{}{:>4}{:>6}{:>7}",
         text::cell("repository", name_width, ell),
         "open",
         "high",
@@ -868,7 +868,7 @@ fn render_tasks(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focused
         let work = &overview.work[index];
         Item::line(Line::from(vec![
             Span::raw(text::column(&text::safe(&work.name), name_width, ell)),
-            Span::raw(format!("{:>6}", work.open)),
+            Span::raw(format!("{:>4}", work.open)),
             Span::styled(
                 format!("{:>6}", work.high),
                 if work.high > 0 {
@@ -961,10 +961,10 @@ fn render_commits(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
 
     let ell = theme.glyphs.ellipsis();
     let width = inner.width();
-    // name, bar, count (7 wide), two columns of margin. The bar needs a few
+    // name, bar, count (7 wide), one column of margin. The bar needs a few
     // cells to mean anything; without them the name takes the room.
     const COUNT: usize = 7;
-    const MARGIN: usize = 2;
+    const MARGIN: usize = 1;
     let name_width = 22.min(width / 2);
     let bar_width = width.saturating_sub(name_width + COUNT + MARGIN);
     let (name_width, bar_width) = if bar_width >= 6 {
