@@ -25,6 +25,7 @@ pub mod detail;
 pub mod fuzzy;
 pub mod launchpad;
 pub mod model;
+pub mod overview;
 pub mod provider;
 pub mod search;
 pub mod select;
@@ -41,6 +42,10 @@ pub use model::{
     Branch, CiStatus, CommitMeta, Contributor, PullRequest, RemoteDetail, RemoteInfo, RemoteKind,
     RepoId, RepoOperation, RepoRef, RepoSnapshot, TagInfo, Upstream, WorktreeStatus,
     classify_remote, remote_host,
+};
+pub use overview::{
+    ActionKind, KeyFigures, NextAction, Overview, RepoCommits, RepoLine, RepoWork, SuggestedAction,
+    fleet_activity, overview,
 };
 pub use provider::RepoProvider;
 pub use search::{SearchHit, SearchKind, is_sensitive_dir, is_sensitive_path, search_metadata};

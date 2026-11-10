@@ -7,13 +7,13 @@
 //! The TUI uses [`assess`] for the per-row reason and [`fleet_summary`] for the
 //! header strip; the sort uses the clock-free [`rank`]. See ADR-014.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::model::{Branch, RepoOperation, RepoSnapshot};
 
 /// How urgently a repo wants attention, least to most. Ordered (declaration
 /// order = severity order) so `max`/comparison work directly.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Severity {
     Ok,
@@ -24,11 +24,11 @@ pub enum Severity {
 }
 
 /// Unpushed work older than this (seconds) is "aging" — at risk of being lost.
-const UNPUSHED_AGING_SECS: i64 = 2 * 24 * 60 * 60; // 2 days
+pub const UNPUSHED_AGING_SECS: i64 = 2 * 24 * 60 * 60; // 2 days
 /// A stash older than this (seconds) is "stale" — probably forgotten.
-const STALE_STASH_SECS: i64 = 7 * 24 * 60 * 60; // 1 week
+pub const STALE_STASH_SECS: i64 = 7 * 24 * 60 * 60; // 1 week
 /// A remote not fetched for this long (seconds) is "stale" — ahead/behind may lie.
-const STALE_FETCH_SECS: i64 = 14 * 24 * 60 * 60; // 2 weeks
+pub const STALE_FETCH_SECS: i64 = 14 * 24 * 60 * 60; // 2 weeks
 
 /// A single reason a repo wants attention.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -124,6 +124,56 @@ impl AttentionReason {
                     format!("{count} stash · stale")
                 } else {
                     format!("{count} stash")
+                }
+            }
+            AttentionReason::Detached => "detached HEAD".to_string(),
+        }
+    }
+
+    /// The reason in plain words, with no arrows or symbols: `3 commits not
+    /// pushed, older than 2 days`. [`label`](Self::label) is the compact form
+    /// for a narrow table column; this is the one a person reads in a sentence,
+    /// so every surface (web, terminal, editor, MCP) states it the same way.
+    pub fn phrase(&self) -> String {
+        // "1 file" / "2 files" — the noun follows the count.
+        fn n(count: u32, one: &str, many: &str) -> String {
+            format!("{count} {}", if count == 1 { one } else { many })
+        }
+        match self {
+            AttentionReason::Unreadable => "could not be read".to_string(),
+            AttentionReason::Conflicted { files } => {
+                n(*files, "conflicted file", "conflicted files")
+            }
+            AttentionReason::Operation(op) => format!("{} in progress", op.label()),
+            AttentionReason::StaleRemote { days } => format!("not fetched in {days} days"),
+            AttentionReason::Unpushed { commits, aging } => {
+                let base = n(*commits, "commit not pushed", "commits not pushed");
+                if *aging {
+                    format!("{base}, older than 2 days")
+                } else {
+                    base
+                }
+            }
+            AttentionReason::Diverged { ahead, behind } => {
+                format!("diverged, {ahead} ahead and {behind} behind")
+            }
+            AttentionReason::Behind { commits } => n(*commits, "commit behind", "commits behind"),
+            AttentionReason::Unpublished => "branch never pushed".to_string(),
+            AttentionReason::Uncommitted {
+                staged,
+                modified,
+                untracked,
+            } => n(
+                staged + modified + untracked,
+                "uncommitted file",
+                "uncommitted files",
+            ),
+            AttentionReason::Stash { count, stale } => {
+                let base = n(*count, "stash", "stashes");
+                if *stale {
+                    format!("{base}, older than a week")
+                } else {
+                    base
                 }
             }
             AttentionReason::Detached => "detached HEAD".to_string(),
@@ -290,7 +340,8 @@ pub fn rank(repo: &RepoSnapshot) -> u32 {
 /// the same per-repo [`assess`] reasons the rows show — the summary *inherits*
 /// the attention judgment rather than re-deciding what "unpushed" or "dirty"
 /// means with its own field checks.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FleetSummary {
     pub total: usize,
     pub needs_attention: usize,
