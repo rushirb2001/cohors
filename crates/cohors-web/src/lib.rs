@@ -30,7 +30,9 @@ pub const CONFIRM_VERBS: &[&str] = &["commit", "stash", "run"];
 ///
 /// Compiled on both targets so the rule is unit-tested by the native gates.
 pub fn shell_quote(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "'\\''"))
+    // One implementation for every surface: the same quoting `cohors agent`
+    // uses when it prints a command for a terminal.
+    cohors_core::agents::Shell::Posix.quote(text)
 }
 
 #[cfg(test)]
