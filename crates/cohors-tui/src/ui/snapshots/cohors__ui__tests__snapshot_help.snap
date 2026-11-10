@@ -1,68 +1,54 @@
 ---
 source: crates/cohors-tui/src/ui/tests.rs
-expression: "render_to_string(&app, 100, 64)"
+expression: "render_to_string(&app, 120, 50)"
 ---
-╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
-║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ ║
-║ ▀▐▖▀█▀▗▌▀  ~/╔════════════════════════════════════════════════════════════════════╗ weeks        ║
-╚══════════════║                                                                    ║══════════════╝
-╔ Attention (4 ║  Help                                                              ║══════════════╗
-║ █████████████╟────────────────────────────────────────────────────────────────────╢█████████████ ║
-║ 1 at risk · 2║  Legend — what each column shows                                   ║              ║
-╚══════════════║    ↑2              commits ahead of upstream                       ║══════════════╝
-╔ Repositories ║    ↓5              commits behind upstream                         ║══════════════╗
-║    Repo      ║    ●               in sync with upstream                           ║              ║
-║▌   legacy-bil║    local           no upstream (local only)                        ║ad .git (perm…║
-║  ○ payments @║    ● ● ●           CI: pass / fail / pending                       ║pushed        ║
-║    ▷ @feat/ch║    2pr             open pull requests                              ║behind        ║
-║  ○ web-app @f║    3               changed files, all staged                       ║hind — pull   ║
-║  ○ infra @a1b║    3               changed files, some unstaged                    ║d changes     ║
-║  ○ auth-servi║    s1              stash entries                                   ║              ║
-║              ║    name            row: clean                                      ║              ║
-║              ║    name            row: needs attention                            ║              ║
-║              ║    name            row: unreadable (error)                         ║              ║
-║              ║    ●               row: marked for a bulk action                   ║              ║
-║              ║                                                                    ║              ║
-║              ║  Navigation                                                        ║              ║
-║              ║    ↑ / ↓           move cursor                                     ║              ║
-║              ║    Home / End      top / bottom                                    ║              ║
-║              ║                                                                    ║              ║
-║              ║  Select & filter                                                   ║              ║
-║              ║    Space           mark / unmark the repo                          ║              ║
-║              ║    a               mark all (again to clear)                       ║              ║
-║              ║    Esc             clear the selection                             ║              ║
-║              ║    /               fuzzy filter (Esc clears)                       ║              ║
-║              ║    :               command mode (:fetch, :!cmd shell, :sort,       ║              ║
-║              ║  :jump …)                                                          ║              ║
-║              ║    d               toggle needs-attention                          ║              ║
-║              ║    s               cycle sort mode                                 ║              ║
-║              ║    Tab             weekly standup                                  ║              ║
-║              ║    t               launchpad: tasks + flows                        ║              ║
-║              ║                                                                    ║              ║
-║              ║  Act — on the marked repos, else the current one                   ║              ║
-║              ║    ⏎               inspect repo — commits, changes, branches       ║              ║
-║              ║    o               open with… (editors, reveal, lazygit)           ║              ║
-║              ║    f / F           fetch selection / all                           ║              ║
-║              ║    p               pull (fast-forward only)                        ║              ║
-║              ║    P               push (current branch upstream)                  ║              ║
-║              ║    !               shell command (opens the : palette)             ║              ║
-║              ║    S               stash (asks to confirm)                         ║              ║
-║              ║    L               open in lazygit                                 ║              ║
-║              ║    y               copy path to clipboard                          ║              ║
-║              ║                                                                    ║              ║
-║              ║  App                                                               ║              ║
-║              ║    r               refresh (re-scan)                               ║              ║
-╟──────────────║    h               show / hide the hint bar                        ║──────────────╢
-║ legacy-billin║    ?               toggle this help                                ║: full detail ║
-║              ║    q / Ctrl-C      quit                                            ║              ║
-║ ⚠ could not r║                                                                    ║              ║
-╚══════════════║  cohors vX.Y.Z                                                     ║══════════════╝
-───────────────╟────────────────────────────────────────────────────────────────────╢───────────────
-╔══════════════║                            ? / Esc close                           ║══════════════╗
-║             s║                                                                    ║              ║
-║ ─────────────╚════════════════════════════════════════════════════════════════════╝───────────── ║
-║     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       ║
-║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
-║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
-╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛   cohors  your git fleet                                                                                   │
+│ ▟██▌█▐██▙   ~/projects (+1 more)                                                                                     │
+│ ▀▐▖▀█▀▗▌▀   5 repositories. 3 have work at risk, 1 is clean.                 scanned 2m ago                          │
+╰───────────────╔══════════════════════════════════════════════════════════════════════════════════════╗───────────────╯
+╭───────────────║                                                                                      ║───────────────╮
+│ Not backed up ║  Help                                                                                ║ommits 7d      │
+│ 1             ╟──────────────────────────────────────────────────────────────────────────────────────╢               │
+│ 2 commits     ║  Marks                                                                               ║rev week 0     │
+╰───────────────║    ▲ ◆                work at risk: it exists only on this machine                   ║───────────────╯
+╭─  1  ▶ Do next║    ○ ·                worth a look / clean                                           ║───────────────╮
+│▸▲  e  Check 1 ║    ●                  marked for a bulk action                                       ║               │
+│ ◆  P  Push 2 c║                                                                                      ║               │
+│ ○  p  Pull 1 r║  Everywhere                                                                          ║               │
+│ ○  c  Commit o║    1-5                focus a card                                                   ║               │
+╰───────────────║    tab / shift-tab    next / previous card                                           ║───────────────╯
+╭─  2  ▲ Work at║    ↑↓ j k             move within the focused card                                   ║───────────────╮
+│ ▲ legacy-billi║    ⏎                  open the highlighted row                                       ║               │
+│ ◆ payments    ║    :                  command line (:fetch :pull :push :commit :sort …)              ║      2h  Push │
+│ ◆ web-app     ║    !                  run a shell command in the marked repositories                 ║     20m  Pull │
+╰─  ⏎  open   e ║    /                  filter the repository table by name                            ║───────────────╯
+╭─  3  ✓ Open ta║    r  ?  q            rescan / this help / quit (Ctrl-C also quits)                  ║───────────────╮
+│ No launchpad f║                                                                                      ║               │
+│ a repository h║  1 Do next and 2 Work at risk                                                        ║               │
+╰─  t  board   ⏎║    a step's key       do that step for the repositories it lists                     ║───────────────╯
+╭─  5  ▤ Reposit║    ⏎                  do the highlighted step / open the repository                  ║───────────────╮
+│   repository  ║                                                                                      ║               │
+│ ▲ legacy-billi║  3 Open tasks and 4 Commits                                                          ║ad .git (perm… │
+│ ◆ payments    ║    t  ⏎               the launchpad board / that repository's tasks                  ║n 5xx          │
+│ ◆ web-app     ║    s  y               the standup / copy the standup as markdown                     ║awer           │
+│ ○ infra       ║                                                                                      ║i image        │
+│ · auth-service║  5 Repositories, and the detail view                                                 ║deps           │
+│               ║    ␣  *               mark it / mark all listed (again to clear)                     ║               │
+│               ║    f  F  p  P         fetch / fetch all / pull (ff only) / push                      ║               │
+│               ║    c  S               commit / stash; both ask before changing anything              ║               │
+│               ║    o  L  y            open with… / lazygit / copy the path                           ║               │
+│               ║    >                  change the sort order                                          ║               │
+│               ║    ⏎                  the detail view; there, the full drill-in                      ║               │
+│               ║    esc                clear marks, a narrowing, the filter; or go back               ║               │
+│               ║                                                                                      ║               │
+│               ║  cohors vX.Y.Z   config: ~/.config/cohors/config.toml                                ║               │
+│               ╟──────────────────────────────────────────────────────────────────────────────────────╢               │
+│               ║                                     ? / Esc close                                    ║               │
+│               ║                                                                                      ║               │
+│               ╚══════════════════════════════════════════════════════════════════════════════════════╝               │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

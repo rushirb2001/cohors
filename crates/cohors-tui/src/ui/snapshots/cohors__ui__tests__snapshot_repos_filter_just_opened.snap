@@ -1,0 +1,44 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 120, 40)"
+---
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛   cohors  your git fleet                                                                                   │
+│ ▟██▌█▐██▙   ~/projects (+1 more)                                                                                     │
+│ ▀▐▖▀█▀▗▌▀   5 repositories. 3 have work at risk, 1 is clean.                 scanned 2m ago                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────╮ ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮ ╭─────────────────╮ ╭─────────────────╮
+│ Not backed up   │ │ Stashes         │ │ Uncommitted      │ │ Stale fetch     │ │ Open tasks      │ │ Commits 7d      │
+│ 1               │ │ 1               │ │ 15               │ │ 0               │ │ 0               │ │ 0               │
+│ 2 commits       │ │ in 1 repo       │ │ in 3 repos       │ │ all recent      │ │ no launchpad    │ │ prev week 0     │
+╰─────────────────╯ ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▲  e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.                       │
+│ ◆  P  Push 2 commits from 1 repository             They exist only on this machine: payments.                        │
+│ ○  p  Pull 1 repository that is behind             A fast-forward pull cannot lose work: web-app.                    │
+│ ○  c  Commit or discard 15 uncommitted files       In 3 repositories. Largest: web-app with 7.                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  2  ▲ Work at risk  3 ──────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▲ legacy-billing        (no commits)   Could not be read                                                             │
+│ ◆ payments              main           2 commits not pushed, 4 uncommitted files, 1 stash                   2h  Push │
+│ ◆ web-app               feat/checkout  5 commits behind, 7 uncommitted files                               20m  Pull │
+╰─  ⏎  open   e  unreadable   P  push 1   p  pull 1   c  review changes  ──────────────────────────────────────────────╯
+╭─  3  ✓ Open tasks  0 ──────────────────────────╮ ╭─  4  ● Commits, last 7 days  0 ───────────────────────────────────╮
+│ No launchpad files yet. Tasks appear here once │ │ No commits in the last 7 days.                                    │
+│ a repository has .principia/repo.json.         │ │                                                                   │
+╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
+╭─  5  ▤ Repositories  5  / ▏ ─────────────────────────────────────────────────────────────────────────────────────────╮
+│   repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit                │
+│▸▲ legacy-billing          unreadable                                                      could not read .git (perm… │
+│ ◆ payments                main           ↑2              0    3    1      1      0    2h  fix: retry on 5xx          │
+│ ◆ web-app                 feat/checkout  ↓5              0    7    0      0      0   20m  wip: cart drawer           │
+│ ○ infra                   @a1b2c3d (det… no remote       0    0    4      0      0    1w  build: pin ci image        │
+│ · auth-service            main           no remote       0    0    0      0      0    3d  chore: bump deps           │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯
+  type  filter by name    ⏎  keep    esc  clear

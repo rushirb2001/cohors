@@ -7,12 +7,9 @@
 use cohors_core::launchpad::Task;
 
 use super::*;
-
-/// Drop control characters from repo-authored text before it reaches the
-/// terminal buffer (ADR-055): a task title is untrusted input.
-fn safe(text: &str) -> String {
-    text.chars().filter(|c| !c.is_control()).collect()
-}
+// Repo-authored text (a task title, a summary) is untrusted input: control
+// characters are dropped before it reaches the terminal buffer (ADR-055).
+use super::text::safe;
 
 /// The status mark. Shape, not colour, carries the meaning, so it still reads
 /// under `NO_COLOR`.
@@ -56,11 +53,34 @@ fn task_line<'a>(task: &Task, theme: &Theme) -> Line<'a> {
     Line::from(spans)
 }
 
+/// The line a repository's tasks start on, so the overlay can open scrolled to
+/// it (Enter on a repository in the overview's tasks card). `None` when that
+/// repository has no open tasks to show.
+pub(crate) fn launchpad_line_of(view: &crate::app::LaunchpadView, repo: &str) -> Option<usize> {
+    // The line numbers do not depend on colours or glyphs, so any theme will do.
+    let theme = Theme::new(cohors_config::IconMode::Unicode, false, false);
+    let (_, anchors) = body(view, &theme);
+    anchors
+        .into_iter()
+        .find(|(name, _)| name == repo)
+        .map(|(_, line)| line)
+}
+
 /// Every line of the body, built up front so the overlay can size and scroll.
 fn body_lines<'a>(view: &crate::app::LaunchpadView, theme: &Theme) -> Vec<Line<'a>> {
+    body(view, theme).0
+}
+
+/// The body's lines, plus where each repository's block starts (its name and
+/// the index of its heading line).
+fn body<'a>(
+    view: &crate::app::LaunchpadView,
+    theme: &Theme,
+) -> (Vec<Line<'a>>, Vec<(String, usize)>) {
     let brand = theme.fg(SPIDER_PURPLE).bold();
     let heading = theme.bronze().bold();
     let mut lines: Vec<Line> = Vec::new();
+    let mut anchors: Vec<(String, usize)> = Vec::new();
 
     let focus: Vec<_> = view
         .board
@@ -88,6 +108,7 @@ fn body_lines<'a>(view: &crate::app::LaunchpadView, theme: &Theme) -> Vec<Line<'
     }
 
     for entry in view.entries.iter().filter(|e| !e.open_tasks().is_empty()) {
+        anchors.push((entry.name.clone(), lines.len()));
         let mut head = vec![
             Span::styled("  ▸ ", theme.dim()),
             Span::styled(safe(&entry.name), brand),
@@ -144,7 +165,7 @@ fn body_lines<'a>(view: &crate::app::LaunchpadView, theme: &Theme) -> Vec<Line<'
             theme.dim(),
         )));
     }
-    lines
+    (lines, anchors)
 }
 
 pub(crate) fn render_launchpad(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {

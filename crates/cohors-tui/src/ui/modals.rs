@@ -1,14 +1,27 @@
+//! The overlays: help, the standup, the full repository drill-in, the command
+//! run results, and the small pickers and confirmations.
+
+use super::cards::severity_style;
 use super::*;
 
+/// Truncate `s` to at most `max` characters, adding an ellipsis when cut.
+pub(crate) fn ellipsize(s: &str, max: usize) -> String {
+    text::clip(s, max, '…')
+}
+
+/// The help overlay: what the marks mean, then every key, grouped by the card
+/// it belongs to. This is the one place the whole keymap is written down, so
+/// it must be changed together with the key handling in `app.rs`.
 pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Theme) {
     let bold = Style::new().add_modifier(Modifier::BOLD);
-    let s = |t: &str, st: Style| Span::styled(t.to_string(), st);
+    let g = &theme.glyphs;
+    let mark = |sev: Severity| Span::styled(g.severity_mark(sev), severity_style(sev, theme));
 
     // One shared two-column grid for the whole overlay: a 2-space-indented left
     // cell (a colored glyph example, or a key) is padded so *every* description
     // starts in the same column — so the legend and the keymap read as one
     // aligned table instead of a wrapping paragraph.
-    let desc_col = 16usize;
+    let desc_col = 19usize;
     let row = |left: Vec<Span<'static>>, desc: &str| -> Line<'static> {
         let used: usize = left.iter().map(|sp| sp.content.chars().count()).sum();
         let pad = desc_col.saturating_sub(used).max(2);
@@ -21,93 +34,93 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
     let head = |t: &str| Line::from(Span::styled(t.to_string(), bold));
     let key = |t: &str| vec![Span::styled(t.to_string(), bold)];
 
+    let enter = g.key_enter();
     let lines = vec![
         // The legend first: it answers "what am I looking at?", which is the
         // question a new user has before they care about keybindings.
-        head("Legend — what each column shows"),
-        row(vec![s("↑2", theme.ahead())], "commits ahead of upstream"),
-        row(vec![s("↓5", theme.behind())], "commits behind upstream"),
+        head("Marks"),
         row(
-            vec![s(theme.glyphs.synced(), theme.ok())],
-            "in sync with upstream",
+            vec![mark(Severity::Risk), Span::raw(" "), mark(Severity::Warn)],
+            "work at risk: it exists only on this machine",
         ),
-        row(vec![s("local", theme.dim())], "no upstream (local only)"),
         row(
-            vec![
-                s(theme.glyphs.ci_dot(CiStatus::Passing), theme.ok()),
-                Span::raw(" "),
-                s(theme.glyphs.ci_dot(CiStatus::Failing), theme.risk()),
-                Span::raw(" "),
-                s(theme.glyphs.ci_dot(CiStatus::Pending), theme.warn()),
-            ],
-            "CI: pass / fail / pending",
+            vec![mark(Severity::Notice), Span::raw(" "), mark(Severity::Ok)],
+            "worth a look / clean",
         ),
-        row(vec![s("2pr", theme.dim())], "open pull requests"),
-        row(vec![s("3", theme.staged())], "changed files, all staged"),
         row(
-            vec![s("3", theme.modified())],
-            "changed files, some unstaged",
-        ),
-        row(vec![s("s1", theme.dim())], "stash entries"),
-        row(vec![s("name", theme.dim())], "row: clean"),
-        row(vec![s("name", bold)], "row: needs attention"),
-        row(vec![s("name", theme.error())], "row: unreadable (error)"),
-        row(
-            vec![s(theme.glyphs.marked(), theme.ahead())],
-            "row: marked for a bulk action",
+            vec![Span::styled(g.marked(), theme.ahead())],
+            "marked for a bulk action",
         ),
         Line::from(""),
-        head("Navigation"),
-        row(key("↑ / ↓"), "move cursor"),
-        row(key("Home / End"), "top / bottom"),
-        Line::from(""),
-        head("Select & filter"),
-        row(key("Space"), "mark / unmark the repo"),
-        row(key("a"), "mark all (again to clear)"),
-        row(key("Esc"), "clear the selection"),
-        row(key("/"), "fuzzy filter (Esc clears)"),
+        head("Everywhere"),
+        row(key("1-5"), "focus a card"),
+        row(key("tab / shift-tab"), "next / previous card"),
+        row(
+            key(&format!("{} j k", g.key_updown())),
+            "move within the focused card",
+        ),
+        row(key(enter), "open the highlighted row"),
         row(
             key(":"),
-            "command mode (:fetch, :!cmd shell, :sort, :jump …)",
+            "command line (:fetch :pull :push :commit :sort …)",
         ),
-        row(key("d"), "toggle needs-attention"),
-        row(key("s"), "cycle sort mode"),
-        row(key("Tab"), "weekly standup"),
-        row(key("t"), "launchpad: tasks + flows"),
+        row(key("!"), "run a shell command in the marked repositories"),
+        row(key("/"), "filter the repository table by name"),
+        row(
+            key("r  ?  q"),
+            "rescan / this help / quit (Ctrl-C also quits)",
+        ),
         Line::from(""),
-        head("Act — on the marked repos, else the current one"),
-        row(key("⏎"), "inspect repo — commits, changes, branches"),
-        row(key("o"), "open with… (editors, reveal, lazygit)"),
-        row(key("f / F"), "fetch selection / all"),
-        row(key("p"), "pull (fast-forward only)"),
-        row(key("P"), "push (current branch upstream)"),
-        row(key("!"), "shell command (opens the : palette)"),
-        row(key("S"), "stash (asks to confirm)"),
-        row(key("L"), "open in lazygit"),
-        row(key("y"), "copy path to clipboard"),
+        head("1 Do next and 2 Work at risk"),
+        row(
+            key("a step's key"),
+            "do that step for the repositories it lists",
+        ),
+        row(key(enter), "do the highlighted step / open the repository"),
         Line::from(""),
-        head("App"),
-        row(key("r"), "refresh (re-scan)"),
-        row(key("h"), "show / hide the hint bar"),
-        row(key("?"), "toggle this help"),
-        row(key("q / Ctrl-C"), "quit"),
+        head("3 Open tasks and 4 Commits"),
+        row(
+            key(&format!("t  {enter}")),
+            "the launchpad board / that repository's tasks",
+        ),
+        row(key("s  y"), "the standup / copy the standup as markdown"),
+        Line::from(""),
+        head("5 Repositories, and the detail view"),
+        row(
+            key(&format!("{}  *", g.key_space())),
+            "mark it / mark all listed (again to clear)",
+        ),
+        row(
+            key("f  F  p  P"),
+            "fetch / fetch all / pull (ff only) / push",
+        ),
+        row(
+            key("c  S"),
+            "commit / stash; both ask before changing anything",
+        ),
+        row(key("o  L  y"), "open with… / lazygit / copy the path"),
+        row(key(">"), "change the sort order"),
+        row(key(enter), "the detail view; there, the full drill-in"),
+        row(
+            key("esc"),
+            "clear marks, a narrowing, the filter; or go back",
+        ),
         Line::from(""),
         Line::from(Span::styled(
-            format!("cohors v{}", version_str()),
-            theme.dim(),
-        )),
-        Line::from(Span::styled(
-            format!("config: {}", app.config_path),
+            format!("cohors v{}   config: {}", version_str(), app.config_path),
             theme.dim(),
         )),
     ];
 
-    // Collapse the box to its content (capped at 90% of the screen height) so the
-    // help doesn't sit in a tall, mostly-empty modal. + padding (2) + border (2)
-    // + the in-box header (2) + the in-box hint footer (2).
+    // Collapse the box to its content (capped to the screen) so the help doesn't
+    // sit in a tall, mostly-empty modal. + padding (2) + border (2) + the in-box
+    // header (2) + the in-box hint footer (2).
     let want_h = lines.len() as u16 + 8;
-    let h = want_h.min((full.height * 90 / 100).max(10));
-    let w = (full.width * 70 / 100).max(40);
+    let h = want_h.min(full.height.saturating_sub(2).max(10));
+    // Wide enough that no description wraps, when the screen allows it.
+    let w = (full.width * 70 / 100)
+        .max(88)
+        .min(full.width.saturating_sub(4));
     let area = Rect {
         x: full.x + full.width.saturating_sub(w) / 2,
         y: full.y + full.height.saturating_sub(h) / 2,
@@ -599,7 +612,7 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
 
     // Why this repo needs you, most urgent first — the same reasons the row's
     // Status column abbreviates, spelled out in one place.
-    if let Some(snap) = app.repos.iter().find(|r| r.name == dv.repo_name) {
+    if let Some(snap) = app.repos.iter().find(|r| r.id == dv.repo_id) {
         let assessment = assess(snap, now);
         if !assessment.reasons.is_empty() {
             detail_section(&mut lines, "Attention".to_string());
@@ -609,6 +622,12 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
                     severity_style(reason.severity(), theme),
                 )));
             }
+        }
+        // CI and open pull requests, when the repository's host reported them.
+        // The table has no columns for these, so this is where they are read.
+        if let Some(remote) = &snap.remote {
+            detail_section(&mut lines, "Checks".to_string());
+            lines.push(checks_line(remote, theme));
         }
     }
 
@@ -867,6 +886,27 @@ pub(crate) fn render_remote_sections(
     }
 }
 
+/// `CI failing  ·  2 open pull requests` — the state of the default branch's
+/// checks in a word (so it reads without colour) and how many pull requests
+/// are open.
+fn checks_line(remote: &cohors_core::RemoteInfo, theme: &Theme) -> Line<'static> {
+    let (ci, style) = match remote.ci {
+        CiStatus::Passing => ("CI passing", theme.ok()),
+        CiStatus::Failing => ("CI failing", theme.risk()),
+        CiStatus::Pending => ("CI pending", theme.warn()),
+        CiStatus::None => ("no CI runs", theme.dim()),
+    };
+    let prs = text::count(
+        remote.open_prs as usize,
+        "open pull request",
+        "open pull requests",
+    );
+    Line::from(vec![
+        Span::styled(ci, style),
+        Span::styled(format!("  ·  {prs}"), theme.dim()),
+    ])
+}
+
 /// The command-run overlay: a left list of repos (status glyph + name, the
 /// focused one highlighted) and the focused repo's scrollable output on the
 /// right, with a live combined pass/fail summary in the bottom border.
@@ -978,7 +1018,7 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
     );
 
     // Left column: status glyph + name; the focused row takes the soft wash.
-    let spin = spinner_frame(app.spinner);
+    let spin = theme.glyphs.spinner(app.spinner);
     let name_w = (repos_list_area.width as usize).saturating_sub(4);
     let items: Vec<ListItem> = run
         .results
@@ -1273,15 +1313,4 @@ pub(crate) fn render_push_branch(frame: &mut Frame, full: Rect, app: &App, theme
     let mut state = ListState::default();
     state.select(Some(pick.cursor));
     frame.render_stateful_widget(list, inner, &mut state);
-}
-
-/// A fixed-height rect centered vertically within `area`.
-pub(crate) fn center_v(area: Rect, height: u16) -> Rect {
-    let [_, mid, _] = Layout::vertical([
-        Constraint::Min(0),
-        Constraint::Length(height),
-        Constraint::Min(0),
-    ])
-    .areas(area);
-    mid
 }

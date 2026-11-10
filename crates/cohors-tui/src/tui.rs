@@ -16,7 +16,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use camino::Utf8PathBuf;
-use cohors_core::{RemoteDetail, RepoDetail, RepoId, RepoRef, RepoSnapshot, StandupCommit};
+use cohors_core::launchpad::LaunchpadEntry;
+use cohors_core::{
+    Overview, RemoteDetail, RepoDetail, RepoId, RepoRef, RepoSnapshot, StandupCommit,
+};
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
@@ -29,8 +32,8 @@ use ratatui::crossterm::terminal::{
 
 use crate::action;
 use crate::app::{
-    App, Cmd, CommandRun, ConfirmAction, DetailView, Mode, OpenWith, Opener, PushPick, RunResult,
-    RunState, StandupView,
+    App, BulkVerb, Cmd, CommandRun, ConfirmAction, DetailView, LaunchpadView, Mode, OpenWith,
+    Opener, PushPick, RunResult, RunState,
 };
 use crate::cli::Cli;
 use crate::scan::Scanner;
@@ -76,6 +79,14 @@ enum BgMsg {
     StandupReady(Vec<StandupCommit>),
     /// Every repo's launchpad entry plus the focus board.
     LaunchpadReady(Box<crate::app::LaunchpadView>),
+    /// The overview model for the current snapshots, with the launchpad
+    /// entries read alongside it. `seq` lets the loop drop a result that a
+    /// newer request has already superseded.
+    OverviewReady {
+        seq: u64,
+        overview: Box<Overview>,
+        entries: Vec<LaunchpadEntry>,
+    },
     /// The drill-in detail for a repo finished loading (matched by id).
     DetailReady {
         id: RepoId,
@@ -152,7 +163,7 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
     let now = now_secs();
     let mut app = App::new(vec!["(demo)".to_string()], "(demo — no config)".to_string());
     app.dark = dark;
-    app.set_repos(cohors_core::demo::fleet(now));
+    seed_demo(&mut app, now);
     app.status = Some("demo mode — sample data; actions are stubbed".to_string());
 
     let mut toast_seen: Option<String> = app.status.clone();
@@ -169,13 +180,18 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
                     Cmd::Quit => break,
                     // The standup works for real — seeded from demo commits.
                     Cmd::OpenStandup | Cmd::StandupNextWindow => {
-                        app.standup = Some(StandupView::new(cohors_core::demo::standup(now)));
+                        app.show_standup(cohors_core::demo::standup(now));
                     }
                     Cmd::CopyStandup => copy_standup(&mut app),
+                    Cmd::CopyStandupMarkdown => {
+                        app.show_standup(cohors_core::demo::standup(now));
+                        app.copy_standup_pending = false;
+                        copy_standup(&mut app);
+                    }
                     // The launchpad is seeded from sample data, like the standup.
                     Cmd::OpenLaunchpad => {
                         let (entries, board) = cohors_core::launchpad::demo();
-                        app.launchpad = Some(crate::app::LaunchpadView::new(entries, board));
+                        show_launchpad(&mut app, LaunchpadView::new(entries, board));
                     }
                     // The command runner is simulated so its UI can be shown off.
                     Cmd::RunCommand => simulate_demo_run(&mut app),
@@ -209,6 +225,7 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
                     | Cmd::PullSelected
                     | Cmd::PushSelected
                     | Cmd::PushBranchAccept
+                    | Cmd::Act { .. }
                     | Cmd::Lazygit
                     | Cmd::ConfirmAccept => {
                         app.status =
@@ -239,6 +256,34 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Fill `app` with the built-in sample fleet and its overview. Everything is
+/// computed in memory by the pure core, so nothing touches the disk.
+pub(crate) fn seed_demo(app: &mut App, now: i64) {
+    let repos = cohors_core::demo::fleet(now);
+    let (mut entries, board) = cohors_core::launchpad::demo();
+    // The sample launchpad identifies a repository by its plain name, while the
+    // sample fleet's ids are `demo/<name>`. Line the two up, or no repository
+    // would be matched to its tasks.
+    for entry in &mut entries {
+        if let Some(repo) = repos.iter().find(|r| r.name == entry.name) {
+            entry.id = repo.id.0.clone();
+        }
+    }
+    let overview = cohors_core::overview(&repos, &entries, &board, now);
+    app.set_repos(repos);
+    app.set_overview(overview, entries);
+    app.scanned_at = Some(now);
+}
+
+/// Show a loaded launchpad, scrolled to the repository Enter was pressed on in
+/// card 3 when there is one.
+fn show_launchpad(app: &mut App, mut view: LaunchpadView) {
+    if let Some(name) = app.launchpad_jump.take() {
+        view.scroll = ui::launchpad_line_of(&view, &name).unwrap_or(0);
+    }
+    app.launchpad = Some(view);
 }
 
 /// Populate the command-run view with a fake successful run, so `cohors demo`
@@ -283,6 +328,9 @@ fn run_loop(
     let mut app = App::new(scanner.roots(), scanner.config_path());
     app.icons = scanner.icon_mode();
     app.dark = dark;
+    // Stamped on every overview request, so a result that a newer request has
+    // superseded is dropped when it arrives.
+    let mut overview_seq: u64 = 0;
     // Warm start: paint cached snapshots instantly, then refresh in background.
     if use_cache
         && let Some(cached) = crate::cache::load()
@@ -290,6 +338,7 @@ fn run_loop(
     {
         app.set_repos(cached);
         app.status = Some("refreshing…".to_string());
+        spawn_overview(&app, &tx, &mut overview_seq);
     }
     app.scanning = true;
     spawn_scan(&scanner, tx.clone());
@@ -326,6 +375,16 @@ fn run_loop(
                         start_action_targets(&mut app, &tx, ActionKind::Pull, &mut batch)
                     }
                     Cmd::PushSelected => start_push(&mut app, &tx, &mut batch),
+                    // A "Do next" step: the overview already chose the targets.
+                    Cmd::Act { verb, ids } => {
+                        let kind = match verb {
+                            BulkVerb::Fetch => ActionKind::Fetch,
+                            BulkVerb::Pull => ActionKind::Pull,
+                            BulkVerb::Push => ActionKind::Push,
+                        };
+                        start_action_on(&mut app, &tx, kind, ids, Targets::Exact, &mut batch)
+                    }
+                    Cmd::CopyStandupMarkdown => spawn_standup(&mut app, &scanner, &tx),
                     Cmd::PushBranchAccept => accept_push_branch(&mut app, &tx),
                     Cmd::CopyPath => copy_selected(&mut app),
                     Cmd::OpenDetail => open_detail(&mut app, &scanner, &tx),
@@ -369,7 +428,7 @@ fn run_loop(
             app.spinner = app.spinner.wrapping_add(1);
         }
 
-        drain_background(&mut app, &rx, &mut batch, &scanner, &tx);
+        drain_background(&mut app, &rx, &mut batch, &scanner, &tx, &mut overview_seq);
 
         // Auto-expire a result toast once nothing is in flight, so a stale
         // "fetched 3 repos" doesn't sit there forever. In-progress messages are
@@ -454,6 +513,7 @@ fn drain_background(
     batch: &mut Option<Batch>,
     scanner: &Arc<Scanner>,
     tx: &Sender<BgMsg>,
+    overview_seq: &mut u64,
 ) {
     while let Ok(msg) = rx.try_recv() {
         match msg {
@@ -470,9 +530,13 @@ fn drain_background(
                 }
                 app.set_repos(repos);
                 app.scanning = false;
+                app.scanned_at = Some(now_secs());
                 if app.status.as_deref() == Some("refreshing…") {
                     app.status = None;
                 }
+                // The overview is derived from the snapshots, so every scan
+                // needs a new one.
+                spawn_overview(app, tx, overview_seq);
                 // Empty fleet? Offer a first-run rescue: repos detected elsewhere
                 // that aren't already being searched (the empty-state picker).
                 app.suggested_roots = if app.repos.is_empty() {
@@ -497,12 +561,27 @@ fn drain_background(
                 crate::cache::save(&app.repos);
             }
             BgMsg::StandupReady(commits) => {
-                app.standup = Some(StandupView::new(commits));
+                app.show_standup(commits);
+                // `y` in the commits card asked for the markdown, not the view.
+                if app.copy_standup_pending {
+                    app.copy_standup_pending = false;
+                    copy_standup(app);
+                }
             }
             BgMsg::LaunchpadReady(view) => {
                 // Ignore a late result if the user already closed the view.
                 if app.mode == Mode::Launchpad {
-                    app.launchpad = Some(*view);
+                    show_launchpad(app, *view);
+                }
+            }
+            BgMsg::OverviewReady {
+                seq,
+                overview,
+                entries,
+            } => {
+                // Only the newest request's answer describes the current fleet.
+                if seq == *overview_seq {
+                    app.set_overview(*overview, entries);
                 }
             }
             BgMsg::DetailReady { id, detail } => {
@@ -548,6 +627,11 @@ fn drain_background(
                 app.busy.remove(&id);
                 if let Some(new_snapshot) = snapshot {
                     replace_snapshot(app, &id, *new_snapshot);
+                    // The repository changed, so "Do next" and the figures did
+                    // too. Wait for the last action of a batch before asking.
+                    if app.busy.is_empty() {
+                        spawn_overview(app, tx, overview_seq);
+                    }
                 }
                 if let Some(b) = batch.as_ref() {
                     if app.busy.is_empty() {
@@ -584,6 +668,33 @@ fn start_action_targets(
     kind: ActionKind,
     batch: &mut Option<Batch>,
 ) {
+    let ids = app.action_targets();
+    start_action_on(app, tx, kind, ids, Targets::Selection, batch);
+}
+
+/// Where a list of action targets came from, which decides how much the loop
+/// second-guesses it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Targets {
+    /// The marked selection (or the cursor). A bulk push leaves out the
+    /// repositories with nothing to push rather than reporting a failure each.
+    Selection,
+    /// Chosen by the overview for a "Do next" step: exactly the repositories
+    /// that need the action, so none is left out. This is what lets a push
+    /// publish branches that have no upstream yet.
+    Exact,
+}
+
+/// Run `kind` over `ids` on the shared action pool, with the per-repo busy
+/// markers and the aggregate status line.
+fn start_action_on(
+    app: &mut App,
+    tx: &Sender<BgMsg>,
+    kind: ActionKind,
+    ids: Vec<RepoId>,
+    source: Targets,
+    batch: &mut Option<Batch>,
+) {
     // Pull/stash/commit mutate the worktree, so a conflicted or mid-operation
     // repo is skipped with a reason (the same `worktree_block` rule the
     // MCP/web dispatch applies); fetch/push never touch the worktree.
@@ -600,8 +711,8 @@ fn start_action_targets(
     // as "nothing to push", instead of firing a `git push` at each that reports back
     // a failure. A single-repo push still attempts, so its real git result shows
     // (and a specific branch is chosen through the picker, not here).
-    let ids = app.action_targets();
-    let bulk_push = ids.len() > 1 && matches!(kind, ActionKind::Push);
+    let bulk_push =
+        source == Targets::Selection && ids.len() > 1 && matches!(kind, ActionKind::Push);
     let mut nothing_count = 0usize;
     for id in ids {
         let Some(r) = app.repos.iter().find(|r| r.id == id) else {
@@ -1047,6 +1158,7 @@ fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
     let Some(email) = scanner.author_email() else {
         app.status = Some("set `git config user.email` to use the standup".to_string());
         app.mode = Mode::Normal;
+        app.copy_standup_pending = false;
         return;
     };
     let (since, until) = app.standup_window.range(now_secs());
@@ -1070,8 +1182,31 @@ fn spawn_launchpad(app: &App, tx: &Sender<BgMsg>) {
         // One shared read (the same one the web and MCP use), not a local copy.
         let home = cohors_fleet::launchpad::launchpad_home();
         let bundle = cohors_fleet::launchpad_bundle(&repos, home.as_deref());
-        let view = crate::app::LaunchpadView::new(bundle.entries, bundle.board);
+        let view = LaunchpadView::new(bundle.entries, bundle.board);
         let _ = tx.send(BgMsg::LaunchpadReady(Box::new(view)));
+    });
+}
+
+/// Compute the overview for the current snapshots on a worker thread. It
+/// reads each repository's small launchpad file, which is why it stays off
+/// the UI thread. The same thread reads the launchpad entries the detail
+/// view's tasks card shows (task titles and run commands), which the overview
+/// model itself only counts.
+fn spawn_overview(app: &App, tx: &Sender<BgMsg>, seq: &mut u64) {
+    *seq += 1;
+    let seq = *seq;
+    let repos = app.repos.clone();
+    let tx = tx.clone();
+    std::thread::spawn(move || {
+        let home = cohors_fleet::launchpad::launchpad_home();
+        // The one overview every front-end shares; this crate only lays it out.
+        let overview = cohors_fleet::overview(&repos, home.as_deref(), now_secs());
+        let entries = cohors_fleet::launchpad_bundle(&repos, home.as_deref()).entries;
+        let _ = tx.send(BgMsg::OverviewReady {
+            seq,
+            overview: Box::new(overview),
+            entries,
+        });
     });
 }
 

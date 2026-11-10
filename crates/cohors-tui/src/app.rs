@@ -6,17 +6,174 @@
 //! returns a [`Cmd`] telling the event loop what side effect to run (quit,
 //! rescan), keeping I/O out of the state.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use cohors_core::launchpad::LaunchpadEntry;
 use cohors_core::{
-    RemoteDetail, RepoDetail, RepoId, RepoSnapshot, SortMode, StandupCommit, StandupWindow,
-    ViewParams, ViewRow, compute_view, group_commits,
+    ActionKind, NextAction, Overview, RemoteDetail, RepoDetail, RepoId, RepoLine, RepoSnapshot,
+    SortMode, StandupCommit, StandupWindow, ViewParams, ViewRow, compute_view, group_commits,
 };
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+
+/// Which screen sits underneath the overlays.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Screen {
+    /// The overview: the header, the key figures and the five numbered cards.
+    /// This is what cohors opens on.
+    Overview,
+    /// The detail view: every repository as a two-line list, with three cards
+    /// about the selected one underneath. Opened from card 5 with Enter.
+    Repos,
+}
+
+/// The five numbered cards of the overview. The number is the key that focuses
+/// the card.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Card {
+    DoNext,
+    AtRisk,
+    Tasks,
+    Commits,
+    Repos,
+}
+
+impl Card {
+    /// Every card, in reading order (also the order Tab cycles through).
+    pub const ALL: [Card; 5] = [
+        Card::DoNext,
+        Card::AtRisk,
+        Card::Tasks,
+        Card::Commits,
+        Card::Repos,
+    ];
+
+    /// The number shown in the card's title: 1 to 5.
+    pub fn number(self) -> u8 {
+        match self {
+            Card::DoNext => 1,
+            Card::AtRisk => 2,
+            Card::Tasks => 3,
+            Card::Commits => 4,
+            Card::Repos => 5,
+        }
+    }
+
+    /// The card a number key focuses, if the key is `1` to `5`.
+    pub fn from_key(key: char) -> Option<Card> {
+        Card::ALL
+            .into_iter()
+            .find(|card| char::from(b'0' + card.number()) == key)
+    }
+
+    /// The card `step` places further along, wrapping at both ends.
+    fn cycle(self, step: isize) -> Card {
+        let count = Card::ALL.len() as isize;
+        let index = isize::from(self.number()) - 1;
+        Card::ALL[(index + step).rem_euclid(count) as usize]
+    }
+}
+
+/// The four cards of the detail view: the list, and three about the selected
+/// repository.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pane {
+    List,
+    State,
+    Signals,
+    Tasks,
+}
+
+impl Pane {
+    const ALL: [Pane; 4] = [Pane::List, Pane::State, Pane::Signals, Pane::Tasks];
+
+    fn cycle(self, step: isize) -> Pane {
+        let count = Pane::ALL.len() as isize;
+        let index = Pane::ALL.iter().position(|p| *p == self).unwrap_or(0) as isize;
+        Pane::ALL[(index + step).rem_euclid(count) as usize]
+    }
+}
+
+/// A git action that runs over several repositories with no question asked.
+/// Fetch, fast-forward pull and push cannot lose local work, which is why they
+/// are the only three here; commit and stash go through a confirmation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BulkVerb {
+    Fetch,
+    Pull,
+    Push,
+}
+
+impl BulkVerb {
+    /// The typed verb for an action-registry verb name, if it is one of the
+    /// three that run without a confirmation.
+    fn from_registry(verb: &str) -> Option<Self> {
+        match verb {
+            "fetch" => Some(BulkVerb::Fetch),
+            "pull" => Some(BulkVerb::Pull),
+            "push" => Some(BulkVerb::Push),
+            _ => None,
+        }
+    }
+}
+
+/// A set of repositories the table is narrowed to, e.g. the ones a "Do next"
+/// step is about. `Esc` on the table clears it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Scope {
+    /// What the set is, in a few words: `Review stashes`.
+    pub label: String,
+    pub ids: HashSet<RepoId>,
+}
+
+/// The cursor row of each overview card that is not the table (the table's
+/// cursor is [`App::selected`], which the detail view shares).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Cursors {
+    pub next: usize,
+    pub risk: usize,
+    pub tasks: usize,
+    pub commits: usize,
+}
+
+/// The first visible row of each scrolling list, remembered between frames so
+/// a list only scrolls when the cursor would leave it. The renderer owns these
+/// (it is the one that knows how many rows fit), hence the `Cell`s.
+#[derive(Debug, Default)]
+pub struct Scrolls {
+    pub next: std::cell::Cell<usize>,
+    pub risk: std::cell::Cell<usize>,
+    pub tasks: std::cell::Cell<usize>,
+    pub commits: std::cell::Cell<usize>,
+    /// The table in card 5.
+    pub table: std::cell::Cell<usize>,
+    /// The two-line list of the detail view.
+    pub list: std::cell::Cell<usize>,
+    /// How far the focused card of the detail view may scroll (set each frame).
+    pub pane_max: std::cell::Cell<usize>,
+}
+
+/// The key shown beside a "Do next" step, and the key that carries it out.
+///
+/// Push and Publish share `P` on purpose: both are a push, so one key backs up
+/// everything that exists only on this machine.
+pub fn action_key(kind: ActionKind) -> char {
+    match kind {
+        ActionKind::Unreadable => 'e',
+        ActionKind::Resolve => 'm',
+        ActionKind::Push | ActionKind::Publish => 'P',
+        ActionKind::Reconcile => 'd',
+        ActionKind::ReviewStash => 'S',
+        ActionKind::Pull => 'p',
+        ActionKind::Commit => 'c',
+        ActionKind::Fetch => 'F',
+        ActionKind::StartTask => 't',
+    }
+}
 
 /// Which input mode the dashboard is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mode {
+    /// No overlay: keys go to the current [`Screen`].
     Normal,
     /// Typing into the fuzzy filter.
     Filter,
@@ -86,6 +243,14 @@ pub enum Cmd {
     PushBranchAccept,
     /// Adopt the auto-detected roots from the empty-state rescue prompt.
     UseSuggestedRoots,
+    /// Run a bulk git action over exactly these repositories — a "Do next"
+    /// step, whose targets come from the overview rather than the selection.
+    Act {
+        verb: BulkVerb,
+        ids: Vec<RepoId>,
+    },
+    /// Collect the standup and copy it as markdown without opening the view.
+    CopyStandupMarkdown,
 }
 
 /// How a registry action verb is reached from the TUI. This is the TUI half of
@@ -306,6 +471,35 @@ pub struct App {
     /// view filter and renderers share (WASM-safe core takes it injected).
     pub now: i64,
     pub repos: Vec<RepoSnapshot>,
+    /// The shared overview model: "Do next", the key figures, one line per
+    /// repository, tasks and commits. Computed off the UI thread after every
+    /// scan, so it is `None` for the first moments of a run.
+    pub overview: Option<Overview>,
+    /// Each repository's launchpad entry (task titles and run commands), read
+    /// alongside the overview. The detail view's tasks card shows them.
+    pub entries: Vec<LaunchpadEntry>,
+    /// When the fleet was last scanned (Unix seconds), for the header.
+    pub scanned_at: Option<i64>,
+    /// Which screen is showing under any overlay.
+    pub screen: Screen,
+    /// The focused card of the overview.
+    pub focus: Card,
+    /// The focused card of the detail view.
+    pub pane: Pane,
+    /// Cursor rows of the overview's cards 1 to 4.
+    pub cursors: Cursors,
+    /// First visible rows of the scrolling lists (owned by the renderer).
+    pub scrolls: Scrolls,
+    /// Scroll offset of the focused card in the detail view.
+    pub pane_scroll: usize,
+    /// When set, the table lists only these repositories.
+    pub scope: Option<Scope>,
+    /// The repository the standup should open on (set by Enter in card 4).
+    pub standup_jump: Option<String>,
+    /// The repository the launchpad should open on (set by Enter in card 3).
+    pub launchpad_jump: Option<String>,
+    /// `y` in card 4 was pressed: copy the standup as soon as it is collected.
+    pub copy_standup_pending: bool,
     pub sort: SortMode,
     pub dirty_only: bool,
     pub mode: Mode,
@@ -341,16 +535,10 @@ pub struct App {
     pub run: Option<CommandRun>,
     /// The destructive action awaiting confirmation (`Some` ⇒ `Mode::Confirm`).
     pub confirm: Option<Pending>,
-    /// Collapse the footer hint boxes to a single divider line (toggled with `h`).
-    pub hints_hidden: bool,
     /// The "Open with…" picker (`Some` ⇒ `Mode::OpenWith`).
     pub open_with: Option<OpenWith>,
     /// The "push which branch?" picker (`Some` ⇒ `Mode::PushBranch`).
     pub push_pick: Option<PushPick>,
-    /// The repo table's scroll offset, cached from the last render (interior
-    /// mutability, like the overlay scroll states) so the panel can show a
-    /// "… N more" affordance when the list overflows the window.
-    pub repos_scroll: std::cell::Cell<usize>,
     /// The drill-in detail pane (`Some` ⇒ `Mode::Detail`).
     pub detail: Option<DetailView>,
     /// Repos auto-detected elsewhere when the configured roots came up empty —
@@ -451,6 +639,19 @@ impl App {
         Self {
             now: 0,
             repos: Vec::new(),
+            overview: None,
+            entries: Vec::new(),
+            scanned_at: None,
+            screen: Screen::Overview,
+            focus: Card::DoNext,
+            pane: Pane::List,
+            cursors: Cursors::default(),
+            scrolls: Scrolls::default(),
+            pane_scroll: 0,
+            scope: None,
+            standup_jump: None,
+            launchpad_jump: None,
+            copy_standup_pending: false,
             sort: SortMode::default(),
             dirty_only: false,
             mode: Mode::Normal,
@@ -470,10 +671,8 @@ impl App {
             command_line: String::new(),
             run: None,
             confirm: None,
-            hints_hidden: false,
             open_with: None,
             push_pick: None,
-            repos_scroll: std::cell::Cell::new(0),
             detail: None,
             suggested_roots: Vec::new(),
             icons: cohors_config::IconMode::default(),
@@ -489,7 +688,7 @@ impl App {
 
     /// The ordered, filtered rows to render this frame.
     pub fn view(&self) -> Vec<ViewRow> {
-        compute_view(
+        let mut rows = compute_view(
             &self.repos,
             &ViewParams {
                 sort: self.sort,
@@ -497,7 +696,106 @@ impl App {
                 query: &self.filter,
                 now: self.now,
             },
-        )
+        );
+        if let Some(scope) = &self.scope {
+            rows.retain(|row| scope.ids.contains(&self.repos[row.index].id));
+        }
+        // With the default sort and nothing typed, list repositories in the
+        // overview's own order (most urgent first, then by name) so the table
+        // agrees with "Work at risk" above it. The sort is stable, so a
+        // repository the overview has not seen yet keeps its place at the end.
+        if self.sort == SortMode::default()
+            && self.filter.trim().is_empty()
+            && let Some(overview) = &self.overview
+        {
+            let rank: HashMap<&str, usize> = overview
+                .repos
+                .iter()
+                .enumerate()
+                .map(|(i, line)| (line.id.as_str(), i))
+                .collect();
+            rows.sort_by_key(|row| {
+                let id = self.repos[row.index].id.0.as_str();
+                rank.get(id).copied().unwrap_or(usize::MAX)
+            });
+        }
+        rows
+    }
+
+    /// The overview's line for a repository: its severity, reasons, suggested
+    /// step and task counts. `None` until the overview has been computed.
+    pub fn line(&self, id: &RepoId) -> Option<&RepoLine> {
+        self.overview
+            .as_ref()?
+            .repos
+            .iter()
+            .find(|line| line.id == id.0)
+    }
+
+    /// The launchpad entry (task titles, run commands) for a repository.
+    pub fn entry(&self, id: &RepoId) -> Option<&LaunchpadEntry> {
+        self.entries.iter().find(|entry| entry.id == id.0)
+    }
+
+    /// The repositories in "Work at risk", most urgent first.
+    pub fn at_risk(&self) -> Vec<&RepoLine> {
+        self.overview
+            .as_ref()
+            .map(|overview| overview.at_risk().collect())
+            .unwrap_or_default()
+    }
+
+    /// The "Do next" steps (empty until the overview has been computed).
+    pub fn actions(&self) -> &[NextAction] {
+        self.overview
+            .as_ref()
+            .map_or(&[], |overview| overview.actions.as_slice())
+    }
+
+    /// Install a freshly computed overview and the launchpad entries it was
+    /// built from, keeping every cursor on a row that still exists. The table
+    /// cursor stays on the same repository even though the order may change.
+    pub fn set_overview(&mut self, overview: Overview, entries: Vec<LaunchpadEntry>) {
+        // A cursor still resting on the first row has not been moved by the
+        // person, so it stays on the first row of the new order (the most
+        // urgent repository) rather than following whatever was there before.
+        let untouched = self.overview.is_none() && self.selected == 0;
+        let keep = self.selected_repo().map(|r| r.id.clone());
+        self.overview = Some(overview);
+        self.entries = entries;
+        if !untouched {
+            self.restore_selection(keep);
+        }
+        self.clamp_selection();
+        self.clamp_cursors();
+    }
+
+    /// Keep the four card cursors inside their lists.
+    fn clamp_cursors(&mut self) {
+        let clamp = |cursor: usize, len: usize| cursor.min(len.saturating_sub(1));
+        let (next, risk, tasks, commits) = (
+            self.actions().len(),
+            self.at_risk().len(),
+            self.overview.as_ref().map_or(0, |o| o.work.len()),
+            self.overview.as_ref().map_or(0, |o| o.commits.len()),
+        );
+        self.cursors.next = clamp(self.cursors.next, next);
+        self.cursors.risk = clamp(self.cursors.risk, risk);
+        self.cursors.tasks = clamp(self.cursors.tasks, tasks);
+        self.cursors.commits = clamp(self.cursors.commits, commits);
+    }
+
+    /// Put the table cursor back on the repository `id`, if it is still listed.
+    fn restore_selection(&mut self, id: Option<RepoId>) {
+        if let Some(id) = id
+            && let Some(pos) = self
+                .view()
+                .iter()
+                .position(|row| self.repos[row.index].id == id)
+        {
+            self.selected = pos;
+        }
+        self.clamp_selection();
     }
 
     /// Number of currently-visible repos.
@@ -578,15 +876,7 @@ impl App {
         // same stability.
         let keep = self.selected_repo().map(|r| r.id.clone());
         self.repos = repos;
-        if let Some(id) = keep
-            && let Some(pos) = self
-                .view()
-                .iter()
-                .position(|row| self.repos[row.index].id == id)
-        {
-            self.selected = pos;
-        }
-        self.clamp_selection();
+        self.restore_selection(keep);
     }
 
     fn clamp_selection(&mut self) {
@@ -636,8 +926,8 @@ impl App {
         let max = view.max_scroll.get();
         match key.code {
             KeyCode::Esc | KeyCode::Char('q' | 't') => self.mode = Mode::Normal,
-            KeyCode::Down => view.scroll = (view.scroll + 1).min(max),
-            KeyCode::Up => view.scroll = view.scroll.saturating_sub(1),
+            KeyCode::Down | KeyCode::Char('j') => view.scroll = (view.scroll + 1).min(max),
+            KeyCode::Up | KeyCode::Char('k') => view.scroll = view.scroll.saturating_sub(1),
             KeyCode::PageDown => view.scroll = (view.scroll + 10).min(max),
             KeyCode::PageUp => view.scroll = view.scroll.saturating_sub(10),
             KeyCode::Home => view.scroll = 0,
@@ -740,63 +1030,401 @@ impl App {
         Cmd::None
     }
 
+    /// Keys with no overlay open go to whichever screen is showing.
     fn on_key_normal(&mut self, key: KeyEvent) -> Cmd {
+        if let Some(cmd) = self.on_key_anywhere(key) {
+            return cmd;
+        }
+        match self.screen {
+            Screen::Overview => self.on_key_overview(key),
+            Screen::Repos => self.on_key_repos_screen(key),
+        }
+    }
+
+    /// Keys that mean the same thing on both screens and on every card.
+    /// Returns `None` when the key is not one of them.
+    fn on_key_anywhere(&mut self, key: KeyEvent) -> Option<Cmd> {
         match key.code {
-            KeyCode::Char('q') => return Cmd::Quit,
-            // First-run rescue: adopt the auto-detected roots (empty state only).
-            KeyCode::Char('u') if self.empty_picker_active() => {
-                return Cmd::UseSuggestedRoots;
-            }
-            // Movement is arrow-keys only (Home/End jump to top/bottom).
-            KeyCode::Down => self.move_down(),
-            KeyCode::Up => self.move_up(),
-            KeyCode::Home => self.selected = 0,
-            KeyCode::End => self.select_last(),
-            // Multi-select for bulk actions.
-            KeyCode::Char(' ') => self.toggle_selection(),
-            KeyCode::Char('a') => self.select_all_visible(),
-            KeyCode::Esc => self.selection.clear(),
-            KeyCode::Char('/') => self.mode = Mode::Filter,
+            KeyCode::Char('q') => return Some(Cmd::Quit),
+            KeyCode::Char('r') => return Some(Cmd::Refresh),
+            KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char(':') => {
                 self.mode = Mode::Command;
                 self.command_line.clear();
             }
-            KeyCode::Char('d') => {
-                self.dirty_only = !self.dirty_only;
-                self.clamp_selection();
+            // `!` is the shell shortcut into the command palette: open it
+            // pre-seeded with `!` so the next keystroke starts the command.
+            KeyCode::Char('!') => self.open_command_with("!"),
+            // Filtering always applies to the repository table.
+            KeyCode::Char('/') => {
+                self.focus = Card::Repos;
+                self.pane = Pane::List;
+                self.mode = Mode::Filter;
             }
-            KeyCode::Char('s') => {
-                self.sort = self.sort.next();
-                self.clamp_selection();
+            // First-run rescue: adopt the auto-detected roots (empty state only).
+            KeyCode::Char('u') if self.empty_picker_active() => {
+                return Some(Cmd::UseSuggestedRoots);
             }
-            KeyCode::Char('?') => self.mode = Mode::Help,
-            KeyCode::Char('h') => self.hints_hidden = !self.hints_hidden,
-            KeyCode::Char('r') => return Cmd::Refresh,
-            // Actions (operate on the selection / all repos).
-            KeyCode::Char('f') => return Cmd::FetchSelected,
-            KeyCode::Char('F') => return Cmd::FetchAll,
-            KeyCode::Char('p') => return Cmd::PullSelected,
-            KeyCode::Char('P') => return Cmd::PushSelected,
-            // `!` is the shell shortcut into the unified command palette:
-            // open it pre-seeded with `!` so the next keystroke starts the command.
-            KeyCode::Char('!') => {
-                self.mode = Mode::Command;
-                self.command_line = "!".to_string();
+            // A number key focuses that card, from either screen.
+            KeyCode::Char(c) if Card::from_key(c).is_some() => {
+                self.focus = Card::from_key(c).unwrap_or(self.focus);
+                self.screen = Screen::Overview;
             }
-            KeyCode::Char('S') => self.request_bulk_stash(),
-            KeyCode::Enter => return Cmd::OpenDetail,
-            KeyCode::Char('o') => return Cmd::OpenWith,
-            KeyCode::Char('L') => return Cmd::Lazygit,
-            KeyCode::Char('y') => return Cmd::CopyPath,
-            KeyCode::Tab => {
-                self.mode = Mode::Standup;
-                self.standup = None;
-                return Cmd::OpenStandup;
+            _ => return None,
+        }
+        Some(Cmd::None)
+    }
+
+    /// Open the command palette with `text` already typed.
+    fn open_command_with(&mut self, text: &str) {
+        self.mode = Mode::Command;
+        self.command_line = text.to_string();
+    }
+
+    // ── The overview ─────────────────────────────────────────────────────────
+
+    fn on_key_overview(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Tab => self.focus = self.focus.cycle(1),
+            KeyCode::BackTab => self.focus = self.focus.cycle(-1),
+            KeyCode::Down | KeyCode::Char('j') => self.move_cursor(1),
+            KeyCode::Up | KeyCode::Char('k') => self.move_cursor(-1),
+            KeyCode::PageDown => self.move_cursor(10),
+            KeyCode::PageUp => self.move_cursor(-10),
+            KeyCode::Home => self.move_cursor(isize::MIN / 2),
+            KeyCode::End => self.move_cursor(isize::MAX / 2),
+            _ => {
+                return match self.focus {
+                    Card::DoNext => self.on_key_do_next(key),
+                    Card::AtRisk => self.on_key_at_risk(key),
+                    Card::Tasks => self.on_key_tasks(key),
+                    Card::Commits => self.on_key_commits(key),
+                    Card::Repos => self.on_key_repos_card(key),
+                };
             }
+        }
+        Cmd::None
+    }
+
+    /// How many rows the focused overview card has.
+    fn focused_len(&self) -> usize {
+        match self.focus {
+            Card::DoNext => self.actions().len(),
+            Card::AtRisk => self.at_risk().len(),
+            Card::Tasks => self.overview.as_ref().map_or(0, |o| o.work.len()),
+            Card::Commits => self.overview.as_ref().map_or(0, |o| o.commits.len()),
+            Card::Repos => self.visible_len(),
+        }
+    }
+
+    /// Move the focused card's cursor by `delta` rows, stopping at both ends.
+    fn move_cursor(&mut self, delta: isize) {
+        let last = self.focused_len().saturating_sub(1) as isize;
+        let cursor = match self.focus {
+            Card::DoNext => &mut self.cursors.next,
+            Card::AtRisk => &mut self.cursors.risk,
+            Card::Tasks => &mut self.cursors.tasks,
+            Card::Commits => &mut self.cursors.commits,
+            Card::Repos => &mut self.selected,
+        };
+        *cursor = (*cursor as isize).saturating_add(delta).clamp(0, last) as usize;
+    }
+
+    /// Card 1: Enter carries out the highlighted step; a step's own key
+    /// carries out every step that lists that key.
+    fn on_key_do_next(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Enter => match self.actions().get(self.cursors.next).cloned() {
+                Some(action) => self.perform(&[action]),
+                None => Cmd::None,
+            },
+            KeyCode::Char(c) => self.perform_key(c),
+            _ => Cmd::None,
+        }
+    }
+
+    /// Card 2: Enter opens the highlighted repository in the detail view; the
+    /// step keys work as they do in card 1.
+    fn on_key_at_risk(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Enter => {
+                let id = self
+                    .at_risk()
+                    .get(self.cursors.risk)
+                    .map(|line| RepoId(line.id.clone()));
+                if let Some(id) = id {
+                    self.show_repo(&id);
+                }
+                Cmd::None
+            }
+            KeyCode::Char(c) => self.perform_key(c),
+            _ => Cmd::None,
+        }
+    }
+
+    /// Card 3: `t` opens the launchpad at the focus board; Enter opens it at
+    /// the highlighted repository's tasks.
+    fn on_key_tasks(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Char('t') => self.open_launchpad(),
+            KeyCode::Enter => {
+                self.launchpad_jump = self
+                    .overview
+                    .as_ref()
+                    .and_then(|o| o.work.get(self.cursors.tasks))
+                    .map(|work| work.name.clone());
+                self.open_launchpad()
+            }
+            _ => Cmd::None,
+        }
+    }
+
+    /// Card 4: `s` (or Enter, on the highlighted repository) opens the
+    /// standup; `y` copies it as markdown without opening it.
+    fn on_key_commits(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Char('s') => self.open_standup(),
+            KeyCode::Enter => {
+                self.standup_jump = self
+                    .overview
+                    .as_ref()
+                    .and_then(|o| o.commits.get(self.cursors.commits))
+                    .map(|commits| commits.name.clone());
+                self.open_standup()
+            }
+            KeyCode::Char('y') => {
+                self.copy_standup_pending = true;
+                Cmd::CopyStandupMarkdown
+            }
+            KeyCode::Char('t') => self.open_launchpad(),
+            _ => Cmd::None,
+        }
+    }
+
+    /// Card 5: the table keys, plus Enter for the detail view and Esc to peel
+    /// back one narrowing at a time.
+    fn on_key_repos_card(&mut self, key: KeyEvent) -> Cmd {
+        if let Some(cmd) = self.on_key_table(key) {
+            return cmd;
+        }
+        match key.code {
+            KeyCode::Enter if self.selected_repo().is_some() => {
+                self.screen = Screen::Repos;
+                self.pane = Pane::List;
+                self.pane_scroll = 0;
+            }
+            KeyCode::Esc => self.clear_one_narrowing(),
             KeyCode::Char('t') => return self.open_launchpad(),
             _ => {}
         }
         Cmd::None
+    }
+
+    /// Esc on the table undoes the most recent narrowing: the marked
+    /// selection first, then a "Do next" scope, then the typed filter.
+    fn clear_one_narrowing(&mut self) {
+        if !self.selection.is_empty() {
+            self.selection.clear();
+        } else if self.scope.take().is_none() {
+            self.filter.clear();
+        }
+        self.clamp_selection();
+    }
+
+    /// The keys the repository table answers to on both screens. Returns
+    /// `None` when the key is not a table key.
+    fn on_key_table(&mut self, key: KeyEvent) -> Option<Cmd> {
+        let cmd = match key.code {
+            // Multi-select for bulk actions.
+            KeyCode::Char(' ') => {
+                self.toggle_selection();
+                Cmd::None
+            }
+            KeyCode::Char('*') => {
+                self.select_all_visible();
+                Cmd::None
+            }
+            KeyCode::Char('>') => {
+                self.sort = self.sort.next();
+                self.clamp_selection();
+                Cmd::None
+            }
+            // Actions on the marked repositories, else the one under the cursor.
+            KeyCode::Char('f') => Cmd::FetchSelected,
+            KeyCode::Char('F') => Cmd::FetchAll,
+            KeyCode::Char('p') => Cmd::PullSelected,
+            KeyCode::Char('P') => Cmd::PushSelected,
+            // A commit needs a message, so `c` opens the command line with
+            // `commit ` typed; Enter then asks for confirmation as before.
+            KeyCode::Char('c') => {
+                self.open_command_with("commit ");
+                Cmd::None
+            }
+            KeyCode::Char('S') => {
+                self.request_bulk_stash();
+                Cmd::None
+            }
+            KeyCode::Char('o') => Cmd::OpenWith,
+            KeyCode::Char('L') => Cmd::Lazygit,
+            KeyCode::Char('y') => Cmd::CopyPath,
+            _ => return None,
+        };
+        Some(cmd)
+    }
+
+    /// Carry out every "Do next" step whose key is `key`. Does nothing when no
+    /// step lists that key.
+    fn perform_key(&mut self, key: char) -> Cmd {
+        let steps: Vec<NextAction> = self
+            .actions()
+            .iter()
+            .filter(|action| action_key(action.kind) == key)
+            .cloned()
+            .collect();
+        // `t` always reaches the launchpad from these cards, whether or not
+        // "start a task" is currently one of the steps.
+        if steps.is_empty() && key == 't' {
+            return self.open_launchpad();
+        }
+        self.perform(&steps)
+    }
+
+    /// Carry out one or more "Do next" steps of the same kind of work.
+    ///
+    /// A step with a fetch, pull or push verb runs that action over exactly the
+    /// step's repositories. A stash step asks first. Everything else needs a
+    /// person to look, so it navigates: the launchpad for tasks, otherwise the
+    /// repository table narrowed to the step's repositories.
+    fn perform(&mut self, steps: &[NextAction]) -> Cmd {
+        let Some(first) = steps.first() else {
+            return Cmd::None;
+        };
+        // Several steps can share a key (Push and Publish); act on all their
+        // repositories once each, in the order the overview lists them.
+        let mut seen = HashSet::new();
+        let ids: Vec<RepoId> = steps
+            .iter()
+            .flat_map(|step| step.repos.iter())
+            .filter(|id| seen.insert(id.as_str()))
+            .map(|id| RepoId(id.clone()))
+            .collect();
+
+        if first.kind == ActionKind::StartTask {
+            return self.open_launchpad();
+        }
+        match first.verb.as_deref() {
+            Some("stash") => {
+                self.confirm_stash(ids);
+                Cmd::None
+            }
+            Some(verb) => match BulkVerb::from_registry(verb) {
+                Some(verb) => Cmd::Act { verb, ids },
+                None => self.narrow_to(&first.title, ids),
+            },
+            None => self.narrow_to(&first.title, ids),
+        }
+    }
+
+    /// Show only `ids` in the repository table and move the focus there.
+    fn narrow_to(&mut self, label: &str, ids: Vec<RepoId>) -> Cmd {
+        self.scope = Some(Scope {
+            label: label.to_string(),
+            ids: ids.into_iter().collect(),
+        });
+        // A leftover filter or the attention toggle could hide the very
+        // repositories the step is about.
+        self.filter.clear();
+        self.dirty_only = false;
+        self.selected = 0;
+        self.focus = Card::Repos;
+        self.screen = Screen::Overview;
+        Cmd::None
+    }
+
+    /// Open the detail view with the cursor on `id`. If the current filter or
+    /// scope hides that repository, they are cleared so it can be shown.
+    fn show_repo(&mut self, id: &RepoId) {
+        let position = |app: &App| {
+            app.view()
+                .iter()
+                .position(|row| &app.repos[row.index].id == id)
+        };
+        if position(self).is_none() {
+            self.scope = None;
+            self.filter.clear();
+            self.dirty_only = false;
+        }
+        let Some(index) = position(self) else {
+            self.status = Some("that repository is no longer in the fleet".to_string());
+            return;
+        };
+        self.selected = index;
+        self.focus = Card::Repos;
+        self.screen = Screen::Repos;
+        self.pane = Pane::List;
+        self.pane_scroll = 0;
+    }
+
+    /// Switch to the standup view; the event loop collects its commits.
+    fn open_standup(&mut self) -> Cmd {
+        self.mode = Mode::Standup;
+        self.standup = None;
+        Cmd::OpenStandup
+    }
+
+    /// Show collected standup commits, opening on the repository Enter was
+    /// pressed on in card 4 when there is one.
+    pub fn show_standup(&mut self, commits: Vec<StandupCommit>) {
+        let mut view = StandupView::new(commits);
+        if let Some(name) = self.standup_jump.take()
+            && let Some(index) = view.groups.iter().position(|(repo, _)| *repo == name)
+        {
+            view.focus = index;
+        }
+        self.standup = Some(view);
+    }
+
+    // ── The detail view ──────────────────────────────────────────────────────
+
+    fn on_key_repos_screen(&mut self, key: KeyEvent) -> Cmd {
+        match key.code {
+            KeyCode::Esc => self.screen = Screen::Overview,
+            KeyCode::Tab => self.focus_pane(self.pane.cycle(1)),
+            KeyCode::BackTab => self.focus_pane(self.pane.cycle(-1)),
+            KeyCode::Down | KeyCode::Char('j') => self.move_in_detail(1),
+            KeyCode::Up | KeyCode::Char('k') => self.move_in_detail(-1),
+            KeyCode::PageDown => self.move_in_detail(10),
+            KeyCode::PageUp => self.move_in_detail(-10),
+            KeyCode::Home => self.move_in_detail(isize::MIN / 2),
+            KeyCode::End => self.move_in_detail(isize::MAX / 2),
+            // The full drill-in: commits, branches, changed files, stashes.
+            KeyCode::Enter | KeyCode::Char('d') => return Cmd::OpenDetail,
+            KeyCode::Char('t') => return self.open_launchpad(),
+            _ => return self.on_key_table(key).unwrap_or(Cmd::None),
+        }
+        Cmd::None
+    }
+
+    fn focus_pane(&mut self, pane: Pane) {
+        self.pane = pane;
+        self.pane_scroll = 0;
+    }
+
+    /// Up/down in the detail view: move through the list, or scroll the card
+    /// that has the focus.
+    fn move_in_detail(&mut self, delta: isize) {
+        if self.pane == Pane::List {
+            let last = self.visible_len().saturating_sub(1) as isize;
+            self.selected = (self.selected as isize)
+                .saturating_add(delta)
+                .clamp(0, last) as usize;
+            self.pane_scroll = 0;
+        } else {
+            let max = self.scrolls.pane_max.get() as isize;
+            self.pane_scroll = (self.pane_scroll as isize)
+                .saturating_add(delta)
+                .clamp(0, max) as usize;
+        }
     }
 
     fn on_key_filter(&mut self, key: KeyEvent) -> Cmd {
@@ -863,11 +1491,7 @@ impl App {
             Some(C::Push) => return Cmd::PushSelected,
             Some(C::Commit(message)) => self.request_bulk_commit(message),
             Some(C::Refresh) => return Cmd::Refresh,
-            Some(C::Standup) => {
-                self.mode = Mode::Standup;
-                self.standup = None;
-                return Cmd::OpenStandup;
-            }
+            Some(C::Standup) => return self.open_standup(),
             Some(C::Launchpad) => return self.open_launchpad(),
             Some(C::Help) => self.mode = Mode::Help,
             Some(C::Quit) => return Cmd::Quit,
@@ -908,7 +1532,12 @@ impl App {
             .iter()
             .position(|vr| self.repos[vr.index].name.to_lowercase().contains(&needle));
         match hit {
-            Some(i) => self.selected = i,
+            Some(i) => {
+                self.selected = i;
+                // Put the focus where the cursor just moved, so it is visible.
+                self.focus = Card::Repos;
+                self.pane = Pane::List;
+            }
             None => self.status = Some(format!("no repo matching '{name}'")),
         }
     }
@@ -1068,8 +1697,14 @@ impl App {
 
     /// Open the confirmation modal for stashing the target repos' changes.
     fn request_bulk_stash(&mut self) {
-        let ids: Vec<RepoId> = self
-            .action_targets()
+        let ids = self.action_targets();
+        self.confirm_stash(ids);
+    }
+
+    /// Ask before stashing changes in `ids` (unreadable repositories are left
+    /// out: there is nothing to stash in a repository that cannot be read).
+    fn confirm_stash(&mut self, ids: Vec<RepoId>) {
+        let ids: Vec<RepoId> = ids
             .into_iter()
             .filter(|id| self.repos.iter().any(|r| &r.id == id && !r.has_error()))
             .collect();
@@ -1127,8 +1762,14 @@ impl App {
     /// `ScrollDown` event toward the top.
     pub fn on_mouse_scroll(&mut self, scroll_up: bool) {
         let toward_top = !scroll_up;
+        let step = if toward_top { -1 } else { 1 };
         match self.mode {
-            Mode::Normal | Mode::Filter => {
+            // The wheel moves whatever the arrow keys would move.
+            Mode::Normal => match self.screen {
+                Screen::Overview => self.move_cursor(step),
+                Screen::Repos => self.move_in_detail(step),
+            },
+            Mode::Filter => {
                 if toward_top {
                     self.move_up();
                 } else {
@@ -1162,10 +1803,6 @@ impl App {
 
     fn move_up(&mut self) {
         self.selected = self.selected.saturating_sub(1);
-    }
-
-    fn select_last(&mut self) {
-        self.selected = self.visible_len().saturating_sub(1);
     }
 }
 
@@ -1220,10 +1857,505 @@ mod tests {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
 
+    /// An app with these repositories and the focus on the repository table
+    /// (card 5), which is where the table keys live.
     fn app_with(names: &[(&str, bool)]) -> App {
         let mut app = App::new(vec![], String::new());
         app.set_repos(names.iter().map(|(n, d)| snap(n, *d)).collect());
+        app.focus = Card::Repos;
         app
+    }
+
+    const NOW: i64 = 1_700_000_000;
+
+    /// The built-in sample fleet with its overview, as `cohors demo` starts.
+    fn demo_app() -> App {
+        let mut app = App::new(vec![], String::new());
+        crate::tui::seed_demo(&mut app, NOW);
+        app.now = NOW;
+        app
+    }
+
+    /// The index of the first "Do next" step of `kind` in the sample fleet.
+    fn step(app: &App, kind: ActionKind) -> usize {
+        app.actions()
+            .iter()
+            .position(|action| action.kind == kind)
+            .unwrap_or_else(|| panic!("the sample fleet has no {kind:?} step"))
+    }
+
+    #[test]
+    fn number_keys_focus_cards_and_tab_cycles_both_ways() {
+        let mut app = demo_app();
+        assert_eq!(app.focus, Card::DoNext); // what cohors opens on
+        for (digit, card) in ['1', '2', '3', '4', '5'].into_iter().zip(Card::ALL) {
+            app.on_key(key(digit));
+            assert_eq!(app.focus, card);
+        }
+        // Tab wraps from the last card to the first, shift-tab the other way.
+        app.on_key(code(KeyCode::Tab));
+        assert_eq!(app.focus, Card::DoNext);
+        app.on_key(code(KeyCode::BackTab));
+        assert_eq!(app.focus, Card::Repos);
+        // Digits that are not a card do nothing.
+        app.on_key(key('6'));
+        app.on_key(key('0'));
+        assert_eq!(app.focus, Card::Repos);
+    }
+
+    #[test]
+    fn arrows_and_jk_move_only_the_focused_card() {
+        let mut app = demo_app();
+        app.on_key(key('2'));
+        app.on_key(key('j'));
+        app.on_key(code(KeyCode::Down));
+        assert_eq!(app.cursors.risk, 2);
+        app.on_key(key('k'));
+        assert_eq!(app.cursors.risk, 1);
+        // Nothing else moved.
+        assert_eq!((app.cursors.next, app.selected), (0, 0));
+
+        // The cursor stops at both ends instead of wrapping or overflowing.
+        app.on_key(code(KeyCode::End));
+        assert_eq!(app.cursors.risk, app.at_risk().len() - 1);
+        app.on_key(code(KeyCode::Down));
+        assert_eq!(app.cursors.risk, app.at_risk().len() - 1);
+        app.on_key(code(KeyCode::Home));
+        app.on_key(code(KeyCode::Up));
+        assert_eq!(app.cursors.risk, 0);
+    }
+
+    #[test]
+    fn moving_in_an_empty_card_is_harmless() {
+        // No overview yet and no repositories: every card is empty.
+        let mut app = App::new(vec![], String::new());
+        for card in ['1', '2', '3', '4', '5'] {
+            app.on_key(key(card));
+            for movement in [KeyCode::Down, KeyCode::Up, KeyCode::End, KeyCode::PageDown] {
+                assert_eq!(app.on_key(code(movement)), Cmd::None);
+            }
+        }
+        // Enter has nothing to open in "Do next", "Work at risk" or the table.
+        for card in ['1', '2', '5'] {
+            app.on_key(key(card));
+            assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
+        }
+        assert_eq!(app.cursors, Cursors::default());
+        assert_eq!((app.screen, app.selected), (Screen::Overview, 0));
+    }
+
+    #[test]
+    fn a_step_with_a_verb_runs_over_exactly_its_repositories() {
+        let mut app = demo_app();
+        let index = step(&app, ActionKind::Pull);
+        let targets: Vec<RepoId> = app.actions()[index]
+            .repos
+            .iter()
+            .map(|id| RepoId(id.clone()))
+            .collect();
+        assert!(!targets.is_empty());
+
+        // Its own key, from "Do next"…
+        assert_eq!(
+            app.on_key(key('p')),
+            Cmd::Act {
+                verb: BulkVerb::Pull,
+                ids: targets.clone()
+            }
+        );
+        // …the same key from "Work at risk"…
+        app.on_key(key('2'));
+        assert_eq!(
+            app.on_key(key('p')),
+            Cmd::Act {
+                verb: BulkVerb::Pull,
+                ids: targets.clone()
+            }
+        );
+        // …and Enter on the highlighted step.
+        app.on_key(key('1'));
+        app.cursors.next = index;
+        assert_eq!(
+            app.on_key(code(KeyCode::Enter)),
+            Cmd::Act {
+                verb: BulkVerb::Pull,
+                ids: targets
+            }
+        );
+    }
+
+    #[test]
+    fn push_and_publish_share_a_key_and_run_together() {
+        let step = |kind, repos: &[&str]| NextAction {
+            kind,
+            severity: cohors_core::Severity::Warn,
+            title: String::new(),
+            why: String::new(),
+            label: String::new(),
+            verb: Some("push".to_string()),
+            repos: repos.iter().map(|r| r.to_string()).collect(),
+        };
+        let mut app = demo_app();
+        let overview = app.overview.as_mut().unwrap();
+        overview.actions = vec![
+            step(ActionKind::Push, &["a", "b"]),
+            // "b" is listed by both steps and must be pushed once.
+            step(ActionKind::Publish, &["b", "c"]),
+        ];
+        let ids = |names: &[&str]| names.iter().map(|n| RepoId(n.to_string())).collect();
+        assert_eq!(
+            app.on_key(key('P')),
+            Cmd::Act {
+                verb: BulkVerb::Push,
+                ids: ids(&["a", "b", "c"])
+            }
+        );
+        // Enter acts on the highlighted step alone.
+        app.cursors.next = 1;
+        assert_eq!(
+            app.on_key(code(KeyCode::Enter)),
+            Cmd::Act {
+                verb: BulkVerb::Push,
+                ids: ids(&["b", "c"])
+            }
+        );
+    }
+
+    #[test]
+    fn a_step_that_needs_a_look_narrows_the_table_instead_of_acting() {
+        let mut app = demo_app();
+        let index = step(&app, ActionKind::Commit);
+        let wanted = app.actions()[index].repos.len();
+        // `c` on "Do next" must not commit anything: it shows the repositories.
+        assert_eq!(app.on_key(key('c')), Cmd::None);
+        assert_eq!(app.mode, Mode::Normal);
+        assert_eq!(app.focus, Card::Repos);
+        assert_eq!(app.visible_len(), wanted);
+        assert!(app.scope.is_some());
+
+        // Esc on the table shows the whole fleet again.
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.scope.is_none());
+        assert_eq!(app.visible_len(), app.repos.len());
+    }
+
+    #[test]
+    fn a_stash_step_asks_before_it_does_anything() {
+        let mut app = demo_app();
+        let target = app
+            .repos
+            .iter()
+            .find(|r| !r.has_error())
+            .unwrap()
+            .id
+            .clone();
+        app.overview.as_mut().unwrap().actions = vec![NextAction {
+            kind: ActionKind::ReviewStash,
+            severity: cohors_core::Severity::Warn,
+            title: String::new(),
+            why: String::new(),
+            label: String::new(),
+            verb: Some("stash".to_string()),
+            repos: vec![target.0.clone()],
+        }];
+        assert_eq!(app.on_key(key('S')), Cmd::None);
+        assert_eq!(app.mode, Mode::Confirm);
+        assert!(matches!(
+            app.confirm.as_ref().unwrap().action,
+            ConfirmAction::BulkStash(ref ids) if ids == &[target]
+        ));
+    }
+
+    #[test]
+    fn an_unknown_verb_never_runs_blind() {
+        let mut app = demo_app();
+        app.overview.as_mut().unwrap().actions = vec![NextAction {
+            kind: ActionKind::Fetch,
+            severity: cohors_core::Severity::Info,
+            title: "Something new".to_string(),
+            why: String::new(),
+            label: String::new(),
+            verb: Some("obliterate".to_string()),
+            repos: vec!["demo/payments".to_string()],
+        }];
+        // A verb this build does not know is shown, not executed.
+        assert_eq!(app.on_key(key('F')), Cmd::None);
+        assert_eq!(app.scope.as_ref().unwrap().label, "Something new");
+    }
+
+    #[test]
+    fn step_keys_do_nothing_when_no_step_lists_them() {
+        let mut app = demo_app();
+        app.overview.as_mut().unwrap().actions.clear();
+        for c in ['P', 'p', 'F', 'S', 'c', 'e', 'm', 'd', 'x'] {
+            assert_eq!(app.on_key(key(c)), Cmd::None, "{c}");
+        }
+        assert!(app.scope.is_none() && app.confirm.is_none());
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn the_start_task_step_opens_the_launchpad() {
+        let mut app = demo_app();
+        assert_eq!(app.on_key(key('t')), Cmd::OpenLaunchpad);
+        assert_eq!(app.mode, Mode::Launchpad);
+    }
+
+    #[test]
+    fn enter_on_work_at_risk_opens_that_repository_in_the_detail_view() {
+        let mut app = demo_app();
+        app.on_key(key('2'));
+        app.on_key(code(KeyCode::Down));
+        let wanted = app.at_risk()[1].id.clone();
+        // A filter that hides the repository must not stop it being shown.
+        app.filter = "zzz-matches-nothing".to_string();
+        app.on_key(code(KeyCode::Enter));
+        assert_eq!(app.screen, Screen::Repos);
+        assert_eq!(app.selected_repo().unwrap().id.0, wanted);
+        assert!(app.filter.is_empty());
+    }
+
+    #[test]
+    fn tasks_card_opens_the_board_or_one_repositorys_tasks() {
+        let mut app = demo_app();
+        app.on_key(key('3'));
+        assert_eq!(app.on_key(key('t')), Cmd::OpenLaunchpad);
+        assert_eq!(app.launchpad_jump, None);
+
+        app.mode = Mode::Normal;
+        app.on_key(code(KeyCode::Down));
+        let name = app.overview.as_ref().unwrap().work[1].name.clone();
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::OpenLaunchpad);
+        assert_eq!(app.launchpad_jump, Some(name));
+    }
+
+    #[test]
+    fn commits_card_opens_the_standup_or_copies_it() {
+        let mut app = demo_app();
+        app.on_key(key('4'));
+        assert_eq!(app.on_key(key('s')), Cmd::OpenStandup);
+        assert_eq!(app.mode, Mode::Standup);
+
+        app.mode = Mode::Normal;
+        assert_eq!(app.on_key(key('y')), Cmd::CopyStandupMarkdown);
+        assert!(app.copy_standup_pending);
+        assert_eq!(app.mode, Mode::Normal); // copying does not open the view
+
+        // Enter opens the standup on the highlighted repository.
+        let name = app.overview.as_ref().unwrap().commits[0].name.clone();
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::OpenStandup);
+        assert_eq!(app.standup_jump, Some(name.clone()));
+        let commit = |repo: &str| StandupCommit {
+            repo: repo.to_string(),
+            short_id: "abc1234".to_string(),
+            summary: "work".to_string(),
+            timestamp: NOW,
+        };
+        app.show_standup(vec![commit("zzz"), commit("zzz"), commit(&name)]);
+        let view = app.standup.as_ref().unwrap();
+        assert_eq!(view.groups[view.focus].0, name);
+        assert_eq!(app.standup_jump, None);
+    }
+
+    #[test]
+    fn enter_on_the_table_opens_the_detail_view_and_esc_returns() {
+        let mut app = demo_app();
+        app.on_key(key('5'));
+        app.on_key(code(KeyCode::Down));
+        let selected = app.selected_repo().unwrap().id.clone();
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
+        assert_eq!(app.screen, Screen::Repos);
+        assert_eq!(app.selected_repo().unwrap().id, selected);
+
+        // Enter (or `d`) there asks for the full drill-in.
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::OpenDetail);
+        assert_eq!(app.on_key(key('d')), Cmd::OpenDetail);
+
+        // Tab walks the four cards; arrows only move the list while it has
+        // the focus.
+        app.on_key(code(KeyCode::Tab));
+        assert_eq!(app.pane, Pane::State);
+        app.on_key(code(KeyCode::Down));
+        assert_eq!(app.selected_repo().unwrap().id, selected);
+        app.on_key(code(KeyCode::BackTab));
+        app.on_key(code(KeyCode::Down));
+        assert_ne!(app.selected_repo().unwrap().id, selected);
+
+        app.on_key(code(KeyCode::Esc));
+        assert_eq!(app.screen, Screen::Overview);
+        assert_eq!(app.focus, Card::Repos);
+        // A number key also leaves the detail view, focusing that card.
+        app.on_key(code(KeyCode::Enter));
+        app.on_key(key('2'));
+        assert_eq!((app.screen, app.focus), (Screen::Overview, Card::AtRisk));
+    }
+
+    #[test]
+    fn the_table_keys_work_in_the_detail_view_too() {
+        let mut app = demo_app();
+        app.screen = Screen::Repos;
+        assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
+        assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
+        assert_eq!(app.on_key(key('P')), Cmd::PushSelected);
+        assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
+        app.on_key(key('>'));
+        assert_eq!(app.sort, SortMode::Recent);
+    }
+
+    #[test]
+    fn table_action_keys_are_inert_on_the_other_cards() {
+        // On "Open tasks" and "Commits" none of the table's git keys act.
+        let mut app = demo_app();
+        for card in ['3', '4'] {
+            app.on_key(key(card));
+            for c in ['f', 'F', 'p', 'P', 'S', 'c', ' ', '*', '>', 'o', 'L'] {
+                assert_eq!(app.on_key(key(c)), Cmd::None, "card {card}, key {c}");
+            }
+        }
+        assert!(app.selection.is_empty() && app.confirm.is_none());
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn commit_key_asks_for_a_message_then_for_confirmation() {
+        let mut app = app_with(&[("a", true)]);
+        assert_eq!(app.on_key(key('c')), Cmd::None);
+        assert_eq!(app.mode, Mode::Command);
+        assert_eq!(app.command_line, "commit ");
+        for c in "wip".chars() {
+            app.on_key(key(c));
+        }
+        // Enter does not commit: it opens the confirmation.
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
+        assert_eq!(app.mode, Mode::Confirm);
+        // An empty message is not a commit at all.
+        let mut app = app_with(&[("a", true)]);
+        app.on_key(key('c'));
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
+        assert_eq!(app.mode, Mode::Normal);
+        assert!(app.confirm.is_none());
+    }
+
+    #[test]
+    fn slash_filters_the_table_from_any_card() {
+        let mut app = demo_app();
+        app.on_key(key('3'));
+        app.on_key(key('/'));
+        assert_eq!((app.mode, app.focus), (Mode::Filter, Card::Repos));
+    }
+
+    #[test]
+    fn esc_on_the_table_peels_back_one_narrowing_at_a_time() {
+        let mut app = demo_app();
+        app.on_key(key('c')); // narrow to the "commit or discard" step
+        app.on_key(key(' ')); // mark the first of them
+        assert!(!app.selection.is_empty() && app.scope.is_some());
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.selection.is_empty() && app.scope.is_some());
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.scope.is_none());
+        // With nothing else narrowing, Esc clears a kept filter.
+        app.filter = "pay".to_string();
+        app.on_key(code(KeyCode::Esc));
+        assert!(app.filter.is_empty());
+    }
+
+    #[test]
+    fn the_table_follows_the_overviews_order_until_a_sort_is_chosen() {
+        let mut app = demo_app();
+        let listed = |app: &App| -> Vec<String> {
+            app.view()
+                .iter()
+                .map(|row| app.repos[row.index].id.0.clone())
+                .collect()
+        };
+        let overview: Vec<String> = app
+            .overview
+            .as_ref()
+            .unwrap()
+            .repos
+            .iter()
+            .map(|line| line.id.clone())
+            .collect();
+        assert_eq!(listed(&app), overview);
+
+        // Choosing a sort takes over from the overview's order.
+        app.on_key(key('5'));
+        app.on_key(key('>'));
+        app.on_key(key('>'));
+        assert_eq!(app.sort, SortMode::Name);
+        let mut by_name = listed(&app);
+        by_name.sort_by_key(|id| id.to_lowercase());
+        assert_eq!(listed(&app), by_name);
+    }
+
+    #[test]
+    fn a_new_overview_keeps_the_cursor_on_the_same_repository() {
+        let mut app = demo_app();
+        app.on_key(key('5'));
+        app.on_key(code(KeyCode::End));
+        let selected = app.selected_repo().unwrap().id.clone();
+        // An overview whose order is reversed must not move the cursor off it.
+        let mut overview = app.overview.clone().unwrap();
+        overview.repos.reverse();
+        let entries = app.entries.clone();
+        app.set_overview(overview, entries);
+        assert_eq!(app.selected_repo().unwrap().id, selected);
+    }
+
+    #[test]
+    fn a_shorter_overview_pulls_the_card_cursors_back_in_range() {
+        let mut app = demo_app();
+        app.cursors = Cursors {
+            next: 99,
+            risk: 99,
+            tasks: 99,
+            commits: 99,
+        };
+        let overview = cohors_core::overview(&[], &[], &Default::default(), NOW);
+        app.set_overview(overview, Vec::new());
+        assert_eq!(app.cursors, Cursors::default());
+    }
+
+    #[test]
+    fn the_key_a_is_left_free_on_both_screens() {
+        // `a` is reserved for a feature that is wired separately; until then it
+        // must do nothing at all, on any card.
+        let mut app = demo_app();
+        for card in ['1', '2', '3', '4', '5'] {
+            app.on_key(key(card));
+            assert_eq!(app.on_key(key('a')), Cmd::None);
+        }
+        app.screen = Screen::Repos;
+        assert_eq!(app.on_key(key('a')), Cmd::None);
+        assert!(app.selection.is_empty());
+        assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn every_step_kind_has_a_key_and_only_push_and_publish_share_one() {
+        use ActionKind::*;
+        let kinds = [
+            Unreadable,
+            Resolve,
+            Push,
+            Reconcile,
+            Publish,
+            ReviewStash,
+            Pull,
+            Commit,
+            Fetch,
+            StartTask,
+        ];
+        let keys: HashSet<char> = kinds.iter().map(|kind| action_key(*kind)).collect();
+        assert_eq!(keys.len(), kinds.len() - 1);
+        assert_eq!(action_key(Push), action_key(Publish));
+        // None of them collides with a key that means something everywhere.
+        for reserved in [
+            'q', 'r', '?', ':', '!', '/', 'j', 'k', 'a', '1', '2', '3', '4', '5',
+        ] {
+            assert!(!keys.contains(&reserved), "{reserved}");
+        }
     }
 
     #[test]
@@ -1259,7 +2391,7 @@ mod tests {
     fn sort_key_cycles_modes() {
         let mut app = app_with(&[("a", false)]);
         assert_eq!(app.sort, SortMode::DirtyFirst);
-        app.on_key(key('s'));
+        app.on_key(key('>'));
         assert_eq!(app.sort, SortMode::Recent);
     }
 
@@ -1267,7 +2399,13 @@ mod tests {
     fn dirty_only_toggle_filters_view() {
         let mut app = app_with(&[("clean", false), ("dirty", true)]);
         assert_eq!(app.visible_len(), 2);
-        app.on_key(key('d'));
+        // The attention toggle has no bare key any more; it is `:dirty`.
+        app.on_key(key(':'));
+        for c in "dirty".chars() {
+            app.on_key(key(c));
+        }
+        app.on_key(code(KeyCode::Enter));
+        assert!(app.dirty_only);
         assert_eq!(app.visible_len(), 1);
         assert_eq!(app.selected_repo().unwrap().name, "dirty");
     }
@@ -1285,16 +2423,16 @@ mod tests {
     #[test]
     fn select_all_then_toggle_clears() {
         let mut app = app_with(&[("a", false), ("b", false), ("c", false)]);
-        app.on_key(key('a'));
+        app.on_key(key('*'));
         assert_eq!(app.selection.len(), 3);
-        app.on_key(key('a')); // already all marked → clears
+        app.on_key(key('*')); // already all marked → clears
         assert!(app.selection.is_empty());
     }
 
     #[test]
     fn esc_clears_selection() {
         let mut app = app_with(&[("a", false)]);
-        app.on_key(key('a'));
+        app.on_key(key('*'));
         assert_eq!(app.selection.len(), 1);
         app.on_key(code(KeyCode::Esc));
         assert!(app.selection.is_empty());
@@ -1323,7 +2461,7 @@ mod tests {
         app.selection.insert(RepoId("clean".to_string()));
         app.selection.insert(RepoId("dirty".to_string()));
         // The dirty-only filter hides "clean", so only "dirty" is targetable.
-        app.on_key(key('d'));
+        app.dirty_only = true;
         assert_eq!(app.action_targets(), vec![RepoId("dirty".to_string())]);
     }
 
@@ -1553,10 +2691,11 @@ mod tests {
         assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
         assert_eq!(app.on_key(key('L')), Cmd::Lazygit);
         assert_eq!(app.on_key(key('y')), Cmd::CopyPath);
-        assert_eq!(
-            app.on_key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)),
-            Cmd::OpenDetail
-        );
+        // Enter on the table opens the detail view, where Enter again asks for
+        // the full drill-in.
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
+        assert_eq!(app.screen, Screen::Repos);
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::OpenDetail);
     }
 
     /// Structural parity, TUI half: every action in the shared registry must be

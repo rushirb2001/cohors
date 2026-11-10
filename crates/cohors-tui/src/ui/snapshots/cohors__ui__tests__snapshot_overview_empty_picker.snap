@@ -1,0 +1,34 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 100, 30)"
+---
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛   cohors  your git fleet                                                               │
+│ ▟██▌█▐██▙   ~/projects                                                                           │
+│ ▀▐▖▀█▀▗▌▀   No repositories found.                                                               │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ No repositories found ──────────────────────────────────────────────────────────────────────────╮
+│ cohors found no git repositories under ~/projects.                                               │
+│                                                                                                  │
+│ It did find some under: ~/code, ~/work                                                           │
+│   u  use these folders (adds them to your config)                                                │
+│                                                                                                  │
+│ To point cohors at your projects:                                                                │
+│   cohors --root ~/code   look in one folder, this run only                                       │
+│   or add the folder to roots in ~/.config/cohors/config.toml                                     │
+│                                                                                                  │
+│   r  scan again      q  quit                                                                     │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

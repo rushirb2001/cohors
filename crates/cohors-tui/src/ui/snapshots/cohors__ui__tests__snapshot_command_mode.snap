@@ -1,26 +1,28 @@
 ---
 source: crates/cohors-tui/src/ui/tests.rs
-expression: "render_to_string(&app, 100, 22)"
+expression: "render_to_string(&app, 100, 24)"
 ---
-╔══════════════════════════════════════════════════════════════════════════════════════════════════╗
-║ ▜▒▟███▙▒▛  cohors  vX.Y.Z                                             │  Fleet activity          ║
-║ ▟██▌█▐██▙  All your git repositories at a glance                      │  ▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁▒▁ ║
-║ ▀▐▖▀█▀▗▌▀  ~/projects (+1)                                            │  quiet · 12 weeks        ║
-╚════════════╔════════════════════════════════════════════════════════════════════════╗════════════╝
-╔ Attention (║ Command                                                                ║════════════╗
-║ 1 at risk ·╟────────────────────────────────────────────────────────────────────────╢            ║
-╚════════════║ : sort name▏                                                           ║════════════╝
-╔ Repositorie╟────────────────────────────┬───────────────────────────────────────────╢════════════╗
-║    Repo    ║ :fetch :pull :push         │ sync the targets with their remotes       ║            ║
-║▌   legacy-b║ :!<cmd>                    │ run any shell command across the targets  ║ .git (perm…║
-║  ○ payments║ :sort <name·dirty·recent>  │ change the sort order                     ║shed        ║
-║            ║ :dirty   /<text>           │ needs-attention · fuzzy filter            ║            ║
-╚════════════║ :jump <repo>               │ move the cursor to a repo                 ║════════════╝
-─────────────║ :standup :refresh :quit    │ standup · rescan · exit                   ║─────────────
-╔════════════╟────────────────────────────┴───────────────────────────────────────────╢════════════╗
-║            ║                           ⏎ run · Esc cancel                           ║            ║
-║ ───────────╚════════════════════════════════════════════════════════════════════════╝─────────── ║
-║     ␣ mrk repo │ / filter       │     ⏎ open  │ P push         │      ↑/↓ move │ ⇥ standup       ║
-║     a mrk all  │ Esc clear      │     f fetch │ S stash        │      s sort   │ ? help          ║
-║                                 │     p pull  │ ! run cmd      │      d attn   │ q quit          ║
-╚═════════════════════════════════╧══════════════════════════════╧═════════════════════════════════╝
+ cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
+ 1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────╮
+│▸▲  e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.   │
+│ ◆  P  Push ╔════════════════════════════════════════════════════════════════════════╗ayments.    │
+│ ○  p  Pull ║ Command                                                                ║rk: web-ap… │
+│ ○  c  Commi╟────────────────────────────────────────────────────────────────────────╢p with 7.   │
+╰────────────║ : sort name▏                                                           ║────────────╯
+╭─  2  ▲ Work╟────────────────────────────┬───────────────────────────────────────────╢────────────╮
+│ ▲ legacy-bi║ :fetch :pull :push         │ sync the targets with their remotes       ║            │
+│ ◆ payments ║ :commit <message>          │ commit every change in the targets (asks  ║   2h  Push │
+│ ◆ web-app  ║ :!<cmd>                    │ run any shell command across the targets  ║  20m  Pull │
+╰─  ⏎  open  ║ :sort <name·dirty·recent>  │ change the sort order                     ║────────────╯
+╭─  3  ✓ Open║ :dirty   /<text>           │ needs-attention · fuzzy filter            ║────────────╮
+│ No launchpa║ :jump <repo>               │ move the cursor to a repo                 ║            │
+│ here once a║ :standup  :tasks           │ your commits · the launchpad              ║            │
+╰─  t  board ║ :refresh  :quit            │ rescan · exit                             ║────────────╯
+╭─  5  ▤ Repo╟────────────────────────────┴───────────────────────────────────────────╢────────────╮
+│   repositor║                           ⏎ run · Esc cancel                           ║ast commit  │
+│ ▲ legacy-bi╚════════════════════════════════════════════════════════════════════════╝ould not r… │
+│ ◆ payments               main      ↑2              0    3    1      1      0    2h  fix: retry … │
+│   ↓ 3 more                                                                                       │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

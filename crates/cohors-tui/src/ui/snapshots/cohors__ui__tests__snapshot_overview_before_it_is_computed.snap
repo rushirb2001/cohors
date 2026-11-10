@@ -1,0 +1,44 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 120, 40)"
+---
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ ▜▒▟███▙▒▛   cohors  your git fleet                                                                                   │
+│ ▟██▌█▐██▙   ~/projects (+1 more)                                                                                     │
+│ ▀▐▖▀█▀▗▌▀   5 repositories. Working out what needs you…                      scanned 2m ago                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─────────────────╮ ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮ ╭─────────────────╮ ╭─────────────────╮
+│ Not backed up   │ │ Stashes         │ │ Uncommitted      │ │ Stale fetch     │ │ Open tasks      │ │ Commits 7d      │
+│ …               │ │ …               │ │ …                │ │ …               │ │ …               │ │ …               │
+│                 │ │                 │ │                  │ │                 │ │                 │ │                 │
+╰─────────────────╯ ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Working out what needs you…                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  2  ▲ Work at risk ─────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Working out what needs you…                                                                                          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  3  ✓ Open tasks ─────────────────────────────╮ ╭─  4  ● Commits, last 7 days ──────────────────────────────────────╮
+│ Working out what needs you…                    │ │ Working out what needs you…                                       │
+╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
+╭─  5  ▤ Repositories  5 ──────────────────────────────────────────────────────────────────────────────────────────────╮
+│   repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit                │
+│   legacy-billing          unreadable                                                      could not read .git (perm… │
+│   payments                main           ↑2              0    3    1      1           2h  fix: retry on 5xx          │
+│   web-app                 feat/checkout  ↓5              0    7    0      0          20m  wip: cart drawer           │
+│   infra                   @a1b2c3d (det… no remote       0    0    4      0           1w  build: pin ci image        │
+│   auth-service            main           no remote       0    0    0      0           3d  chore: bump deps           │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯
+  1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit
