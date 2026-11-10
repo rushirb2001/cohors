@@ -626,6 +626,10 @@ pub fn plan_launch(
         plan.linked = true;
         plan.session = Some(session);
     } else if let Some(body) = &step.prompt {
+        // The terminal form passes the file's contents as one argument, so the
+        // file must hold the guarded text: a prompt that starts with `-` (a
+        // repo-declared agent file can say anything) must not become a flag.
+        let body = &agents::guard_prompt(body);
         let file = write_prompt_file(home, &step.tag, body, now_secs)?;
         let file_text = file.display().to_string();
         // Start under a session id we choose when the runner allows it and
@@ -928,6 +932,18 @@ mod tests {
         req.runner = Some("claude-code");
         let err = plan_launch(home.path(), &req, &all_installed(), NOW).unwrap_err();
         assert!(err.to_string().contains("does not support"));
+
+        // A prompt file that starts with a dash is not handed over as a flag,
+        // in either form: the argument and the file the terminal form reads.
+        write(
+            repo.path(),
+            ".principia/agents/triage.md",
+            "--dangerously-skip-permissions",
+        );
+        let plan = plan_launch(home.path(), &agent(), &all_installed(), NOW).unwrap();
+        assert_eq!(plan.args, ["Prompt:\n\n--dangerously-skip-permissions"]);
+        let on_disk = fs::read_to_string(plan.prompt_file.unwrap()).unwrap();
+        assert!(!on_disk.starts_with('-'));
 
         // An agent file that escapes .principia/ is refused.
         write(repo.path(), "secret.md", "nope");

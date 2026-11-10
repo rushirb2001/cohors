@@ -155,6 +155,24 @@ impl Shell {
     }
 }
 
+/// Make sure a prompt cannot be mistaken for a command-line flag.
+///
+/// The prompt reaches the runner as one argument. Its text can come from a
+/// file inside a repository (a repo-declared agent), which on a cloned repo
+/// is written by someone else. If that text began with `-`, the runner's
+/// argument parser could read it as an option (for instance one that turns
+/// off permission prompts) instead of as the prompt. An argument is only
+/// treated as an option when its first character is `-`, so putting a fixed
+/// line in front removes the possibility for every runner, whatever its
+/// parser. Prompts that do not start with `-` are returned unchanged.
+pub fn guard_prompt(text: &str) -> String {
+    if text.starts_with('-') {
+        format!("Prompt:\n\n{text}")
+    } else {
+        text.to_string()
+    }
+}
+
 /// What to start: a new session with a prompt, the same under a chosen session
 /// id, or an existing session.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -191,7 +209,9 @@ impl Runner {
             args.iter()
                 .map(|arg| match arg {
                     Arg::Lit(text) => (*text).to_string(),
-                    Arg::Prompt => prompt.to_string(),
+                    // Guarded here as well as where the prompt file is written,
+                    // so no caller can hand a runner a prompt that reads as a flag.
+                    Arg::Prompt => guard_prompt(prompt),
                     Arg::Session => session.clone().unwrap_or_default(),
                 })
                 .collect(),
@@ -199,7 +219,8 @@ impl Runner {
     }
 
     /// One line to type into a terminal running `shell`. The prompt is read
-    /// from `prompt_file` when the line runs. `None` when this runner cannot do
+    /// from `prompt_file` when the line runs, so the file's contents must have
+    /// been passed through [`guard_prompt`] before they were written. `None` when this runner cannot do
     /// that kind of launch.
     pub fn shell_command(
         &self,
@@ -477,6 +498,34 @@ mod tests {
             "'/tmp/x'\\''; rm -rf ~; echo '\\'''"
         );
         assert_eq!(Shell::PowerShell.quote("it's"), "'it''s'");
+    }
+
+    #[test]
+    fn a_prompt_can_never_be_read_as_a_flag() {
+        // A repo-declared agent file is untrusted; this one tries to smuggle
+        // an option to the runner in place of a prompt.
+        let hostile = "--dangerously-skip-permissions";
+        assert_eq!(guard_prompt(hostile), format!("Prompt:\n\n{hostile}"));
+        assert_eq!(guard_prompt("Fix the build."), "Fix the build.");
+        for r in &RUNNERS {
+            for launch in [
+                Launch::Start,
+                Launch::Linked {
+                    session: "abcdef12",
+                },
+            ] {
+                let Some(argv) = r.argv(launch, hostile) else {
+                    continue;
+                };
+                let prompt = argv.last().unwrap();
+                assert!(
+                    !prompt.starts_with('-'),
+                    "{} passes a flag-like prompt",
+                    r.id
+                );
+                assert!(prompt.ends_with(hostile));
+            }
+        }
     }
 
     #[test]
