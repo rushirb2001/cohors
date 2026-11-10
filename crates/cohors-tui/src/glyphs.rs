@@ -200,6 +200,17 @@ impl Glyphs {
         }
     }
 
+    /// The mark that leads an action's result: a tick, or a cross when it
+    /// failed (`ok` / `!!` in the Ascii tier).
+    pub fn result_mark(&self, failed: bool) -> &'static str {
+        match (self.kind, failed) {
+            (IconKind::Ascii, false) => "ok",
+            (IconKind::Ascii, true) => "!!",
+            (_, false) => "✓",
+            (_, true) => "✗",
+        }
+    }
+
     /// One frame of the "working" spinner for animation tick `tick`.
     pub fn spinner(&self, tick: usize) -> &'static str {
         const BRAILLE: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];

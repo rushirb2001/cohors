@@ -407,6 +407,74 @@ fn snapshot_repos_narrowed_to_a_step() {
     insta::assert_snapshot!(render_to_string(&app, 120, 45));
 }
 
+/// A filter that was just opened: the title shows the empty prompt and the
+/// key bar says what typing does.
+#[test]
+fn snapshot_repos_filter_just_opened() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.mode = Mode::Filter;
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// `:dirty` keeps only the repositories that need attention, and the title
+/// says the table is narrowed.
+#[test]
+fn snapshot_repos_needs_attention_only() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.dirty_only = true;
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// A sort other than the default is named in the title.
+#[test]
+fn snapshot_repos_sorted_by_name() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.sort = cohors_core::SortMode::Name;
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// While an action runs on a repository its gutter shows a spinner.
+#[test]
+fn snapshot_repos_busy() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.busy.insert(RepoId("payments".to_string()));
+    app.busy.insert(RepoId("web-app".to_string()));
+    app.status = Some("fetching 2 repos…".to_string());
+    insta::assert_snapshot!(render_to_string(&app, 120, 40));
+}
+
+/// Scrolled to the middle of a table that does not fit: the last line counts
+/// what is hidden both below and above.
+#[test]
+fn snapshot_repos_scrolled_to_the_middle() {
+    let mut app = fleet_app();
+    app.focus = Card::Repos;
+    // Walk down one row at a time, as the arrow key would, drawing each frame
+    // so the table scrolls only when the cursor reaches its edge.
+    for _ in 0..7 {
+        app.selected += 1;
+        render_to_string(&app, 120, 45);
+    }
+    let screen = render_to_string(&app, 120, 45);
+    assert!(screen.contains("more") && screen.contains("above"));
+    insta::assert_snapshot!(screen);
+}
+
+/// The plain-text tier marks a repository for a bulk action with `*`.
+#[test]
+fn snapshot_repos_marked_no_color_ascii() {
+    let mut app = small_app();
+    app.focus = Card::Repos;
+    app.selection.insert(RepoId("payments".to_string()));
+    let screen = render_plain(&app, 120, 40);
+    assert!(screen.is_ascii(), "the plain tier must be pure ASCII");
+    insta::assert_snapshot!(screen);
+}
+
 /// An action's result is shown at the right end of the key bar.
 #[test]
 fn snapshot_toast() {
@@ -461,6 +529,21 @@ fn snapshot_detail_view_tasks_focused() {
 #[test]
 fn snapshot_detail_view_narrow() {
     insta::assert_snapshot!(render_to_string(&detail_app(), 80, 30));
+}
+
+/// The cursor on the last repository: the list has scrolled with it, and the
+/// note at the bottom counts the entries above.
+#[test]
+fn snapshot_detail_view_scrolled_to_the_end() {
+    let mut app = detail_app();
+    app.selected = app.visible_len() - 1;
+    insta::assert_snapshot!(render_to_string(&app, 120, 30));
+}
+
+/// A screen too short for the three cards keeps the list and the key bar.
+#[test]
+fn snapshot_detail_view_short() {
+    insta::assert_snapshot!(render_to_string(&detail_app(), 100, 16));
 }
 
 /// The unreadable repository: no state to show, only why it could not be read.

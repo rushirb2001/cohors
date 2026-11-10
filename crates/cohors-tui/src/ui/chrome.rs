@@ -18,10 +18,18 @@ pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
         || msg.contains("error")
         || msg.contains("reject")
         || msg.starts_with("no ");
-    let (icon, style) = if failed {
-        ("✗", theme.risk())
+    let style = if failed {
+        theme.risk()
     } else {
-        ("✓", theme.ok().add_modifier(Modifier::BOLD))
+        theme.ok().add_modifier(Modifier::BOLD)
+    };
+    // While actions are still running the message is progress, not a result,
+    // so it leads with the spinner. Afterwards the mark's shape says pass or
+    // fail, so the colour is not needed to tell.
+    let icon = if app.busy.is_empty() {
+        theme.glyphs.result_mark(failed)
+    } else {
+        theme.glyphs.spinner(app.spinner)
     };
     Some(Line::from(Span::styled(format!(" {icon} {msg} "), style)))
 }

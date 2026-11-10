@@ -15,7 +15,9 @@
 //! (the repository table both screens use), `layout` (pure sizing decisions)
 //! and `text` (pure clipping and wording helpers).
 
-pub(crate) use cohors_core::{Branch, RepoSnapshot, Severity, StandupCommit, assess, time};
+pub(crate) use cohors_core::{
+    Branch, CiStatus, RepoSnapshot, Severity, StandupCommit, assess, time,
+};
 pub(crate) use ratatui::Frame;
 pub(crate) use ratatui::buffer::Buffer;
 pub(crate) use ratatui::layout::{Alignment, Constraint, Layout, Rect};

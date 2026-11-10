@@ -612,7 +612,7 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
 
     // Why this repo needs you, most urgent first — the same reasons the row's
     // Status column abbreviates, spelled out in one place.
-    if let Some(snap) = app.repos.iter().find(|r| r.name == dv.repo_name) {
+    if let Some(snap) = app.repos.iter().find(|r| r.id == dv.repo_id) {
         let assessment = assess(snap, now);
         if !assessment.reasons.is_empty() {
             detail_section(&mut lines, "Attention".to_string());
@@ -622,6 +622,12 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
                     severity_style(reason.severity(), theme),
                 )));
             }
+        }
+        // CI and open pull requests, when the repository's host reported them.
+        // The table has no columns for these, so this is where they are read.
+        if let Some(remote) = &snap.remote {
+            detail_section(&mut lines, "Checks".to_string());
+            lines.push(checks_line(remote, theme));
         }
     }
 
@@ -878,6 +884,27 @@ pub(crate) fn render_remote_sections(
         }
         (None, _) => {}
     }
+}
+
+/// `CI failing  ·  2 open pull requests` — the state of the default branch's
+/// checks in a word (so it reads without colour) and how many pull requests
+/// are open.
+fn checks_line(remote: &cohors_core::RemoteInfo, theme: &Theme) -> Line<'static> {
+    let (ci, style) = match remote.ci {
+        CiStatus::Passing => ("CI passing", theme.ok()),
+        CiStatus::Failing => ("CI failing", theme.risk()),
+        CiStatus::Pending => ("CI pending", theme.warn()),
+        CiStatus::None => ("no CI runs", theme.dim()),
+    };
+    let prs = text::count(
+        remote.open_prs as usize,
+        "open pull request",
+        "open pull requests",
+    );
+    Line::from(vec![
+        Span::styled(ci, style),
+        Span::styled(format!("  ·  {prs}"), theme.dim()),
+    ])
 }
 
 /// The command-run overlay: a left list of repos (status glyph + name, the

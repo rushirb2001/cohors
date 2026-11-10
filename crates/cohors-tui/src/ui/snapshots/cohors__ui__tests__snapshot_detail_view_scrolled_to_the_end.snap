@@ -1,0 +1,34 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 120, 30)"
+---
+╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────────────────────────────╮
+│   repository                    branch              upstream        stg  mod  new  stash  tasks   fetched  commit    │
+│ ◆ web-app                       feat/checkout       ↓5                0    6    1      0      2     never     20m    │
+│   ~/code/web-app                                    abc1234  wip: cart drawer animation                              │
+│ ○ cli-tools                     main                level             0    0    1      0      0     never     12h    │
+│   ~/code/cli-tools                                  abc1234  docs: add shell-completion install notes                │
+│ ○ data-pipeline                 main                ↓3                0    0    0      0      1     never      5h    │
+│   ~/code/data-pipeline                              abc1234  fix: backfill job off-by-one window                     │
+│ ○ experiments                   @9f8e7d6 (detached) no remote         0    4    3      0      0                1y    │
+│   ~/code/experiments                                abc1234  spike: try wgpu for the renderer                        │
+│ ○ infra                         @a1b2c3d (detached) no remote         0    2    2      0      0                1w    │
+│   ~/code/infra                                      abc1234  build: pin terraform provider versions                  │
+│ · auth-service                  main                level             0    0    0      0      0     never      3d    │
+│   ~/code/auth-service                               abc1234  chore: bump jsonwebtoken to 9.3                         │
+│▸· marketing-site                main                level             0    0    0      0      0               1mo    │
+│   ~/code/marketing-site                             abc1234  content: Q2 launch landing page                         │
+│   ↑ 5 above                                                                                                          │
+│                                                                                                                      │
+╰─  ␣  select   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort   esc  overview  ──╯
+╭─ marketing-site  state ─────────────╮ ╭─ signals ────────────────────────────╮ ╭─ tasks  0 ──────────────────────────╮
+│ branch      main                    │ │ · Nothing needs attention            │ │ No launchpad file. Tasks appear     │
+│ upstream    origin/main             │ │                                      │ │ here once this repository has       │
+│ fetched     no remote               │ │ last commit                          │ │ .principia/repo.json.               │
+│ staged      0                       │ │ content: Q2 launch landing page      │ │                                     │
+│ modified    0                       │ │                                      │ │                                     │
+│ untracked   0                       │ │ path                                 │ │                                     │
+│ stashes     0                       │ │ ~/code/marketing-site                │ │                                     │
+│ commit      abc1234, 1mo ago        │ │                                      │ │                                     │
+╰─  d  changes  ──────────────────────╯ ╰─  f  fetch  ─────────────────────────╯ ╰─  t  board   !  run  ───────────────╯
+  ↑↓  move    ⏎  full detail    tab  next card    :  command    ?  help    q  quit
