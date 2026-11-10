@@ -256,9 +256,8 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
             reasons.push(AttentionReason::Detached);
         }
         // Only meaningful when the repo has a remote and has fetched at least once.
-        if repo.remote_url.is_some()
+        if is_stale_fetch(repo, now)
             && let Some(fetched) = repo.last_fetch
-            && now - fetched > STALE_FETCH_SECS
         {
             reasons.push(AttentionReason::StaleRemote {
                 days: (now - fetched) / (24 * 60 * 60),
@@ -304,8 +303,19 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
 /// A named branch on a repo that *has* a remote but isn't tracking one — work
 /// that was never pushed, so it lives only on this disk. (A repo with no remote
 /// at all is intentionally local and doesn't count.)
-fn is_unpublished(repo: &RepoSnapshot) -> bool {
+pub(crate) fn is_unpublished(repo: &RepoSnapshot) -> bool {
     matches!(repo.branch, Branch::Named(_)) && repo.upstream.is_none() && repo.remote_url.is_some()
+}
+
+/// The repo has a remote, has fetched at least once, and that fetch is older
+/// than [`STALE_FETCH_SECS`]. One definition, shared by [`assess`] and the
+/// `stale-fetch` selector, so "Fetch 18 repositories" and the command that
+/// fetches them always mean the same 18.
+pub(crate) fn is_stale_fetch(repo: &RepoSnapshot, now: i64) -> bool {
+    repo.remote_url.is_some()
+        && repo
+            .last_fetch
+            .is_some_and(|fetched| now - fetched > STALE_FETCH_SECS)
 }
 
 /// Clock-free urgency key for sorting (higher = more urgent). Kept separate from

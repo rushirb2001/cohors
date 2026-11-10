@@ -85,6 +85,14 @@ pub struct Selector {
     pub diverged: bool,
     /// No tracking branch configured.
     pub no_upstream: bool,
+    /// A branch that was never pushed although the repo has a remote to push
+    /// it to: exactly the repos the attention layer calls "branch never
+    /// pushed". Narrower than `no_upstream`, which also matches repos with no
+    /// remote at all (where there is nowhere to publish).
+    pub unpublished: bool,
+    /// The remote has not been fetched for longer than the stale-fetch
+    /// threshold, so ahead/behind may be out of date (clock-dependent).
+    pub stale_fetch: bool,
     /// At least one stash.
     pub has_stash: bool,
     /// Detached `HEAD`.
@@ -128,6 +136,8 @@ impl Selector {
             && !self.behind
             && !self.diverged
             && !self.no_upstream
+            && !self.unpublished
+            && !self.stale_fetch
             && !self.has_stash
             && !self.detached
             && !self.conflicted
@@ -182,6 +192,12 @@ impl Selector {
             return false;
         }
         if self.no_upstream && repo.upstream.is_some() {
+            return false;
+        }
+        if self.unpublished && !attention::is_unpublished(repo) {
+            return false;
+        }
+        if self.stale_fetch && !attention::is_stale_fetch(repo, now) {
             return false;
         }
         if self.has_stash && repo.stash_count == 0 {
@@ -545,6 +561,57 @@ mod tests {
         );
     }
 
+    /// `unpublished` and `stale-fetch` select exactly the repos the attention
+    /// layer flags for those reasons, so a suggested command acts on the same
+    /// set its step counted.
+    #[test]
+    fn unpublished_and_stale_fetch_match_the_attention_reasons() {
+        const DAY: i64 = 24 * 60 * 60;
+        // No upstream but a remote: a branch that was never pushed.
+        let mut unpublished = sample("unpub", "unpub", false, 0, 0, Some(NOW));
+        unpublished.remote_url = Some("git@example.com:me/unpub.git".into());
+        // No upstream and no remote: nowhere to publish, so not "unpublished".
+        let local_only = sample("local", "local", false, 0, 0, Some(NOW));
+        // Has a remote, last fetched long ago.
+        let mut stale = sample("stale", "stale", false, 1, 0, Some(NOW));
+        stale.remote_url = Some("git@example.com:me/stale.git".into());
+        stale.last_fetch = Some(NOW - 40 * DAY);
+        // Has a remote, fetched yesterday.
+        let mut fresh = sample("fresh", "fresh", false, 1, 0, Some(NOW));
+        fresh.remote_url = Some("git@example.com:me/fresh.git".into());
+        fresh.last_fetch = Some(NOW - DAY);
+        let repos = vec![unpublished, local_only, stale, fresh];
+
+        let pick = |query: &str| {
+            let sel = parse_shorthand(query).unwrap();
+            assert!(!sel.is_empty(), "`{query}` is a real constraint");
+            names(&resolve(&repos, &sel, SortMode::Name, NOW), &repos)
+        };
+        assert_eq!(pick("unpublished"), ["unpub"]);
+        assert_eq!(pick("never-pushed"), ["unpub"]);
+        // The wider, older selector still includes the repo with no remote.
+        assert_eq!(pick("no-upstream"), ["local", "unpub"]);
+        assert_eq!(pick("stale-fetch"), ["stale"]);
+
+        // They agree with what `assess` reports, repo by repo.
+        for repo in &repos {
+            let reasons = attention::assess(repo, NOW).reasons;
+            let says = |want: fn(&attention::AttentionReason) -> bool| reasons.iter().any(want);
+            assert_eq!(
+                pick("unpublished").contains(&repo.name),
+                says(|r| matches!(r, attention::AttentionReason::Unpublished)),
+                "{}",
+                repo.name
+            );
+            assert_eq!(
+                pick("stale-fetch").contains(&repo.name),
+                says(|r| matches!(r, attention::AttentionReason::StaleRemote { .. })),
+                "{}",
+                repo.name
+            );
+        }
+    }
+
     #[test]
     fn fields_and_together() {
         // dirty AND name → only the dirty repo whose name matches.
@@ -804,6 +871,8 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
             "behind" => sel.behind = true,
             "diverged" => sel.diverged = true,
             "no-upstream" => sel.no_upstream = true,
+            "unpublished" | "never-pushed" => sel.unpublished = true,
+            "stale-fetch" => sel.stale_fetch = true,
             "stash" | "has-stash" => sel.has_stash = true,
             "detached" => sel.detached = true,
             "conflicted" | "conflicts" => sel.conflicted = true,
