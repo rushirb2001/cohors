@@ -1050,13 +1050,13 @@ fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
         return;
     };
     let (since, until) = app.standup_window.range(now_secs());
-    let paths: Vec<Utf8PathBuf> = app.repos.iter().filter_map(|r| r.path.clone()).collect();
+    // The fleet facade walks every repo and tags each commit with the repo's
+    // display name (its alias when one is set), so the standup names repos the
+    // same way the dashboard does.
+    let repos = app.repos.clone();
     let tx = tx.clone();
     std::thread::spawn(move || {
-        let mut commits = Vec::new();
-        for path in &paths {
-            commits.extend(cohors_fleet::collect_commits(path, &email, since, until));
-        }
+        let commits = cohors_fleet::fleet_commits(&repos, &email, since, until);
         let _ = tx.send(BgMsg::StandupReady(commits));
     });
 }
@@ -1064,23 +1064,13 @@ fn spawn_standup(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
 /// Read every repo's launchpad contribution and the focus board on a worker
 /// thread (a few small file reads per repo), then deliver the view.
 fn spawn_launchpad(app: &App, tx: &Sender<BgMsg>) {
-    let repos: Vec<(String, String, Utf8PathBuf)> = app
-        .repos
-        .iter()
-        .filter_map(|r| Some((r.id.0.clone(), r.name.clone(), r.path.clone()?)))
-        .collect();
+    let repos = app.repos.clone();
     let tx = tx.clone();
     std::thread::spawn(move || {
-        use cohors_fleet::launchpad as lp;
-        let mut entries: Vec<_> = repos
-            .iter()
-            .map(|(id, name, path)| lp::entry(id, name, path.as_std_path()))
-            .collect();
-        entries.sort_by(|a, b| a.name.cmp(&b.name));
-        let board = lp::launchpad_home()
-            .map(|home| lp::read_board(&home))
-            .unwrap_or_default();
-        let view = crate::app::LaunchpadView::new(entries, board);
+        // One shared read (the same one the web and MCP use), not a local copy.
+        let home = cohors_fleet::launchpad::launchpad_home();
+        let bundle = cohors_fleet::launchpad_bundle(&repos, home.as_deref());
+        let view = crate::app::LaunchpadView::new(bundle.entries, bundle.board);
         let _ = tx.send(BgMsg::LaunchpadReady(Box::new(view)));
     });
 }

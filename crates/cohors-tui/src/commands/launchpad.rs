@@ -68,21 +68,16 @@ fn report(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
         },
     };
     let order = cohors_core::resolve(&snapshots, &selector, SortMode::Name, now);
-    let entries: Vec<LaunchpadEntry> = order
+    let selected: Vec<cohors_core::RepoSnapshot> = order
         .iter()
-        .filter_map(|id| snapshots.iter().find(|s| &s.id == id))
-        .filter_map(|s| {
-            let path = s.path.as_ref()?;
-            Some(lp::entry(&s.id.0, &s.name, path.as_std_path()))
-        })
+        .filter_map(|id| snapshots.iter().find(|s| &s.id == id).cloned())
         .collect();
 
+    // The shared read every surface uses (entries sorted by name, the focus
+    // board, recent activity), so this report can't drift from the dashboard.
     let home = lp::launchpad_home();
-    let board = home.as_deref().map(lp::read_board).unwrap_or_default();
-    let activity = home
-        .as_deref()
-        .map(|h| lp::recent_activity(h, 20))
-        .unwrap_or_default();
+    let bundle = cohors_fleet::launchpad_bundle(&selected, home.as_deref());
+    let (entries, board, activity) = (bundle.entries, bundle.board, bundle.recent_activity);
 
     if !human {
         let out = json!({
