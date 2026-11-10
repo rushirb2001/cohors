@@ -166,9 +166,15 @@ pub fn sidebar(cx: Ctx) -> impl IntoView {
                 "Fetch, pull, push, commit, stash and shell commands can run.",
             ),
         };
+        // A lock only while something is locked; a bolt once actions can run.
+        let icon = if writes || run {
+            Icon::Bolt
+        } else {
+            Icon::Lock
+        };
         view! {
             <div class="row" title=tip>
-                {ui::icon(Icon::Lock)}
+                {ui::icon(icon)}
                 <span>{text}</span>
             </div>
         }
