@@ -203,14 +203,30 @@ pub fn copy_text(cx: Ctx, text: String, what: &'static str) {
     });
 }
 
-/// A command in a monospace box with a Copy button.
+/// A command the page wrote itself, in a monospace box with a Copy button.
+///
+/// The user pastes it into a terminal, so any part that comes from the fleet
+/// (a path, a name, an id) must already have gone through
+/// [`cohors_web::shell_quote`] before it gets here.
 pub fn command(cx: Ctx, text: String) -> impl IntoView {
+    command_box(cx, text, "command")
+}
+
+/// A command a repository wrote: the `run` line of a flow from its launchpad
+/// file or its manifests. It is shown exactly as written, because it *is* the
+/// command, and it is only ever copied, never run by the page. The caller
+/// labels where it came from.
+pub fn repo_command(cx: Ctx, text: String) -> impl IntoView {
+    command_box(cx, text, "repository's command")
+}
+
+fn command_box(cx: Ctx, text: String, what: &'static str) -> impl IntoView {
     let shown = text.clone();
     let tip = text.clone();
     view! {
         <div class="cmd">
             <code title=tip>{shown}</code>
-            <button class="btn small" on:click=move |_| copy_text(cx, text.clone(), "command")>
+            <button class="btn small" on:click=move |_| copy_text(cx, text.clone(), what)>
                 "Copy"
             </button>
         </div>

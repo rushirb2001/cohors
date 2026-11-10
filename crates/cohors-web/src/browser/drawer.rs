@@ -843,7 +843,7 @@ fn launchpad_sections(cx: Ctx, id: &str) -> AnyView {
                 view! {
                     <div class="flow">
                         <div class="t">{tasks::flow_title(&flow, declared)}</div>
-                        {ui::command(cx, flow.run.clone())}
+                        {ui::repo_command(cx, flow.run.clone())}
                     </div>
                 }
             })
@@ -854,6 +854,10 @@ fn launchpad_sections(cx: Ctx, id: &str) -> AnyView {
                     "Run"
                     <span class="n">{count}</span>
                 </h3>
+                <p class="soft from-repo">
+                    "These commands come from this repository's own files and are shown as \
+                     written. cohors never runs them: read one before you copy it."
+                </p>
                 {rows}
             </div>
         }

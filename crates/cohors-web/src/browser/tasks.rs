@@ -41,13 +41,16 @@ pub fn priority_label(priority: Option<&str>) -> AnyView {
 }
 
 /// The command that asks an agent to write a repository's launchpad file.
+///
+/// The path is always shell-quoted. The user pastes this line into a terminal
+/// and a folder name is not trustworthy (it can hold quotes, `;` or `$(…)`),
+/// so it must reach the shell as one inert argument. See
+/// [`cohors_web::shell_quote`].
 pub fn setup_command(path: &str) -> String {
-    // Quote a path with spaces so the command can be pasted as it is.
-    if path.contains(char::is_whitespace) {
-        format!("cohors agent run setup-repo --repo '{path}'")
-    } else {
-        format!("cohors agent run setup-repo --repo {path}")
-    }
+    format!(
+        "cohors agent run setup-repo --repo {}",
+        cohors_web::shell_quote(path)
+    )
 }
 
 /// A flow's label with its small facts (primary, port, folder, and whether it
@@ -378,7 +381,7 @@ fn flows(cx: Ctx) -> impl IntoView {
                         view! {
                             <div class="flow-row">
                                 <span>{flow_title(&flow, declared)}</span>
-                                {ui::command(cx, flow.run.clone())}
+                                {ui::repo_command(cx, flow.run.clone())}
                             </div>
                         }
                     })
@@ -413,7 +416,8 @@ fn flows(cx: Ctx) -> impl IntoView {
                 <span>
                     {move || {
                         format!(
-                            "What {} can run. Open one and copy a command to run it there.",
+                            "Commands written by {}, in its own files, shown as written. \
+                             cohors never runs them: read one, then copy it to run it yourself.",
                             ui::plural(count(), "repository", "repositories"),
                         )
                     }}

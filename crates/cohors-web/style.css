@@ -377,6 +377,7 @@ th.r .sort { flex-direction: row-reverse; }
 .list a { text-decoration: none; }
 .list a:hover { text-decoration: underline; }
 .list.reasons li { align-items: center; gap: 0; }
+.from-repo { margin-bottom: var(--s2); font-size: 12.5px; }
 .flow { display: grid; gap: var(--s1); padding: var(--s2) 0; }
 .flow:first-child { padding-top: 0; }
 .flow .t { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s2); }
@@ -491,13 +492,15 @@ details.group > .flow-row { padding-left: calc(var(--s4) + 15px + var(--s3)); }
   padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line); color: var(--ink-2);
 }
 .setup-how code { color: var(--ink); font-size: 12.5px; }
-/* Two columns of repositories; the 1px gaps over a line-coloured ground draw
-   the dividers, as in the figure grid. */
-.setup-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line-soft); }
+/* Two columns of repositories. Each row draws its own bottom line, so an odd
+   count leaves an empty cell rather than a grey one. */
+.setup-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-bottom: -1px; }
 .setup-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--s3); align-items: center; padding: 6px var(--s4); background: var(--surface);
+  gap: var(--s3); align-items: center; padding: 6px var(--s4);
+  border-bottom: 1px solid var(--line-soft);
 }
+.setup-row:nth-child(odd) { border-right: 1px solid var(--line-soft); }
 .setup-row .link { display: block; max-width: 100%; padding: 0; border: none; background: none; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .setup-row .link:hover { text-decoration: underline; }
 .setup-row .sub { display: block; }
