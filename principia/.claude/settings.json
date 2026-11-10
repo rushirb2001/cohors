@@ -1,0 +1,13 @@
+{
+  "$comment": [
+    "This repo is its own Claude Code plugin, so `.mcp.json` at the root is the",
+    "PLUGIN's server declaration and correctly uses ${CLAUDE_PLUGIN_ROOT}.",
+    "Claude Code also auto-detects that same file as a project-scoped MCP config,",
+    "where ${CLAUDE_PLUGIN_ROOT} is unset — so the project-scoped copy can never",
+    "start and shows up forever as `principia: ... Failed to connect`.",
+    "Disable that copy. The server you actually want comes from installing the",
+    "plugin (`plugin:principia:principia`) or from `principia init`, which runs",
+    "`claude mcp add principia -- node <checkout>/mcp/src/server.js`."
+  ],
+  "disabledMcpjsonServers": ["principia"]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "principia",
+  "description": "Teach a repository to describe itself to the Principia launchpad.",
+  "owner": {
+    "name": "Rushir Bhavsar"
+  },
+  "plugins": [
+    {
+      "name": "principia",
+      "source": "./",
+      "description": "Teach a repository to describe itself to the Principia launchpad, and plan focus across repos."
+    }
+  ]
+}

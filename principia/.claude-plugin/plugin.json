@@ -1,0 +1,11 @@
+{
+  "name": "principia",
+  "displayName": "Principia",
+  "description": "Teach a repository to describe itself to the Principia launchpad, and plan focus across repos.",
+  "version": "0.1.0",
+  "author": { "name": "Rushir Bhavsar" },
+  "homepage": "https://github.com/rushirb2001/principia",
+  "repository": "https://github.com/rushirb2001/principia",
+  "license": "MIT",
+  "keywords": ["launchpad", "dashboard", "multi-repo", "agents", "vscode"]
+}
