@@ -6,22 +6,22 @@ expression: "render_to_string(&app, 100, 24)"
  1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────╮
 │▸▲  e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.   │
-│ ◆  P  Push 2 commits from 1 repository             They exist only on this machine: payments.    │
-│ ○  p  Pull ╔════════════════════════════════════════════════════════════════════════╗rk: web-ap… │
-│ ○  c  Commi║ Command                                                                ║p with 7.   │
-╰────────────╟────────────────────────────────────────────────────────────────────────╢────────────╯
-╭─  2  ▲ Work║ : sort name▏                                                           ║────────────╮
-│ ▲ legacy-bi╟────────────────────────────┬───────────────────────────────────────────╢            │
-│ ◆ payments ║ :fetch :pull :push         │ sync the targets with their remotes       ║   2h  Push │
+│ ◆  P  Push ╔════════════════════════════════════════════════════════════════════════╗ayments.    │
+│ ○  p  Pull ║ Command                                                                ║rk: web-ap… │
+│ ○  c  Commi╟────────────────────────────────────────────────────────────────────────╢p with 7.   │
+╰────────────║ : sort name▏                                                           ║────────────╯
+╭─  2  ▲ Work╟────────────────────────────┬───────────────────────────────────────────╢────────────╮
+│ ▲ legacy-bi║ :fetch :pull :push         │ sync the targets with their remotes       ║            │
+│ ◆ payments ║ :commit <message>          │ commit every change in the targets (asks  ║   2h  Push │
 │ ◆ web-app  ║ :!<cmd>                    │ run any shell command across the targets  ║  20m  Pull │
 ╰─  ⏎  open  ║ :sort <name·dirty·recent>  │ change the sort order                     ║────────────╯
 ╭─  3  ✓ Open║ :dirty   /<text>           │ needs-attention · fuzzy filter            ║────────────╮
 │ No launchpa║ :jump <repo>               │ move the cursor to a repo                 ║            │
-│ here once a║ :standup :refresh :quit    │ standup · rescan · exit                   ║            │
-╰─  t  board ╟────────────────────────────┴───────────────────────────────────────────╢────────────╯
-╭─  5  ▤ Repo║                           ⏎ run · Esc cancel                           ║────────────╮
-│   repositor╚════════════════════════════════════════════════════════════════════════╝ast commit  │
-│ ▲ legacy-billing         unreadab…                                                  could not r… │
+│ here once a║ :standup  :tasks           │ your commits · the launchpad              ║            │
+╰─  t  board ║ :refresh  :quit            │ rescan · exit                             ║────────────╯
+╭─  5  ▤ Repo╟────────────────────────────┴───────────────────────────────────────────╢────────────╮
+│   repositor║                           ⏎ run · Esc cancel                           ║ast commit  │
+│ ▲ legacy-bi╚════════════════════════════════════════════════════════════════════════╝ould not r… │
 │ ◆ payments               main      ↑2              0    3    1      1      0    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯

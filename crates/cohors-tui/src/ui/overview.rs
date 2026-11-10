@@ -1155,9 +1155,9 @@ fn key_bar_width(hints: &[Hint], gap: usize) -> usize {
 /// Choose which key-bar hints to show in `room` columns, and how far apart.
 ///
 /// The design spaces them four columns apart. On a narrower screen they first
-/// move closer together, and then hints are left off, least needed first: a
-/// hint's position in `KEEP_LAST` says how long it is kept, so help and quit
-/// are still there on the narrowest screen.
+/// move closer together, and then hints are left off from the right. Help and
+/// quit are never left off, so even the narrowest screen says how to find
+/// every other key and how to leave.
 fn fit_key_bar(mut hints: Vec<Hint>, room: usize) -> (Vec<Hint>, usize) {
     const KEEP_LAST: [&str; 2] = ["help", "quit"];
     if key_bar_width(&hints, 4) <= room {

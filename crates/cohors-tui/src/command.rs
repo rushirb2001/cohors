@@ -75,6 +75,9 @@ pub fn parse(input: &str) -> Option<Command> {
         "dirty" => Some(Command::DirtyOnly),
         "sort" => parse_sort(arg).map(Command::Sort),
         "filter" => Some(Command::Filter(arg.to_string())),
+        // `:jump <repo>` is what the command sheet shows; the name alone also
+        // works (the catch-all below).
+        "jump" | "j" if !arg.is_empty() => Some(Command::Jump(arg.to_string())),
         // Any other bare token (no argument) jumps to a repo by name.
         _ if arg.is_empty() => Some(Command::Jump(verb_raw.to_string())),
         // A known-shaped command with an unexpected argument is not valid.
@@ -107,6 +110,8 @@ mod tests {
         );
         assert_eq!(parse("/WIP"), Some(Command::Filter("WIP".into())));
         assert_eq!(parse("cohors"), Some(Command::Jump("cohors".into())));
+        // The spelled-out form the command sheet shows, with the name's case kept.
+        assert_eq!(parse(":jump MyRepo"), Some(Command::Jump("MyRepo".into())));
         assert_eq!(
             parse(":!git status"),
             Some(Command::Run("git status".into()))

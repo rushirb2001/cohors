@@ -231,6 +231,10 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
                 "sync the targets with their remotes",
             ),
             (
+                vec![cmd(":commit"), dim(" <message>")],
+                "commit every change in the targets (asks first)",
+            ),
+            (
                 vec![cmd(":!"), dim("<cmd>")],
                 "run any shell command across the targets",
             ),
@@ -247,14 +251,12 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
                 "move the cursor to a repo",
             ),
             (
-                vec![
-                    cmd(":standup"),
-                    dim(" "),
-                    cmd(":refresh"),
-                    dim(" "),
-                    cmd(":quit"),
-                ],
-                "standup · rescan · exit",
+                vec![cmd(":standup"), dim("  "), cmd(":tasks")],
+                "your commits · the launchpad",
+            ),
+            (
+                vec![cmd(":refresh"), dim("  "), cmd(":quit")],
+                "rescan · exit",
             ),
         ]
     };
