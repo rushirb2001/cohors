@@ -30,10 +30,10 @@ expression: screen
 #=  5  = Repositories  5  1 marked ====================================================================================#
 |        repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit           |
 |> RISK  legacy-billing          unreadable                                                      could not read .git ~ |
-|* WARN  payments                main           +2              0    3    1      1      0    2h  fix: retry on 5xx     |
-|  WARN  web-app                 feat/checkout  -5              0    7    0      0      0   20m  wip: cart drawer      |
-|  NOTE  infra                   @a1b2c3d (det~ no remote       0    0    4      0      0    1w  build: pin ci image   |
-|        auth-service            main           no remote       0    0    0      0      0    3d  chore: bump deps      |
+|* WARN  payments                main           +2              .    3    1      1      .    2h  fix: retry on 5xx     |
+|  WARN  web-app                 feat/checkout  -5              .    7    .      .      .   20m  wip: cart drawer      |
+|  NOTE  infra                   @a1b2c3d (det~ no remote       .    .    4      .      .    1w  build: pin ci image   |
+|        auth-service            main           no remote       .    .    .      .      .    3d  chore: bump deps      |
 |                                                                                                                      |
 |                                                                                                                      |
 |                                                                                                                      |

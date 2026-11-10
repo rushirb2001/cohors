@@ -29,7 +29,7 @@ expression: "render_to_string(&app, 120, 40)"
 ╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
 ╭─  5  ▤ Repositories  2 of 5  / pay▏ ─────────────────────────────────────────────────────────────────────────────────╮
 │        repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit           │
-│▸ WARN  payments                main           ↑2              0    3    1      1      0    2h  fix: retry on 5xx     │
+│▸ WARN  payments                main           ↑2              ·    3    1      1      ·    2h  fix: retry on 5xx     │
 │  RISK  legacy-billing          unreadable                                                      could not read .git … │
 │                                                                                                                      │
 │                                                                                                                      │

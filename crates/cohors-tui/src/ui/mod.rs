@@ -43,12 +43,54 @@ pub(crate) struct Theme {
     /// tint (letting the native accent colours read) instead of a light one.
     dark: bool,
     glyphs: Glyphs,
+    /// Which styling of the same layout to draw (see [`Scheme`]).
+    scheme: Scheme,
+}
+
+/// A styling of the dashboard. Every scheme draws the SAME layout (the same
+/// cards in the same places with the same text); only colour, weight and what
+/// the card frames are made of differ.
+///
+/// TRIAL: these exist side by side so they can be compared on a real terminal
+/// (`COHORS_STYLE=ink|panels|keyed|bands`). Once one is chosen the others go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Scheme {
+    /// The frames and weights as shipped.
+    #[default]
+    Current,
+    /// Frames recede to a faint grey, titles take the bronze, and rows that
+    /// need nothing are drawn quietly so the ones that do stand out.
+    Ink,
+    /// No lines at all: every card is a filled surface a shade off the
+    /// terminal's background, with half a row of space between them.
+    Panels,
+    /// Each section has its own muted hue on its frame and title.
+    Keyed,
+    /// Faint frames, each title on a solid label, and a striped table.
+    Bands,
+}
+
+impl Scheme {
+    fn from_env() -> Self {
+        match std::env::var("COHORS_STYLE").as_deref() {
+            Ok("ink") => Self::Ink,
+            Ok("panels") => Self::Panels,
+            Ok("keyed") => Self::Keyed,
+            Ok("bands") => Self::Bands,
+            _ => Self::Current,
+        }
+    }
 }
 
 impl Theme {
     /// The theme for this run: colour is on unless `NO_COLOR` is set.
     fn from_env(icons: cohors_config::IconMode, dark: bool) -> Self {
-        Self::new(icons, dark, std::env::var_os("NO_COLOR").is_none())
+        let mut theme = Self::new(icons, dark, std::env::var_os("NO_COLOR").is_none());
+        // Every scheme is made of colour; without it there is only one look.
+        if theme.color {
+            theme.scheme = Scheme::from_env();
+        }
+        theme
     }
 
     /// A theme with colour explicitly on or off (tests use this to render the
@@ -58,7 +100,111 @@ impl Theme {
             color,
             dark,
             glyphs: Glyphs::resolve(icons, !color),
+            scheme: Scheme::Current,
         }
+    }
+
+    /// One of two colours, by whether the terminal is dark or light.
+    fn tone(&self, dark: (u8, u8, u8), light: (u8, u8, u8)) -> Color {
+        let (r, g, b) = if self.dark { dark } else { light };
+        Color::Rgb(r, g, b)
+    }
+
+    /// A faint grey for frames that should recede behind their content.
+    fn faint(&self) -> Style {
+        Style::new().fg(self.tone((0x4E, 0x4B, 0x47), (0xC4, 0xBF, 0xB5)))
+    }
+
+    /// The hue of a section in the keyed scheme: purple for what to do, brick
+    /// for work at risk, sage for tasks, slate for commits, grey for the rest.
+    fn section_hue(&self, number: Option<u8>) -> Color {
+        match number {
+            Some(1) => SPIDER_PURPLE,
+            Some(2) => self.tone((0xD9, 0x77, 0x6E), (0xB4, 0x48, 0x3F)),
+            Some(3) => self.tone((0x7F, 0xB0, 0x8C), (0x4D, 0x8A, 0x62)),
+            Some(4) => self.tone((0x7E, 0x9C, 0xC2), (0x4A, 0x6A, 0x94)),
+            _ => self.tone((0x8A, 0x86, 0x80), (0x8A, 0x84, 0x78)),
+        }
+    }
+
+    /// The style of a card's frame.
+    fn card_line(&self, number: Option<u8>, focused: bool) -> Style {
+        if focused && self.scheme != Scheme::Keyed {
+            return self.accent().add_modifier(Modifier::BOLD);
+        }
+        match self.scheme {
+            Scheme::Current => self.dim(),
+            Scheme::Ink | Scheme::Bands | Scheme::Panels => self.faint(),
+            Scheme::Keyed if focused => Style::new()
+                .fg(self.section_hue(number))
+                .add_modifier(Modifier::BOLD),
+            Scheme::Keyed if number.is_some() => Style::new()
+                .fg(self.section_hue(number))
+                .add_modifier(Modifier::DIM),
+            Scheme::Keyed => self.faint(),
+        }
+    }
+
+    /// What to lay over a card's title (its number, icon and words), or
+    /// `None` to leave the title as each card styled it.
+    fn card_title(&self, number: Option<u8>, focused: bool) -> Option<Style> {
+        match self.scheme {
+            Scheme::Current => None,
+            // A panel's title sits on its own band, which says enough.
+            Scheme::Panels => None,
+            Scheme::Ink if focused => Some(self.accent()),
+            Scheme::Ink => Some(self.bronze()),
+            Scheme::Keyed => Some(Style::new().fg(self.section_hue(number))),
+            // A solid label: the brand purple when focused, a light neutral
+            // otherwise, with dark text either way.
+            Scheme::Bands => {
+                let ground = if focused {
+                    SPIDER_PURPLE
+                } else {
+                    self.tone((0xB8, 0xB3, 0xAA), (0x5E, 0x5A, 0x54))
+                };
+                let ink = self.tone((0x1C, 0x1B, 0x1A), (0xFF, 0xFF, 0xFF));
+                Some(Style::new().bg(ground).fg(ink))
+            }
+        }
+    }
+
+    /// The fill of a card in the panels scheme (`None` in every other scheme:
+    /// there the card is a frame of lines).
+    fn surface(&self) -> Option<Color> {
+        (self.scheme == Scheme::Panels).then(|| self.tone((0x2D, 0x2B, 0x29), (0xEE, 0xEA, 0xE3)))
+    }
+
+    /// The strip across the top of a panel that carries its title: a shade
+    /// lighter than the panel, or a purple tint on the focused card.
+    fn band(&self, focused: bool) -> Color {
+        if focused {
+            self.tone((0x5A, 0x33, 0x55), (0xE3, 0xC3, 0xDC))
+        } else {
+            self.tone((0x45, 0x41, 0x3D), (0xDD, 0xD7, 0xCC))
+        }
+    }
+
+    /// The base style of the key hints on a card's bottom edge. Text drawn on
+    /// a border takes the border's colour unless it names its own, so where
+    /// a scheme makes the frame faint the hints ask for the terminal's normal
+    /// text colour, or they would fade away with it.
+    fn hint_base(&self) -> Style {
+        match self.scheme {
+            Scheme::Current => Style::new(),
+            _ => Style::new().fg(Color::Reset),
+        }
+    }
+
+    /// Whether rows that need nothing are drawn quietly.
+    fn quiets_rows(&self) -> bool {
+        matches!(self.scheme, Scheme::Ink | Scheme::Keyed)
+    }
+
+    /// The ground of every other table row, where the scheme stripes tables.
+    fn stripe(&self) -> Option<Style> {
+        (self.scheme == Scheme::Bands)
+            .then(|| Style::new().bg(self.tone((0x24, 0x23, 0x21), (0xF0, 0xEC, 0xE5))))
     }
 
     fn fg(&self, c: Color) -> Style {

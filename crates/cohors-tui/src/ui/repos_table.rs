@@ -98,6 +98,40 @@ const DROP_ORDER: [ColumnId; 6] = [
     ColumnId::Branch,
 ];
 
+/// How wide the name and the branch would have to be to show every one of them
+/// whole. On a wide terminal those two columns grow towards this, instead of
+/// the commit subject taking all the spare room while names are cut short.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Wanted {
+    pub name: usize,
+    pub branch: usize,
+}
+
+impl Wanted {
+    /// Measured over the whole fleet, not only the rows in view, so the
+    /// columns do not shift as the list is filtered or scrolled.
+    pub(crate) fn of(repos: &[RepoSnapshot]) -> Self {
+        let longest = |text: &dyn Fn(&RepoSnapshot) -> String| {
+            repos
+                .iter()
+                .map(|repo| text::safe(&text(repo)).chars().count())
+                .max()
+                .unwrap_or(0)
+        };
+        Self {
+            name: longest(&|repo| repo.name.clone()),
+            branch: longest(&|repo| repo.branch.label()),
+        }
+    }
+}
+
+/// The commit subject keeps at least this much before the name and the
+/// branch are widened past their designed widths.
+const COMMIT_COMFORT: usize = 48;
+/// The widest the name and the branch are ever drawn.
+const NAME_CAP: usize = 40;
+const BRANCH_CAP: usize = 30;
+
 /// Columns that take spare width, in the order they are offered it.
 const GROW_ORDER: [ColumnId; 4] = [
     ColumnId::Name,
@@ -114,7 +148,7 @@ pub(crate) struct Column {
 }
 
 /// Decide which columns are shown in `text_width` columns, and how wide.
-pub(crate) fn columns(kind: TableKind, text_width: usize) -> Vec<Column> {
+pub(crate) fn columns(kind: TableKind, text_width: usize, wanted: Wanted) -> Vec<Column> {
     let specs: &[ColumnSpec] = match kind {
         TableKind::Overview => &OVERVIEW_COLUMNS,
         TableKind::Detail => &DETAIL_COLUMNS,
@@ -146,6 +180,31 @@ pub(crate) fn columns(kind: TableKind, text_width: usize) -> Vec<Column> {
         let extra = (kept[index].max - kept[index].min).min(spare);
         result[index].width += extra;
         spare -= extra;
+    }
+
+    // A wide terminal: every column has its designed width and there is still
+    // room, either unused or sitting in a commit subject wider than it needs.
+    // Spend it on showing long names and branches whole.
+    let commit = result.iter().position(|c| c.id == ColumnId::Commit);
+    let lendable = commit.map_or(0, |i| result[i].width.saturating_sub(COMMIT_COMFORT));
+    let mut room = spare + lendable;
+    for (id, want, cap) in [
+        (ColumnId::Name, wanted.name, NAME_CAP),
+        (ColumnId::Branch, wanted.branch, BRANCH_CAP),
+    ] {
+        let Some(index) = result.iter().position(|c| c.id == id) else {
+            continue;
+        };
+        // Two columns more than the text, so a gap always follows it.
+        let target = (want + 2).min(cap);
+        let extra = target.saturating_sub(result[index].width).min(room);
+        result[index].width += extra;
+        room -= extra;
+    }
+    // Unused room is spent first; the rest comes out of the commit subject.
+    let borrowed = (spare + lendable - room).saturating_sub(spare);
+    if let Some(index) = commit {
+        result[index].width -= borrowed;
     }
     result
 }
@@ -184,7 +243,8 @@ impl<'a> RepoRow<'a> {
 /// How the current branch relates to its upstream, in a word or two.
 pub(crate) fn upstream_label(snap: &RepoSnapshot, theme: &Theme) -> (String, Style) {
     match &snap.upstream {
-        Some(up) if up.ahead == 0 && up.behind == 0 => ("level".to_string(), theme.dim()),
+        // Level with its upstream: nothing to say, so nothing is said.
+        Some(up) if up.ahead == 0 && up.behind == 0 => (String::new(), theme.dim()),
         Some(up) => (
             theme.glyphs.ahead_behind(up.ahead, up.behind),
             theme.ahead(),
@@ -205,20 +265,37 @@ pub(crate) fn fetched_label(fetched: Option<i64>, now: i64) -> String {
     }
 }
 
-/// A count cell: right-aligned, dim when zero so the non-zero ones stand out.
+/// A count cell, right-aligned. Zero is a dim dot rather than a digit, so the
+/// only numbers on a row are the ones that say something.
 fn count_cell(n: u32, width: usize, style: Style, theme: &Theme) -> Span<'static> {
-    let text = text::cell_right(&n.to_string(), width, theme.glyphs.ellipsis());
-    Span::styled(text, if n == 0 { theme.dim() } else { style })
+    let ell = theme.glyphs.ellipsis();
+    if n == 0 {
+        return Span::styled(
+            text::cell_right(theme.glyphs.zero(), width, ell),
+            theme.dim(),
+        );
+    }
+    Span::styled(text::cell_right(&n.to_string(), width, ell), style)
+}
+
+/// In a scheme that quiets rows, a repository that needs nothing (a note at
+/// most) has its name and branch drawn dim, so the ones at risk are the ones
+/// that read.
+fn is_quiet(row: &RepoRow, theme: &Theme) -> bool {
+    theme.quiets_rows() && row.line.is_some_and(|line| line.severity < Severity::Warn)
 }
 
 /// The repository name as a padded cell, with the characters that matched the
 /// filter picked out.
 fn name_spans(row: &RepoRow, width: usize, theme: &Theme) -> Vec<Span<'static>> {
     let at_risk = row.line.is_some_and(|line| line.at_risk);
+    let quiet = is_quiet(row, theme);
     let base = if row.snap.has_error() {
         theme.error()
     } else if at_risk {
         Style::new().add_modifier(Modifier::BOLD)
+    } else if quiet {
+        theme.dim()
     } else {
         Style::new()
     };
@@ -269,6 +346,7 @@ fn cell_spans(row: &RepoRow, column: Column, now: i64, theme: &Theme) -> Vec<Spa
         ColumnId::Name => name_spans(row, width, theme),
         ColumnId::Branch => {
             let style = match snap.branch {
+                Branch::Named(_) if is_quiet(row, theme) => theme.dim(),
                 Branch::Named(_) => Style::new(),
                 Branch::Detached(_) | Branch::Unborn => theme.detached(),
             };
@@ -566,7 +644,7 @@ pub(crate) fn render_repos_card(
     if inner.text.height == 0 {
         return;
     }
-    let columns = columns(TableKind::Overview, inner.width());
+    let columns = columns(TableKind::Overview, inner.width(), Wanted::of(&app.repos));
     frame.render_widget(
         Paragraph::new(header_line(TableKind::Overview, &columns, theme)),
         Rect {
@@ -603,6 +681,21 @@ fn draw_rows(
     app.scrolls.table.set(window.offset);
     // The cursor only shows while the card has the focus.
     let cursor = focused.then_some(app.selected);
+    // A striping scheme tints every other row, so the eye can follow one
+    // across a wide table. Drawn first; the text and the cursor go over it.
+    if let Some(stripe) = theme.stripe() {
+        for slot in (0..window.shown).filter(|slot| (window.offset + slot) % 2 == 1) {
+            let row = Rect {
+                x: body.gutter_x,
+                y: body.text.y + slot as u16,
+                width: body.text.width + 2,
+                height: 1,
+            };
+            if row.y < body.text.y + body.text.height {
+                frame.buffer_mut().set_style(row, stripe);
+            }
+        }
+    }
     draw_list(frame, body, window, 1, cursor, theme, |index| {
         let row = RepoRow::new(app, &view[index]);
         Item {
@@ -627,13 +720,13 @@ mod tests {
     #[test]
     fn the_designed_width_gets_the_designed_columns() {
         // 119 columns: 115 of text inside the card.
-        let overview = columns(TableKind::Overview, 115);
+        let overview = columns(TableKind::Overview, 115, Wanted::default());
         let widths: Vec<usize> = overview.iter().map(|c| c.width).collect();
         // The severity block takes seven columns; the commit subject gives them up.
         assert_eq!(widths, [24, 15, 12, 5, 5, 5, 7, 7, 6, 22]);
         assert_eq!(total(&overview), 115);
 
-        let detail = columns(TableKind::Detail, 115);
+        let detail = columns(TableKind::Detail, 115, Wanted::default());
         let widths: Vec<usize> = detail.iter().map(|c| c.width).collect();
         assert_eq!(widths, [30, 19, 12, 5, 5, 5, 7, 7, 10, 8]);
     }
@@ -642,15 +735,16 @@ mod tests {
     fn columns_drop_in_order_as_the_table_narrows() {
         // 80-column terminal: the commit subject goes first, then the task
         // count (card 3 already shows tasks per repository).
-        let at_80 = columns(TableKind::Overview, 76);
+        let none = Wanted::default();
+        let at_80 = columns(TableKind::Overview, 76, none);
         assert!(!ids(&at_80).contains(&ColumnId::Commit));
         assert!(!ids(&at_80).contains(&ColumnId::Tasks));
         assert!(ids(&at_80).contains(&ColumnId::Stash));
         // A little wider and the task count is back.
-        assert!(ids(&columns(TableKind::Overview, 84)).contains(&ColumnId::Tasks));
+        assert!(ids(&columns(TableKind::Overview, 84, none)).contains(&ColumnId::Tasks));
 
         // Narrower still: tasks, then stash, then upstream, then branch.
-        let narrow = columns(TableKind::Overview, 44);
+        let narrow = columns(TableKind::Overview, 44, none);
         assert_eq!(
             ids(&narrow),
             [
@@ -662,7 +756,7 @@ mod tests {
             ]
         );
 
-        let detail = columns(TableKind::Detail, 70);
+        let detail = columns(TableKind::Detail, 70, none);
         assert!(!ids(&detail).contains(&ColumnId::Fetched));
         assert!(ids(&detail).contains(&ColumnId::Upstream));
     }
@@ -670,14 +764,56 @@ mod tests {
     #[test]
     fn a_table_never_overflows_its_card() {
         for kind in [TableKind::Overview, TableKind::Detail] {
-            for width in 44..200 {
-                let cols = columns(kind, width);
-                assert!(total(&cols) <= width, "{kind:?} at {width}: {cols:?}");
-                // The name is always there, and never narrower than its floor.
-                assert_eq!(cols[0].id, ColumnId::Name);
-                assert!(cols[0].width >= 14);
+            for width in 44..260 {
+                // With nothing long to show, and with names and branches
+                // longer than any column will ever be.
+                for wanted in [
+                    Wanted::default(),
+                    Wanted {
+                        name: 80,
+                        branch: 80,
+                    },
+                ] {
+                    let cols = columns(kind, width, wanted);
+                    assert!(total(&cols) <= width, "{kind:?} at {width}: {cols:?}");
+                    // The name is always there, and never narrower than its floor.
+                    assert_eq!(cols[0].id, ColumnId::Name);
+                    assert!(cols[0].width >= 14);
+                }
             }
         }
+    }
+
+    #[test]
+    fn long_names_get_the_spare_room_on_a_wide_terminal() {
+        let width_of = |cols: &[Column], id| cols.iter().find(|c| c.id == id).unwrap().width;
+        let long = Wanted {
+            name: 35,
+            branch: 19,
+        };
+
+        // The designed width has nothing to spare: the columns stay as drawn.
+        assert_eq!(
+            columns(TableKind::Overview, 115, long),
+            columns(TableKind::Overview, 115, Wanted::default())
+        );
+
+        // 167 columns of terminal: the name and the branch fit whole, with
+        // their gap, and the commit subject keeps its comfortable width.
+        let wide = columns(TableKind::Overview, 163, long);
+        assert_eq!(width_of(&wide, ColumnId::Name), 37);
+        assert_eq!(width_of(&wide, ColumnId::Branch), 21);
+        assert!(width_of(&wide, ColumnId::Commit) >= COMMIT_COMFORT);
+        assert_eq!(total(&wide), 163);
+
+        // Short names take nothing they do not need.
+        let short = columns(TableKind::Overview, 163, Wanted { name: 9, branch: 4 });
+        assert_eq!(width_of(&short, ColumnId::Name), 24);
+
+        // The detail list has no commit subject; its unused room is spent.
+        let detail = columns(TableKind::Detail, 163, long);
+        assert_eq!(width_of(&detail, ColumnId::Name), 37);
+        assert_eq!(width_of(&detail, ColumnId::Branch), 21);
     }
 
     #[test]

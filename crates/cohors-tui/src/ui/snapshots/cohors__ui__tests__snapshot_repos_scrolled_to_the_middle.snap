@@ -38,12 +38,12 @@ expression: screen
 ╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────────────────────────────╮
 │        repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit           │
-│  WARN  design-system           main           ↑1              0    0    0      1      0    6h  feat: dark-mode toke… │
-│  WARN  mobile-app              release/2.0    ↑4 ↓1           3    1    0      0      0    9h  feat: biometric unlo… │
-│  WARN  payments                main           ↑2              1    2    0      0      2    2h  fix: retry charge on… │
-│  WARN  web-app                 feat/checkout  ↓5              0    6    1      0      2   20m  wip: cart drawer ani… │
-│  NOTE  cli-tools               main           level           0    0    1      0      0   12h  docs: add shell-comp… │
-│▸ NOTE  data-pipeline           main           ↓3              0    0    0      0      1    5h  fix: backfill job of… │
+│  WARN  design-system           main           ↑1              ·    ·    ·      1      ·    6h  feat: dark-mode toke… │
+│  WARN  mobile-app              release/2.0    ↑4 ↓1           3    1    ·      ·      ·    9h  feat: biometric unlo… │
+│  WARN  payments                main           ↑2              1    2    ·      ·      2    2h  fix: retry charge on… │
+│  WARN  web-app                 feat/checkout  ↓5              ·    6    1      ·      2   20m  wip: cart drawer ani… │
+│  NOTE  cli-tools               main                           ·    ·    1      ·      ·   12h  docs: add shell-comp… │
+│▸ NOTE  data-pipeline           main           ↓3              ·    ·    ·      ·      1    5h  fix: backfill job of… │
 │   ↓ 4 more   ↑ 2 above                                                                                               │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯
   1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

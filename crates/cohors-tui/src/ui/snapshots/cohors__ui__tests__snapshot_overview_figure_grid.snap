@@ -44,18 +44,18 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 ╰─  t  board   ⏎  tasks  ──────────────╯ ╰─  s  standup   y  copy as markdown  ────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────╮
 │        repository    branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
-│  RISK  analytics     main      ↑1              0    0    0      2      0    4d  perf: preco… │
+│  RISK  analytics     main      ↑1              ·    ·    ·      2      ·    4d  perf: preco… │
 │  RISK  legacy-billi… unreadable                                                 could not r… │
-│  WARN  design-system main      ↑1              0    0    0      1      0    6h  feat: dark-… │
-│  WARN  mobile-app    release/… ↑4 ↓1           3    1    0      0      0    9h  feat: biome… │
-│  WARN  payments      main      ↑2              1    2    0      0      2    2h  fix: retry … │
-│  WARN  web-app       feat/che… ↓5              0    6    1      0      2   20m  wip: cart d… │
-│  NOTE  cli-tools     main      level           0    0    1      0      0   12h  docs: add s… │
-│  NOTE  data-pipeline main      ↓3              0    0    0      0      1    5h  fix: backfi… │
-│  NOTE  experiments   @9f8e7d6… no remote       0    4    3      0      0    1y  spike: try … │
-│  NOTE  infra         @a1b2c3d… no remote       0    2    2      0      0    1w  build: pin … │
-│        auth-service  main      level           0    0    0      0      0    3d  chore: bump… │
-│        marketing-si… main      level           0    0    0      0      0   1mo  content: Q2… │
+│  WARN  design-system main      ↑1              ·    ·    ·      1      ·    6h  feat: dark-… │
+│  WARN  mobile-app    release/… ↑4 ↓1           3    1    ·      ·      ·    9h  feat: biome… │
+│  WARN  payments      main      ↑2              1    2    ·      ·      2    2h  fix: retry … │
+│  WARN  web-app       feat/che… ↓5              ·    6    1      ·      2   20m  wip: cart d… │
+│  NOTE  cli-tools     main                      ·    ·    1      ·      ·   12h  docs: add s… │
+│  NOTE  data-pipeline main      ↓3              ·    ·    ·      ·      1    5h  fix: backfi… │
+│  NOTE  experiments   @9f8e7d6… no remote       ·    4    3      ·      ·    1y  spike: try … │
+│  NOTE  infra         @a1b2c3d… no remote       ·    2    2      ·      ·    1w  build: pin … │
+│        auth-service  main                      ·    ·    ·      ·      ·    3d  chore: bump… │
+│        marketing-si… main                      ·    ·    ·      ·      ·   1mo  content: Q2… │
 │                                                                                              │
 │                                                                                              │
 │                                                                                              │

@@ -12,8 +12,8 @@
 use cohors_core::{ActionKind, KeyFigures, NextAction, Overview};
 
 use super::cards::{
-    BLOCK_WIDTH, CardFrame, Hint, Item, draw_card, draw_lines, draw_list, draw_message, hint,
-    severity_block,
+    BLOCK_WIDTH, CardFrame, Hint, Item, draw_card, draw_card_filled, draw_lines, draw_list,
+    draw_message, hint, severity_block,
 };
 use super::layout::{Figures, OverviewPlan, Wants, list_window, plan_overview};
 use super::repos_table::render_repos_card;
@@ -479,14 +479,15 @@ fn render_figure_row(frame: &mut Frame, area: Rect, figures: &[Figure], theme: &
         .spacing(1)
         .split(area);
     for (figure, cell) in figures.iter().zip(cells.iter()) {
-        let inner = draw_card(frame, *cell, &CardFrame::default(), theme).text;
-        let width = inner.width as usize;
-        let ell = theme.glyphs.ellipsis();
         // A figure that needs attention is a filled tile: everything inside
         // the frame takes the severity's colour, and the text is drawn in the
         // fill's own contrasting tone (dim text on a coloured ground would be
         // unreadable). A figure with nothing wrong stays neutral.
         let fill = figure.tone.and_then(|tone| theme.fill(tone));
+        let ground = fill.and_then(|fill| fill.bg);
+        let inner = draw_card_filled(frame, *cell, &CardFrame::default(), theme, ground).text;
+        let width = inner.width as usize;
+        let ell = theme.glyphs.ellipsis();
         if let Some(fill) = fill {
             let inside = Rect {
                 x: cell.x.saturating_add(1),
@@ -613,7 +614,13 @@ fn do_next_line(
         Span::raw("  "),
         Span::styled(
             text::cell(&title, title_width, ell),
-            Style::new().add_modifier(Modifier::BOLD),
+            // In a scheme that quiets rows, only a step that guards work is
+            // bold; a note reads at normal weight.
+            if theme.quiets_rows() && action.severity < Severity::Warn {
+                Style::new()
+            } else {
+                Style::new().add_modifier(Modifier::BOLD)
+            },
         ),
     ];
     if why_width > 0 {

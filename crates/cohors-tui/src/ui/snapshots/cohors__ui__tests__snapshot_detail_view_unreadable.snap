@@ -4,29 +4,29 @@ expression: "render_to_string(&app, 120, 45)"
 ---
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────────────────────────────╮
 │        repository                    branch              upstream      stg  mod  new  stash  tasks   fetched  commit │
-│  RISK  analytics                     main                ↑1              0    0    0      2      0     never      4d │
+│  RISK  analytics                     main                ↑1              ·    ·    ·      2      ·     never      4d │
 │        ~/code/analytics                                  abc1234  perf: precompute funnel rollups                    │
 │▸ RISK  legacy-billing                unreadable                                                                      │
 │        ~/code/legacy-billing                             could not read .git (permission denied)                     │
-│  WARN  design-system                 main                ↑1              0    0    0      1      0     never      6h │
+│  WARN  design-system                 main                ↑1              ·    ·    ·      1      ·     never      6h │
 │        ~/code/design-system                              abc1234  feat: dark-mode tokens                             │
-│  WARN  mobile-app                    release/2.0         ↑4 ↓1           3    1    0      0      0     never      9h │
+│  WARN  mobile-app                    release/2.0         ↑4 ↓1           3    1    ·      ·      ·     never      9h │
 │        ~/code/mobile-app                                 abc1234  feat: biometric unlock                             │
-│  WARN  payments                      main                ↑2              1    2    0      0      2     never      2h │
+│  WARN  payments                      main                ↑2              1    2    ·      ·      2     never      2h │
 │        ~/code/payments                                   abc1234  fix: retry charge on 5xx from processor            │
-│  WARN  web-app                       feat/checkout       ↓5              0    6    1      0      2     never     20m │
+│  WARN  web-app                       feat/checkout       ↓5              ·    6    1      ·      2     never     20m │
 │        ~/code/web-app                                    abc1234  wip: cart drawer animation                         │
-│  NOTE  cli-tools                     main                level           0    0    1      0      0     never     12h │
+│  NOTE  cli-tools                     main                                ·    ·    1      ·      ·     never     12h │
 │        ~/code/cli-tools                                  abc1234  docs: add shell-completion install notes           │
-│  NOTE  data-pipeline                 main                ↓3              0    0    0      0      1     never      5h │
+│  NOTE  data-pipeline                 main                ↓3              ·    ·    ·      ·      1     never      5h │
 │        ~/code/data-pipeline                              abc1234  fix: backfill job off-by-one window                │
-│  NOTE  experiments                   @9f8e7d6 (detached) no remote       0    4    3      0      0                1y │
+│  NOTE  experiments                   @9f8e7d6 (detached) no remote       ·    4    3      ·      ·                1y │
 │        ~/code/experiments                                abc1234  spike: try wgpu for the renderer                   │
-│  NOTE  infra                         @a1b2c3d (detached) no remote       0    2    2      0      0                1w │
+│  NOTE  infra                         @a1b2c3d (detached) no remote       ·    2    2      ·      ·                1w │
 │        ~/code/infra                                      abc1234  build: pin terraform provider versions             │
-│        auth-service                  main                level           0    0    0      0      0     never      3d │
+│        auth-service                  main                                ·    ·    ·      ·      ·     never      3d │
 │        ~/code/auth-service                               abc1234  chore: bump jsonwebtoken to 9.3                    │
-│        marketing-site                main                level           0    0    0      0      0               1mo │
+│        marketing-site                main                                ·    ·    ·      ·      ·               1mo │
 │        ~/code/marketing-site                             abc1234  content: Q2 launch landing page                    │
 │                                                                                                                      │
 │                                                                                                                      │

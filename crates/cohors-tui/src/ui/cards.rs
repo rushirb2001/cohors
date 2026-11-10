@@ -73,14 +73,41 @@ pub(crate) fn draw_card(
     card: &CardFrame,
     theme: &Theme,
 ) -> CardArea {
+    draw_card_filled(frame, area, card, theme, None)
+}
+
+/// [`draw_card`], with the option of saying what colour the card's surface
+/// is. Only a scheme that fills its cards uses `fill` (a figure tile that
+/// needs attention is filled with its severity's colour); a scheme of lines
+/// ignores it and the caller paints the inside itself.
+pub(crate) fn draw_card_filled(
+    frame: &mut Frame,
+    area: Rect,
+    card: &CardFrame,
+    theme: &Theme,
+    fill: Option<Color>,
+) -> CardArea {
+    let content = CardArea {
+        gutter_x: area.x.saturating_add(1),
+        text: Rect {
+            x: area.x.saturating_add(2),
+            y: area.y.saturating_add(1),
+            width: area.width.saturating_sub(4),
+            height: area.height.saturating_sub(2),
+        },
+    };
+    if let Some(surface) = theme.surface() {
+        // A panel needs a top edge, a bottom edge and something between.
+        if area.height >= 3 && area.width >= 2 {
+            draw_panel(frame, area, card, fill.unwrap_or(surface), theme);
+            return content;
+        }
+    }
+
     // Without colour the focused card is told apart by a heavier frame.
     let heavy = card.focused && !theme.color;
     let set = theme.glyphs.card_border(heavy);
-    let border_style = if card.focused {
-        theme.accent().add_modifier(Modifier::BOLD)
-    } else {
-        theme.dim()
-    };
+    let border_style = theme.card_line(card.number, card.focused);
 
     let mut block = Block::bordered().border_set(set).border_style(border_style);
     if card.number.is_some() || !card.title.is_empty() {
@@ -96,22 +123,67 @@ pub(crate) fn draw_card(
         ));
     }
     frame.render_widget(block, area);
+    content
+}
 
-    CardArea {
-        gutter_x: area.x.saturating_add(1),
-        text: Rect {
-            x: area.x.saturating_add(2),
-            y: area.y.saturating_add(1),
-            width: area.width.saturating_sub(4),
-            height: area.height.saturating_sub(2),
-        },
+/// A card as a filled surface instead of a frame of lines.
+///
+/// The rows are the same as a framed card's, so nothing inside moves: the top
+/// row is a lighter band that carries the title, the bottom row carries the
+/// key hints. A row with nothing to carry is drawn with half-height blocks, so
+/// the surface stops half a row short and stacked cards get a visible gap
+/// without the layout giving up a row for it.
+fn draw_panel(frame: &mut Frame, area: Rect, card: &CardFrame, surface: Color, theme: &Theme) {
+    let top = Rect { height: 1, ..area };
+    let bottom = Rect {
+        y: area.y + area.height - 1,
+        height: 1,
+        ..area
+    };
+    let body = Rect {
+        y: area.y + 1,
+        height: area.height - 2,
+        ..area
+    };
+    let titled = card.number.is_some() || !card.title.is_empty();
+    let buffer = frame.buffer_mut();
+    buffer.set_style(body, Style::new().bg(surface));
+    // Half blocks are drawn in the surface colour on the terminal's own
+    // background: `▄` fills the lower half of the top row, `▀` the upper half
+    // of the bottom row.
+    let mut half = |row: Rect, symbol: &str| {
+        for x in row.x..row.x + row.width {
+            buffer[(x, row.y)]
+                .set_symbol(symbol)
+                .set_style(Style::new().fg(surface));
+        }
+    };
+    if !titled {
+        half(top, "▄");
+    }
+    if card.hints.is_empty() {
+        half(bottom, "▀");
+    }
+
+    if titled {
+        let band = Style::new().bg(theme.band(card.focused));
+        frame.buffer_mut().set_style(top, band);
+        let line = title_line(card, " ", theme.dim(), theme);
+        frame.render_widget(Paragraph::new(line), top);
+    }
+    if !card.hints.is_empty() {
+        frame
+            .buffer_mut()
+            .set_style(bottom, Style::new().bg(surface));
+        let line = hints_line(&card.hints, area.width, " ", Style::new(), theme);
+        frame.render_widget(Paragraph::new(line), bottom);
     }
 }
 
 /// The title on the top border: `─  1  ▶ Do next  5 ` (the leading rule is
 /// part of the title so the text sits two columns in from the corner).
 fn title_line(card: &CardFrame, rule: &str, border: Style, theme: &Theme) -> Line<'static> {
-    let mut spans = vec![Span::styled(rule.to_string(), border)];
+    let mut label = Vec::new();
     match card.number {
         Some(number) => {
             let key_style = if card.focused {
@@ -119,16 +191,24 @@ fn title_line(card: &CardFrame, rule: &str, border: Style, theme: &Theme) -> Lin
             } else {
                 Style::new().add_modifier(Modifier::BOLD)
             };
-            spans.push(Span::styled(format!("  {number}  "), key_style));
+            label.push(Span::styled(format!("  {number}  "), key_style));
             let icon = theme.glyphs.card_icon(number);
             if !icon.is_empty() {
-                spans.push(Span::styled(format!("{icon} "), border));
+                label.push(Span::styled(format!("{icon} "), border));
             }
         }
-        None => spans.push(Span::raw(" ")),
+        None => label.push(Span::raw(" ")),
     }
-    spans.extend(card.title.iter().cloned());
-    spans.push(Span::raw(" "));
+    label.extend(card.title.iter().cloned());
+    label.push(Span::raw(" "));
+    // A scheme may restyle the whole title (its colour, or a solid label).
+    if let Some(over) = theme.card_title(card.number, card.focused) {
+        for span in &mut label {
+            span.style = span.style.patch(over);
+        }
+    }
+    let mut spans = vec![Span::styled(rule.to_string(), border)];
+    spans.extend(label);
     Line::from(spans)
 }
 
@@ -145,7 +225,8 @@ fn hints_line(
     // Corners (2), the leading rule (1), two spaces each side of the hints,
     // and at least one rule before the right corner.
     let mut room = (card_width as usize).saturating_sub(2 + 1 + 2 + 2 + 1);
-    let key_style = Style::new().add_modifier(Modifier::BOLD);
+    let key_style = theme.hint_base().add_modifier(Modifier::BOLD);
+    let label_style = theme.hint_base().patch(theme.dim());
     let mut spans = vec![Span::styled(rule.to_string(), border), Span::raw("  ")];
     let mut shown = 0;
     for hint in hints {
@@ -159,7 +240,7 @@ fn hints_line(
             spans.push(Span::raw("   "));
         }
         spans.push(Span::styled(hint.key.clone(), key_style));
-        spans.push(Span::styled(format!("  {}", hint.label), theme.dim()));
+        spans.push(Span::styled(format!("  {}", hint.label), label_style));
         shown += 1;
     }
     if shown == 0 {

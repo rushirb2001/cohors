@@ -100,6 +100,15 @@ impl Glyphs {
         }
     }
 
+    /// What a count of zero is drawn as: a small dot instead of the digit, so
+    /// the numbers that mean something are the only numbers on the row.
+    pub fn zero(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => ".",
+            IconKind::Unicode | IconKind::Nerd => "·",
+        }
+    }
+
     /// One cell of a ranked bar (commits per repository).
     pub fn bar_cell(&self) -> &'static str {
         match self.kind {

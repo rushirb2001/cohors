@@ -46,9 +46,9 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 ╰─  s  standup   y  copy as markdown  ─────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────╮
 │        repository        branch      stg  mod  new   age │
-│  RISK  analytics         main          0    0    0    4d │
+│  RISK  analytics         main          ·    ·    ·    4d │
 │  RISK  legacy-billing    unreadable                      │
-│  WARN  design-system     main          0    0    0    6h │
+│  WARN  design-system     main          ·    ·    ·    6h │
 │   ↓ 9 more                                               │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push  ─╯
   1-5  focus card  tab  next card  ?  help  q  quit

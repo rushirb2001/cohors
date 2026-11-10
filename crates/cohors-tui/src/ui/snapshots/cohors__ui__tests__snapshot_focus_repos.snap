@@ -38,12 +38,12 @@ expression: "render_to_string(&app, 120, 45)"
 ╰─  t  board   ⏎  tasks  ────────────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────────────────────────────╮
 │        repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit           │
-│  NOTE  cli-tools               main           level           0    0    1      0      0   12h  docs: add shell-comp… │
-│  NOTE  data-pipeline           main           ↓3              0    0    0      0      1    5h  fix: backfill job of… │
-│  NOTE  experiments             @9f8e7d6 (det… no remote       0    4    3      0      0    1y  spike: try wgpu for … │
-│  NOTE  infra                   @a1b2c3d (det… no remote       0    2    2      0      0    1w  build: pin terraform… │
-│        auth-service            main           level           0    0    0      0      0    3d  chore: bump jsonwebt… │
-│▸       marketing-site          main           level           0    0    0      0      0   1mo  content: Q2 launch l… │
+│  NOTE  cli-tools               main                           ·    ·    1      ·      ·   12h  docs: add shell-comp… │
+│  NOTE  data-pipeline           main           ↓3              ·    ·    ·      ·      1    5h  fix: backfill job of… │
+│  NOTE  experiments             @9f8e7d6 (det… no remote       ·    4    3      ·      ·    1y  spike: try wgpu for … │
+│  NOTE  infra                   @a1b2c3d (det… no remote       ·    2    2      ·      ·    1w  build: pin terraform… │
+│        auth-service            main                           ·    ·    ·      ·      ·    3d  chore: bump jsonwebt… │
+│▸       marketing-site          main                           ·    ·    ·      ·      ·   1mo  content: Q2 launch l… │
 │   ↑ 6 above                                                                                                          │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯
   1-5  focus card    tab  next card    ↑↓  move    :  command    r  rescan    ?  help    q  quit

@@ -13,7 +13,7 @@ use super::cards::{CardFrame, Item, draw_card, draw_lines, draw_list, draw_messa
 use super::layout::list_window_tall;
 use super::overview::render_key_bar;
 use super::repos_table::{
-    RepoRow, TableKind, columns, empty_message, gutter, header_line, path_line, row_line,
+    RepoRow, TableKind, Wanted, columns, empty_message, gutter, header_line, path_line, row_line,
     table_hints, table_title,
 };
 use super::*;
@@ -68,7 +68,7 @@ fn render_list(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
     if inner.text.height == 0 {
         return;
     }
-    let columns = columns(TableKind::Detail, inner.width());
+    let columns = columns(TableKind::Detail, inner.width(), Wanted::of(&app.repos));
     frame.render_widget(
         Paragraph::new(header_line(TableKind::Detail, &columns, theme)),
         Rect {
