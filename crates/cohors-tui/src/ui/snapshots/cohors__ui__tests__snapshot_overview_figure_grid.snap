@@ -20,12 +20,12 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 ╰─────────────────────────────╯ ╰──────────────────────────────╯ ╰─────────────────────────────╯
                                                                                                 
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────╮
-│▸ RISK   e  Check 1 repository that could not be read    Nothing else is known about legacy-… │
+│▸ RISK      Check 1 repository that could not be read    Nothing else is known about legacy-… │
 │  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: pa… │
-│  WARN   d  Reconcile 1 diverged branch                  Local and remote both moved, so nei… │
+│  WARN      Reconcile 1 diverged branch                  Local and remote both moved, so nei… │
 │  NOTE   p  Pull 2 repositories that are behind          A fast-forward pull cannot lose wor… │
-│  NOTE   c  Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app… │
-╰──────────────────────────────────────────────────────────────────────────────────────────────╯
+│  NOTE      Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app… │
+╰─  ⏎  do the highlighted step   P  push 3   p  pull 2  ───────────────────────────────────────╯
                                                                                                 
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────────────────────────────────────────╮
 │  RISK  analytics         main           1 commit not pushed, older than 2 …    4d  Push      │

@@ -678,29 +678,33 @@ fn the_overview_at_119_columns_matches_the_approved_frame() {
 fn the_detail_view_at_119_columns_matches_the_approved_frame() {
     let rows = rows_of(&render_to_string(&detail_app(), 119, 40));
 
-    let header = row_with(&rows, &["repository", "fetched", "commit"]);
+    let header = row_with(&rows, &["repository", "fetched", "age"]);
     // As in the overview, the severity block leads every row, so the name
     // starts at 9.
     for (label, column) in [
         ("repository", 9),
         ("branch", 39),
-        ("upstream", 58),
-        ("stg", 72),
-        ("mod", 77),
-        ("new", 82),
-        ("stash", 87),
-        ("tasks", 94),
-        ("fetched", 102),
-        ("commit", 111),
+        // The branch column is one wider than designed: the fleet has a
+        // detached head whose label needs it, and the row had a column spare.
+        ("upstream", 60),
+        ("stg", 74),
+        ("mod", 79),
+        ("new", 84),
+        ("stash", 89),
+        ("tasks", 96),
+        ("fetched", 104),
+        ("age", 114),
     ] {
         assert_eq!(column_of(header, label), column, "{label}");
     }
 
-    // Second line of an entry: the path under the name, then id and subject.
-    let path = row_with(&rows, &["~/code/payments", "abc1234"]);
-    assert_eq!(column_of(path, "~/code/payments"), 9);
-    assert_eq!(column_of(path, "abc1234"), 58);
-    assert_eq!(column_of(path, "fix:"), 67);
+    // One line per repository. The path is said once, in the card about the
+    // selected repository, not under every name in the list.
+    let with_path = rows
+        .iter()
+        .filter(|row| row.iter().collect::<String>().contains("~/code/"))
+        .count();
+    assert_eq!(with_path, 1);
 
     // Three cards of 39 columns, one column apart.
     let cards = row_with(&rows, &["staged", "last commit"]);
@@ -1477,14 +1481,14 @@ fn an_overlay_is_a_panel_in_its_sections_colour() {
 fn a_card_lists_its_keys_only_while_it_has_the_focus() {
     let mut app = fleet_app();
     let text = render_to_string(&app, 119, 53);
-    assert!(!text.contains("copy as markdown"));
+    assert!(!text.contains("as markdown"));
     assert!(!text.contains("pull   P"));
     // The keys that work everywhere are on the key bar.
     let keys = text.lines().last().unwrap().to_string();
     assert!(keys.contains("standup") && keys.contains("tasks"), "{keys}");
 
     app.focus = Card::Commits;
-    assert!(render_to_string(&app, 119, 53).contains("copy as markdown"));
+    assert!(render_to_string(&app, 119, 53).contains("as markdown"));
     app.focus = Card::Repos;
     assert!(render_to_string(&app, 119, 53).contains("pull   P"));
 }

@@ -9,7 +9,7 @@
 //! repository snapshots). Nothing is counted or judged here; this module only
 //! decides where things go and how they are worded.
 
-use cohors_core::{ActionKind, KeyFigures, NextAction, Overview};
+use cohors_core::{ActionKind, KeyFigures, NextAction};
 
 use super::cards::{
     BLOCK_WIDTH, CardFrame, Hint, Item, draw_card, draw_card_filled, draw_lines, draw_list,
@@ -553,7 +553,13 @@ fn render_do_next(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
         number: Some(1),
         hue: None,
         title: vec![Span::styled("Do next", Style::new().bold())],
-        hints: Vec::new(),
+        hints: hints_when(
+            focused,
+            app.overview
+                .as_ref()
+                .map(|o| do_next_hints(&o.actions, theme))
+                .unwrap_or_default(),
+        ),
         focused,
     };
     let inner = draw_card(frame, area, &card, theme);
@@ -616,8 +622,9 @@ fn do_next_line(
     let mut spans = vec![
         severity_block(action.severity, theme),
         Span::raw("  "),
+        // The step's letter, or a blank where the step is opened with Enter.
         Span::styled(
-            action_key(action.kind).to_string(),
+            action_key(action.kind).map_or(" ".to_string(), |key| key.to_string()),
             theme.accent().add_modifier(Modifier::BOLD),
         ),
         Span::raw("  "),
@@ -648,14 +655,31 @@ fn step_label(action: &NextAction) -> String {
     }
 }
 
-/// The keys under "Work at risk": Enter, then each step that is about risk
-/// (starting a task is not).
-fn at_risk_hints(overview: &Overview, theme: &Theme) -> Vec<Hint> {
-    let mut hints = vec![hint(theme.glyphs.key_enter(), "open")];
+/// The keys under "Work at risk": every row is a repository, so these are
+/// the repository keys, the same ones the table lists.
+fn at_risk_hints(theme: &Theme) -> Vec<Hint> {
+    vec![
+        hint(theme.glyphs.key_enter(), "open"),
+        hint("f", "fetch"),
+        hint("p", "pull"),
+        hint("P", "push"),
+        hint("c", "commit"),
+        hint("S", "stash"),
+        hint("o", "open with"),
+    ]
+}
+
+/// The keys under "Do next": Enter for the highlighted step, then the letter
+/// of each step that has one (a step that only shows you repositories has
+/// none; see [`action_key`]).
+fn do_next_hints(actions: &[NextAction], theme: &Theme) -> Vec<Hint> {
+    let mut hints = vec![hint(theme.glyphs.key_enter(), "do the highlighted step")];
     let mut seen = Vec::new();
-    for action in &overview.actions {
-        let key = action_key(action.kind);
-        // Push and Publish share a key; list it once.
+    for action in actions {
+        let Some(key) = action_key(action.kind) else {
+            continue;
+        };
+        // Push and Publish share a key, and `t` is on the key bar already.
         if action.kind == ActionKind::StartTask || seen.contains(&key) {
             continue;
         }
@@ -682,13 +706,7 @@ fn render_at_risk(
         number: Some(2),
         hue: None,
         title,
-        hints: hints_when(
-            focused,
-            app.overview
-                .as_ref()
-                .map(|o| at_risk_hints(o, theme))
-                .unwrap_or_default(),
-        ),
+        hints: hints_when(focused, at_risk_hints(theme)),
         focused,
     };
     let inner = draw_card(frame, area, &card, theme);
@@ -984,7 +1002,10 @@ fn render_commits(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
         title,
         hints: hints_when(
             focused,
-            vec![hint("s", "standup"), hint("y", "copy as markdown")],
+            vec![
+                hint(theme.glyphs.key_enter(), "its commits"),
+                hint("Y", "copy the standup as markdown"),
+            ],
         ),
         focused,
     };

@@ -154,20 +154,44 @@ pub struct Scrolls {
 
 /// The key shown beside a "Do next" step, and the key that carries it out.
 ///
-/// Push and Publish share `P` on purpose: both are a push, so one key backs up
-/// everything that exists only on this machine.
-pub fn action_key(kind: ActionKind) -> char {
+/// A letter is one verb on every card: `f` fetches, `p` pulls, `P` pushes,
+/// `t` opens the tasks. So a step has a letter only when it IS one of those
+/// verbs, and the letter is the same one the repository table uses. Push and
+/// Publish share `P` because both are a push. A step that needs a person to
+/// look (conflicts, a diverged branch, stashes, uncommitted files) has no
+/// letter: `S` and `c` mean "stash" and "commit" everywhere, and a step that
+/// only shows you the repositories must not borrow them. Those steps are
+/// opened with Enter.
+pub fn action_key(kind: ActionKind) -> Option<char> {
     match kind {
-        ActionKind::Unreadable => 'e',
-        ActionKind::Resolve => 'm',
-        ActionKind::Push | ActionKind::Publish => 'P',
-        ActionKind::Reconcile => 'd',
-        ActionKind::ReviewStash => 'S',
-        ActionKind::Pull => 'p',
-        ActionKind::Commit => 'c',
-        ActionKind::Fetch => 'F',
-        ActionKind::StartTask => 't',
+        ActionKind::Push | ActionKind::Publish => Some('P'),
+        ActionKind::Pull => Some('p'),
+        ActionKind::Fetch => Some('f'),
+        ActionKind::StartTask => Some('t'),
+        ActionKind::Unreadable
+        | ActionKind::Resolve
+        | ActionKind::Reconcile
+        | ActionKind::ReviewStash
+        | ActionKind::Commit => None,
     }
+}
+
+/// What a repository key does, in a word, or `None` if `key` is not one. It
+/// names the keys [`App::on_key_repo`] answers to, so "Do next" (whose rows
+/// are steps, not repositories) can say why such a key did nothing there.
+fn repo_key_verb(key: char) -> Option<&'static str> {
+    Some(match key {
+        'f' => "fetch",
+        'p' => "pull",
+        'P' => "push",
+        'c' => "commit",
+        'S' => "stash",
+        'a' => "set up",
+        'o' => "open",
+        'L' => "open in lazygit",
+        'y' => "copy the path of",
+        _ => return None,
+    })
 }
 
 /// Which input mode the dashboard is in.
@@ -814,14 +838,32 @@ impl App {
             .map(|row| &self.repos[row.index])
     }
 
+    /// Whether the cursor that matters is the one on "Work at risk".
+    fn on_at_risk_card(&self) -> bool {
+        self.mode != Mode::Filter && self.screen == Screen::Overview && self.focus == Card::AtRisk
+    }
+
+    /// The repository an action key acts on: the row under the cursor of the
+    /// card that has the focus. That is the "Work at risk" row while that card
+    /// is focused, and the repository table's row everywhere else.
+    pub fn current_repo(&self) -> Option<&RepoSnapshot> {
+        if self.on_at_risk_card() {
+            let id = &self.at_risk().get(self.cursors.risk)?.id;
+            return self.repos.iter().find(|repo| &repo.id.0 == id);
+        }
+        self.selected_repo()
+    }
+
     /// The repos an action should operate on: the marked selection (intersected
     /// with what's currently visible, in view order) if any are marked, else the
     /// repo under the cursor. Callers still drop error/path-less repos, exactly
     /// as the single-repo action paths already do.
     pub fn action_targets(&self) -> Vec<RepoId> {
-        if self.selection.is_empty() {
+        // Marks belong to the repository table. On "Work at risk" an action
+        // is always about the row the cursor is on there.
+        if self.selection.is_empty() || self.on_at_risk_card() {
             return self
-                .selected_repo()
+                .current_repo()
                 .map(|r| r.id.clone())
                 .into_iter()
                 .collect();
@@ -1055,6 +1097,13 @@ impl App {
             // from the cards that summarise them.
             KeyCode::Char('s') => return Some(self.open_standup()),
             KeyCode::Char('t') => return Some(self.open_launchpad()),
+            // Fetching everything and copying the standup are about the
+            // whole fleet, so they do not depend on where the cursor is.
+            KeyCode::Char('F') => return Some(Cmd::FetchAll),
+            KeyCode::Char('Y') => {
+                self.copy_standup_pending = true;
+                return Some(Cmd::CopyStandupMarkdown);
+            }
             KeyCode::Char('?') => self.mode = Mode::Help,
             KeyCode::Char(':') => {
                 self.mode = Mode::Command;
@@ -1146,7 +1195,21 @@ impl App {
                 Some(action) => self.perform(&[action]),
                 None => Cmd::None,
             },
-            KeyCode::Char(c) => self.perform_key(c),
+            KeyCode::Char(c) => {
+                let steps = self.steps_for_key(c);
+                if !steps.is_empty() {
+                    return self.perform(&steps);
+                }
+                // The rows here are steps, not repositories, so a key that
+                // acts on a repository has nothing to act on. Say where it
+                // works instead of doing nothing.
+                if let Some(verb) = repo_key_verb(c) {
+                    self.status = Some(format!(
+                        "no step here to {verb}: press 2 or 5 and pick a repository"
+                    ));
+                }
+                Cmd::None
+            }
             _ => Cmd::None,
         }
     }
@@ -1165,8 +1228,9 @@ impl App {
                 }
                 Cmd::None
             }
-            KeyCode::Char(c) => self.perform_key(c),
-            _ => Cmd::None,
+            // Every row is a repository, so the repository keys act on it,
+            // exactly as they do in the table.
+            _ => self.on_key_repo(key).unwrap_or(Cmd::None),
         }
     }
 
@@ -1191,7 +1255,6 @@ impl App {
     /// standup; `y` copies it as markdown without opening it.
     fn on_key_commits(&mut self, key: KeyEvent) -> Cmd {
         match key.code {
-            KeyCode::Char('s') => self.open_standup(),
             KeyCode::Enter => {
                 self.standup_jump = self
                     .overview
@@ -1200,11 +1263,6 @@ impl App {
                     .map(|commits| commits.name.clone());
                 self.open_standup()
             }
-            KeyCode::Char('y') => {
-                self.copy_standup_pending = true;
-                Cmd::CopyStandupMarkdown
-            }
-            KeyCode::Char('t') => self.open_launchpad(),
             _ => Cmd::None,
         }
     }
@@ -1257,9 +1315,18 @@ impl App {
                 self.clamp_selection();
                 Cmd::None
             }
-            // Actions on the marked repositories, else the one under the cursor.
+            _ => return self.on_key_repo(key),
+        };
+        Some(cmd)
+    }
+
+    /// The keys that act on a repository: the one under the cursor (or, in
+    /// the table, the marked ones). They mean the same thing on "Work at
+    /// risk", in the repository table and in the detail view. Returns `None`
+    /// when the key is not one of them. Keep [`repo_key_verb`] in step.
+    fn on_key_repo(&mut self, key: KeyEvent) -> Option<Cmd> {
+        let cmd = match key.code {
             KeyCode::Char('f') => Cmd::FetchSelected,
-            KeyCode::Char('F') => Cmd::FetchAll,
             KeyCode::Char('p') => Cmd::PullSelected,
             KeyCode::Char('P') => Cmd::PushSelected,
             // A commit needs a message, so `c` opens the command line with
@@ -1284,21 +1351,13 @@ impl App {
         Some(cmd)
     }
 
-    /// Carry out every "Do next" step whose key is `key`. Does nothing when no
-    /// step lists that key.
-    fn perform_key(&mut self, key: char) -> Cmd {
-        let steps: Vec<NextAction> = self
-            .actions()
+    /// Every "Do next" step whose key is `key` (Push and Publish share one).
+    fn steps_for_key(&self, key: char) -> Vec<NextAction> {
+        self.actions()
             .iter()
-            .filter(|action| action_key(action.kind) == key)
+            .filter(|action| action_key(action.kind) == Some(key))
             .cloned()
-            .collect();
-        // `t` always reaches the launchpad from these cards, whether or not
-        // "start a task" is currently one of the steps.
-        if steps.is_empty() && key == 't' {
-            return self.open_launchpad();
-        }
-        self.perform(&steps)
+            .collect()
     }
 
     /// Carry out one or more "Do next" steps of the same kind of work.
@@ -1721,7 +1780,7 @@ impl App {
     /// coding agent to write (or update) its launchpad file. One repository at
     /// a time: an agent session is interactive, so it cannot be a bulk action.
     fn request_agent_setup(&mut self) {
-        let Some(repo) = self.selected_repo() else {
+        let Some(repo) = self.current_repo() else {
             self.status = Some("no repo selected".to_string());
             return;
         };
@@ -2010,17 +2069,7 @@ mod tests {
                 ids: targets.clone()
             }
         );
-        // …the same key from "Work at risk"…
-        app.on_key(key('2'));
-        assert_eq!(
-            app.on_key(key('p')),
-            Cmd::Act {
-                verb: BulkVerb::Pull,
-                ids: targets.clone()
-            }
-        );
         // …and Enter on the highlighted step.
-        app.on_key(key('1'));
         app.cursors.next = index;
         assert_eq!(
             app.on_key(code(KeyCode::Enter)),
@@ -2073,8 +2122,14 @@ mod tests {
         let mut app = demo_app();
         let index = step(&app, ActionKind::Commit);
         let wanted = app.actions()[index].repos.len();
-        // `c` on "Do next" must not commit anything: it shows the repositories.
+        // `c` means "commit", and the rows here are steps: it does nothing
+        // but say where it works.
         assert_eq!(app.on_key(key('c')), Cmd::None);
+        assert_eq!(app.focus, Card::DoNext);
+        assert!(app.status.as_deref().unwrap().contains("commit"));
+        // Enter on the step shows its repositories; it commits nothing.
+        app.cursors.next = index;
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
         assert_eq!(app.mode, Mode::Normal);
         assert_eq!(app.focus, Card::Repos);
         assert_eq!(app.visible_len(), wanted);
@@ -2105,7 +2160,7 @@ mod tests {
             verb: Some("stash".to_string()),
             repos: vec![target.0.clone()],
         }];
-        assert_eq!(app.on_key(key('S')), Cmd::None);
+        assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
         assert_eq!(app.mode, Mode::Confirm);
         assert!(matches!(
             app.confirm.as_ref().unwrap().action,
@@ -2126,7 +2181,7 @@ mod tests {
             repos: vec!["demo/payments".to_string()],
         }];
         // A verb this build does not know is shown, not executed.
-        assert_eq!(app.on_key(key('F')), Cmd::None);
+        assert_eq!(app.on_key(key('f')), Cmd::None);
         assert_eq!(app.scope.as_ref().unwrap().label, "Something new");
     }
 
@@ -2134,7 +2189,7 @@ mod tests {
     fn step_keys_do_nothing_when_no_step_lists_them() {
         let mut app = demo_app();
         app.overview.as_mut().unwrap().actions.clear();
-        for c in ['P', 'p', 'F', 'S', 'c', 'e', 'm', 'd', 'x'] {
+        for c in ['P', 'p', 'f', 'S', 'c', 'e', 'm', 'd', 'x'] {
             assert_eq!(app.on_key(key(c)), Cmd::None, "{c}");
         }
         assert!(app.scope.is_none() && app.confirm.is_none());
@@ -2183,10 +2238,18 @@ mod tests {
         assert_eq!(app.on_key(key('s')), Cmd::OpenStandup);
         assert_eq!(app.mode, Mode::Standup);
 
+        // `Y` copies the standup from any card; `y` stays "copy the path",
+        // which means nothing on this card.
         app.mode = Mode::Normal;
-        assert_eq!(app.on_key(key('y')), Cmd::CopyStandupMarkdown);
-        assert!(app.copy_standup_pending);
-        assert_eq!(app.mode, Mode::Normal); // copying does not open the view
+        assert_eq!(app.on_key(key('y')), Cmd::None);
+        for card in ['1', '2', '3', '4', '5'] {
+            app.on_key(key(card));
+            app.copy_standup_pending = false;
+            assert_eq!(app.on_key(key('Y')), Cmd::CopyStandupMarkdown, "{card}");
+            assert!(app.copy_standup_pending);
+            assert_eq!(app.mode, Mode::Normal); // copying does not open the view
+        }
+        app.on_key(key('4'));
 
         // Enter opens the standup on the highlighted repository.
         let name = app.overview.as_ref().unwrap().commits[0].name.clone();
@@ -2251,16 +2314,61 @@ mod tests {
 
     #[test]
     fn table_action_keys_are_inert_on_the_other_cards() {
-        // On "Open tasks" and "Commits" none of the table's git keys act.
+        // On "Open tasks" and "Commits" none of the repository keys act.
         let mut app = demo_app();
         for card in ['3', '4'] {
             app.on_key(key(card));
-            for c in ['f', 'F', 'p', 'P', 'S', 'c', ' ', '*', '>', 'o', 'L'] {
+            for c in ['f', 'p', 'P', 'S', 'c', ' ', '*', '>', 'o', 'L'] {
                 assert_eq!(app.on_key(key(c)), Cmd::None, "card {card}, key {c}");
             }
         }
         assert!(app.selection.is_empty() && app.confirm.is_none());
         assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn repository_keys_act_on_the_row_under_the_cursor_on_work_at_risk() {
+        let mut app = demo_app();
+        // Mark something in the table: marks must not leak into this card.
+        app.on_key(key('5'));
+        app.on_key(key(' '));
+        app.on_key(key('2'));
+        // The third row: a readable repository (the second cannot be read).
+        app.cursors.risk = 2;
+        let row = RepoId(app.at_risk()[2].id.clone());
+        assert_ne!(app.selected_repo().map(|r| r.id.clone()), Some(row.clone()));
+
+        // The same keys as the table, about the highlighted repository.
+        assert_eq!(app.current_repo().unwrap().id, row);
+        assert_eq!(app.action_targets(), vec![row.clone()]);
+        assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
+        assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
+        assert_eq!(app.on_key(key('P')), Cmd::PushSelected);
+        assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
+        // `S` is "stash" here as everywhere: it asks about that repository.
+        assert_eq!(app.on_key(key('S')), Cmd::None);
+        assert!(matches!(
+            app.confirm.as_ref().unwrap().action,
+            ConfirmAction::BulkStash(ref ids) if ids == &[row]
+        ));
+        // Back on the table the marks count again.
+        app.confirm = None;
+        app.mode = Mode::Normal;
+        app.on_key(key('5'));
+        assert_eq!(app.action_targets().len(), 1);
+        assert_eq!(
+            app.action_targets(),
+            app.selection.iter().cloned().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn fetch_all_works_from_every_card() {
+        let mut app = demo_app();
+        for card in ['1', '2', '3', '4', '5'] {
+            app.on_key(key(card));
+            assert_eq!(app.on_key(key('F')), Cmd::FetchAll, "{card}");
+        }
     }
 
     #[test]
@@ -2294,8 +2402,10 @@ mod tests {
     #[test]
     fn esc_on_the_table_peels_back_one_narrowing_at_a_time() {
         let mut app = demo_app();
-        app.on_key(key('c')); // narrow to the "commit or discard" step
-        app.on_key(key(' ')); // mark the first of them
+        // Narrow to the "commit or discard" step, then mark the first of them.
+        app.cursors.next = step(&app, ActionKind::Commit);
+        app.on_key(code(KeyCode::Enter));
+        app.on_key(key(' '));
         assert!(!app.selection.is_empty() && app.scope.is_some());
         app.on_key(code(KeyCode::Esc));
         assert!(app.selection.is_empty() && app.scope.is_some());
@@ -2367,8 +2477,8 @@ mod tests {
     #[test]
     fn the_key_a_asks_before_starting_an_agent_on_the_selected_repo() {
         let mut app = demo_app();
-        // On the cards that are not a list of repositories, `a` does nothing.
-        for card in ['1', '2', '3', '4'] {
+        // On the cards whose rows are not repositories, `a` starts nothing.
+        for card in ['1', '3', '4'] {
             app.on_key(key(card));
             assert_eq!(app.on_key(key('a')), Cmd::None);
             assert_eq!(app.mode, Mode::Normal, "card {card}");
@@ -2401,28 +2511,26 @@ mod tests {
     }
 
     #[test]
-    fn every_step_kind_has_a_key_and_only_push_and_publish_share_one() {
+    fn a_step_has_a_letter_only_when_it_is_that_verb() {
         use ActionKind::*;
-        let kinds = [
-            Unreadable,
-            Resolve,
-            Push,
-            Reconcile,
-            Publish,
-            ReviewStash,
-            Pull,
-            Commit,
-            Fetch,
-            StartTask,
-        ];
-        let keys: HashSet<char> = kinds.iter().map(|kind| action_key(*kind)).collect();
-        assert_eq!(keys.len(), kinds.len() - 1);
-        assert_eq!(action_key(Push), action_key(Publish));
-        // None of them collides with a key that means something everywhere.
-        for reserved in [
-            'q', 'r', '?', ':', '!', '/', 'j', 'k', 'a', '1', '2', '3', '4', '5',
-        ] {
-            assert!(!keys.contains(&reserved), "{reserved}");
+        // The steps that act carry the letter the repository keys use for
+        // the same verb, so a letter is one verb on every card.
+        assert_eq!(action_key(Fetch), Some('f'));
+        assert_eq!(action_key(Pull), Some('p'));
+        assert_eq!(action_key(Push), Some('P'));
+        assert_eq!(action_key(Publish), Some('P'));
+        assert_eq!(action_key(StartTask), Some('t'));
+        for (kind, key) in [(Fetch, 'f'), (Pull, 'p'), (Push, 'P')] {
+            let verb = repo_key_verb(key).unwrap();
+            assert!(
+                format!("{kind:?}").to_lowercase().starts_with(verb),
+                "{kind:?}"
+            );
+        }
+        // The steps that only show you repositories have none: `S` and `c`
+        // stay "stash" and "commit", and nothing else is borrowed either.
+        for kind in [Unreadable, Resolve, Reconcile, ReviewStash, Commit] {
+            assert_eq!(action_key(kind), None, "{kind:?}");
         }
     }
 

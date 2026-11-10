@@ -5,11 +5,11 @@ expression: "render_to_string(&app, 100, 24)"
  cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
  1 not backed up  1 stashes  15 uncommitted  0 stale  0 tasks  0 commits 7d                         
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────╮
-│▸ RISK   e  Check 1 repository that could not be read    Nothing else is known about legacy-bill… │
+│▸ RISK      Check 1 repository that could not be read    Nothing else is known about legacy-bill… │
 │  WARN   P  Push 2 commits from 1 repository             They exist only on this machine: paymen… │
 │  NOT╔══════════════════════════════════════════════════════════════════════════════════════╗: w… │
 │  NOT║ Run · cargo test   ·  1 ✓ · 1 ✗                                                      ║wit… │
-╰─────╟────────────────────────┬─────────────────────────────────────────────────────────────╢─────╯
+╰─  ⏎ ╟────────────────────────┬─────────────────────────────────────────────────────────────╢─────╯
 ╭─  2 ║ Repos                  │ web-app                                                     ║─────╮
 │  RIS║ ✓ payments             │ exit 1                                                      ║     │
 │  WAR║ ✗ web-app 1            │                                                             ║Push │

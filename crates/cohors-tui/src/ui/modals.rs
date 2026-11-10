@@ -60,7 +60,6 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
             key(&format!("{} j k", g.key_updown())),
             "move within the focused card",
         ),
-        row(key(enter), "open the highlighted row"),
         row(
             key(":"),
             "command line (:fetch :pull :push :commit :sort …)",
@@ -69,33 +68,26 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
         row(key("/"), "filter the repository table by name"),
         row(key("s  t"), "the standup / the launchpad (tasks and flows)"),
         row(
+            key("F  Y"),
+            "fetch every repository / copy the standup as markdown",
+        ),
+        row(
             key("r  ?  q"),
             "rescan / this help / quit (Ctrl-C also quits)",
         ),
         Line::from(""),
-        head("1 Do next and 2 Work at risk"),
-        row(
-            key("a step's key"),
-            "do that step for the repositories it lists",
-        ),
-        row(key(enter), "do the highlighted step / open the repository"),
-        Line::from(""),
-        head("3 Open tasks and 4 Commits"),
+        head("1 Do next, 3 Open tasks, 4 Commits"),
         row(
             key(enter),
-            "that repository's tasks / its commits in the standup",
+            "do the step / that repository's tasks / its commits",
         ),
-        row(key("y"), "on 4 Commits: copy the standup as markdown"),
+        row(
+            key("f  p  P"),
+            "on 1: do the fetch, pull or push step for its repositories",
+        ),
         Line::from(""),
-        head("5 Repositories, and the detail view"),
-        row(
-            key(&format!("{}  *", g.key_space())),
-            "mark it / mark all listed (again to clear)",
-        ),
-        row(
-            key("f  F  p  P"),
-            "fetch / fetch all / pull (ff only) / push",
-        ),
+        head("On a repository: 2 Work at risk, 5 Repositories, the detail view"),
+        row(key("f  p  P"), "fetch / pull (ff only) / push"),
         row(
             key("c  S"),
             "commit / stash; both ask before changing anything",
@@ -104,6 +96,12 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
         row(
             key("a"),
             "ask your coding agent to set the repo up (asks first)",
+        ),
+        Line::from(""),
+        head("5 Repositories only"),
+        row(
+            key(&format!("{}  *", g.key_space())),
+            "mark it / mark all listed (again to clear)",
         ),
         row(key(">"), "change the sort order"),
         row(key(enter), "the detail view; there, the full drill-in"),
@@ -1174,7 +1172,7 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
         return;
     };
 
-    let repo = app.selected_repo().map(|r| r.name.as_str()).unwrap_or("");
+    let repo = app.current_repo().map(|r| r.name.as_str()).unwrap_or("");
     let title = if repo.is_empty() {
         "Open with…".to_string()
     } else {

@@ -5,41 +5,40 @@ expression: "render_to_string(&app, 120, 50)"
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ ▜▒▟███▙▒▛   cohors  your git fleet                                                                                   │
 │ ▟██▌█▐██▙   ~/projects (+1 more)                                                                                     │
-│ ▀▐▖▀█▀▗▌▀   5 ╔══════════════════════════════════════════════════════════════════════════════════════╗               │
-╰───────────────║                                                                                      ║───────────────╯
-                ║  Help                                                                                ║                
-╭───────────────╟──────────────────────────────────────────────────────────────────────────────────────╢───────────────╮
-│ Not backed up ║  Marks                                                                               ║ommits 7d      │
-│ 1             ║     RISK   WARN       work at risk: it exists only on this machine                   ║               │
-│ 2 commits     ║     NOTE   INFO       worth a look; a row with no block is clean                     ║rev week 0     │
-╰───────────────║    ●                  marked for a bulk action                                       ║───────────────╯
+│ ▀▐▖▀█▀▗▌▀   5 repositories. 3 have work at risk, 1 is clean.                 scanned 2m ago                          │
+╰───────────────╔══════════════════════════════════════════════════════════════════════════════════════╗───────────────╯
                 ║                                                                                      ║                
-╭─  1  ▶ Do next║  Everywhere                                                                          ║───────────────╮
-│▸ RISK   e  Che║    1-5                focus a card                                                   ║               │
-│  WARN   P  Pus║    tab / shift-tab    next / previous card                                           ║               │
-│  NOTE   p  Pul║    ↑↓ j k             move within the focused card                                   ║               │
-│  NOTE   c  Com║    ⏎                  open the highlighted row                                       ║               │
-╰───────────────║    :                  command line (:fetch :pull :push :commit :sort …)              ║───────────────╯
+╭───────────────║  Help                                                                                ║───────────────╮
+│ Not backed up ╟──────────────────────────────────────────────────────────────────────────────────────╢ommits 7d      │
+│ 1             ║  Marks                                                                               ║               │
+│ 2 commits     ║     RISK   WARN       work at risk: it exists only on this machine                   ║rev week 0     │
+╰───────────────║     NOTE   INFO       worth a look; a row with no block is clean                     ║───────────────╯
+                ║    ●                  marked for a bulk action                                       ║                
+╭─  1  ▶ Do next║                                                                                      ║───────────────╮
+│▸ RISK      Che║  Everywhere                                                                          ║               │
+│  WARN   P  Pus║    1-5                focus a card                                                   ║               │
+│  NOTE   p  Pul║    tab / shift-tab    next / previous card                                           ║               │
+│  NOTE      Com║    ↑↓ j k             move within the focused card                                   ║               │
+╰─  ⏎  do the hi║    :                  command line (:fetch :pull :push :commit :sort …)              ║───────────────╯
                 ║    !                  run a shell command in the marked repositories                 ║                
 ╭─  2  ▲ Work at║    /                  filter the repository table by name                            ║───────────────╮
 │  RISK  legacy-║    s  t               the standup / the launchpad (tasks and flows)                  ║               │
-│  WARN  payment║    r  ?  q            rescan / this help / quit (Ctrl-C also quits)                  ║      2h  Push │
-│  WARN  web-app║                                                                                      ║     20m  Pull │
-╰───────────────║  1 Do next and 2 Work at risk                                                        ║───────────────╯
-                ║    a step's key       do that step for the repositories it lists                     ║                
-╭─  3  ✓ Open ta║    ⏎                  do the highlighted step / open the repository                  ║───────────────╮
-│ No launchpad f║                                                                                      ║               │
-│ a repository h║  3 Open tasks and 4 Commits                                                          ║               │
-╰───────────────║    ⏎                  that repository's tasks / its commits in the standup           ║───────────────╯
-                ║    y                  on 4 Commits: copy the standup as markdown                     ║                
-╭─  5  ▤ Reposit║                                                                                      ║───────────────╮
-│        reposit║  5 Repositories, and the detail view                                                 ║mmit           │
-│  RISK  legacy-║    ␣  *               mark it / mark all listed (again to clear)                     ║ot read .git … │
-│  WARN  payment║    f  F  p  P         fetch / fetch all / pull (ff only) / push                      ║try on 5xx     │
-│  WARN  web-app║    c  S               commit / stash; both ask before changing anything              ║rt drawer      │
-│  NOTE  infra  ║    o  L  y            open with… / lazygit / copy the path                           ║pin ci image   │
-│        auth-se║    a                  ask your coding agent to set the repo up (asks first)          ║bump deps      │
-│               ║    >                  change the sort order                                          ║               │
+│  WARN  payment║    F  Y               fetch every repository / copy the standup as markdown          ║      2h  Push │
+│  WARN  web-app║    r  ?  q            rescan / this help / quit (Ctrl-C also quits)                  ║     20m  Pull │
+╰───────────────║                                                                                      ║───────────────╯
+                ║  1 Do next, 3 Open tasks, 4 Commits                                                  ║                
+╭─  3  ✓ Open ta║    ⏎                  do the step / that repository's tasks / its commits            ║───────────────╮
+│ No launchpad f║    f  p  P            on 1: do the fetch, pull or push step for its repositories     ║               │
+│ a repository h║                                                                                      ║               │
+╰───────────────║  On a repository: 2 Work at risk, 5 Repositories, the detail view                    ║───────────────╯
+                ║    f  p  P            fetch / pull (ff only) / push                                  ║                
+╭─  5  ▤ Reposit║    c  S               commit / stash; both ask before changing anything              ║───────────────╮
+│        reposit║    o  L  y            open with… / lazygit / copy the path                           ║mmit           │
+│  RISK  legacy-║    a                  ask your coding agent to set the repo up (asks first)          ║ot read .git … │
+│  WARN  payment║                                                                                      ║try on 5xx     │
+│  WARN  web-app║  5 Repositories only                                                                 ║rt drawer      │
+│  NOTE  infra  ║    ␣  *               mark it / mark all listed (again to clear)                     ║pin ci image   │
+│        auth-se║    >                  change the sort order                                          ║bump deps      │
 │               ║    ⏎                  the detail view; there, the full drill-in                      ║               │
 │               ║    esc                clear marks, a narrowing, the filter; or go back               ║               │
 │               ║                                                                                      ║               │
@@ -48,6 +47,7 @@ expression: "render_to_string(&app, 120, 50)"
 │               ║                                     ? / Esc close                                    ║               │
 │               ║                                                                                      ║               │
 │               ╚══════════════════════════════════════════════════════════════════════════════════════╝               │
+│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

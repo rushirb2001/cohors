@@ -1412,7 +1412,7 @@ fn spawn_action(tx: Sender<BgMsg>, kind: ActionKind, id: RepoId, path: Utf8PathB
 
 /// (id, path, name) of the selected repo, if it has a path.
 fn selected_path(app: &App) -> Option<Utf8PathBuf> {
-    app.selected_repo().and_then(|r| r.path.clone())
+    app.current_repo().and_then(|r| r.path.clone())
 }
 
 /// Replace a repo's snapshot in place, preserving its (possibly aliased) name.

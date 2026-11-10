@@ -18,12 +18,12 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 │ all recent      │ │ 3 high, 1 doing  │ │ prev week 61    │
 ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯
 ╭─  1  ▶ Do next ──────────────────────────────────────────╮
-│▸ RISK   e  Check 1 repository that could not be read     │
+│▸ RISK      Check 1 repository that could not be read     │
 │  RISK   P  Push 4 commits from 3 repositories            │
-│  WARN   d  Reconcile 1 diverged branch                   │
+│  WARN      Reconcile 1 diverged branch                   │
 │  NOTE   p  Pull 2 repositories that are behind           │
-│  NOTE   c  Commit or discard 26 uncommitted files        │
-╰──────────────────────────────────────────────────────────╯
+│  NOTE      Commit or discard 26 uncommitted files        │
+╰─  ⏎  do the highlighted step   P  push 3   p  pull 2  ───╯
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────╮
 │  RISK  analytics         1 commit not pushed, old…    4d │
 │  RISK  legacy-billing    Could not be read               │

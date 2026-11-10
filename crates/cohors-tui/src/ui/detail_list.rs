@@ -10,11 +10,11 @@ use cohors_core::RepoLine;
 use cohors_core::launchpad::LaunchpadEntry;
 
 use super::cards::{CardFrame, Item, draw_card, draw_lines, draw_list, draw_message, hint};
-use super::layout::list_window_tall;
+use super::layout::list_window;
 use super::overview::render_key_bar;
 use super::repos_table::{
-    RepoRow, TableKind, Wanted, columns, empty_message, gutter, header_line, path_line, row_line,
-    table_hints, table_title,
+    RepoRow, TableKind, Wanted, columns, empty_message, gutter, header_line, row_line, table_hints,
+    table_title,
 };
 use super::*;
 use crate::app::Pane;
@@ -75,7 +75,7 @@ fn render_list(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
     }
     let columns = columns(TableKind::Detail, inner.width(), Wanted::of(&app.repos));
     frame.render_widget(
-        Paragraph::new(header_line(TableKind::Detail, &columns, theme)),
+        Paragraph::new(header_line(&columns, theme)),
         Rect {
             height: 1,
             ..inner.text
@@ -87,22 +87,18 @@ fn render_list(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
         return;
     }
 
-    let window = list_window_tall(
+    let window = list_window(
         app.scrolls.list.get(),
         app.selected,
         body.text.height as usize,
-        2,
         view.len(),
     );
     app.scrolls.list.set(window.offset);
     // The cursor is always shown here: the cards below describe that entry.
-    draw_list(frame, body, window, 2, Some(app.selected), theme, |index| {
+    draw_list(frame, body, window, 1, Some(app.selected), theme, |index| {
         let row = RepoRow::new(app, &view[index]);
         Item {
-            lines: vec![
-                row_line(&row, &columns, now, theme),
-                path_line(&row, &columns, inner.width(), theme),
-            ],
+            lines: vec![row_line(&row, &columns, now, theme)],
             gutter: gutter(&row, app, theme),
         }
     });

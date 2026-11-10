@@ -72,18 +72,22 @@ const OVERVIEW_COLUMNS: [ColumnSpec; 10] = [
     spec(ColumnId::Commit, 14, usize::MAX),
 ];
 
-/// The detail view's list at full width.
-const DETAIL_COLUMNS: [ColumnSpec; 10] = [
+/// The detail view's list: the overview's columns plus when each repository
+/// was last fetched. One line per repository, like the overview's table; the
+/// path, the commit id and everything else about the selected repository are
+/// in the cards below the list, so they are not repeated on every row.
+const DETAIL_COLUMNS: [ColumnSpec; 11] = [
     spec(ColumnId::Name, 14, 30),
     spec(ColumnId::Branch, 10, 20),
-    spec(ColumnId::Upstream, 12, 14),
+    spec(ColumnId::Upstream, 12, 12),
     spec(ColumnId::Staged, 5, 5),
     spec(ColumnId::Modified, 5, 5),
     spec(ColumnId::Untracked, 5, 5),
     spec(ColumnId::Stash, 7, 7),
     spec(ColumnId::Tasks, 7, 7),
     spec(ColumnId::Fetched, 10, 10),
-    spec(ColumnId::Age, 8, 8),
+    spec(ColumnId::Age, 6, 6),
+    spec(ColumnId::Commit, 14, usize::MAX),
 ];
 
 /// Columns to give up, first to last, when the table does not fit. The name,
@@ -127,7 +131,7 @@ impl Wanted {
 
 /// The commit subject keeps at least this much before the name and the
 /// branch are widened past their designed widths.
-const COMMIT_COMFORT: usize = 48;
+const COMMIT_COMFORT: usize = 40;
 /// The widest the name and the branch are ever drawn.
 const NAME_CAP: usize = 40;
 const BRANCH_CAP: usize = 30;
@@ -155,6 +159,23 @@ pub(crate) fn columns(kind: TableKind, text_width: usize, wanted: Wanted) -> Vec
     };
     let mut kept: Vec<&ColumnSpec> = specs.iter().collect();
     let needed = |kept: &[&ColumnSpec]| MARK_WIDTH + kept.iter().map(|c| c.min).sum::<usize>();
+
+    // The detail list shows the commit subject only once the name and the
+    // branch have their designed widths; the subject is the least of the
+    // three, and the selected repository's is in the card below anyway.
+    if kind == TableKind::Detail {
+        let designed = MARK_WIDTH
+            + kept
+                .iter()
+                .map(|c| match c.id {
+                    ColumnId::Name | ColumnId::Branch => c.max,
+                    _ => c.min,
+                })
+                .sum::<usize>();
+        if designed > text_width {
+            kept.retain(|c| c.id != ColumnId::Commit);
+        }
+    }
 
     // Drop columns until the rest fit at their narrowest.
     for id in DROP_ORDER {
@@ -207,11 +228,6 @@ pub(crate) fn columns(kind: TableKind, text_width: usize, wanted: Wanted) -> Vec
         result[index].width -= borrowed;
     }
     result
-}
-
-/// The width of column `id`, or zero when it was dropped.
-fn width_of(columns: &[Column], id: ColumnId) -> usize {
-    columns.iter().find(|c| c.id == id).map_or(0, |c| c.width)
 }
 
 /// Everything a row needs: the snapshot for the facts and the overview's line
@@ -414,7 +430,7 @@ fn cell_spans(row: &RepoRow, column: Column, now: i64, theme: &Theme) -> Vec<Spa
 }
 
 /// The column header line.
-pub(crate) fn header_line(kind: TableKind, columns: &[Column], theme: &Theme) -> Line<'static> {
+pub(crate) fn header_line(columns: &[Column], theme: &Theme) -> Line<'static> {
     let ell = theme.glyphs.ellipsis();
     let mut text = " ".repeat(MARK_WIDTH);
     for column in columns {
@@ -429,9 +445,6 @@ pub(crate) fn header_line(kind: TableKind, columns: &[Column], theme: &Theme) ->
             ColumnId::Stash => text::cell_right("stash", width, ell),
             ColumnId::Tasks => text::cell_right("tasks", width, ell),
             ColumnId::Fetched => text::cell_right("fetched", width, ell),
-            // The detail view has no subject column on this line, so its age
-            // column says what the age is of.
-            ColumnId::Age if kind == TableKind::Detail => text::cell_right("commit", width, ell),
             ColumnId::Age => text::cell_right("age", width, ell),
             ColumnId::Commit => format!("  {}", text::cell("last commit", width - 2, ell)),
         };
@@ -455,60 +468,6 @@ pub(crate) fn row_line(
     let mut spans = vec![mark, Span::raw(" ")];
     for column in columns {
         spans.extend(cell_spans(row, *column, now, theme));
-    }
-    Line::from(spans)
-}
-
-/// The detail view's second line: where the repository is, and its last
-/// commit (short id and subject).
-pub(crate) fn path_line(
-    row: &RepoRow,
-    columns: &[Column],
-    text_width: usize,
-    theme: &Theme,
-) -> Line<'static> {
-    const SHA_WIDTH: usize = 7;
-    let ell = theme.glyphs.ellipsis();
-    // The path sits under the name and branch columns.
-    let path_width = width_of(columns, ColumnId::Name) + width_of(columns, ColumnId::Branch);
-    let path = row
-        .snap
-        .path
-        .as_ref()
-        .map(|p| text::abbrev_home(p.as_str()))
-        .unwrap_or_default();
-    let path = text::clip_start(&text::safe(&path), path_width.saturating_sub(2), ell);
-    let mut spans = vec![
-        Span::raw(" ".repeat(MARK_WIDTH)),
-        Span::styled(text::cell(&path, path_width, ell), theme.dim()),
-    ];
-    // Two columns of margin on the right, as in the design.
-    let rest = text_width.saturating_sub(MARK_WIDTH + path_width + 2);
-    match (&row.snap.error, &row.snap.last_commit) {
-        (Some(error), _) => spans.push(Span::styled(
-            text::clip(&text::safe(error), rest, ell),
-            theme.risk(),
-        )),
-        (None, Some(commit)) => {
-            // Git's own abbreviation can be longer than seven characters in a
-            // big repository. Any prefix of a hash is still a valid short id,
-            // so cut it rather than mark it with an ellipsis ("eee44f…" reads
-            // as damage and shows less of the hash).
-            let short: String = text::safe(&commit.short_id)
-                .chars()
-                .take(SHA_WIDTH)
-                .collect();
-            let sha = format!("{short:<SHA_WIDTH$}");
-            let subject_width = rest.saturating_sub(SHA_WIDTH + 2);
-            spans.push(Span::styled(sha, theme.ahead()));
-            spans.push(Span::raw("  "));
-            spans.push(Span::raw(text::clip(
-                &text::safe(&commit.summary),
-                subject_width,
-                ell,
-            )));
-        }
-        (None, None) => spans.push(Span::styled("no commits yet", theme.dim())),
     }
     Line::from(spans)
 }
@@ -636,7 +595,7 @@ pub(crate) fn render_repos_card(
     }
     let columns = columns(TableKind::Overview, inner.width(), Wanted::of(&app.repos));
     frame.render_widget(
-        Paragraph::new(header_line(TableKind::Overview, &columns, theme)),
+        Paragraph::new(header_line(&columns, theme)),
         Rect {
             height: 1,
             ..inner.text
@@ -703,7 +662,12 @@ mod tests {
 
         let detail = columns(TableKind::Detail, 115, Wanted::default());
         let widths: Vec<usize> = detail.iter().map(|c| c.width).collect();
-        assert_eq!(widths, [30, 19, 12, 5, 5, 5, 7, 7, 10, 8]);
+        // No room for the commit subject beside full-width names here.
+        assert_eq!(widths, [30, 20, 12, 5, 5, 5, 7, 7, 10, 6]);
+        // A wider terminal adds it, without taking from the name or branch.
+        let wide = columns(TableKind::Detail, 140, Wanted::default());
+        let widths: Vec<usize> = wide.iter().map(|c| c.width).collect();
+        assert_eq!(widths, [30, 20, 12, 5, 5, 5, 7, 7, 10, 6, 26]);
     }
 
     #[test]
@@ -785,7 +749,7 @@ mod tests {
         let short = columns(TableKind::Overview, 163, Wanted { name: 9, branch: 4 });
         assert_eq!(width_of(&short, ColumnId::Name), 24);
 
-        // The detail list has no commit subject; its unused room is spent.
+        // The detail list does the same.
         let detail = columns(TableKind::Detail, 163, long);
         assert_eq!(width_of(&detail, ColumnId::Name), 37);
         assert_eq!(width_of(&detail, ColumnId::Branch), 21);

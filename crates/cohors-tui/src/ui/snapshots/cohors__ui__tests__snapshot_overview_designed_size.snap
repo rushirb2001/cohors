@@ -15,12 +15,12 @@ expression: "render_to_string(&fleet_app(), 119, 53)"
 ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
                                                                                                                        
 ╭─  1  ▶ Do next ─────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│▸ RISK   e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.                 │
+│▸ RISK      Check 1 repository that could not be read    Nothing else is known about legacy-billing.                 │
 │  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: payments, design-system a… │
-│  WARN   d  Reconcile 1 diverged branch                  Local and remote both moved, so neither a push nor a fast-… │
+│  WARN      Reconcile 1 diverged branch                  Local and remote both moved, so neither a push nor a fast-… │
 │  NOTE   p  Pull 2 repositories that are behind          A fast-forward pull cannot lose work: web-app and data-pip… │
-│  NOTE   c  Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app with 7.                 │
-╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+│  NOTE      Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app with 7.                 │
+╰─  ⏎  do the highlighted step   P  push 3   p  pull 2  ──────────────────────────────────────────────────────────────╯
                                                                                                                        
 ╭─  2  ▲ Work at risk  6 ─────────────────────────────────────────────────────────────────────────────────────────────╮
 │  RISK  analytics             main           1 commit not pushed, older than 2 days, 2 stashes         4d  Push      │

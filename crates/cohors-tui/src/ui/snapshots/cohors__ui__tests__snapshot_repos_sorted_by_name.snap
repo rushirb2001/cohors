@@ -15,10 +15,10 @@ expression: "render_to_string(&app, 120, 40)"
 ╰─────────────────╯ ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
                                                                                                                         
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  RISK   e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.                  │
+│  RISK      Check 1 repository that could not be read    Nothing else is known about legacy-billing.                  │
 │  WARN   P  Push 2 commits from 1 repository             They exist only on this machine: payments.                   │
 │  NOTE   p  Pull 1 repository that is behind             A fast-forward pull cannot lose work: web-app.               │
-│  NOTE   c  Commit or discard 15 uncommitted files       In 3 repositories. Largest: web-app with 7.                  │
+│  NOTE      Commit or discard 15 uncommitted files       In 3 repositories. Largest: web-app with 7.                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
                                                                                                                         
 ╭─  2  ▲ Work at risk  3 ──────────────────────────────────────────────────────────────────────────────────────────────╮

@@ -13,11 +13,11 @@ expression: screen
 │ 8 commits       │ │ in 2 repos      │ │ in 6 repos       │ │ all recent      │ │ 3 high, 1 doing │ │ prev week 61    │
 ╰─────────────────╯ ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  RISK   e  Check 1 repository that could not be read    Nothing else is known about legacy-billing.                  │
+│  RISK      Check 1 repository that could not be read    Nothing else is known about legacy-billing.                  │
 │  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: payments, design-system an… │
-│  WARN   d  Reconcile 1 diverged branch                  Local and remote both moved, so neither a push nor a fast-f… │
+│  WARN      Reconcile 1 diverged branch                  Local and remote both moved, so neither a push nor a fast-f… │
 │  NOTE   p  Pull 2 repositories that are behind          A fast-forward pull cannot lose work: web-app and data-pipe… │
-│  NOTE   c  Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app with 7.                  │
+│  NOTE      Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app with 7.                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────────────────────────────────────────────────────────────────╮
 │  RISK  analytics             main           1 commit not pushed, older than 2 days, 2 stashes          4d  Push      │
