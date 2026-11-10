@@ -50,14 +50,22 @@ const path = require("path");
 const MAX_RUN_LENGTH = 400;
 const PLAIN = /^[\x20-\x7e\p{L}\p{N}]+$/u;
 const HANGUL_FILLERS = /[\u115f\u1160\u3164\uffa0]/;
+// Right-to-left scripts (Hebrew, Arabic, Syriac, Thaana, N'Ko and the rest:
+// the blocks the Unicode bidirectional algorithm treats as right-to-left by
+// default). They are ordinary letters, but mixed into a left-to-right command
+// they make the display reorder the pieces around them, with no special
+// character involved, so what is read would not be what runs. Same ranges as
+// `is_rtl` in cohors core.
+const RIGHT_TO_LEFT = /[\u0590-\u08ff\ufb1d-\ufdff\ufe70-\ufeff\u{10800}-\u{10fff}\u{1e800}-\u{1efff}]/u;
 
-const isPlain = (text) => typeof text === "string" && PLAIN.test(text) && !HANGUL_FILLERS.test(text);
+const isPlain = (text) => typeof text === "string" && PLAIN.test(text)
+  && !HANGUL_FILLERS.test(text) && !RIGHT_TO_LEFT.test(text);
 
 /** Why a command line may not be run, or null when it may. */
 function unsafeRun(run) {
   if (typeof run !== "string" || run.trim() === "") return "it has no command";
   if ([...run].length > MAX_RUN_LENGTH) return `its command is longer than ${MAX_RUN_LENGTH} characters`;
-  if (!isPlain(run)) return "its command contains something other than plain letters, digits and ASCII punctuation, such as a line break, a control character or an invisible character";
+  if (!isPlain(run)) return "its command contains something other than plain left-to-right letters, digits and ASCII punctuation, such as a line break, a control character, an invisible character or right-to-left text";
   return null;
 }
 
@@ -86,6 +94,18 @@ function excerpt(text) {
 }
 
 const sha256 = (text) => crypto.createHash("sha256").update(text, "utf8").digest("hex");
+
+// The launch command with the two parts that differ on every launch (the
+// prompt file cohors just wrote, and a session id it just chose) replaced by
+// fixed words. What is left is the shape of the command: which runner, which
+// flags. It goes into the approval key, so a yes to one runner and command
+// shape is never reused for another.
+function commandShape(plan) {
+  let shape = String(plan.command || "");
+  if (plan.prompt_file) shape = shape.split(plan.prompt_file).join("<prompt file>");
+  if (plan.session) shape = shape.split(plan.session).join("<session>");
+  return shape;
+}
 
 // A flow by id in a launchpad entry, and whether the repository declared it.
 function findFlow(entry, flowId) {
@@ -142,7 +162,9 @@ function promptRequest(repoPath, kind, plan, text, runnerLabel) {
   return {
     repo: repoPath,
     kind,
-    key: sha256(`${repoPath}\n${text}`),
+    // Everything the answer depends on: where, which runner, the shape of
+    // the command, and the instructions themselves.
+    key: sha256([repoPath, plan.cwd, plan.runner, commandShape(plan), text].join("\n")),
     message: `Hand these instructions to ${who} in ${repoPath}?`,
     detail: `They come from the repository, not from cohors: ${kind === "task" ? "a task in its .principia/repo.json" : "an agent prompt it committed"}.`
       + ` ${who} receives exactly this text and can read and change files in that folder.\n\n${excerpt(text)}\n\n`
@@ -231,6 +253,17 @@ function create(host) {
     const label = o.runnerLabel ? o.runnerLabel(plan.runner) : "";
     const allowed = await permit(promptRequest(o.repo, o.kind, plan, text, label));
     if (!allowed.ok) return allowed;
+    // The command reads the prompt file when the terminal runs it. cohors
+    // writes that file for the user alone (mode 600 in a 700 folder), but
+    // check once more, at the last moment, that it still holds exactly the
+    // text that was shown; if anything changed it, nothing is started.
+    if (text != null && plan.prompt_file) {
+      let onDisk;
+      try { onDisk = o.readFile(plan.prompt_file); } catch { onDisk = null; }
+      if (onDisk !== text) {
+        return { ok: false, reason: "changed", message: "The prompt file changed after it was shown, so nothing was started." };
+      }
+    }
     o.run(plan);
     return { ok: true, asked: allowed.asked, plan };
   }
@@ -238,4 +271,4 @@ function create(host) {
   return { permit, flow, launch, approvedCount: () => [...approved.values()].reduce((n, s) => n + s.size, 0) };
 }
 
-module.exports = { create, findFlow, flowCwd, flowRequest, promptRequest, unsafeRun, isPlain, visible, excerpt, sha256, MAX_RUN_LENGTH };
+module.exports = { create, findFlow, flowCwd, flowRequest, promptRequest, unsafeRun, isPlain, visible, excerpt, sha256, commandShape, MAX_RUN_LENGTH };

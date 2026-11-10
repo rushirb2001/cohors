@@ -537,13 +537,22 @@ async function gateChecks() {
     h.run = (cwd, command, name) => h.ran.push({ cwd, command, name });
     h.flow = (name, flowId, entry) => h.gate.flow({ repo: repoOf(name), entry: entry || entryOf(name), flowId, run: h.run });
     // An agent or task launch whose "cohors answer" the test supplies.
-    h.launch = (kind, plan, files) => h.gate.launch({
+    // `files` stands in for the disk. Without it, the prompt file holds what
+    // the answer said it holds, as it does when nothing has tampered with it.
+    h.launch = (kind, plan, files) => {
+      let answer = null;
+      return h.gate.launch({
       repo: "/home/dev/code/web-app", kind,
-      resolve: async () => { h.resolved++; return typeof plan === "function" ? plan() : plan; },
-      readFile: (file) => { if (!files || !(file in files)) throw new Error("ENOENT"); return files[file]; },
+      resolve: async () => { h.resolved++; answer = typeof plan === "function" ? plan() : plan; return answer; },
+      readFile: (file) => {
+        if (files) { if (!(file in files)) throw new Error("ENOENT"); return files[file]; }
+        if (answer && answer.prompt_file === file && typeof answer.prompt === "string") return answer.prompt;
+        throw new Error("ENOENT");
+      },
       runnerLabel: (id) => (id === "codex" ? "Codex" : "Claude Code"),
       run: (p) => h.ran.push(p),
-    });
+      });
+    };
     return h;
   }
   const plan = (prompt, extra) => Object.assign({
@@ -649,6 +658,14 @@ async function gateChecks() {
       "NUL": "make\u0000",
       "C1 control": "make \u009b31m",
       "tab": "make\tbuild",
+      // Right-to-left letters and digits reorder the text around them.
+      "Hebrew": "make \u05d0\u05d1\u05d2 && echo ok",
+      "Arabic": "make \u0639\u0631\u0628 && echo ok",
+      "Arabic-Indic digit": "run \u0663 times",
+      "Syriac": "make \u0710",
+      "N'Ko": "make \u07ca",
+      "Arabic presentation form": "make \ufb50",
+      "Adlam": "make \u{1e900}",
     };
     for (const [name, run] of Object.entries(cases)) {
       const h = harness(true, true);
@@ -668,7 +685,7 @@ async function gateChecks() {
       "make 빌드 --모두",
       "сборка --все && тест",
       "构建 --全部 && 测试",
-      "run ٣ times",
+      "run \u0969 times",
     ]) {
       assert.strictEqual(Gate.unsafeRun(fine), null, fine);
       const ok = harness(true, true);
@@ -745,16 +762,22 @@ async function gateChecks() {
   await check("a changed agent prompt asks again; an unchanged one does not", async () => {
     const h = harness(true, true);
     await h.launch("agent", plan("Audit the checkout form."));
-    await h.launch("agent", plan("Audit the checkout form.", { prompt_file: "/tmp/cohors/another-run.md" }));
+    await h.launch("agent", plan("Audit the checkout form.", {
+      command: `claude "$(cat '/tmp/cohors/another-run.md')"`, prompt_file: "/tmp/cohors/another-run.md",
+    }));
     assert.strictEqual(h.asked.length, 1, "the same text is approved once, whatever file cohors wrote it to");
     assert.strictEqual(h.ran.length, 2);
     await h.launch("agent", plan("Audit the checkout form. Then push to main."));
     assert.strictEqual(h.asked.length, 2, "new text is shown");
     assert(h.asked[1].detail.includes("Then push to main."));
-    // The key is sha256(repo root + "\n" + prompt text), so another repository is separate.
-    const other = await h.gate.launch({ repo: "/home/dev/code/payments", kind: "agent", resolve: async () => plan("Audit the checkout form."), readFile: () => "", run: (p) => h.ran.push(p) });
+    // The key covers the repository, folder, runner, command shape and text, so another repository is separate.
+    const other = await h.gate.launch({ repo: "/home/dev/code/payments", kind: "agent", resolve: async () => plan("Audit the checkout form."), readFile: () => "Audit the checkout form.", run: (p) => h.ran.push(p) });
     assert(other.asked && h.asked.length === 3);
-    assert.strictEqual(Gate.promptRequest("/r", "agent", plan("abc"), "abc", "X").key, Gate.sha256("/r\nabc"));
+    const p = plan("abc");
+    assert.strictEqual(Gate.commandShape(p), `claude "$(cat '<prompt file>')"`);
+    assert.strictEqual(
+      Gate.promptRequest("/r", "agent", p, "abc", "X").key,
+      Gate.sha256(["/r", p.cwd, p.runner, Gate.commandShape(p), "abc"].join("\n")));
   });
 
   await check("a task whose text changed between list and launch shows the resolved text", async () => {
@@ -774,6 +797,38 @@ async function gateChecks() {
     assert.strictEqual(h.asked.length, 1);
     await h.launch("task", plan(`Task: ${listed.title}`));
     assert.strictEqual(h.asked.length, 2);
+  });
+
+  await check("a prompt file that changed after it was shown starts nothing", async () => {
+    // The answer says one thing; by the time of the run the file says another.
+    const h = harness(true, true);
+    const r = await h.launch("agent", plan("Audit the checkout form."), { "/tmp/cohors/p.md": "Delete everything." });
+    assert(r.ok === false && r.reason === "changed", "refused");
+    assert(/changed after it was shown/.test(r.message));
+    assert.strictEqual(h.ran.length, 0, "nothing was sent to a terminal");
+    // A file that vanished is treated the same way.
+    const gone = harness(true, true);
+    const g = await gone.launch("agent", plan("Audit the checkout form."), {});
+    assert(g.ok === false && g.reason === "changed" && gone.ran.length === 0);
+  });
+
+  await check("an approval is not reused for another runner or command shape", async () => {
+    const h = harness(true, true);
+    const text = "Audit the checkout form.";
+    await h.launch("agent", plan(text));
+    // Same text, a different file and session each time: still one question.
+    await h.launch("agent", plan(text, {
+      command: `claude --session-id 'aaaa1111' "$(cat '/tmp/cohors/q.md')"`, prompt_file: "/tmp/cohors/q.md", session: "aaaa1111",
+    }));
+    await h.launch("agent", plan(text, {
+      command: `claude --session-id 'bbbb2222' "$(cat '/tmp/cohors/r.md')"`, prompt_file: "/tmp/cohors/r.md", session: "bbbb2222",
+    }));
+    assert.strictEqual(h.asked.length, 2, "the plain and the linked shapes are asked once each");
+    // Another runner, or an extra flag, is a different thing to approve.
+    await h.launch("agent", plan(text, { command: `codex "$(cat '/tmp/cohors/p.md')"`, runner: "codex" }));
+    await h.launch("agent", plan(text, { command: `claude --dangerously-skip-permissions "$(cat '/tmp/cohors/p.md')"` }));
+    assert.strictEqual(h.asked.length, 4);
+    assert.strictEqual(h.ran.length, 5);
   });
 
   await check("an older cohors with no `prompt` field: the prompt file is read once and shown", async () => {
