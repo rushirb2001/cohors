@@ -272,7 +272,7 @@ fn validate(path: Option<&str>) -> Result<()> {
 }
 
 /// Walk up from `start` to the directory holding `.git`.
-fn repo_root(start: &Path) -> Option<PathBuf> {
+pub(super) fn repo_root(start: &Path) -> Option<PathBuf> {
     start
         .ancestors()
         .find(|dir| dir.join(".git").exists())
@@ -281,7 +281,7 @@ fn repo_root(start: &Path) -> Option<PathBuf> {
 
 /// The checked-out branch, read straight from `.git/HEAD` (no subprocess, so a
 /// session hook stays fast). Empty when detached or unreadable.
-fn head_branch(root: &Path) -> String {
+pub(super) fn head_branch(root: &Path) -> String {
     std::fs::read_to_string(root.join(".git/HEAD"))
         .ok()
         .and_then(|head| {

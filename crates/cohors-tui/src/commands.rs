@@ -1,5 +1,6 @@
 //! Implementations of the CLI subcommands.
 
+pub mod agent;
 pub mod launchpad;
 
 use std::collections::HashMap;

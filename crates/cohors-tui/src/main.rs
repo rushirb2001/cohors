@@ -105,6 +105,7 @@ fn main() -> anyhow::Result<()> {
             select,
             json,
         }) => commands::launchpad::run(&cli, action.as_ref(), select.as_deref(), *json),
+        Some(Command::Agent { action }) => commands::agent::run(&cli, action),
         Some(Command::Mcp {
             allow_writes,
             allow_run,

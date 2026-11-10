@@ -192,6 +192,16 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Start a coding agent on a repo, a task, or the whole fleet.
+    ///
+    /// `cohors agent run setup-repo` asks your agent (Claude Code, Codex,
+    /// Gemini CLI or agy, whichever is installed) to read the current repo and
+    /// write its launchpad file; `cohors agent run plan-day` plans your focus
+    /// across every repo. `cohors agent runners` shows what is installed.
+    Agent {
+        #[command(subcommand)]
+        action: AgentCmd,
+    },
     /// Serve your fleet to a coding agent over MCP (read-only by default).
     ///
     /// Speaks Model Context Protocol as a stdio server, so a client spawns it
@@ -228,6 +238,54 @@ pub struct ActionArgs {
     /// Preview the matching repos without acting.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum AgentCmd {
+    /// Which agent runners are installed, and why one is not.
+    Runners {
+        /// Print JSON instead of the human list.
+        #[arg(long)]
+        json: bool,
+    },
+    /// The prompts cohors ships (`setup-repo`, `plan-day`, …).
+    Prompts {
+        /// Print JSON instead of the human list.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Start an agent in this terminal.
+    Run(AgentLaunch),
+    /// Print the command that would start an agent, as JSON (for editors and
+    /// scripts). Writes the prompt file and logs the launch, like `run`.
+    Command(AgentLaunch),
+}
+
+/// What to start and where. Shared by `agent run` and `agent command`.
+#[derive(Debug, clap::Args)]
+pub struct AgentLaunch {
+    /// A shipped prompt (`setup-repo`, `declare-flows`, `add-agent`,
+    /// `track-tasks`, `plan-day`), or `agent` (with --agent), `task` (with
+    /// --task), `start` (just open a session) or `resume` (with --session).
+    #[arg(value_name = "WHAT")]
+    pub what: String,
+    /// Which runner to use: `claude-code`, `codex`, `gemini-cli` or `agy`.
+    /// Omit it to use the first one installed.
+    #[arg(long, value_name = "ID")]
+    pub runner: Option<String>,
+    /// The repository: a path, or a repo name from your fleet (default: the
+    /// repo containing the current directory).
+    #[arg(long, value_name = "PATH|NAME")]
+    pub repo: Option<String>,
+    /// The id of an agent the repo declares (for `agent`).
+    #[arg(long, value_name = "ID")]
+    pub agent: Option<String>,
+    /// The id of a task in the repo (for `task`).
+    #[arg(long, value_name = "ID")]
+    pub task: Option<String>,
+    /// The session to re-enter (for `resume`).
+    #[arg(long, value_name = "ID")]
+    pub session: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]
