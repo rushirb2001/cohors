@@ -262,15 +262,9 @@ fn run_demo_loop(terminal: &mut Tui, dark: bool) -> Result<()> {
 /// computed in memory by the pure core, so nothing touches the disk.
 pub(crate) fn seed_demo(app: &mut App, now: i64) {
     let repos = cohors_core::demo::fleet(now);
-    let (mut entries, board) = cohors_core::launchpad::demo();
-    // The sample launchpad identifies a repository by its plain name, while the
-    // sample fleet's ids are `demo/<name>`. Line the two up, or no repository
-    // would be matched to its tasks.
-    for entry in &mut entries {
-        if let Some(repo) = repos.iter().find(|r| r.name == entry.name) {
-            entry.id = repo.id.0.clone();
-        }
-    }
+    // The sample launchpad's entry ids match the sample fleet's repo ids
+    // (a core test pins that), so the overview joins them directly.
+    let (entries, board) = cohors_core::launchpad::demo();
     let overview = cohors_core::overview(&repos, &entries, &board, now);
     app.set_repos(repos);
     app.set_overview(overview, entries);
