@@ -60,7 +60,7 @@ pub fn registry() -> &'static [ActionDef] {
             tier: Tier::Write,
             needs_confirm: false,
             destructive: false,
-            summary: "git push the current branch to its upstream across the selected repos. Never force-pushes (git rejects non-fast-forward pushes), so it can't overwrite remote history. Pair after commit to land a cross-repo change. Requires a selector. Executing needs --allow-writes; dry_run:true previews the targets.",
+            summary: "git push the current branch to its upstream across the selected repos; a branch that was never pushed is published (git push -u origin HEAD) so it starts tracking. Never force-pushes (git rejects non-fast-forward pushes), so it can't overwrite remote history. Pair after commit to land a cross-repo change. Requires a selector. Executing needs --allow-writes; dry_run:true previews the targets.",
         },
         ActionDef {
             verb: "commit",

@@ -63,6 +63,12 @@ pub fn pull_ff(path: &Utf8Path, name: &str) -> Result<String, String> {
 /// Push the current branch to its upstream (`git push`). Non-fast-forward
 /// pushes are *rejected by git* (we never pass `--force`), so this can't
 /// overwrite remote history. Returns a short status message.
+///
+/// A branch that was never pushed has no upstream, and plain `git push`
+/// refuses it. That is exactly the work most at risk (it exists on one disk),
+/// so instead of skipping it we *publish* it: `git push -u origin HEAD`, which
+/// creates the branch on the remote and starts tracking it. It is still an
+/// ordinary push — nothing is forced and nothing existing is overwritten.
 pub fn push(path: &Utf8Path, name: &str) -> Result<String, String> {
     let out = run_git(path, &["push"])?;
     if out.status.success() {
@@ -70,7 +76,15 @@ pub fn push(path: &Utf8Path, name: &str) -> Result<String, String> {
     } else {
         let msg = first_line(&out.stderr).to_lowercase();
         if msg.contains("no upstream") || msg.contains("no configured push") {
-            Err(format!("push {name}: no upstream — skipped"))
+            let published = run_git(path, &["push", "-u", "origin", "HEAD"])?;
+            if published.status.success() {
+                Ok(format!("published {name} (new branch on origin)"))
+            } else {
+                Err(format!(
+                    "push {name}: could not publish — {}",
+                    first_line(&published.stderr)
+                ))
+            }
         } else if msg.contains("rejected") || msg.contains("non-fast-forward") {
             Err(format!("push {name}: rejected (pull first)"))
         } else {
@@ -358,6 +372,53 @@ mod tests {
 
         let res = push(&work, "work");
         assert_eq!(res, Ok("pushed work".to_string()));
+    }
+
+    /// A branch that was never pushed has no upstream; `push` publishes it
+    /// (`-u origin HEAD`) rather than skipping the work most at risk.
+    #[test]
+    fn push_publishes_a_branch_that_has_no_upstream() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = camino::Utf8Path::from_path(tmp.path()).unwrap();
+        let bare = root.join("remote.git");
+        let work = root.join("work");
+        let git = |dir: &Utf8Path, args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(dir.as_str())
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {:?}", out);
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        Command::new("git")
+            .args(["init", "--bare", bare.as_str()])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .args(["init", "-b", "feature", work.as_str()])
+            .output()
+            .unwrap();
+        git(&work, &["config", "user.email", "t@example.com"]);
+        git(&work, &["config", "user.name", "Tester"]);
+        git(&work, &["remote", "add", "origin", bare.as_str()]);
+        std::fs::write(work.join("a.txt"), "1").unwrap();
+        git(&work, &["add", "."]);
+        git(&work, &["commit", "-m", "one"]);
+
+        let res = push(&work, "work");
+        assert_eq!(res, Ok("published work (new branch on origin)".to_string()));
+        // The remote has the branch, and the local branch now tracks it.
+        assert_eq!(
+            git(&bare, &["rev-parse", "refs/heads/feature"]),
+            git(&work, &["rev-parse", "HEAD"])
+        );
+        assert_eq!(
+            git(&work, &["rev-parse", "--abbrev-ref", "feature@{upstream}"]),
+            "origin/feature"
+        );
     }
 
     /// `push_branch` pushes a branch that is *not* checked out, setting upstream on
