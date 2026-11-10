@@ -74,9 +74,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 ### Changed
 
 - **Every surface was rebuilt around what to do next.** A quiet neutral
-  palette with purple kept for the brand mark and focus; severity is a shape
-  (triangle, diamond, ring) as well as a colour, so it reads without colour and
-  under `NO_COLOR`.
+  palette with purple kept for the brand mark and focus. Severity is a block
+  with the word in it: a filled `RISK` (brick red) or `WARN` (ochre) leads the
+  rows of Do next, Work at risk and the repository tables, a quiet outlined
+  `NOTE` or `INFO` marks the rest, and a clean repo has none. The key figures
+  that need attention are filled tiles in the same two colours. Because the
+  word carries the meaning, it reads without colour and under `NO_COLOR`
+  (where the block is reverse video).
   - **Terminal:** the dashboard opens on cards (Do next, Work at risk, Open
     tasks, Commits, Repositories). `1`–`5` focus a card and each card's border
     lists the keys that act on it. Enter on the repositories card opens a
