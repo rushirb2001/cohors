@@ -1,7 +1,13 @@
-# Principia contract, v1
+# The cohors launchpad contract, v1
 
-This is the contract between a repository and the Principia launchpad. Any AI
+This is the contract between a repository and the cohors launchpad. Any AI
 agent, in any repo, can read this file and know exactly what to write.
+
+It was first published as the Principia contract. The on-disk names keep that
+word (`.principia/` in a repository, `~/.principia/` for the user), so
+repositories that already carry one need no migration. `cohors launchpad
+contract` prints the same rules as JSON, and that output is authoritative if
+the two ever disagree.
 
 It is deliberately agent-agnostic. Claude Code, Codex, agy, Gemini CLI, or a
 human with an editor all produce the same artifact.
@@ -10,12 +16,12 @@ human with an editor all produce the same artifact.
 
 ## 1. The model in one paragraph
 
-The launchpad ships **empty**. It discovers candidate repositories from the
-editor's own recently-opened list, then asks each one what it offers. A
-repository answers by committing a `.principia/` directory. The launchpad
-aggregates every answer into one dashboard. Nothing about the user is stored in
-the extension itself, so a fresh install on a new machine behaves identically to
-a stranger's first run.
+The launchpad ships **empty**. cohors discovers the git repositories under the
+user's configured roots, then asks each one what it offers. A repository
+answers by committing a `.principia/` directory. cohors aggregates every answer
+into one dashboard, shown identically in the terminal, the browser, the editor
+extension and over MCP. Nothing about the user is stored in cohors itself, so a
+fresh install on a new machine behaves identically to a stranger's first run.
 
 The unit of enrichment is **the repository**, not the dashboard.
 
@@ -27,19 +33,18 @@ The unit of enrichment is **the repository**, not the dashboard.
 | --- | --- | --- | --- |
 | `<repo>/.principia/repo.json` | One repository | **Yes** | Agent |
 | `<repo>/.principia/agents/*.md` | One repository | **Yes** | Agent |
-| `<repo>/.principia/local.json` | One repo, one machine | **No** (gitignored) | Extension |
+| `<repo>/.principia/local.json` | One repo, one machine | **No** (gitignored) | cohors |
 | `~/.principia/board.json` | User, all repos | Optional | Agent |
-| `~/.principia/history/*.jsonl` | User, all repos | Optional | Extension + hooks |
+| `~/.principia/history/*.jsonl` | User, all repos | Optional | cohors + session hooks |
 
 Committed files are the point: clone the repo on another machine and its
 launchpad entry comes with it. Machine-local values (absolute paths, chosen
 ports, device ids) never enter a committed file.
 
-`~/.principia/` is the portable home. When the Claude Code plugin is installed,
-it mirrors the same files into `${CLAUDE_PLUGIN_DATA}` so plugin-side agents can
-read them without knowing the user's home layout. The extension treats
-`~/.principia/` as authoritative and keeps the mirror fresh; neither copy is
-allowed to go stale silently (see §7).
+`~/.principia/` is the launchpad home; set `$PRINCIPIA_HOME` to put it
+somewhere else. There is one copy and it is authoritative. Agents reach it
+through the cohors MCP tools (`read_board`, `write_board`, `record_activity`)
+rather than by knowing the user's home layout.
 
 ---
 
@@ -60,7 +65,7 @@ Full shape:
 ```jsonc
 {
   "specVersion": 1,                  // required, integer, currently 1
-  "name": "sushrutalgs-bff",         // required, display name
+  "name": "billing-service",         // required, display name
   "summary": "Backend for frontend", // one line, <= 80 chars
   "group": "Platform",               // free-text; groups repos in the dashboard
   "icon": "server",                  // codicon name; omit to auto-pick by stack
@@ -122,8 +127,14 @@ tasks that recur often enough to warrant tailored instructions.
 - Every `id` is stable and kebab-case. The dashboard keys off it; renaming one
   orphans its state.
 - No absolute paths. Ever. `run` and `cwd` are relative to the repo root.
+- A flow's `run` is one line a person can read in full: at most 400
+  characters, each one either printable ASCII or a letter or digit of a
+  left-to-right script. Control characters, invisible characters, line
+  breaks and right-to-left text are refused, because they let a command
+  display as one thing and run as another. A flow that breaks this rule is
+  rejected by the validator and is not offered on any surface.
 - No secrets, tokens, or machine-specific values. This file is committed.
-- Unknown keys are preserved, not dropped, so a newer extension can round-trip an
+- Unknown keys are preserved, not dropped, so a newer cohors can round-trip an
   older file.
 
 ---
@@ -158,9 +169,6 @@ Placeholders the launchpad substitutes before invoking a runner:
 | `{{REPO_ROOT}}` | absolute path of the repo the runner is launched in |
 | `{{BRANCH}}` | current branch |
 | `{{TASK_TITLE}}` | the task's title, when a task triggered the run |
-| `{{CONTRACT_ROOT}}` | absolute path of the Principia checkout |
-| `{{SPEC}}` | absolute path of this file |
-| `{{VALIDATE}}` | the full validate command, ready to run |
 
 These exist so that a **committed** prompt never contains a machine-specific
 path. The placeholder is what lives in git; the resolved value only ever appears
@@ -175,7 +183,7 @@ session drops the user into an idle agent that was never asked anything.
 
 | Runner | Invocation |
 | --- | --- |
-| `claude-code` | `claude "$(cat <file>)"` in the repo, or a plugin agent when Principia's plugin is installed |
+| `claude-code` | `claude "$(cat <file>)"` |
 | `codex` | `codex "$(cat <file>)"` |
 | `gemini-cli` | `gemini -i "$(cat <file>)"` |
 | `agy` | `agy --prompt-interactive "$(cat <file>)"` |
@@ -187,22 +195,35 @@ system-prompt append and never through a headless flag (`claude -p`,
 A runner listed in `supports` but not installed is shown disabled with a reason,
 never hidden. The user should never wonder why an action vanished.
 
+`cohors agent run <what>` performs these invocations, and `cohors agent
+command <what>` prints the one it would perform so an editor can type it into
+its own terminal. Two safety rules apply to every runner:
+
+- The prompt is one argument and must never be read as an option, so a
+  prompt whose first character is `-` gets a fixed `Prompt:` line in front.
+- Where the shell cannot pass a file's contents as exactly one argument
+  (PowerShell), the prompt text is not put on a command line at all: cohors
+  reads the file and starts the runner itself.
+
+A front-end that starts a repo-declared agent or task must show the person the
+exact text cohors resolved (the `prompt` field of `cohors agent command`)
+before running it, and run nothing else.
+
 ---
 
 ## 5. What the launchpad does without any of this
 
 Zero-config behaviour, so a fresh install is useful immediately:
 
-1. Reads the editor's recently-opened list (`_workbench.getRecentlyOpened`).
-2. Keeps entries that exist on disk and contain a `.git` directory.
-3. Reads branch, dirty count, and ahead/behind for each.
+1. Scans the user's configured roots (or the ones passed with `--root`).
+2. Keeps every directory that is a git repository.
+3. Reads branch, uncommitted work, stashes, and ahead/behind for each.
 4. **Auto-detects flows** without any config:
    - `package.json` scripts (`dev`, `start`, `build`, `test`, `lint`)
    - `Cargo.toml` → `cargo check|build|test|run`
    - `pyproject.toml` / `uv.lock` → `uv sync`, `uv run pytest`
    - `Makefile` targets
    - `settings.gradle[.kts]` → `./gradlew assembleDebug`
-   - `*.xcodeproj` / `Package.swift` → iOS build
 5. Shows every discovered repo, including unconfigured ones, each with a
    **"Set up with an agent"** action.
 
@@ -224,7 +245,7 @@ Cross-repo focus. Optional; the dashboard works without it.
     {
       "id": "f-1",
       "title": "Ship billing retries",
-      "repo": "sushrutalgs-bff",     // matches repo.json name, not a path
+      "repo": "billing-service",     // matches repo.json name, not a path
       "ref": "billing-retries",      // optional: a task id inside that repo
       "status": "doing",
       "agent": "triage",             // optional: repo agent to launch
@@ -241,7 +262,7 @@ machines where checkouts live in different places.
 
 ## 6b. `<repo>/.principia/local.json`
 
-Machine-local, gitignored, written by the extension. Never commit it.
+Machine-local, gitignored, written by cohors. Never commit it.
 
 ```jsonc
 {
@@ -277,8 +298,6 @@ Anything cached must be able to prove it is current, or say that it is not.
 - `repo.json` also carries an optional `"generatedFrom"`: the commit SHA the
   agent read when writing it. The dashboard shows a "may be out of date" hint
   when `HEAD` has moved far past it.
-- The `${CLAUDE_PLUGIN_DATA}` mirror stores the source mtime it copied. On
-  mismatch the extension re-mirrors rather than serving the old copy.
 - The dashboard never displays a cached value without also being able to show its
   age.
 
@@ -287,19 +306,22 @@ Anything cached must be able to prove it is current, or say that it is not.
 ## 8. Validating
 
 ```bash
-node scripts/validate.js <path-to-repo>
+cohors launchpad validate <path-to-repo>
 ```
 
-Checks `repo.json` against `spec/v1/repo.schema.json`, verifies every
-`agents[].file` exists, that ids are unique and kebab-case, that no `run` or
-`cwd` is absolute, and that `specVersion` is supported. Agents should run this
+Checks `repo.json` against this contract (the JSON Schema beside this file
+describes the same shape): every `agents[].file` exists, ids are unique and
+kebab-case, no `run` or `cwd` is absolute, every `run` is plain text as §3
+requires, and `specVersion` is supported. Every problem is reported at once.
+The MCP tool `write_repo_contribution` runs the same checks before it writes
+and writes nothing when one fails. Agents should run this
 before reporting success.
 
 ---
 
 ## 9. Versioning
 
-`specVersion` is an integer. The extension supports the current version and one
+`specVersion` is an integer. cohors supports the current version and one
 back. When it reads an older file it migrates in memory and writes the new shape
 only when something else changes the file. It never rewrites a repo's committed
 config just to bump a version.

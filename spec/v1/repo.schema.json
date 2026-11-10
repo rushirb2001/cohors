@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://principia.dev/spec/v1/repo.schema.json",
-  "title": "Principia repo contribution",
+  "$id": "https://github.com/rushirb2001/cohors/blob/main/spec/v1/repo.schema.json",
+  "title": "cohors launchpad repo contribution",
   "type": "object",
   "required": ["specVersion", "name"],
   "additionalProperties": true,
@@ -76,6 +76,11 @@
   "$defs": {
     "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$", "maxLength": 40 },
     "relPath": { "type": "string", "not": { "pattern": "^(/|~|[A-Za-z]:)" } },
-    "relCommand": { "type": "string", "minLength": 1, "maxLength": 300 }
+    "relCommand": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400,
+      "description": "One line a person can read in full: printable ASCII plus letters and digits of left-to-right scripts. No control or invisible characters, no line breaks, no right-to-left text (see SPEC.md §3)."
+    }
   }
 }

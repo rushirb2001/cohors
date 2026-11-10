@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://principia.dev/spec/v1/board.schema.json",
-  "title": "Principia cross-repo board",
+  "$id": "https://github.com/rushirb2001/cohors/blob/main/spec/v1/board.schema.json",
+  "title": "cohors launchpad cross-repo board",
   "type": "object",
   "required": ["specVersion"],
   "additionalProperties": true,

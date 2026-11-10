@@ -84,7 +84,7 @@ cohors launchpad validate .   # check this repo's .principia/repo.json
 
 Then ask your agent to **"plan my day"**: it reads every repo's tasks, the uncommitted and unpushed work nobody wrote a task for, and failing CI, and proposes a cross-repo focus board.
 
-The format is the open [Principia](https://github.com/rushirb2001/principia) contract (spec v1). Text inside a repo's launchpad files is treated as untrusted data: the agent is told so, and cohors never runs a declared flow on its own.
+The format is an open contract, written down in [spec/v1/SPEC.md](spec/v1/SPEC.md) (first published as the Principia contract, which is why the directory is called `.principia/`). Text inside a repo's launchpad files is treated as untrusted data: the agent is told so, and cohors never runs a declared flow on its own.
 
 ## For you: a fast fleet dashboard
 
