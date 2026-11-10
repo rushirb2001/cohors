@@ -271,28 +271,34 @@ pub const MAX_COMMAND_CHARS: usize = 400;
 
 /// Whether a repo-authored command is safe to *show*: what a person reads must
 /// be exactly what would run. A command comes from a file in a repository
-/// someone else may have written, and three kinds of character break that:
+/// someone else may have written, and several kinds of character break that:
+/// control characters (a newline runs a second command; an escape sequence can
+/// rewrite what a terminal displays), invisible characters (two different
+/// commands look alike), and text-direction controls (they reorder what is
+/// displayed).
 ///
-/// - control characters (a newline runs a second command; an escape sequence
-///   can rewrite what a terminal displays),
-/// - zero-width characters (invisible, so two different commands look alike),
-/// - text-direction overrides (they reorder what is displayed).
+/// Unicode has many such characters and keeps adding more, so this does not
+/// try to list the bad ones. It lists what is allowed instead:
 ///
-/// A command containing any of them, or longer than [`MAX_COMMAND_CHARS`], is
-/// rejected by the validator and dropped when a contribution is read, so no
-/// surface ever offers it.
+/// - printable ASCII (space through `~`), which covers every shell command, and
+/// - letters and digits of other scripts, so a path or argument in any
+///   language still works.
+///
+/// Everything else is refused: all control and format characters, non-ASCII
+/// spaces and punctuation, combining marks, variation selectors, private-use
+/// characters. A command with any of them, or longer than
+/// [`MAX_COMMAND_CHARS`], is rejected by the validator and dropped when a
+/// contribution is read, so no surface ever offers it.
 pub fn is_plain_command(run: &str) -> bool {
-    let hidden = |c: char| {
-        c.is_control()
-            || matches!(
-                c,
-                '\u{200B}'..='\u{200F}'   // zero-width space/joiners, direction marks
-                    | '\u{202A}'..='\u{202E}' // direction embeddings and overrides
-                    | '\u{2060}'..='\u{2069}' // word joiner, direction isolates
-                    | '\u{FEFF}'              // zero-width no-break space
-            )
+    let allowed = |c: char| match c {
+        ' '..='~' => true,
+        // The rest of ASCII is control characters.
+        c if c.is_ascii() => false,
+        // The Hangul fillers are classed as letters but render as nothing.
+        '\u{115F}' | '\u{1160}' | '\u{3164}' | '\u{FFA0}' => false,
+        c => c.is_alphanumeric(),
     };
-    !run.trim().is_empty() && run.chars().count() <= MAX_COMMAND_CHARS && !run.chars().any(hidden)
+    !run.trim().is_empty() && run.chars().count() <= MAX_COMMAND_CHARS && run.chars().all(allowed)
 }
 
 /// `^[a-z0-9]+(-[a-z0-9]+)*$`, written out by hand to avoid a regex dependency
@@ -411,8 +417,9 @@ pub fn validate_contribution(doc: &Value, file_exists: &dyn Fn(&str) -> bool) ->
                 errors.push(format!("{at}: run must not start with an absolute path"))
             }
             Some(run) if !is_plain_command(run) => errors.push(format!(
-                "{at}: run must be one line of at most {MAX_COMMAND_CHARS} visible characters \
-                 (no control, zero-width or text-direction characters)"
+                "{at}: run must be one line of at most {MAX_COMMAND_CHARS} characters, using only \
+                 printable ASCII plus letters and digits (no control, invisible or \
+                 text-direction characters)"
             )),
             Some(_) => {}
         }
@@ -893,6 +900,30 @@ mod tests {
         // Invisible and direction-changing characters hide what really runs.
         assert!(!is_plain_command("npm\u{200b} test"));
         assert!(!is_plain_command("echo \u{202e}hs | live lruc"));
+        // Not on any hand-written list: Arabic letter mark, soft hyphen, line
+        // separator, a variation selector, a tag character, a private-use
+        // character, a no-break space, and a Hangul filler (a "letter" that
+        // renders as nothing). All refused, because none is on the allowlist.
+        for hidden in [
+            '\u{061C}',
+            '\u{00AD}',
+            '\u{2028}',
+            '\u{FE0F}',
+            '\u{E0041}',
+            '\u{E000}',
+            '\u{00A0}',
+            '\u{3164}',
+            '\u{180E}',
+            '\u{034F}',
+        ] {
+            assert!(
+                !is_plain_command(&format!("npm{hidden} test")),
+                "U+{:04X} should be refused",
+                hidden as u32
+            );
+        }
+        // Letters and digits of other scripts are fine.
+        assert!(is_plain_command("make 테스트 проверка 試験 ٣"));
         assert!(!is_plain_command("   "));
         assert!(!is_plain_command(&"x".repeat(MAX_COMMAND_CHARS + 1)));
 
