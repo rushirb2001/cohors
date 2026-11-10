@@ -45,7 +45,7 @@ expression: "render_to_string(&fleet_app(), 96, 60)"
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────╮
 │   repository         branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
 │ ▲ analytics          main      ↑1              0    0    0      2      0    4d  perf: preco… │
-│ ▲ legacy-billing     unreadab…                                                  could not r… │
+│ ▲ legacy-billing     unreadable                                                 could not r… │
 │ ◆ design-system      main      ↑1              0    0    0      1      0    6h  feat: dark-… │
 │ ◆ mobile-app         release/… ↑4 ↓1           3    1    0      0      0    9h  feat: biome… │
 │ ◆ payments           main      ↑2              1    2    0      0      2    2h  fix: retry … │

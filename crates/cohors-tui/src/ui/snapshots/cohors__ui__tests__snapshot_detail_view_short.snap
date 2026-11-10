@@ -6,7 +6,7 @@ expression: "render_to_string(&detail_app(), 100, 16)"
 │   repository               branch    upstream      stg  mod  new  stash  tasks   fetched  commit │
 │ ▲ analytics                main      ↑1              0    0    0      2      0     never      4d │
 │   ~/code/analytics                   abc1234  perf: precompute funnel rollups                    │
-│ ▲ legacy-billing           unreadab…                                                             │
+│ ▲ legacy-billing           unreadable                                                            │
 │   ~/code/legacy-billing              could not read .git (permission denied)                     │
 │ ◆ design-system            main      ↑1              0    0    0      1      0     never      6h │
 │   ~/code/design-system               abc1234  feat: dark-mode tokens                             │

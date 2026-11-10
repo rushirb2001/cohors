@@ -184,14 +184,15 @@ pub(crate) fn header_roots(app: &App) -> String {
 
 /// The one sentence under the wordmark. It is the overview's own headline;
 /// before the overview exists it only says what is known so far.
-fn headline(app: &App) -> String {
+fn headline(app: &App, theme: &Theme) -> String {
     match &app.overview {
         Some(o) if !app.repos.is_empty() => o.headline.clone(),
-        _ if app.scanning => "Scanning for repositories…".to_string(),
+        _ if app.scanning => format!("Scanning for repositories{}", theme.glyphs.dots()),
         _ if app.repos.is_empty() => "No repositories found.".to_string(),
         _ => format!(
-            "{}. Working out what needs you…",
-            text::count(app.repos.len(), "repository", "repositories")
+            "{}. {}",
+            text::count(app.repos.len(), "repository", "repositories"),
+            computing(theme)
         ),
     }
 }
@@ -199,7 +200,11 @@ fn headline(app: &App) -> String {
 /// `scanned 2m ago`, or a spinner while a scan is running.
 fn scan_status(app: &App, now: i64, theme: &Theme) -> String {
     if app.scanning {
-        return format!("{} scanning…", theme.glyphs.spinner(app.spinner));
+        return format!(
+            "{} scanning{}",
+            theme.glyphs.spinner(app.spinner),
+            theme.glyphs.dots()
+        );
     }
     match app.scanned_at {
         Some(at) => match time::relative(at, now).as_str() {
@@ -274,7 +279,11 @@ fn render_header_card(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
             text::clip(&header_roots(app), text_width, ell),
             theme.dim(),
         )],
-        vec![Span::raw(text::clip(&headline(app), text_width, ell))],
+        vec![Span::raw(text::clip(
+            &headline(app, theme),
+            text_width,
+            ell,
+        ))],
     ];
     let lines: Vec<Line> = texts
         .into_iter()
@@ -327,7 +336,7 @@ fn render_header_line(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     let status_width = status.chars().count();
     // One column of margin each side, and two between the text and the status.
     let room = (area.width as usize).saturating_sub(2 + status_width + 2 + 8);
-    let rest = format!("{}   {}", header_roots(app), headline(app));
+    let rest = format!("{}   {}", header_roots(app), headline(app, theme));
     let line = Line::from(vec![
         Span::styled(" cohors", theme.accent().add_modifier(Modifier::BOLD)),
         Span::raw("  "),
@@ -444,10 +453,17 @@ pub(crate) fn figures(f: &KeyFigures) -> [Figure; 6] {
 }
 
 fn render_figures(frame: &mut Frame, area: Rect, app: &App, layout: Figures, theme: &Theme) {
-    let Some(overview) = &app.overview else {
-        return; // nothing to count yet; the cards below say so
+    let all = match &app.overview {
+        Some(overview) => figures(&overview.figures),
+        // Not counted yet. The cards are drawn anyway, with no number in them,
+        // so nothing jumps when the numbers arrive a moment later.
+        None => figures(&KeyFigures::default()).map(|figure| Figure {
+            value: theme.glyphs.ellipsis().to_string(),
+            note: String::new(),
+            warn: false,
+            ..figure
+        }),
     };
-    let all = figures(&overview.figures);
     match layout {
         Figures::Cards => render_figure_row(frame, area, &all, theme),
         Figures::Grid => {
@@ -520,7 +536,9 @@ fn render_figure_line(frame: &mut Frame, area: Rect, figures: &[Figure], theme: 
 // ── Card 1: Do next ──────────────────────────────────────────────────────────
 
 /// What a card says while the overview is still being computed.
-const COMPUTING: &str = "Working out what needs you…";
+pub(crate) fn computing(theme: &Theme) -> String {
+    format!("Working out what needs you{}", theme.glyphs.dots())
+}
 
 fn render_do_next(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focused: bool) {
     let card = CardFrame {
@@ -531,7 +549,7 @@ fn render_do_next(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
     };
     let inner = draw_card(frame, area, &card, theme);
     let Some(overview) = &app.overview else {
-        draw_message(frame, inner.text, COMPUTING, theme);
+        draw_message(frame, inner.text, &computing(theme), theme);
         return;
     };
     let actions = &overview.actions;
@@ -662,7 +680,7 @@ fn render_at_risk(
     };
     let inner = draw_card(frame, area, &card, theme);
     if app.overview.is_none() {
-        draw_message(frame, inner.text, COMPUTING, theme);
+        draw_message(frame, inner.text, &computing(theme), theme);
         return;
     }
     if lines.is_empty() {
@@ -799,7 +817,7 @@ fn render_tasks(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focused
     };
     let inner = draw_card(frame, area, &card, theme);
     let Some(overview) = &app.overview else {
-        draw_message(frame, inner.text, COMPUTING, theme);
+        draw_message(frame, inner.text, &computing(theme), theme);
         return;
     };
     let f = &overview.figures;
@@ -951,7 +969,7 @@ fn render_commits(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
     };
     let inner = draw_card(frame, area, &card, theme);
     let Some(overview) = &app.overview else {
-        draw_message(frame, inner.text, COMPUTING, theme);
+        draw_message(frame, inner.text, &computing(theme), theme);
         return;
     };
     if overview.commits.is_empty() {
@@ -1065,8 +1083,9 @@ fn render_no_repositories(frame: &mut Frame, area: Rect, app: &App, theme: &Them
     };
     if app.scanning {
         let line = format!(
-            "{} Looking for git repositories under {roots}…",
-            theme.glyphs.spinner(app.spinner)
+            "{} Looking for git repositories under {roots}{}",
+            theme.glyphs.spinner(app.spinner),
+            theme.glyphs.dots()
         );
         draw_message(frame, inner, &line, theme);
         return;

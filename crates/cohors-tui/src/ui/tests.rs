@@ -872,6 +872,47 @@ fn control_characters_from_repositories_are_not_drawn() {
     }
 }
 
+/// With colour off and ASCII data, both screens draw nothing outside ASCII in
+/// any state: loaded, waiting for the overview, scanning, empty, with a status
+/// message, or too small.
+#[test]
+fn the_plain_tier_is_ascii_in_every_state() {
+    let empty = || App::new(vec!["~/projects".to_string()], "cfg".to_string());
+    let mut waiting = small_app();
+    waiting.overview = None;
+    let mut scanning = empty();
+    scanning.scanning = true;
+    let mut rescue = empty();
+    rescue.suggested_roots = vec!["~/code".to_string()];
+    let mut busy = small_app();
+    busy.busy.insert(RepoId("payments".to_string()));
+    // Status messages are written with typographic punctuation.
+    busy.status = Some("fetching 2 repos…  ·  1 skipped — conflict".to_string());
+    let mut filtering = small_app();
+    filtering.mode = Mode::Filter;
+    filtering.filter = "zzz".to_string();
+
+    let states = [
+        ("loaded", fleet_app()),
+        ("waiting", waiting),
+        ("scanning", scanning),
+        ("empty", with_overview(empty())),
+        ("rescue", rescue),
+        ("busy", busy),
+        ("filtering", filtering),
+    ];
+    for (name, mut app) in states {
+        for screen in [Screen::Overview, Screen::Repos] {
+            app.screen = screen;
+            for (w, h) in [(120, 45), (80, 24), (60, 50), (40, 10)] {
+                let text = render_plain(&app, w, h);
+                let stray: String = text.chars().filter(|c| !c.is_ascii()).collect();
+                assert!(stray.is_empty(), "{name} {screen:?} {w}x{h}: {stray:?}");
+            }
+        }
+    }
+}
+
 // ── Overlays (drawn on top of the overview) ──────────────────────────────────
 
 /// The "Open with…" picker lists detected openers with the default marked.

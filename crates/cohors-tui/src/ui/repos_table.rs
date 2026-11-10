@@ -246,7 +246,7 @@ fn cell_spans(row: &RepoRow, column: Column, now: i64, theme: &Theme) -> Vec<Spa
         return match column.id {
             ColumnId::Name => name_spans(row, width, theme),
             ColumnId::Branch => vec![Span::styled(
-                text::column("unreadable", width, ell),
+                text::cell("unreadable", width, ell),
                 theme.risk(),
             )],
             ColumnId::Commit => vec![Span::styled(

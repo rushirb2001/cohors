@@ -21,7 +21,7 @@ expression: "render_to_string(&app, 100, 24)"
 ╰─  t  board   ⏎  tasks  ────────────────╯ ╰─  s  standup   y  copy as markdown  ──────────────────╯
 ╭─  5  ▤ Repositories  5  2 marked ────────────────────────────────────────────────────────────────╮
 │   repository             branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
-│ ▲ legacy-billing         unreadab…                                                  could not r… │
+│ ▲ legacy-billing         unreadable                                                 could not r… │
 │●◆ payments               main      ↑2              0    3    1      1      0    2h  fix: retry … │
 │   ↓ 3 more                                                                                       │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯

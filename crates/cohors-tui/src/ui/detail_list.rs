@@ -280,7 +280,7 @@ fn signal_lines(
     let mut lines = Vec::new();
     match line {
         None => lines.push(Line::from(Span::styled(
-            "Working out what needs you…",
+            super::overview::computing(theme),
             theme.dim(),
         ))),
         Some(line) if line.reasons.is_empty() => lines.push(Line::from(vec![

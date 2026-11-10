@@ -108,6 +108,33 @@ impl Glyphs {
         }
     }
 
+    /// What ends a "still working" message: `Scanning…`.
+    pub fn dots(&self) -> &'static str {
+        match self.kind {
+            IconKind::Ascii => "...",
+            IconKind::Unicode | IconKind::Nerd => "…",
+        }
+    }
+
+    /// A status message as this tier can show it. Messages are written once,
+    /// with typographic punctuation (`fetching 3 repos…`, `skipped — reason`);
+    /// the Ascii tier swaps those few characters for plain ones. Text that
+    /// came from a repository (a name) is left exactly as it is.
+    pub fn plain(&self, text: &str) -> String {
+        if self.kind != IconKind::Ascii {
+            return text.to_string();
+        }
+        let mut out = String::with_capacity(text.len());
+        for c in text.chars() {
+            match c {
+                '…' => out.push_str("..."),
+                '—' | '–' | '·' => out.push('-'),
+                other => out.push(other),
+            }
+        }
+        out
+    }
+
     /// The arrow in "N more" when rows are hidden below (`true`) or above.
     pub fn more_arrow(&self, below: bool) -> &'static str {
         match (self.kind, below) {
@@ -281,6 +308,23 @@ mod tests {
         assert_eq!(Glyphs::resolve(IconMode::Ascii, false).marked(), "*");
         // Nerd is only ever chosen explicitly, and draws the same shapes here.
         assert_eq!(Glyphs::resolve(IconMode::Nerd, true).marked(), "●");
+    }
+
+    #[test]
+    fn status_messages_lose_their_typographic_punctuation_in_ascii() {
+        let message = "fetching 3 repos…  ·  1 skipped — conflict";
+        let ascii = Glyphs::resolve(IconMode::Ascii, false);
+        assert_eq!(
+            ascii.plain(message),
+            "fetching 3 repos...  -  1 skipped - conflict"
+        );
+        // The other tiers show it as written, and a repository's own name is
+        // never rewritten, whatever it contains.
+        assert_eq!(
+            Glyphs::resolve(IconMode::Unicode, false).plain(message),
+            message
+        );
+        assert_eq!(ascii.plain("pushed café"), "pushed café");
     }
 
     #[test]

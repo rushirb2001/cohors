@@ -31,6 +31,8 @@ pub(crate) fn toast_line(app: &App, theme: &Theme) -> Option<Line<'static>> {
     } else {
         theme.glyphs.spinner(app.spinner)
     };
+    // Control characters are dropped: a message can carry text git printed.
+    let msg = theme.glyphs.plain(&text::safe(msg));
     Some(Line::from(Span::styled(format!(" {icon} {msg} "), style)))
 }
 
