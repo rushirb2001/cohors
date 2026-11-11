@@ -19,6 +19,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-11
+
+The launchpad release. Each repository can now say what you run in it and what
+work is waiting, your coding agent can plan across all of them, and cohors
+arrives as a Claude Code plugin whose settings decide what Claude may do.
+Release builds also carry the browser dashboard inside the binary.
+
 ### Added
 
 - **The launchpad.** cohors now reads what each repository says about itself:
