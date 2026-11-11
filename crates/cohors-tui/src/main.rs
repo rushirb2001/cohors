@@ -16,6 +16,11 @@ mod logging;
 mod scan;
 mod tui;
 mod ui;
+/// The browser dashboard's files, compiled in by `build.rs` when a release
+/// build provides them (empty otherwise).
+mod web_assets {
+    include!(concat!(env!("OUT_DIR"), "/web_assets.rs"));
+}
 
 use clap::{CommandFactory, FromArgMatches};
 

@@ -30,7 +30,7 @@ use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Result, anyhow};
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use cohors_core::RepoSnapshot;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -84,6 +84,32 @@ fn shown_root(root: &str) -> String {
     }
 }
 
+/// Where the page's files (HTML, JavaScript, WebAssembly, CSS) come from.
+#[derive(Debug, Clone)]
+pub enum Assets {
+    /// A directory on disk, as `trunk` builds it in a checkout of cohors.
+    Dir(Utf8PathBuf),
+    /// Files compiled into the binary, as `(path, bytes)` pairs with `/`
+    /// between directories. A release build carries the page this way, so an
+    /// installed `cohors web` needs no checkout and no toolchain.
+    Embedded(&'static [(&'static str, &'static [u8])]),
+}
+
+impl Assets {
+    /// The bytes of one file, or `None` when there is no such file.
+    fn read(&self, rel: &str) -> Option<std::borrow::Cow<'static, [u8]>> {
+        match self {
+            Assets::Dir(dir) => std::fs::read(dir.join(rel).as_std_path())
+                .ok()
+                .map(std::borrow::Cow::Owned),
+            Assets::Embedded(files) => files
+                .iter()
+                .find(|(path, _)| *path == rel)
+                .map(|(_, bytes)| std::borrow::Cow::Borrowed(*bytes)),
+        }
+    }
+}
+
 /// How to run the server: everything except the assets directory and the scan.
 /// A struct rather than a long argument list, so adding an option does not
 /// ripple through every caller.
@@ -117,13 +143,14 @@ struct Site {
     author_email: Option<String>,
 }
 
-/// Serve `dist_dir` on `127.0.0.1:port`, exposing the local scan under `/api` and
-/// the action endpoint gated by `options.caps`. Blocks until the process is stopped.
-pub fn serve(dist_dir: &Utf8Path, scan: Arc<ScanFn>, options: ServeOptions) -> Result<()> {
+/// Serve the page from `assets` on `127.0.0.1:port`, exposing the local scan
+/// under `/api` and the action endpoint gated by `options.caps`. Blocks until
+/// the process is stopped.
+pub fn serve(assets: Assets, scan: Arc<ScanFn>, options: ServeOptions) -> Result<()> {
     let server = Server::http(("127.0.0.1", options.port))
         .map_err(|e| anyhow!("could not start web server: {e}"))?;
     let server = Arc::new(server);
-    let dist = dist_dir.to_owned();
+    let dist = Arc::new(assets);
     let action = ActionCtx {
         scan: scan.clone(),
         caps: options.caps,
@@ -159,13 +186,7 @@ pub fn serve(dist_dir: &Utf8Path, scan: Arc<ScanFn>, options: ServeOptions) -> R
     Ok(())
 }
 
-fn handle(
-    req: tiny_http::Request,
-    dist: &Utf8Path,
-    scan: &ScanFn,
-    site: &Site,
-    action: &ActionCtx,
-) {
+fn handle(req: tiny_http::Request, dist: &Assets, scan: &ScanFn, site: &Site, action: &ActionCtx) {
     let url = req.url().to_string();
     let path = url.split('?').next().unwrap_or("/");
     // Binding to 127.0.0.1 is not enough on its own: a web page on another
@@ -388,20 +409,23 @@ fn respond_json<T: Serialize>(req: tiny_http::Request, value: &T) {
 
 /// Serve a static file from `dist`, defaulting `/` to `index.html` and falling
 /// back to `index.html` for unknown non-asset paths (SPA routing).
-fn serve_static(req: tiny_http::Request, dist: &Utf8Path, url: &str) {
+fn serve_static(req: tiny_http::Request, dist: &Assets, url: &str) {
     let path = url.split('?').next().unwrap_or("/").trim_start_matches('/');
     let rel = if path.is_empty() { "index.html" } else { path };
     if rel.contains("..") {
         let _ = req.respond(Response::from_string("bad path").with_status_code(400));
         return;
     }
-    let bytes = std::fs::read(dist.join(rel).as_std_path())
-        .or_else(|_| std::fs::read(dist.join("index.html").as_std_path()));
-    match bytes {
-        Ok(bytes) => {
-            let _ = req.respond(Response::from_data(bytes).with_header(content_type(rel)));
+    // Any path that is not a file is a page route; the page handles it.
+    let found = match dist.read(rel) {
+        Some(bytes) => Some((bytes, rel)),
+        None => dist.read("index.html").map(|bytes| (bytes, "index.html")),
+    };
+    match found {
+        Some((bytes, name)) => {
+            let _ = req.respond(Response::from_data(bytes).with_header(content_type(name)));
         }
-        Err(_) => {
+        None => {
             let _ = req.respond(Response::from_string("not found").with_status_code(404));
         }
     }
@@ -623,6 +647,15 @@ mod tests {
         assert!(!is_local_origin("https://evil.example"));
         assert!(!is_local_origin("http://evil.example"));
         assert!(!is_local_origin("null"));
+    }
+
+    #[test]
+    fn built_in_assets_are_found_by_path() {
+        static FILES: [(&str, &[u8]); 2] = [("index.html", b"<html>"), ("snippets/a.js", b"x")];
+        let assets = Assets::Embedded(&FILES);
+        assert_eq!(assets.read("index.html").as_deref(), Some(&b"<html>"[..]));
+        assert_eq!(assets.read("snippets/a.js").as_deref(), Some(&b"x"[..]));
+        assert!(assets.read("missing.js").is_none());
     }
 
     #[test]

@@ -82,7 +82,7 @@ mod shell_quote_tests {
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
 #[cfg(not(target_arch = "wasm32"))]
-pub use server::{Caps, ScanFn, ServeOptions, serve};
+pub use server::{Assets, Caps, ScanFn, ServeOptions, serve};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod standalone {
@@ -155,6 +155,6 @@ pub mod standalone {
             author_email: scanner.author_email(),
         };
         let scan = Arc::new(move || scanner.scan());
-        serve(&dist, scan, options)
+        serve(crate::Assets::Dir(dist), scan, options)
     }
 }

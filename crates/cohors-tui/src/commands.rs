@@ -1192,13 +1192,16 @@ fn parse_selector(query: &str) -> Result<Selector> {
 /// clean, device-local URL that just works.
 const WEB_HOST: &str = "cohors.localhost";
 
-/// `cohors web` — one command to build, serve, and open the web dashboard.
+/// `cohors web` — one command to serve and open the web dashboard.
 ///
-/// It locates the `cohors-web` crate, ensures Trunk (the WASM bundler) is
-/// installed, starts the dev server bound to loopback, waits until it's actually
-/// accepting connections, then prints + opens the branded local URL
-/// (`http://cohors.localhost:<port>`). Blocks until Ctrl-C. Must run from inside
-/// the cohors repository, since Trunk builds the app from source.
+/// The page comes from one of two places. A release build carries it inside
+/// the binary (see `build.rs`), so it is served from memory and nothing else is
+/// needed. A build without it (from source) builds the page itself: it locates
+/// the `cohors-web` crate in a checkout, ensures Trunk (the WASM bundler) is
+/// installed, and keeps `trunk watch` running so an edit rebuilds the page.
+/// Either way it serves on loopback, waits until the server accepts
+/// connections, then prints and opens the branded local URL
+/// (`http://cohors.localhost:<port>`). Blocks until Ctrl-C.
 pub fn run_web(
     cli: &Cli,
     port: u16,
@@ -1208,16 +1211,19 @@ pub fn run_web(
     allow_run: bool,
     demo: bool,
 ) -> Result<()> {
-    // `cohors web` builds the dashboard from source, so it needs the repo. This
-    // is the *developer* path. End users won't run this at all: once the
-    // dashboard is deployed (v0.5 slice 4), an installed `cohors web` outside a
-    // checkout will simply open the hosted URL — no local build, no Trunk, no
-    // Cargo. So Trunk is a dev-only dependency, never something a distributed
-    // binary must ship (TODO: wire the hosted-URL branch when we deploy).
-    let web_dir = find_web_crate().context(
-        "couldn't find `crates/cohors-web` — `cohors web` builds the dashboard from source, so \
-         run it inside the cohors repository (a hosted version arrives with the deploy milestone)",
-    )?;
+    // A release build has the page compiled in; anything else must build it,
+    // which needs a checkout (the developer path, with Trunk).
+    let built_in = !crate::web_assets::WEB_ASSETS.is_empty();
+    let web_dir = if built_in {
+        None
+    } else {
+        Some(find_web_crate().context(
+            "this cohors was built without the browser dashboard inside it. The release \
+             builds (Homebrew, pip, the shell installer) include it. From source, run \
+             `cohors web` inside a clone of the cohors repository, where it builds the page \
+             with Trunk",
+        )?)
+    };
     // The web app is just another front-end over the SAME local scan the TUI,
     // CLI, and MCP run: discover the repos under `--root`/config, snapshot their
     // local state, and (with a token) enrich with remote CI/PRs. The server does
@@ -1239,7 +1245,9 @@ pub fn run_web(
         return Ok(());
     }
 
-    ensure_trunk(install)?;
+    if web_dir.is_some() {
+        ensure_trunk(install)?;
+    }
 
     // If the requested port is busy (e.g. another `cohors web`), step to the next
     // free one rather than failing.
@@ -1265,24 +1273,35 @@ pub fn run_web(
         "{}",
         masthead(
             "web: the dashboard in your browser",
-            "building the WASM bundle, this takes a moment",
+            if built_in {
+                "the page is built in, starting the server"
+            } else {
+                "building the WASM bundle, this takes a moment"
+            },
             color
         )
     );
-    let mut watcher = std::process::Command::new("trunk")
-        .arg("watch")
-        .current_dir(&web_dir)
-        .spawn()
-        .context("starting `trunk watch` (is Trunk installed and on PATH?)")?;
-
-    let dist = web_dir.join("dist");
-    if !wait_for_file(
-        &dist.join("index.html"),
-        std::time::Duration::from_secs(240),
-    ) {
-        let _ = watcher.kill();
-        bail!("the WASM build didn't finish in time");
-    }
+    let mut watcher = None;
+    let assets = match &web_dir {
+        None => cohors_web::Assets::Embedded(crate::web_assets::WEB_ASSETS),
+        Some(web_dir) => {
+            let child = std::process::Command::new("trunk")
+                .arg("watch")
+                .current_dir(web_dir)
+                .spawn()
+                .context("starting `trunk watch` (is Trunk installed and on PATH?)")?;
+            let watching = watcher.insert(child);
+            let dist = web_dir.join("dist");
+            if !wait_for_file(
+                &dist.join("index.html"),
+                std::time::Duration::from_secs(240),
+            ) {
+                let _ = watching.kill();
+                bail!("the WASM build didn't finish in time");
+            }
+            cohors_web::Assets::Dir(dist)
+        }
+    };
 
     let url = format!("http://{WEB_HOST}:{port}");
     // What it is serving, and what that means, in the same two-column grammar the
@@ -1362,8 +1381,10 @@ pub fn run_web(
         let scanner = scanner.clone();
         std::sync::Arc::new(move || scanner.scan())
     };
-    let result = cohors_web::serve(&dist, scan, options);
-    let _ = watcher.kill();
+    let result = cohors_web::serve(assets, scan, options);
+    if let Some(mut watching) = watcher {
+        let _ = watching.kill();
+    }
     result
 }
 
