@@ -46,6 +46,18 @@
   /* The key between two states. */
   .press { position: absolute; z-index: 3; display: flex; align-items: center; gap: calc(var(--u) * 1.6); font-size: calc(var(--u) * 2.8); color: var(--ink-2); }
   .press b { display: grid; place-items: center; width: calc(var(--u) * 7); height: calc(var(--u) * 7); border-radius: calc(var(--u) * 1.3); background: #24221f; box-shadow: 0 0 0 1px #3a3734, 0 calc(var(--u) * 0.6) 0 #0c0b0b; font-size: calc(var(--u) * 3.6); font-weight: 700; color: var(--ink); }
+  /* The roll call: every repository by name, with what cohors found. */
+  .roll { position: absolute; z-index: 1; display: grid; column-gap: calc(var(--u) * 5); row-gap: calc(var(--u) * 0.9); align-content: space-between; }
+  .roll .one { display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: calc(var(--u) * 2); min-width: 0; padding-bottom: calc(var(--u) * 0.9); border-bottom: 1px solid var(--line); }
+  .roll .tag { align-self: center; width: calc(var(--u) * 6.6); padding: calc(var(--u) * 0.35) 0; border-radius: calc(var(--u) * 0.4); text-align: center; font-size: calc(var(--u) * 1.75); font-weight: 700; letter-spacing: 0.02em; color: var(--ground); }
+  .roll .tag.risk { background: var(--brick); }
+  .roll .tag.warn { background: var(--ochre); }
+  .roll .tag.notice, .roll .tag.info { background: none; box-shadow: inset 0 0 0 1px #4a4641; color: var(--ink-2); }
+  .roll .tag.ok { background: none; color: var(--sage); }
+  .roll .words { display: flex; align-items: baseline; gap: calc(var(--u) * 2); min-width: 0; }
+  .roll b { flex: none; font-size: calc(var(--u) * 3.5); font-weight: 700; letter-spacing: -0.045em; color: var(--ink); }
+  .roll span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: right; font-size: calc(var(--u) * 2.15); letter-spacing: -0.02em; color: var(--ink-2); }
+  .roll .ok ~ .words b, .roll .ok ~ .words span { color: var(--ink-3); }
   .icon { position: absolute; inset: 0; display: grid; place-items: center; background: var(--panel); }
   .icon .mark { width: 72%; height: 48%; fill: var(--purple); }
 </style>
@@ -177,7 +189,7 @@
 
     // The alternative: a terminal per repository.
     tabs: async () => {
-      const overview = await (await fetch("/target/assets/captures/overview.json")).json();
+      const overview = await (await fetch("/target/assets/captures/overview-before.json")).json();
       const repos = overview.repos.slice(0, 13);
       const head = `${["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen"][repos.length] || repos.length} tabs of git status.<br>Or one screen.`;
       el("copy", `<h1>${head}</h1>`, { left: px(U * 8), top: px(U * 8), width: px(W - U * 16) });
@@ -220,9 +232,45 @@
       el("copy", `<h1>One screen answers all five.</h1><p>Free and open source. One Rust binary for the terminal, the editor and your agent.</p><span class="cmd"><i>$ </i>brew install rushirb2001/tap/cohors</span><br><span class="cmd" style="margin-top:${U * 1.6}px"><i>$ </i>pip install cohors</span>`, { left: px(U * 8), top: px(U * 40), width: px(W - U * 16) });
     },
 
+    // The roll call: no screenshot at all. Every repository of the fleet by
+    // name, in the order cohors ranks them, each with what cohors found in
+    // it. The words under the headline are cohors's own summary line.
+    roll: async () => {
+      const fleet = await (await fetch("/target/assets/captures/overview-before.json")).json();
+      const RANK = { risk: 0, warn: 1, notice: 2, info: 3, ok: 4 };
+      const TAG = { risk: "RISK", warn: "WARN", notice: "NOTE", info: "INFO", ok: "\u2713" };
+      const repos = [...fleet.repos].sort((a, b) => RANK[a.severity] - RANK[b.severity] || a.name.localeCompare(b.name));
+      const NUMBER = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen"];
+      const say = (n) => NUMBER[n] || String(n);
+      const atRisk = repos.filter((repo) => repo.at_risk).length;
+      // A wide card has room for the name in a bottom corner and a line under
+      // the headline. An upright one gives that room to the list: the name
+      // goes above the headline, and the line is kept only on a long poster.
+      const line = wide || H / W >= 1.4 ? "<p>Every repository answers with its branch, what is unpushed and what is uncommitted.</p>" : "";
+      const copy = el("copy", `<h1>Roll call: ${say(repos.length)} repos, ${say(atRisk)} at risk.</h1>${line}`,
+        { left: px(U * 8), top: px(wide ? U * 9 : U * 16), width: px(W - U * 16) });
+      const top = copy.offsetTop + copy.offsetHeight + U * 6;
+      const roll = el("roll", repos.map((repo) =>
+        `<div class="one"><i class="tag ${repo.severity}" style="font-style:normal">${TAG[repo.severity]}</i><div class="words"><b>${repo.name}</b><span>${repo.reasons.join(", ") || "clean, on " + repo.branch}</span></div></div>`).join(""),
+        { left: px(U * 8), top: px(top), width: px(W - U * 16) });
+      // A wide card reads down two columns; an upright one down a single list.
+      const columns = wide ? 2 : 1, rows = Math.ceil(repos.length / columns);
+      Object.assign(roll.style, { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, auto)`, gridAutoFlow: "column" });
+      // The list takes the room that is left. If it is too long for it, its
+      // type is set smaller (every size in it is a multiple of --u); if it is
+      // shorter, the rows spread out to fill the room.
+      const room = H - top - U * (wide ? 16 : 7);
+      const natural = roll.offsetHeight;
+      if (natural > room) roll.style.setProperty("--u", px(U * (room / natural)));
+      roll.style.height = px(room);
+      if (wide) lockup({ left: px(U * 8), bottom: px(U * 6) }, "one screen for every repository");
+      else lockup({ left: px(U * 8), top: px(U * 7) });
+    },
+
     // The dashboard, whole, with nothing said over it: the README's picture
-    // of the terminal.
-    window: async () => { await crop("before-push", null, { x: U * 3.5, y: U * 3.5, w: W - U * 7 }); },
+    // of the terminal. (After the push, as the editor's and the browser's
+    // pictures beside it are.)
+    window: async () => { await crop("after-push", null, { x: U * 3.5, y: U * 3.5, w: W - U * 7 }); },
 
     // The mark alone, for an extension or plugin icon.
     icon: async () => { el("icon").appendChild(S.mark()); },

@@ -35,6 +35,10 @@ shoot tour "wait:3500 shot:overview \
   ? wait:300 shot:help esc \
   : text:so tab text:r tab wait:250 shot:command esc q"
 
+# The fleet as data before anything is pushed, for the cards that list every
+# repository as it was found.
+HOME="$HOME_DIR" "$BIN" overview --json > "$OUT/overview-before.json" 2>/dev/null || echo '{}' > "$OUT/overview-before.json"
+
 # A real action: push everything that exists only on this machine, and the
 # same screen afterwards. (The fleet is rebuilt on the next run.)
 shoot act "wait:3500 shot:before-push P wait:3500 shot:after-push q"

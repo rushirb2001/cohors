@@ -1,6 +1,6 @@
 <!doctype html>
 <!--
-  The launch film: thirty-seven seconds, 1920 by 1080.
+  The launch film: forty-eight seconds, 1920 by 1080.
 
   Every screen in it is a real capture of cohors on the made-up fleet (run
   scripts/studio/capture.sh first). The film adds only a camera, captions and
@@ -8,6 +8,8 @@
 
   Render:   scripts/studio/render.mjs --page assets/studio/film.html --size 1920x1080 --frames target/assets/frames/film
   Preview:  open this page with ?t=12000 for one instant, or ?play=1 to watch.
+  The sting: ?sting=1 is the opening alone (the mark assembling, the name,
+            the line), held at the end: a four-second ident.
 
   The shape, in milliseconds:
        0  the mark assembles, the name is typed
@@ -16,7 +18,9 @@
    16000  Work at risk
    21500  the standup
    27000  the launchpad
-   32500  where to get it
+   32500  the same fleet in the terminal, the editor and the browser
+   37500  the coding agent reading it
+   43500  where to get it
 -->
 <html lang="en">
 <head>
@@ -35,11 +39,43 @@
   .install code { display: block; padding: 18px 28px; border-radius: 12px; background: var(--panel); box-shadow: 0 0 0 1px var(--line); font: 500 min(30px, 3.1vw) var(--mono); color: var(--ink); }
   .install code i { font-style: normal; color: var(--ink-3); }
   .outro small { margin-top: 40px; font-size: 26px; color: var(--ink-3); }
+
+  /* The name over each of the three places the fleet is shown. */
+  .place { position: absolute; font-size: 72px; font-weight: 700; letter-spacing: -0.04em; color: var(--ink-2); white-space: nowrap; }
+
+  /* The agent: a question, the tool it calls, and what cohors answers. The
+     pane is laid out 1180 wide and scaled to the frame. */
+  #agent { left: 0; top: 0; width: 1180px; transform-origin: 0 0; }
+  .talk { padding: 30px 36px 34px; font-size: 24px; line-height: 1.4; letter-spacing: -0.01em; }
+  .talk .ask { color: var(--ink); font-weight: 500; }
+  .talk .ask b { color: var(--purple); margin-right: 14px; }
+  .talk .ask u { display: inline-block; width: 13px; height: 27px; margin-left: 3px; vertical-align: -5px; background: var(--ink-2); text-decoration: none; }
+  .talk .call { display: flex; align-items: center; gap: 14px; margin-top: 22px; color: var(--ink-2); }
+  .talk .call em { font-style: normal; color: var(--purple); }
+  .talk .call small { padding: 2px 10px; border-radius: 6px; box-shadow: inset 0 0 0 1px #4a4641; font-size: 17px; color: var(--ink-3); }
+  .talk .call span { color: var(--ink-3); }
+  .talk .said { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--ink); font-weight: 500; }
+  .talk .step { display: grid; grid-template-columns: 78px 1fr; column-gap: 20px; margin-top: 16px; }
+  .talk .step i { align-self: start; margin-top: 4px; padding: 2px 0; border-radius: 5px; text-align: center; font-style: normal; font-size: 17px; font-weight: 700; color: var(--ground); }
+  .talk .step i.risk { background: var(--brick); }
+  .talk .step i.warn { background: var(--ochre); }
+  .talk .step i.notice, .talk .step i.info { box-shadow: inset 0 0 0 1px #4a4641; color: var(--ink-2); }
+  .talk .step b { display: block; font-weight: 700; color: var(--ink); }
+  .talk .step p { font-size: 20px; color: var(--ink-2); }
 </style>
 </head>
 <body>
 <div id="stage">
   <div id="world"></div>
+  <div class="win" id="agent">
+    <div class="winbar"><i></i><i></i><i></i><span>your coding agent</span></div>
+    <div class="talk">
+      <p class="ask"><b>&rsaquo;</b><span id="ask"></span><u id="caret"></u></p>
+      <p class="call" id="call"><em>cohors</em>overview<small>MCP tool</small><span id="calling"></span></p>
+      <p class="said" id="said"></p>
+      <div id="steps"></div>
+    </div>
+  </div>
   <div class="scrim" id="scrim"></div>
   <div class="caption" id="caption"><h2></h2><p></p></div>
   <div class="keycap" id="keycap"><b></b><span></span></div>
@@ -72,23 +108,35 @@
     [16600, 21100, "Work at risk is marked before it is lost.", "Unpushed commits, old stashes, branches that were never published."],
     [22100, 26600, "A standup from every repo, in one key.", "Everything you committed this week, grouped by repository."],
     [27600, 32100, "Each repo says what is waiting in it.", "Tasks and flows live in the repo, so they travel with the clone."],
+    [33500, 37100, "The same fleet in three places.", "Your terminal, your editor and your browser, all from one binary."],
+    [38300, 43100, "Your coding agent reads the same fleet.", "The same binary is an MCP server. Reads are open; writes stay off until you allow them."],
   ];
   // The key pressed, and what it did.
   const KEYS = [
     [11600, 13900, "P", "push"],
     [21700, 23600, "s", "standup"],
     [27200, 29100, "t", "tasks"],
+    [32150, 33300, "esc", "back"],
   ];
   // Which capture is showing. Each change is a short cross-fade, timed to the
   // key that caused it.
   const SCREENS = [
-    [0, "before-push"], [12300, "after-push"], [16000, "risk"], [21900, "standup"], [27400, "launchpad"],
+    [0, "before-push"], [12300, "after-push"], [16000, "risk"], [21900, "standup"], [27400, "launchpad"], [32300, "after-push"],
   ];
+  const ORDER = ["before-push", "after-push", "risk", "standup", "launchpad"];
   const FADE = 260;
+  // When the later scenes happen.
+  const PLACES = 32500, AGENT = 37500, CLOSE = 43500;
+  // What the agent is asked. Everything it is shown answering is cohors's own
+  // output for the made-up fleet (captures/overview.json).
+  const ASKED = "What needs my attention across my repos?";
+  const TAGS = { risk: "RISK", warn: "WARN", notice: "NOTE", info: "INFO" };
+  // The sting is the opening alone, held once it has assembled.
+  const STING = new URLSearchParams(location.search).has("sting");
 
-  let win, cam, shots, ring, introMark, outroMark;
+  let win, cam, shots, ring, introMark, outroMark, places, agentAt;
 
-  window.duration = 37000;
+  window.duration = STING ? 4600 : 48000;
   window.ready = (async () => {
     await S.fonts();
     win = await S.terminal(["before-push", "after-push", "risk", "standup", "launchpad"], "cohors  ~/code");
@@ -135,6 +183,53 @@
     shots.wide.y += (lift * 0.55) / shots.wide.zoom;
     shots.far.y += (lift * 0.55) / shots.far.zoom;
 
+    // ── the three places ──
+    // The editor's and the browser's pictures (the extension's dashboard and
+    // `cohors web`, both drawn from this same fleet) sit in the world beside
+    // the terminal, unseen until the camera pulls back far enough to show
+    // them. A wide frame has them in a row, an upright one in a column, a
+    // square one with the terminal over the other two.
+    const GAP = 110, LABEL = 116, BAR = 38;
+    const layout = W > H * 1.2
+      ? (() => { const w = Math.round((whole.h - BAR) * 1.6); return { editor: { x: whole.w + GAP, y: 0, w }, browser: { x: -(w + GAP), y: 0, w } }; })()
+      : upright
+        ? (() => { const h = whole.w / 1.6 + BAR; return { editor: { x: 0, y: whole.h + GAP + LABEL, w: whole.w }, browser: { x: 0, y: whole.h + h + (GAP + LABEL) * 2, w: whole.w } }; })()
+        : (() => { const w = (whole.w - GAP) / 2; return { editor: { x: 0, y: whole.h + GAP + LABEL, w }, browser: { x: w + GAP, y: whole.h + GAP + LABEL, w } }; })();
+    places = [];
+    const all = { x: 0, y: -LABEL, w: whole.w, h: whole.h + LABEL };
+    const place = (name, node, at, from) => {
+      const label = document.createElement("div");
+      label.className = "place";
+      label.textContent = name;
+      for (const piece of [node, label]) $("world").appendChild(piece);
+      const height = node === win ? whole.h : at.w / 1.6 + BAR;
+      // Grow the rectangle that holds all three.
+      const right = Math.max(all.x + all.w, at.x + at.w), bottom = Math.max(all.y + all.h, at.y + height);
+      all.x = Math.min(all.x, at.x); all.w = right - all.x; all.h = bottom - all.y;
+      places.push({ node, label, at, from });
+    };
+    const editor = S.picture("/assets/vscode.png", "Visual Studio Code", layout.editor.w);
+    const browser = S.picture("/assets/web.png", "cohors web", layout.browser.w);
+    await Promise.all([editor.loaded, browser.loaded]);
+    place("Terminal", win, { x: 0, y: 0, w: whole.w }, { x: 0, y: 0 });
+    // Each arrives from the side it sits on.
+    place("Editor", editor, layout.editor, { x: Math.sign(layout.editor.x) * 220, y: layout.editor.x ? 0 : 220 });
+    place("Browser", browser, layout.browser, { x: Math.sign(layout.browser.x) * 220, y: layout.browser.x && layout.browser.y === 0 ? 0 : 220 });
+    // All three, fitted into the part of the frame above the caption.
+    const band = upright ? [0.04, 0.7] : W > H * 1.2 ? [0.06, 0.7] : [0.04, 0.6];
+    const zoom = Math.min((W * 0.92) / all.w, (H * (band[1] - band[0])) / all.h);
+    shots.all = { x: all.x + all.w / 2, y: all.y + all.h / 2 + (H / 2 - (H * (band[0] + band[1])) / 2) / zoom, zoom };
+    shots.allNear = { ...shots.all, zoom: zoom * 1.05 };
+
+    // ── the agent ──
+    const fleet = await (await fetch("/target/assets/captures/overview.json")).json();
+    $("said").textContent = fleet.headline;
+    $("steps").innerHTML = fleet.actions.map((step) =>
+      `<div class="step"><i class="${step.severity}">${TAGS[step.severity] || ""}</i><div><b>${step.title}</b><p>${step.why}</p></div></div>`).join("");
+    const pane = $("agent");
+    const fit = Math.min((W * 0.9) / pane.offsetWidth, (H * (upright ? 0.5 : 0.6)) / pane.offsetHeight);
+    agentAt = { x: (W - pane.offsetWidth * fit) / 2, y: H * (upright ? 0.21 : 0.07), fit };
+
     introMark = S.mark(); $("intro-mark").appendChild(introMark);
     outroMark = S.mark(); $("outro-mark").appendChild(outroMark);
     const start = new URLSearchParams(location.search);
@@ -161,6 +256,10 @@
     [26900, shots.standup],
     [28000, shots.launchpad],
     [32300, shots.launchpad],
+    // Pull back until the editor and the browser are in the frame too, then
+    // keep drifting in a little so the shot is never still.
+    [34200, shots.all],
+    [37600, shots.allNear, S.ease.linear],
   ]);
 
   // The colours a cell of the mark passes through as it falls into place:
@@ -181,6 +280,8 @@
   }
 
   window.seek = (t) => {
+    // The sting stops the clock just before the opening would give way.
+    if (STING) t = Math.min(t, 2890);
     // ── the opening ──
     const introShown = 1 - S.span(t, 2900, 3300, S.ease.in);
     $("intro").style.opacity = introShown;
@@ -191,23 +292,66 @@
     $("intro-line").style.opacity = S.span(t, 2100, 2500, S.ease.out);
 
     // ── the dashboard ──
-    const body = S.span(t, 3100, 3700, S.ease.out) * (1 - S.span(t, 32200, 32700, S.ease.in));
+    const body = S.span(t, 3100, 3700, S.ease.out) * (1 - S.span(t, AGENT - 300, AGENT + 200, S.ease.in));
     $("world").style.opacity = body;
     $("world").style.visibility = body > 0.001 ? "visible" : "hidden";
     cam.set(path()(t));
 
+    // Which capture shows. A screen that sits above the one before it fades
+    // in over it; one that sits below (going back from an overlay to the
+    // dashboard) is uncovered as the one above fades out.
     const visible = {};
     SCREENS.forEach(([at, screen], i) => {
-      const until = i + 1 < SCREENS.length ? SCREENS[i + 1][0] : Infinity;
-      // Each screen fades in over the one before it and stays until the
-      // next has fully covered it.
-      visible[screen] = i === 0 ? (t < until + FADE ? 1 : 0)
-        : (t >= until + FADE ? 0 : S.span(t, at, at + FADE, S.ease.out));
+      const before = i > 0 ? SCREENS[i - 1][1] : null;
+      const after = i + 1 < SCREENS.length ? SCREENS[i + 1] : null;
+      const over = (a, b) => ORDER.indexOf(a) > ORDER.indexOf(b);
+      let amount;
+      if (t < at) amount = 0;
+      else if (before && over(screen, before)) amount = S.span(t, at, at + FADE, S.ease.out);
+      else amount = 1;
+      if (after && t >= after[0]) {
+        // Stay under the next one until it has covered this, or fade away
+        // to uncover it.
+        amount = over(after[1], screen) ? (t < after[0] + FADE ? amount : 0) : 1 - S.span(t, after[0], after[0] + FADE, S.ease.out);
+      }
+      visible[screen] = Math.max(visible[screen] || 0, amount);
     });
     win.show(visible);
 
     // The ring round the row, just before and while the key goes down.
     ring.style.opacity = S.during(t, 10500, 12350, 260);
+
+    // ── the three places ──
+    const shown3 = S.during(t, PLACES, AGENT + 200, 700);
+    const arrive = S.span(t, PLACES, PLACES + 1500, S.ease.out);
+    for (const { node, label, at, from } of places) {
+      const x = at.x + from.x * (1 - arrive), y = at.y + from.y * (1 - arrive);
+      if (node !== win) {
+        Object.assign(node.style, { left: `${x}px`, top: `${y}px`, opacity: shown3, visibility: shown3 > 0.001 ? "visible" : "hidden" });
+      }
+      Object.assign(label.style, { left: `${x}px`, top: `${y - 108}px`, opacity: shown3 * S.span(t, PLACES + 900, PLACES + 1500, S.ease.out) });
+    }
+
+    // ── the agent ──
+    const agent = S.during(t, AGENT, CLOSE - 100, 450);
+    const pane = $("agent");
+    pane.style.opacity = agent;
+    pane.style.visibility = agent > 0.001 ? "visible" : "hidden";
+    pane.style.transform = `translate(${agentAt.x}px, ${agentAt.y + (1 - S.span(t, AGENT, AGENT + 600, S.ease.out)) * 26}px) scale(${agentAt.fit})`;
+    // The question is typed, the tool is called, the answer arrives a row at
+    // a time.
+    const typed = Math.round(S.span(t, AGENT + 600, AGENT + 1900, S.ease.linear) * ASKED.length);
+    $("ask").textContent = ASKED.slice(0, typed);
+    $("caret").style.opacity = typed < ASKED.length ? 1 : 0;
+    const called = AGENT + 2200, answered = AGENT + 2950;
+    $("call").style.opacity = S.span(t, called, called + 200, S.ease.out);
+    $("calling").textContent = t < answered ? ".".repeat(1 + (Math.floor(Math.max(0, t - called) / 180) % 3)) : "";
+    $("said").style.opacity = S.span(t, answered, answered + 260, S.ease.out);
+    [...$("steps").children].forEach((step, i) => {
+      const k = S.span(t, answered + 250 + i * 240, answered + 600 + i * 240, S.ease.out);
+      step.style.opacity = k;
+      step.style.transform = `translateY(${(1 - k) * 10}px)`;
+    });
 
     // ── words ──
     let words = null, shown = 0;
@@ -222,7 +366,7 @@
       caption.querySelector("h2").textContent = words[0];
       caption.querySelector("p").textContent = words[1];
     }
-    $("scrim").style.opacity = Math.max(shown, 0) * body;
+    $("scrim").style.opacity = Math.max(shown, 0) * Math.max(body, agent);
 
     let key = null, pressed = 0;
     for (const [on, off, cap, does] of KEYS) {
@@ -241,10 +385,10 @@
     }
 
     // ── the close ──
-    const end = S.span(t, 32500, 33200, S.ease.out);
+    const end = S.span(t, CLOSE, CLOSE + 700, S.ease.out);
     $("outro").style.opacity = end;
     $("outro").style.visibility = end > 0.001 ? "visible" : "hidden";
-    drawMark(outroMark, t, 32500);
+    drawMark(outroMark, t, CLOSE);
   };
 })();
 </script>

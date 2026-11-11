@@ -37,6 +37,7 @@ h1, h2, p { margin: 0; }
 .winbar { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; background: #171615; border-bottom: 1px solid var(--line); }
 .winbar i { width: 11px; height: 11px; border-radius: 50%; background: #3a3734; }
 .winbar span { flex: 1; margin-right: 49px; text-align: center; font-size: 13px; color: var(--ink-3); }
+.winpic { display: block; width: 100%; }
 .winbody { position: relative; }
 .winbody .layer { position: absolute; left: 0; top: 0; }
 .winbody .layer:first-child { position: relative; }

@@ -11,6 +11,7 @@
 //                      scripts/studio/capture.sh saved. It is text, not a
 //                      picture, so a camera can push into it and stay sharp.
 //   terminal(names)    a window holding several captures, one showing.
+//   picture(src)       a window holding a picture of another surface.
 //   camera             pan and zoom over the "world" the windows sit in.
 //   track / ease       values that change over time.
 //   mark()             the cohors mark, as cells that can be animated.
@@ -100,6 +101,23 @@ window.Stage = (() => {
     return win;
   }
 
+  // A window holding a picture of another surface (the editor extension, the
+  // browser dashboard), `width` wide. `win.loaded` resolves once the picture
+  // has arrived, so a frame is never photographed without it.
+  function picture(src, title, width) {
+    const win = document.createElement("div");
+    win.className = "win";
+    win.style.width = `${width}px`;
+    win.innerHTML = `<div class="winbar"><i></i><i></i><i></i><span>${title}</span></div><img class="winpic" alt="">`;
+    const img = win.querySelector("img");
+    win.loaded = new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error(`${src} is missing: run scripts/studio/build.sh posts first`));
+    });
+    img.src = src;
+    return win;
+  }
+
   // Where a piece of a capture is, in the window's own coordinates. Call it
   // before any transform is applied (at load), and keep the answer.
   //   find(win, "overview", "Do next")                 the whole row
@@ -173,5 +191,5 @@ window.Stage = (() => {
 
   const fonts = () => document.fonts.ready;
 
-  return { clamp, lerp, ease, span, track, during, capture, terminal, find, camera, mark, fonts };
+  return { clamp, lerp, ease, span, track, during, capture, terminal, picture, find, camera, mark, fonts };
 })();

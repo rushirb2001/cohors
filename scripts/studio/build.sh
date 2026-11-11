@@ -3,7 +3,7 @@
 #
 #   scripts/studio/build.sh            everything
 #   scripts/studio/build.sh posts      only the post images
-#   scripts/studio/build.sh film       only the film and the README loop
+#   scripts/studio/build.sh film       only the film, the sting and the README loop
 #
 # It rebuilds the made-up fleet, captures cohors on it, and renders the studio
 # pages. The README's pictures go to assets/ (committed); the post images and
@@ -47,6 +47,11 @@ if [ "$WHAT" = all ] || [ "$WHAT" = posts ]; then
   for card in q-cover q1 q2 q3 q4 q5 q-end; do
     still "$card" 1080x1350 "$S/carousel-$n.png"; n=$((n + 1))
   done
+  # The roll call: every repository by name. A post in three shapes, and a
+  # poster large enough to print.
+  still roll 1600x900  "$S/x-roll-call.png"
+  still roll 1080x1350 "$S/portrait-roll-call.png"
+  still roll 1200x1800 "$S/poster-roll-call.png" 2
   # The mark alone: the editor extension's icon and the plugin's.
   still icon 256x256 extension/media/icon.png
   still icon 512x512 "$S/icon-512.png"
@@ -55,8 +60,10 @@ if [ "$WHAT" = all ] || [ "$WHAT" = posts ]; then
   still hero 1280x640 assets/hero.png 2
   still window 1480x1066 assets/terminal.png 2
   # The editor extension and the browser dashboard, as they really render.
-  $RENDER --page "extension/dev/preview.html?bare=1" --size 1440x900 --scale 2 --wait 1500 --still assets/vscode.png
-  $RENDER --page "extension/dev/preview.html?side=all&bare=1" --size 360x1180 --scale 2 --wait 1500 --still assets/vscode-sidebar.png
+  # (`from` points the extension's preview at the captures, so it shows the
+  # same made-up fleet as the terminal.)
+  $RENDER --page "extension/dev/preview.html?bare=1&from=/target/assets/captures/" --size 1440x900 --scale 2 --wait 1500 --still assets/vscode.png
+  $RENDER --page "extension/dev/preview.html?side=all&bare=1&from=/target/assets/captures/" --size 360x1180 --scale 2 --wait 1500 --still assets/vscode-sidebar.png
   HOME_DIR="$(cd /tmp/cohors-demo/home && pwd -P)"
   # The fake home is only for what cohors reads; the toolchain is yours.
   REAL_HOME="$HOME"
@@ -79,6 +86,14 @@ if [ "$WHAT" = all ] || [ "$WHAT" = film ]; then
     $RENDER --page assets/studio/film.html --size "$size" --fps 30 --frames "$F/frames/$name"
     ffmpeg -y -loglevel error -framerate 30 -i "$F/frames/$name/%06d.png" \
       -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart "$F/cohors-film-$name.mp4"
+  done
+  # The sting: the mark assembling and the name, four seconds, for the start
+  # of somebody else's video or a post of its own.
+  for cut in 1080p:1920x1080 square:1080x1080; do
+    name="${cut%%:*}" size="${cut#*:}"
+    $RENDER --page "assets/studio/film.html?sting=1" --size "$size" --fps 30 --frames "$F/frames/sting-$name"
+    ffmpeg -y -loglevel error -framerate 30 -i "$F/frames/sting-$name/%06d.png" \
+      -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart "$F/cohors-sting-$name.mp4"
   done
   # The README loop: the push, from the ring appearing to the number
   # changing. Ten frames a second and a small palette keep it near 2 MB.
