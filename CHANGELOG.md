@@ -36,7 +36,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 - **A Claude Code plugin**, installable from this repository as a marketplace:
   the MCP server (found on your machine by a launcher, so the stripped-`PATH`
   problem goes away), skills for fleet work, setting a repo up, and planning
-  focus, and hooks that log each session.
+  focus, and hooks that log each session. The server starts read-only; three
+  plugin settings, off by default, let Claude act: **Git actions**, **Run
+  commands** and **Launchpad writes** (`/plugin configure cohors@cohors`). A
+  refusal from the plugin's server names the setting to turn on.
+- **`cohors web` works wherever cohors is installed.** Release builds carry
+  the browser dashboard inside the binary (about 2 MB), so it starts at once,
+  with no checkout of this repository and no Trunk or Rust toolchain. A build
+  from source without the page still builds it with Trunk inside a checkout.
 - **One overview, the same everywhere.** cohors now works out a single
   briefing for the fleet: what to do next and why (most urgent first, each step
   naming the repos it applies to), six key figures (work not backed up, stashes,

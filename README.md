@@ -64,7 +64,7 @@ The plugin needs the `cohors` binary installed ([any channel](#install) works; t
 
 | | |
 |---|---|
-| **The cohors MCP server**, read-only | Every read tool below. Claude can look at anything and change nothing. |
+| **The cohors MCP server** | Every read tool below. It starts read-only: Claude can look at anything and change nothing until you [turn on its settings](#3-let-claude-act). |
 | **Three skills** | `fleet` (questions about all your repos), `launchpad-setup` ("set up this repo for the launchpad") and `plan-focus` ("plan my day"). Claude picks them up from what you ask. |
 | **Two subagents** | `cohors-setup` writes a repo's launchpad file; `cohors-plan` plans your focus across repos. |
 | **Session hooks** | Each Claude session's start and end is logged, so the launchpad shows which repos you worked in with an agent. |
@@ -168,11 +168,13 @@ This one changes things, so Claude works in three steps: find, preview, act. It 
 }
 ```
 
-Claude shows you that list and waits for your yes. Then it pushes, if you have [let it act](#3-let-claude-act). On the plugin's read-only server, the real push is refused and Claude is told how to enable it:
+Claude shows you that list and waits for your yes. Then it pushes, if you have [let it act](#3-let-claude-act). Until then the real push is refused, and the refusal tells Claude (and you) which setting to turn on:
 
 ```text
-`push` is disabled: this server is read-only.
-Relaunch it with `cohors mcp --allow-writes` to enable write tools.
+`push` is disabled: this server is read-only. … This server was started by the
+cohors plugin, so turn on its "Git actions" setting instead: `/plugin configure
+cohors@cohors` in Claude Code, or `claude plugin configure cohors@cohors` in a
+shell. Then start a new session.
 ```
 
 `push` never force-pushes, and `pull` is fast-forward only, so neither can lose work. A diverged branch (mobile-app here) is reported as failing, never forced.
@@ -256,27 +258,32 @@ Every read also reports the roots it searched and the config in effect, so an em
 
 ### 3. Let Claude act
 
-The plugin's server is read-only: Claude can look at everything and change nothing. To let it act, register the server yourself with the flags you want. Use the absolute path to `cohors`, because Claude starts servers with a stripped `PATH`:
+The plugin's server starts read-only. Three settings, all off until you turn them on, let Claude act:
+
+| Setting | Lets Claude | Still guarded by |
+|---|---|---|
+| **Git actions** | `fetch`, `pull`, `push`, `commit`, `stash` | `pull` is fast-forward only, `push` never forces, `commit` and `stash` need `confirm` |
+| **Run commands** | `run` a shell command in many repositories | `confirm`, a cap on how many repositories one call touches, an optional allowlist |
+| **Launchpad writes** | write `.cohors/repo.json`, the focus board, the activity log | every write is validated first; never touches git |
+
+Turn them on in Claude Code with `/plugin configure cohors@cohors`, or from a shell:
 
 ```sh
-# fetch, pull, push, commit and stash
-claude mcp add cohors -- "$(which cohors)" mcp --allow-writes
-
-# the same, and run commands
-claude mcp add cohors -- "$(which cohors)" mcp --allow-writes --allow-run
-
-# write launchpad files only
-claude mcp add cohors -- "$(which cohors)" mcp --allow-launchpad
+claude plugin configure cohors@cohors
 ```
 
-| Flag | Lets Claude | Still guarded by |
-|---|---|---|
-| none | read everything | nothing to guard |
-| `--allow-writes` | `fetch`, `pull`, `push`, `commit`, `stash` | `pull` is fast-forward only, `push` never forces, `commit` and `stash` need `confirm` |
-| `--allow-run` | `run` a shell command in many repositories | `confirm`, a cap on how many repositories one call touches, an optional allowlist |
-| `--allow-launchpad` | write `.cohors/repo.json`, the focus board, the activity log | every write is validated first; never touches git |
+Then start a new session: the server reads its settings when it starts. Every action is limited to your configured roots and written to an audit log.
 
-Every action is limited to your configured roots and written to an audit log. Other MCP clients (Claude Desktop, Cursor, Zed, …) take the same command and arguments in their `mcpServers` block; run `cohors mcp` by hand and it prints them, filled in with your install path.
+**Without the plugin**, or for another MCP client (Claude Desktop, Cursor, Zed, …), register the server yourself; each setting above is a flag. Use the absolute path to `cohors`, because clients start servers with a stripped `PATH`:
+
+```sh
+claude mcp add cohors -- "$(which cohors)" mcp                    # read-only
+claude mcp add cohors -- "$(which cohors)" mcp --allow-writes     # + Git actions
+claude mcp add cohors -- "$(which cohors)" mcp --allow-run        # + Run commands
+claude mcp add cohors -- "$(which cohors)" mcp --allow-launchpad  # + Launchpad writes
+```
+
+Combine the flags as you like. Run `cohors mcp` by hand and it prints the lines for Claude Code and for an `mcpServers` block, filled in with your install path.
 
 ### 4. Start Claude from cohors
 
@@ -397,7 +404,9 @@ cohors web --root ~/code --allow-writes   # with fetch, pull, push, commit and s
 cohors web --demo                         # the sample fleet
 ```
 
-The same scan in a browser tab on localhost, with GitHub pull requests and CI alongside. It is read-only unless you start it with `--allow-writes` or `--allow-run`, and your GitHub token stays on your machine: the page never sees it. For now `cohors web` builds the page from source, so run it from a clone of this repository; the first run installs Trunk, the WebAssembly bundler, unless you pass `--no-install`.
+The same scan in a browser tab on localhost, with GitHub pull requests and CI alongside. The page is built into the `cohors` binary, so it starts at once wherever cohors is installed. It is read-only unless you start it with `--allow-writes` or `--allow-run`, and your GitHub token stays on your machine: the page never sees it.
+
+A `cohors` built from source with `cargo install` has no page inside it; run `cohors web` in a clone of this repository and it builds the page with Trunk, the WebAssembly bundler, installing Trunk the first time unless you pass `--no-install`.
 
 ## The launchpad
 
@@ -482,7 +491,7 @@ With no config, cohors looks in the folders where code usually lives. Scope it t
 - `pull` is fast-forward only, and nothing ever force-pushes.
 - Every bulk action takes `--dry-run`, and nothing writes without a selector naming which repositories.
 - No key that can destroy work is a single bare keystroke; commit asks first.
-- The browser dashboard and the MCP server are read-only until you start them with write access.
+- The browser dashboard and the MCP server are read-only until you allow more: a flag for the browser, a setting for the plugin.
 - One repository that cannot be read is reported as such; it never takes the dashboard down.
 
 ## How it compares
