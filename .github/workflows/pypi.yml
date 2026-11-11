@@ -2,11 +2,16 @@ name: PyPI
 
 # Publishes the `cohors` pip package after a GitHub Release is out: for each
 # target it downloads that release's prebuilt binary, bundles it into a
-# platform-specific wheel, and uploads all wheels to PyPI. Runs after the
-# cargo-dist Release workflow has created the release (so the binaries exist).
+# platform-specific wheel, and uploads all wheels to PyPI. Then it lists the new
+# version in the official MCP Registry, which checks the PyPI package.
+#
+# It starts when the cargo-dist Release workflow finishes on a version tag.
+# (Not on `release: published`: that release is created with the workflow's
+# own token, and GitHub never starts other workflows from such events.)
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -20,6 +25,13 @@ jobs:
   wheels:
     name: wheel (${{ matrix.target }})
     runs-on: ubuntu-latest
+    # A run by hand, or a Release run that succeeded for a pushed version tag
+    # (the Release workflow also runs a plan-only pass on pull requests).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
     strategy:
       fail-fast: false
       matrix:
@@ -43,9 +55,10 @@ jobs:
       - name: Resolve release tag
         id: tag
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          # For a tag push, the Release run's "branch" is the tag itself.
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
           INPUT_TAG: ${{ github.event.inputs.tag }}
-        run: echo "tag=${RELEASE_TAG:-$INPUT_TAG}" >> "$GITHUB_OUTPUT"
+        run: echo "tag=${INPUT_TAG:-$RUN_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Fetch the prebuilt binary from the release
         env:
@@ -104,3 +117,53 @@ jobs:
       - name: Show what will be uploaded
         run: ls -l dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # A rerun for a version already on PyPI uploads nothing, not an error.
+          skip-existing: true
+
+  mcp-registry:
+    name: list in the MCP Registry
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # GitHub's identity token proves we own io.github.rushirb2001
+      contents: read
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.9
+      RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+      INPUT_TAG: ${{ github.event.inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          archive=mcp-publisher_linux_amd64.tar.gz
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          curl -fsSL -o "$archive" "$base_url/$archive"
+          curl -fsSL -o "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+      - name: Stamp the version from the tag
+        run: |
+          tag="${INPUT_TAG:-$RUN_TAG}"
+          v="${tag#v}"
+          jq --arg v "$v" '.version = $v | .packages[].version = $v' server.json > server.tmp
+          mv server.tmp server.json
+          cat server.json
+      - name: Wait for PyPI to show the new version
+        # The registry checks the package on PyPI, which can take a minute to
+        # appear after the upload.
+        run: |
+          v="$(jq -r .version server.json)"
+          for _ in $(seq 1 20); do
+            curl -fs "https://pypi.org/pypi/cohors/$v/json" > /dev/null && exit 0
+            sleep 15
+          done
+          echo "cohors $v never appeared on PyPI" >&2; exit 1
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish
