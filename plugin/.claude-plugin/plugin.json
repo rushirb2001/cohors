@@ -3,9 +3,39 @@
   "displayName": "cohors",
   "description": "Every git repo you own as one fleet your agent can see, search, plan across, and (opt-in) act on. Fleet status, cross-repo search, per-repo tasks and flows, and a focus board.",
   "version": "0.7.0",
-  "author": { "name": "Rushir Bhavsar" },
+  "author": {
+    "name": "Rushir Bhavsar"
+  },
   "homepage": "https://github.com/rushirb2001/cohors",
   "repository": "https://github.com/rushirb2001/cohors",
   "license": "MIT",
-  "keywords": ["git", "multi-repo", "fleet", "launchpad", "mcp", "tasks", "dashboard"]
+  "keywords": [
+    "git",
+    "multi-repo",
+    "fleet",
+    "launchpad",
+    "mcp",
+    "tasks",
+    "dashboard"
+  ],
+  "userConfig": {
+    "git_actions": {
+      "type": "boolean",
+      "title": "Git actions",
+      "description": "Let Claude fetch, pull, push, commit and stash across your repositories. Pull is fast-forward only, push never forces, and commit and stash still ask Claude to confirm. Start a new session after changing it.",
+      "default": false
+    },
+    "run_commands": {
+      "type": "boolean",
+      "title": "Run commands",
+      "description": "Let Claude run one shell command in many repositories at once (tests, a codemod). Each run needs a deliberate confirm and is capped by your config's run allowlist. Start a new session after changing it.",
+      "default": false
+    },
+    "launchpad_writes": {
+      "type": "boolean",
+      "title": "Launchpad writes",
+      "description": "Let Claude write a repo's .cohors/repo.json, your focus board and the activity log. Launchpad files only, never git. Start a new session after changing it.",
+      "default": false
+    }
+  }
 }

@@ -2,7 +2,15 @@
   "mcpServers": {
     "cohors": {
       "command": "${CLAUDE_PLUGIN_ROOT}/bin/cohors-launch",
-      "args": ["mcp"]
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "COHORS_MCP_FROM_PLUGIN": "1",
+        "COHORS_PLUGIN_GIT_ACTIONS": "${user_config.git_actions}",
+        "COHORS_PLUGIN_RUN_COMMANDS": "${user_config.run_commands}",
+        "COHORS_PLUGIN_LAUNCHPAD_WRITES": "${user_config.launchpad_writes}"
+      }
     }
   }
 }

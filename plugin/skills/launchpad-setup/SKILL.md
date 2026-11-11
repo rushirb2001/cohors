@@ -60,7 +60,8 @@ lists, then call it for real. Set `generatedFrom` to the current short commit
 SHA so staleness can be shown later.
 
 The plugin starts the server **read-only**, so the real write is refused
-until the user opts in. When that happens, do one of:
+until the user turns on the plugin's "Launchpad writes" setting. When that
+happens, do one of:
 
 - Write `.cohors/repo.json` yourself with your normal file tools (the user
   approves the edit like any other), stamping `"specVersion": 1` and an
@@ -71,7 +72,8 @@ until the user opts in. When that happens, do one of:
   ```
 
 - Or tell the user they can let the server write launchpad files directly by
-  adding `--allow-launchpad` to the server's arguments.
+  turning on "Launchpad writes" with `/plugin configure cohors@cohors` and
+  starting a new session.
 
 Either way, `dry_run: true` always works and is the fastest way to find every
 problem before writing.

@@ -6,6 +6,17 @@
 # no tools. This looks in the places every install channel puts the binary.
 #
 # Override with COHORS_BIN=/path/to/cohors.
+#
+# For `mcp`, it also turns the plugin's settings into the server's flags. The
+# plugin passes each setting in an environment variable (see .mcp.json); only
+# the word "true" switches one on, so an unset or unsubstituted value, such as
+# a Claude Code too old to fill it in, leaves the server read-only.
+
+if [ "${1:-}" = mcp ]; then
+  [ "${COHORS_PLUGIN_GIT_ACTIONS:-}" = true ] && set -- "$@" --allow-writes
+  [ "${COHORS_PLUGIN_RUN_COMMANDS:-}" = true ] && set -- "$@" --allow-run
+  [ "${COHORS_PLUGIN_LAUNCHPAD_WRITES:-}" = true ] && set -- "$@" --allow-launchpad
+fi
 
 if [ -n "${COHORS_BIN:-}" ] && [ -x "$COHORS_BIN" ]; then
   exec "$COHORS_BIN" "$@"

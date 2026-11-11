@@ -119,6 +119,9 @@ fn main() -> anyhow::Result<()> {
                 allow_run: *allow_run,
                 allow_open: *allow_open,
                 allow_launchpad: *allow_launchpad,
+                // Set by the Claude Code plugin's launcher, so refusals name
+                // the plugin setting to turn on rather than a flag.
+                plugin: std::env::var("COHORS_MCP_FROM_PLUGIN").is_ok_and(|v| v == "1"),
             },
         ),
         None => commands::run_tui(&cli),

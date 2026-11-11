@@ -40,9 +40,12 @@ when you really mean every repo.
 
 ## Acting across repos
 
-`fetch`, `pull`, `push`, `commit`, `stash` and `run` are off unless the user
-started the server with `--allow-writes` / `--allow-run`. When one is refused,
-tell the user which flag enables it; do not fall back to a shell loop.
+`fetch`, `pull`, `push`, `commit`, `stash` and `run` are off until the user
+switches them on. The plugin starts the server read-only; its settings turn the
+tiers on: "Git actions" for `fetch`/`pull`/`push`/`commit`/`stash`, "Run
+commands" for `run`. When a tool is refused, the message names the setting:
+tell the user to turn it on with `/plugin configure cohors@cohors` and start a
+new session. Do not fall back to a shell loop.
 
 Always follow **find → target → preview → act**:
 

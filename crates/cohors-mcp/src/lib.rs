@@ -49,6 +49,10 @@ pub struct Caps {
     /// a repo's `.cohors/` directory and the user's launchpad home — never
     /// git state, so they are a separate, lower tier than `allow_writes`.
     pub allow_launchpad: bool,
+    /// The server was started by the Claude Code plugin. There the tiers are
+    /// switched on with the plugin's settings rather than with flags, so a
+    /// refusal names the setting to turn on (see [`plugin_setting_hint`]).
+    pub plugin: bool,
 }
 
 /// A source of fleet snapshots — injected so tests can supply a fixture fleet
@@ -183,7 +187,14 @@ fn handle(request: &Value, ctx: &Ctx, now: i64) -> Option<Value> {
             let args = params.get("arguments").cloned().unwrap_or(json!({}));
             match call_tool(name, &args, ctx, now) {
                 Ok(value) => result_response(id, tool_content(&value, false)),
-                Err(message) => result_response(id, tool_content(&json!(message), true)),
+                Err(message) => {
+                    let message = if ctx.caps.plugin {
+                        plugin_setting_hint(message)
+                    } else {
+                        message
+                    };
+                    result_response(id, tool_content(&json!(message), true))
+                }
             }
         }
         _ => error_response(id, -32601, "method not found"),
@@ -602,6 +613,33 @@ fn launchpad_catalog(selector_schema: &Value) -> Vec<Value> {
             }
         }),
     ]
+}
+
+/// The plugin's settings, each with the flag it passes to the server. The
+/// titles must match `userConfig` in `plugin/.claude-plugin/plugin.json`.
+const PLUGIN_SETTINGS: [(&str, &str); 3] = [
+    ("--allow-writes", "Git actions"),
+    ("--allow-run", "Run commands"),
+    ("--allow-launchpad", "Launchpad writes"),
+];
+
+/// A refusal from a server the plugin started, with the way to fix it there.
+///
+/// Every gate names the flag that opens it (`--allow-writes`, ...). Under the
+/// plugin nobody types that flag: the plugin passes it when a setting is on.
+/// So the message keeps the flag and adds which setting to turn on, and that a
+/// new session is needed (a server reads its flags once, when it starts).
+/// Any other error is returned unchanged.
+fn plugin_setting_hint(message: String) -> String {
+    match PLUGIN_SETTINGS
+        .iter()
+        .find(|(flag, _)| message.contains(flag))
+    {
+        Some((_, setting)) => format!(
+            "{message} This server was started by the cohors plugin, so turn on its \"{setting}\" setting instead: `/plugin configure cohors@cohors` in Claude Code, or `claude plugin configure cohors@cohors` in a shell. Then start a new session."
+        ),
+        None => message,
+    }
 }
 
 /// The gate shared by the three launchpad writes.
@@ -1311,12 +1349,14 @@ mod tests {
         allow_run: false,
         allow_open: false,
         allow_launchpad: false,
+        plugin: false,
     };
     const RUN: Caps = Caps {
         allow_writes: false,
         allow_run: true,
         allow_open: false,
         allow_launchpad: false,
+        plugin: false,
     };
 
     fn act(name: &str, arguments: Value) -> Value {
@@ -1718,6 +1758,37 @@ mod tests {
     }
 
     #[test]
+    fn a_plugin_server_names_the_setting_to_turn_on() {
+        let plugin = Caps {
+            plugin: true,
+            ..Caps::default()
+        };
+        let push = err_text(&call_caps(
+            act("push", json!({ "selector": { "all": true } })),
+            plugin,
+        ));
+        assert!(push.contains("--allow-writes"), "{push}");
+        assert!(push.contains("\"Git actions\""), "{push}");
+        let run = err_text(&call_caps(
+            act(
+                "run",
+                json!({ "selector": { "all": true }, "command": "true", "confirm": true }),
+            ),
+            plugin,
+        ));
+        assert!(run.contains("\"Run commands\""), "{run}");
+        // An error that is not about a switch is left alone.
+        let missing = err_text(&call_caps(
+            act("get_repo", json!({ "repo": "nope" })),
+            plugin,
+        ));
+        assert!(!missing.contains("cohors plugin"), "{missing}");
+        // Started any other way, the message names only the flag.
+        let plain = err_text(&call(act("push", json!({ "selector": { "all": true } }))));
+        assert!(!plain.contains("cohors plugin"), "{plain}");
+    }
+
+    #[test]
     fn push_is_gated_without_writes() {
         let resp = call(act("push", json!({ "selector": { "all": true } })));
         assert!(is_error(&resp));
@@ -1850,6 +1921,7 @@ mod tests {
         allow_run: false,
         allow_open: false,
         allow_launchpad: true,
+        plugin: false,
     };
 
     /// Drive a request against a one-repo fleet rooted in a real temp directory

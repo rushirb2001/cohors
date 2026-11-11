@@ -55,6 +55,7 @@ if [ "$WHAT" = all ] || [ "$WHAT" = posts ]; then
   # The mark alone: the editor extension's icon and the plugin's.
   still icon 256x256 extension/media/icon.png
   still icon 512x512 "$S/icon-512.png"
+  still icon 512x512 plugin/.claude-plugin/icon.png      # the Claude Code plugin's listing
   # The README's pictures, at twice the size they are shown.
   cp "$S/github-social-preview.png" assets/social-preview.png
   # The name at the top of the README, for GitHub's dark and light pages.
