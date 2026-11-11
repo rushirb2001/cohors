@@ -38,10 +38,20 @@ for candidate in \
   fi
 done
 
+# No cohors installed, but uv is: run the newest release from PyPI. `@latest`
+# makes uv check for a newer version on each start, so this path keeps itself
+# up to date. uv lives in ~/.local/bin or ~/.cargo/bin when not on the PATH.
+for uvx in "$(command -v uvx 2>/dev/null)" "$HOME/.local/bin/uvx" "$HOME/.cargo/bin/uvx" \
+  "/opt/homebrew/bin/uvx" "/usr/local/bin/uvx"; do
+  if [ -n "$uvx" ] && [ -x "$uvx" ]; then
+    exec "$uvx" cohors@latest "$@"
+  fi
+done
+
 cat >&2 <<'MSG'
 cohors: the `cohors` binary is not installed, so this plugin has no tools yet.
 
-Install it with any one of:
+Install it with any one of (or install uv, and the plugin runs it for you):
   brew install rushirb2001/tap/cohors
   pip install cohors
   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh

@@ -19,6 +19,20 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Added
+
+- **The Claude Code plugin works with nothing installed** when `uv` is
+  available: it runs `uvx cohors@latest`, so it also keeps itself up to date.
+- **One-click install for VS Code and Cursor**, through `uvx cohors@latest`.
+- **A "Staying up to date" guide** in the README for every install channel, and
+  a privacy policy (`PRIVACY.md`).
+
+### Fixed
+
+- **A failed Homebrew tap update no longer keeps a release off PyPI and the MCP
+  Registry.** Packaging now waits for the GitHub release itself, not for every
+  step of the release run.
+
 ## [0.7.0] — 2026-11-11
 
 The launchpad release. Each repository can now say what you run in it and what

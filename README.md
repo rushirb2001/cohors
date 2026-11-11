@@ -285,13 +285,13 @@ claude mcp add cohors -- "$(which cohors)" mcp --allow-launchpad  # + Launchpad 
 
 Combine the flags as you like. Run `cohors mcp` by hand and it prints the lines for Claude Code and for an `mcpServers` block, filled in with your install path.
 
-**One click, in VS Code or Cursor.** These add the read-only server, run through [`uvx`](https://docs.astral.sh/uv/), so there is nothing to install first beyond `uv`:
+**One click, in VS Code or Cursor.** These add the read-only server, run through [`uvx`](https://docs.astral.sh/uv/) as `cohors@latest`: there is nothing to install first beyond `uv`, and every new session runs the newest release.
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_cohors-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=cohors&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22cohors%22%2C%22mcp%22%5D%7D)
-[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_cohors-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=cohors&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22cohors%22%2C%22mcp%22%5D%7D&quality=insiders)
-[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_cohors-000000?logo=cursor&logoColor=white)](https://cursor.com/en/install-mcp?name=cohors&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJjb2hvcnMiLCJtY3AiXX0%3D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_cohors-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=cohors&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22cohors%40latest%22%2C%22mcp%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_cohors-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=cohors&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22cohors%40latest%22%2C%22mcp%22%5D%7D&quality=insiders)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_cohors-000000?logo=cursor&logoColor=white)](https://cursor.com/en/install-mcp?name=cohors&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJjb2hvcnNAbGF0ZXN0IiwibWNwIl19)
 
-Any other client takes the same entry: `{"command": "uvx", "args": ["cohors", "mcp"]}`. cohors is also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
+Any other client takes the same entry: `{"command": "uvx", "args": ["cohors@latest", "mcp"]}`. cohors is also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
 
 ### 4. Start Claude from cohors
 
@@ -478,7 +478,7 @@ brew install cohors
 pip install cohors
 ```
 
-Or run it without installing, with [uv](https://docs.astral.sh/uv/): `uvx cohors`.
+Or run it without installing, with [uv](https://docs.astral.sh/uv/): `uvx cohors@latest` (with `@latest`, uv checks for a newer release each time).
 
 **Shell installer** (checksum-verified)
 
@@ -502,6 +502,18 @@ code --install-extension target/extension/cohors-*.vsix
 **The Claude Code plugin:** see [Connect it](#1-connect-it).
 
 With no config, cohors looks in the folders where code usually lives. Scope it to one folder with `cohors --root ~/code` (repeat `--root` for several), or run `cohors init` to save a config you can edit at `~/.config/cohors/config.toml`: roots, aliases, groups and ignore rules. crates.io distribution is planned.
+
+### Staying up to date
+
+| Installed with | To update |
+|---|---|
+| Homebrew | `brew upgrade cohors`, or let Homebrew's own auto-update do it |
+| pip | `pip install -U cohors` |
+| `uvx cohors@latest`, or the one-click buttons | Nothing to do: each new session runs the newest release |
+| Shell installer | Run the install command again; it replaces the binary in place |
+| The Claude Code plugin | In Claude Code, run `/plugin`, open the **Marketplaces** tab, select **cohors** and choose **Enable auto-update**. Without that, `claude plugin marketplace update cohors` and then `claude plugin update cohors@cohors`. |
+
+The plugin finds the `cohors` you installed and updates with it. With none installed, it runs `uvx cohors@latest`, so it stays current on its own.
 
 ## Safe by default
 
