@@ -2,32 +2,54 @@
 
 # cohors
 
-**A governed control plane for all your git repositories: for you, and your coding agent.**
-
-Coding agents made single-repo work cheap. The bottleneck moved to the *fleet*: an agent is blind across your 20 repos. It can't see which need attention, can't find which ones call `X`, and can't safely act across them. cohors is the fix: one fast view of every repo, a search that indexes the whole fleet, and bulk actions an agent can preview before you ever grant write access. Over MCP, in the terminal, and in the browser. One Rust core.
-
-<sub><i>cohors</i> is Latin for "cohort," a Roman legion's core unit. Every repository, marshalled into one cohort under your command.</sub>
+**Every repo you own, on one screen: in your terminal, your editor and your coding agent.**
 
 [![CI](https://github.com/rushirb2001/cohors/actions/workflows/ci.yml/badge.svg)](https://github.com/rushirb2001/cohors/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/tag/rushirb2001/cohors?label=release&sort=semver&color=brightgreen)](https://github.com/rushirb2001/cohors/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
 
-</div>
-
-<div align="center">
-
-![cohors in the terminal: every repo on one screen, sorted dirty-first](assets/tui.gif)
+![cohors: every repo you own, one screen](assets/hero.png)
 
 </div>
 
----
+cohors reads every git repository on your machine and tells you what state your work is in and what to do about it. One Rust binary serves a terminal dashboard, a VS Code extension, a browser dashboard and an MCP server for your coding agent, all drawn from the same analysis, so they always agree.
 
-## The fleet is the new bottleneck
+<sub><i>cohors</i> is Latin for "cohort," a Roman legion's core unit: every repository, marshalled under one command.</sub>
 
-You, and your agent, now work across dozens of repos, and the hard questions are fleet-wide: *Which repos have uncommitted work? Which still import the old client? Run the tests in everything I touched today. Rename this header everywhere and open a PR in each.*
+## One key, and four repositories are backed up
 
-By hand that's `cd … && git status` across a dozen tabs and a `for d in */` loop with no guard rail. And handing that loop to an agent means trusting it with **unbounded mutation across your whole machine**. cohors makes the fleet a first-class thing you can **enumerate, search, and act on, safely.**
+![Pressing P on "Do next" pushes every commit that exists only on this machine](assets/demo.gif)
+
+That is a real run, on real repositories with real remotes. The dashboard found five repositories holding work that was on no remote and listed backing them up as the first thing to do. One key pushed the four that could simply be pushed; the fifth has diverged from its remote, so cohors leaves that decision to you. Try the same screen on sample data, with nothing written to disk:
+
+```sh
+cohors demo
+```
+
+## Five questions a pile of terminals cannot answer
+
+| | |
+|---|---|
+| **What only exists on this laptop?** | Commits never pushed and branches never published, counted and named. |
+| **What should I do first?** | A short list of steps, most urgent first: push, publish, pull, review. |
+| **Where is work about to be lost?** | Every repository at risk, with the reason and the step that fixes it. |
+| **What did I ship this week?** | Your commits across every repository, ready to paste into a standup. |
+| **What is waiting in each repo?** | Open tasks and the commands to run, written down in the repo itself. |
+
+## The same fleet, three places
+
+**In the terminal.** Five cards on one screen, each in its own colour: what to do next, work at risk, open tasks, the week's commits, and every repository. A letter is one verb everywhere: `f` fetches, `p` pulls, `P` pushes, `c` commits, `S` stashes.
+
+![The terminal dashboard](assets/terminal.png)
+
+**In VS Code.** The cohors icon in the activity bar opens the overview as six native panes; the dashboard tab has the same cards, with a detail panel for each repository. It reads everything from the `cohors` binary.
+
+![The VS Code extension](assets/vscode.png)
+
+**In the browser.** `cohors web` serves the same scan on localhost, read-only unless you start it with write access. Your GitHub token stays on your machine; the page never sees it.
+
+![The browser dashboard](assets/web.png)
 
 ## For your agent: a governed MCP control plane
 
@@ -86,31 +108,6 @@ Then ask your agent to **"plan my day"**: it reads every repo's tasks, the uncom
 
 The format is an open contract, written down in [spec/v1/SPEC.md](spec/v1/SPEC.md). Text inside a repo's launchpad files is treated as untrusted data: the agent is told so, and cohors never runs a declared flow on its own.
 
-## For you: a fast fleet dashboard
-
-The same core powers a terminal dashboard. See it in five seconds, no setup, nothing written to disk:
-
-```sh
-cohors demo
-```
-
-- **Every repo on one screen**: branch, ahead/behind, dirty state, stashes, last activity, sorted dirty-first.
-- **Per-branch rows**: a repo with several local branches expands into one row each, carrying its own CI, ahead/behind, and status. Checks are keyed by ref, not by what happens to be checked out, so each branch reports its own truth.
-- **Fast**: parallel scanning with a warm cache; launches in milliseconds across dozens of repos.
-- **Bulk actions**: fetch, pull (ff-only), push, commit, stash (confirmed), and run a command across the selected repos with live, per-repo output.
-- **Remote-aware**: open pull-request counts (on the branch each PR targets), CI status, and ahead/behind vs upstream, inline.
-- **Weekly standup**: every commit you made this week, across every repo, in one view.
-
-## For your team: the same fleet in the browser
-
-`cohors web` serves that **same scan** in the browser: local status (worktree, ahead/behind, stash, *why each repo needs you*) plus remote CI/PRs, rendered through the **same core** the TUI and MCP use, so all three surfaces agree by construction. The GitHub token stays on your machine; the page never sees it. Point it at one folder with `--root`, and `--watch` keeps it live. Try it instantly with `cohors web --demo` (sample data, nothing on disk). (A hosted, shareable read-only dashboard is on the roadmap.)
-
-<div align="center">
-
-![cohors in the browser: the same fleet, rendered by the same core](assets/web.gif)
-
-</div>
-
 ## Install
 
 No Rust needed, just `git` on your `PATH`. Every channel installs the same prebuilt binary from the [latest release](https://github.com/rushirb2001/cohors/releases/latest).
@@ -151,29 +148,38 @@ Then just run it:
 cohors
 ```
 
-With no config, cohors auto-detects the folders where you keep code and shows every repo it finds: your whole **super fleet**. Scope the dashboard to one folder with `cohors --root ~/code`, or run `cohors init` to save an editable config (aliases, groups, ignore rules).
+With no config, cohors looks in the folders where code usually lives and shows every repository it finds. Scope it to one folder with `cohors --root ~/code`, or run `cohors init` to save an editable config (roots, aliases, groups, ignore rules).
+
+**The VS Code extension** is built from this repository until it is on the Marketplace:
+
+```sh
+python3 scripts/package-extension.py
+code --install-extension target/extension/cohors-*.vsix
+```
 
 crates.io distribution is planned.
 
 ## Usage
 
 ```sh
-cohors                     # auto-detect every repo and launch the dashboard (the super fleet)
-cohors --root ~/code       # scope the dashboard to a single folder
-cohors demo                # full UI on built-in sample data (nothing written to disk)
+cohors                     # find every repo and open the dashboard
+cohors --root ~/code       # scope it to one folder
+cohors demo                # the whole dashboard on sample data (nothing written to disk)
 cohors init                # save an editable config to ~/.config/cohors/config.toml
-cohors scan                # a report of what needs you, grouped by urgency (JSON when piped)
-cohors scan --select dirty # filter: e.g. dirty, behind, 'name:pay*', or raw JSON
+cohors overview            # what to do next across every repo, and why (JSON when piped)
+cohors scan                # what needs you, grouped by urgency
+cohors scan --select dirty # filter: dirty, behind, unpublished, 'name:pay*', or raw JSON
+cohors standup             # your commits across every repo, ready to paste
 cohors fetch --select all --dry-run   # preview any bulk action before it touches anything
-cohors launchpad           # focus board + open tasks across the fleet (JSON when piped)
-cohors mcp                 # run the MCP server (read-only; --allow-writes / --allow-run to arm)
-cohors web                 # serve the same fleet in the browser (--root to scope, --watch for live)
-cohors web --demo          # browser UI on built-in sample data (nothing scanned)
+cohors launchpad           # focus board + open tasks across the fleet
+cohors agent run setup-repo --repo .  # start your coding agent on a repo, with a shipped prompt
+cohors mcp                 # the MCP server (read-only; --allow-writes / --allow-run to arm)
+cohors web                 # the same fleet in the browser (--root to scope, --watch for live)
 ```
 
-Inside the dashboard: `↑`/`↓` move · `Enter` inspect · `/` fuzzy filter · `:` command palette · `Space` mark · `f`/`p`/`P`/`S` fetch/pull/push/stash · `!` run a command · `Tab` weekly standup · `?` help · `q` quit. Bulk actions target the marked repos, or the current one when nothing is marked. On a repo with several branches, `P` asks which one to push.
+Inside the dashboard: `1`-`5` focus a card · `Tab` next card · `↑`/`↓` move · `Enter` open · `/` filter · `:` command line (Tab completes, `↑` recalls) · `Space` mark · `f`/`p`/`P`/`c`/`S` fetch, pull, push, commit, stash · `s` standup · `t` tasks · `F` fetch everything · `?` help · `q` quit. On "Do next" the letters carry out a step for all its repositories; on a repository they act on that one, or on the ones you marked.
 
-Every command surface introduces itself: run an action without a selector and it prints what it does, its safety posture, and how to pick repos rather than erroring at you. Nothing writes without a selector, and every action takes `--dry-run`.
+Every command introduces itself: run an action without a selector and it prints what it does, how safe it is, and how to pick repositories, rather than erroring at you. Nothing writes without a selector, and every action takes `--dry-run`. `pull` is fast-forward only and nothing ever force-pushes.
 
 ## How it compares
 
@@ -199,6 +205,7 @@ A Rust workspace around a pure, I/O-free core with thin adapters, so the *same* 
 - `cohors-fleet`: the composition layer, with one `Scanner` (config + git + github wired once) and the read facade every front-end goes through, enforced by tests rather than convention.
 - `cohors-mcp`: the MCP server (hand-rolled JSON-RPC over stdio), launched by `cohors mcp`.
 - `cohors-tui` ([ratatui](https://ratatui.rs)): the `cohors` binary (dashboard and CLI).
+- `extension/`: the VS Code extension, plain JavaScript with no dependencies, which shells out to the binary.
 - `cohors-web` ([Leptos](https://leptos.dev), WASM): the browser front-end plus the native `cohors web` server (which can also run gated bulk actions via `POST /api/action`).
 
 Because the core is independent of its data sources and front-ends, one selector language, one analysis, and one action registry serve every surface, and structural tests fail the build if any surface drifts.

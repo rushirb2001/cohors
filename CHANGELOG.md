@@ -75,6 +75,11 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   channel with the binary in use and each command it ran, how long it took and
   whether it worked. `vscode://rushirb2001.cohors/show` opens the dashboard from
   a terminal or a link (it only ever opens the view).
+- **A studio for the project's pictures and film.** `scripts/demo-fleet.sh`
+  builds a made-up fleet of real repositories in a home folder of its own;
+  `scripts/studio/build.sh` captures cohors on it and renders the README's
+  pictures, post images for each place they are shown, and a 37-second film in
+  three framings. Nothing in them is mocked up or taken from a real machine.
 - **`scripts/package-extension.py`** builds the extension's `.vsix` with nothing
   but Python, so a release needs no Node tooling.
 - **The launchpad contract is in this repository**, at `spec/v1/SPEC.md`, with
@@ -151,6 +156,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Fixed
 
+- The browser dashboard listed its roots as full paths; it shows them as
+  `~/code`, the way the terminal does.
 - With no roots configured, cohors could treat `/` or the home directory as a
   root when started from there (an editor extension starts it in `/`), and list
   every tool's checkout on the disk as if it were your work. Neither is ever an
