@@ -3,7 +3,7 @@
     "cohors": {
       "command": "sh",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/bin/cohors-launch",
+        "${CLAUDE_PLUGIN_ROOT}/bin/cohors-launch.sh",
         "mcp"
       ],
       "env": {

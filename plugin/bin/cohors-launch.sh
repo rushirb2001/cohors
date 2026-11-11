@@ -6,7 +6,7 @@
 # no tools. This looks in the places every install channel puts the binary,
 # each spelled out, and runs the first one found.
 #
-#   sh cohors-launch mcp    the MCP server (.mcp.json)
+#   sh cohors-launch.sh mcp    the MCP server (.mcp.json)
 #
 # For `mcp`, it also turns the plugin's settings into the server's flags.
 # Claude Code passes each setting in a CLAUDE_PLUGIN_OPTION_* variable (see
