@@ -72,6 +72,18 @@ struct MetaResponse {
     allow_run: bool,
 }
 
+/// A root as the page shows it: `~/code` rather than the full path of the
+/// home directory, the way the terminal dashboard writes it.
+fn shown_root(root: &str) -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    match root.strip_prefix(home.trim_end_matches('/')) {
+        Some(rest) if !home.is_empty() && (rest.is_empty() || rest.starts_with('/')) => {
+            format!("~{rest}")
+        }
+        _ => root.to_string(),
+    }
+}
+
 /// How to run the server: everything except the assets directory and the scan.
 /// A struct rather than a long argument list, so adding an option does not
 /// ripple through every caller.
@@ -184,7 +196,7 @@ fn handle(
         (Method::Get, "/api/meta") => respond_json(
             req,
             &MetaResponse {
-                roots: site.roots.clone(),
+                roots: site.roots.iter().map(|root| shown_root(root)).collect(),
                 watch: site.watch,
                 demo: site.demo,
                 allow_writes: action.caps.allow_writes,
