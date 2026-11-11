@@ -1,0 +1,68 @@
+/* The studio's look: one ground, one typeface, the product's own colours.
+ *
+ * Every post image and the film share this. The ground is a shade darker
+ * than a cohors panel, so a terminal window sits on it as a surface. Type is
+ * JetBrains Mono throughout, the face the captures are set in: the product is
+ * made of monospace cells, and its headlines are made of the same thing.
+ * Colour is the mark's purple and the five section colours, nothing else.
+ */
+
+:root {
+  --ground: #121110;
+  --panel: #1c1b1a;
+  --line: #2e2c29;
+  --ink: #f2efe9;
+  --ink-2: #a8a39b;
+  --ink-3: #6e6a64;
+  --purple: #c98ac0;
+  --purple-deep: #b55ca4;
+  --brick: #d9776e;
+  --ochre: #cfa255;
+  --sage: #7fb08c;
+  --slate: #7e9cc2;
+  --teal: #5faea6;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--ground); color: var(--ink); font-family: var(--mono); font-variant-ligatures: none; overflow: hidden; -webkit-font-smoothing: antialiased; }
+h1, h2, p { margin: 0; }
+
+#stage { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: var(--ground); }
+#world { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+
+/* A terminal window. Plain grey dots rather than traffic lights: this is a
+   window, not a particular operating system. */
+.win { position: absolute; border-radius: 14px; background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 40px 90px rgba(0, 0, 0, 0.55); overflow: hidden; }
+.winbar { display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 16px; background: #171615; border-bottom: 1px solid var(--line); }
+.winbar i { width: 11px; height: 11px; border-radius: 50%; background: #3a3734; }
+.winbar span { flex: 1; margin-right: 49px; text-align: center; font-size: 13px; color: var(--ink-3); }
+.winbody { position: relative; }
+.winbody .layer { position: absolute; left: 0; top: 0; }
+.winbody .layer:first-child { position: relative; }
+
+/* The mark. */
+.mark { display: block; fill: var(--purple-deep); }
+
+/* Words over the picture: a headline that says what is on screen, and at
+   most one line under it. */
+.caption { position: absolute; left: 5vw; right: 5vw; bottom: 7.8vh; max-width: 1100px; }
+.caption h2 { font-size: clamp(44px, 3.05vw + 12px, 70px); line-height: 1.08; font-weight: 800; letter-spacing: -0.045em; text-wrap: balance; }
+.caption p { margin-top: 16px; font-size: clamp(22px, 1.3vw + 8px, 30px); line-height: 1.35; color: var(--ink-2); letter-spacing: -0.01em; text-wrap: pretty; }
+.caption .hl { color: var(--purple); }
+/* An upright frame is watched on a phone: the words are larger. */
+@media (orientation: portrait) {
+  .caption { bottom: 11vh; }
+  .caption h2 { font-size: 66px; }
+  .caption p { font-size: 32px; margin-top: 20px; }
+  .keycap { bottom: 4.5vh; }
+}
+/* A caption sits on the picture, so it carries its own darkness behind it. */
+.scrim { position: absolute; left: 0; right: 0; bottom: 0; height: 36%; background: linear-gradient(to top, rgba(18, 17, 16, 0.97) 30%, rgba(18, 17, 16, 0.78) 62%, rgba(18, 17, 16, 0)); pointer-events: none; }
+
+/* The key just pressed. */
+.keycap { position: absolute; right: 5vw; bottom: 8.5vh; display: flex; align-items: center; gap: 14px; font-size: 22px; color: var(--ink-2); }
+.keycap b { display: grid; place-items: center; min-width: 62px; height: 62px; padding: 0 16px; border-radius: 12px; background: #24221f; box-shadow: 0 0 0 1px #3a3734, 0 5px 0 #0c0b0b; font-size: 30px; font-weight: 700; color: var(--ink); }
+
+/* A ring drawn round the part of the screen being talked about. */
+.ring { position: absolute; left: 0; top: 0; border-radius: 6px; box-shadow: 0 0 0 3px var(--purple), 0 0 0 9px rgba(201, 138, 192, 0.16); pointer-events: none; }

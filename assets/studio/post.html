@@ -1,0 +1,242 @@
+<!doctype html>
+<!--
+  Post images: one page, many cards, any size.
+
+    post.html?card=NAME        the page takes the size it is rendered at, so
+                               the same card can be cut for several places.
+
+  A card is a headline, at most one line under it, and one real capture of
+  cohors on the made-up fleet, cropped to the part the headline is about.
+  The words say plainly what is in the picture. See CARDS for the list, and
+  scripts/studio/build.sh for the sizes each one is rendered at.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cohors: post images</title>
+<link rel="stylesheet" href="stage.css">
+<style>
+  /* One unit is a hundredth of the card's shorter side, so type and spacing
+     keep their proportions at every size. */
+  #stage { --u: calc(min(100vw, 100vh) / 100); }
+  .copy { position: absolute; z-index: 3; }
+  .copy h1 { font-size: calc(var(--u) * 8.4); line-height: 1.04; font-weight: 800; letter-spacing: -0.055em; text-wrap: balance; }
+  .copy p { margin-top: calc(var(--u) * 2.6); font-size: calc(var(--u) * 3.1); line-height: 1.38; color: var(--ink-2); letter-spacing: -0.02em; text-wrap: pretty; }
+  .copy .q { display: block; margin-bottom: calc(var(--u) * 2); font-size: calc(var(--u) * 3.1); font-weight: 500; letter-spacing: -0.02em; color: var(--purple); }
+  .lock { position: absolute; z-index: 3; display: flex; align-items: center; gap: calc(var(--u) * 1.6); font-size: calc(var(--u) * 3.6); font-weight: 800; letter-spacing: -0.05em; color: var(--purple); }
+  .lock .mark { width: calc(var(--u) * 7.5); height: calc(var(--u) * 5); }
+  .lock small { margin-left: calc(var(--u) * 1.4); font-size: calc(var(--u) * 2.5); font-weight: 400; letter-spacing: -0.01em; color: var(--ink-3); }
+  .win { transform-origin: 0 0; z-index: 1; }
+  /* A piece cut out of the window: the rows a card is about. It keeps the
+     window's surface and loses its chrome, so it reads as a quotation. */
+  .excerpt { position: absolute; z-index: 1; overflow: hidden; border-radius: calc(var(--u) * 1.4) 0 0 calc(var(--u) * 1.4); background: var(--panel); box-shadow: 0 0 0 1px var(--line), 0 calc(var(--u) * 3) calc(var(--u) * 8) rgba(0, 0, 0, 0.5); }
+  .excerpt .win { position: absolute; left: 0; top: 0; border-radius: 0; box-shadow: none; }
+  /* Where a cropped window runs under the words, it fades into the ground. */
+  .veil { position: absolute; z-index: 2; pointer-events: none; }
+  .cmd { display: inline-block; margin-top: calc(var(--u) * 3.4); padding: calc(var(--u) * 1.5) calc(var(--u) * 2.4); border-radius: calc(var(--u) * 1.2); background: var(--panel); box-shadow: 0 0 0 1px var(--line); font-size: calc(var(--u) * 2.9); color: var(--ink); }
+  .cmd i { font-style: normal; color: var(--ink-3); }
+
+  /* The little terminals of the "tabs" card. */
+  .tab { position: absolute; z-index: 1; width: calc(var(--u) * 50); padding: calc(var(--u) * 1.7) calc(var(--u) * 2); border-radius: calc(var(--u) * 1.1); background: var(--panel); box-shadow: 0 0 0 1px #3a3734, 0 calc(var(--u) * 2) calc(var(--u) * 5) rgba(0, 0, 0, 0.55); font-size: calc(var(--u) * 1.85); line-height: 1.5; color: var(--ink-2); white-space: pre; overflow: hidden; }
+  .tab b { color: var(--ink); font-weight: 500; }
+  .tab .r1 { color: var(--brick); }
+  .tab .g1 { color: var(--sage); }
+  .tab .p1 { color: var(--ink-3); }
+
+  /* The key between two states. */
+  .press { position: absolute; z-index: 3; display: flex; align-items: center; gap: calc(var(--u) * 1.6); font-size: calc(var(--u) * 2.8); color: var(--ink-2); }
+  .press b { display: grid; place-items: center; width: calc(var(--u) * 7); height: calc(var(--u) * 7); border-radius: calc(var(--u) * 1.3); background: #24221f; box-shadow: 0 0 0 1px #3a3734, 0 calc(var(--u) * 0.6) 0 #0c0b0b; font-size: calc(var(--u) * 3.6); font-weight: 700; color: var(--ink); }
+  .icon { position: absolute; inset: 0; display: grid; place-items: center; background: var(--panel); }
+  .icon .mark { width: 72%; height: 48%; fill: var(--purple); }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script src="stage.js"></script>
+<script>
+(() => {
+  const S = Stage;
+  const stage = document.getElementById("stage");
+  const W = innerWidth, H = innerHeight, U = Math.min(W, H) / 100;
+  const wide = W / H > 1.25, tall = H / W > 1.15;
+
+  const el = (cls, html, style) => {
+    const node = document.createElement("div");
+    node.className = cls;
+    if (html) node.innerHTML = html;
+    Object.assign(node.style, style || {});
+    stage.appendChild(node);
+    return node;
+  };
+  const px = (n) => `${n}px`;
+
+  // The name, small, in a corner.
+  function lockup(style, note) {
+    const lock = el("lock", `<span>cohors</span>${note ? `<small>${note}</small>` : ""}`, style);
+    lock.prepend(S.mark());
+    return lock;
+  }
+
+  // A window showing `capture`, scaled and moved so that the rows from the
+  // one containing `text` sit in `slot` ({x, y, w} in card pixels). The rest
+  // of the window runs off the card.
+  //
+  // `clip` cuts the window to an excerpt, so nothing above the rows asked for
+  // shows: "rows" keeps exactly those rows, "down" keeps them and whatever
+  // follows, to the bottom of the card. Without it the whole window is drawn.
+  async function crop(capture, text, slot, { rows = 1, part = 1, from = 0, pad = 10, title = "cohors  ~/code", clip = null } = {}) {
+    const win = await S.terminal([capture], title);
+    stage.appendChild(win);
+    win.show({ [capture]: 1 });
+    const rect = text ? S.find(win, capture, text, { rows, pad }) : { x: 0, y: 0, w: win.offsetWidth, h: win.offsetHeight };
+    // `from` and `part` pick a stretch of the rows' width: where it starts
+    // and how much of it fills the slot.
+    rect.x += rect.w * from;
+    const zoom = slot.w / (rect.w * part);
+    const height = rect.h * zoom;
+    if (!clip) {
+      win.style.transform = `translate(${slot.x - rect.x * zoom}px, ${slot.y - rect.y * zoom}px) scale(${zoom})`;
+      return { win, zoom, height };
+    }
+    const box = el("excerpt", "", {
+      left: px(slot.x), top: px(slot.y), width: px(W - slot.x + 2),
+      height: px(clip === "rows" ? height : H - slot.y + 2),
+    });
+    box.appendChild(win);
+    win.style.transform = `translate(${-rect.x * zoom}px, ${-rect.y * zoom}px) scale(${zoom})`;
+    return { win: box, zoom, height };
+  }
+
+  const veil = (style) => el("veil", "", style);
+  const ground = "#121110";
+
+  // Words on the left, the dashboard running off the right and the bottom.
+  async function hero(head, sub, { capture = "before-push", note } = {}) {
+    if (wide) {
+      el("copy", `<h1>${head}</h1><p>${sub}</p>`, { left: px(U * 9), top: px(U * 21), width: px(W * 0.4) });
+      await crop(capture, null, { x: W * 0.5, y: U * 13, w: W * 0.86 });
+      lockup({ left: px(U * 9), bottom: px(U * 9) }, note);
+    } else {
+      el("copy", `<h1>${head}</h1><p>${sub}</p>`, { left: px(U * 8), top: px(U * 17), width: px(W - U * 16) });
+      await crop(capture, null, { x: U * 8, y: H * (tall ? 0.5 : 0.56), w: W * 1.5 });
+      lockup({ left: px(U * 8), top: px(U * 7) }, note);
+    }
+  }
+
+  // Words above, one card of the dashboard below, large enough to read.
+  async function feature(head, sub, capture, text, rows, { part = 0.62, from = 0, q } = {}) {
+    const top = tall ? U * 17 : U * 13;
+    const copy = el("copy", `${q ? `<span class="q">${q}</span>` : ""}<h1>${head}</h1><p>${sub}</p>`, { left: px(U * 8), top: px(top), width: px(W - U * 16) });
+    const below = copy.offsetTop + copy.offsetHeight + U * 6;
+    await crop(capture, text, { x: U * 8, y: below, w: W - U * 8 }, { rows, part, from, clip: "down" });
+    veil({ left: 0, right: 0, bottom: 0, height: px(U * 20), background: `linear-gradient(to top, ${ground} 42%, transparent)` });
+    lockup({ left: px(U * 8), bottom: px(U * 6) });
+  }
+
+  // What `git status` says in a repository, from the same overview the
+  // dashboard is drawn from, for the pile of terminals.
+  function statusOf(repo) {
+    const lines = [`<span class="p1">~/code/${repo.name}</span> <b>$ git status</b>`, `On branch ${repo.branch}`];
+    if (repo.ahead && repo.behind) lines.push(`<span class="r1">Your branch and '${repo.upstream || "origin/" + repo.branch}' have diverged,</span>`, `<span class="r1">and have ${repo.ahead} and ${repo.behind} different commits each.</span>`);
+    else if (repo.ahead) lines.push(`Your branch is ahead of 'origin/${repo.branch}' by ${repo.ahead} commit${repo.ahead === 1 ? "" : "s"}.`);
+    else if (repo.behind) lines.push(`Your branch is behind 'origin/${repo.branch}' by ${repo.behind} commit${repo.behind === 1 ? "" : "s"}.`);
+    else if (repo.upstream) lines.push(`Your branch is up to date with '${repo.upstream}'.`);
+    const changed = (repo.staged || 0) + (repo.modified || 0) + (repo.untracked || 0);
+    if (repo.staged) lines.push("Changes to be committed:", `<span class="g1">        modified:   ${repo.staged} file${repo.staged === 1 ? "" : "s"}</span>`);
+    if (repo.modified) lines.push("Changes not staged for commit:", `<span class="r1">        modified:   ${repo.modified} file${repo.modified === 1 ? "" : "s"}</span>`);
+    if (repo.untracked) lines.push("Untracked files:", `<span class="r1">        ${repo.untracked} file${repo.untracked === 1 ? "" : "s"}</span>`);
+    if (!changed) lines.push("nothing to commit, working tree clean");
+    return lines.join("\n");
+  }
+
+  const CARDS = {
+    // The opening statement.
+    hero: () => hero("Every repo you own. One screen.", "A git dashboard for your terminal, your editor and your coding agent.", { note: "free and open source" }),
+
+    next: () => feature("It tells you what to do next.", "cohors reads every repository and turns the state of all of them into a short list of steps.", "before-push", "Do next", 8),
+
+    risk: () => feature("Work at risk, marked before it is lost.", "Unpushed commits, old stashes, branches that were never published.", "risk", "Work at risk", 8),
+
+    standup: () => feature("A standup from every repo, in one key.", "Everything you committed this week, grouped by repository.", "standup", "Standup", 20, { from: 0.115, part: 0.77 }),
+
+    launchpad: () => feature("Each repo says what is waiting in it.", "Tasks and flows live in the repository, so they travel with the clone.", "launchpad", "Launchpad", 26, { from: 0.115, part: 0.77 }),
+
+    // Before and after one keypress, with the key between them.
+    push: async () => {
+      const copy = el("copy", `<h1>Four repos backed up with one key.</h1><p>Not backed up: five before, one after.</p>`, { left: px(U * 8), top: px(U * 9), width: px(W - U * 16) });
+      const slot = (y) => ({ x: U * 8, y, w: W - U * 8 });
+      const first = copy.offsetTop + copy.offsetHeight + U * 6;
+      const before = await crop("before-push", "Not backed up", slot(first), { rows: 3, part: 0.55, pad: 30, clip: "rows" });
+      const gap = U * 13;
+      const second = first + before.height + gap;
+      await crop("after-push", "Not backed up", slot(second), { rows: 3, part: 0.55, pad: 30, clip: "rows" });
+      el("press", `<b>P</b><span>push everything that exists only on this machine</span>`, { left: px(U * 8), top: px(first + before.height + (gap - U * 7) / 2) });
+      veil({ left: 0, right: 0, bottom: 0, height: px(U * 14), background: `linear-gradient(to top, ${ground} 25%, transparent)` });
+      lockup({ left: px(U * 8), bottom: px(U * 5) });
+    },
+
+    // The alternative: a terminal per repository.
+    tabs: async () => {
+      const overview = await (await fetch("/target/assets/captures/overview.json")).json();
+      const repos = overview.repos.slice(0, 13);
+      const head = `${["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen"][repos.length] || repos.length} tabs of git status.<br>Or one screen.`;
+      el("copy", `<h1>${head}</h1>`, { left: px(U * 8), top: px(U * 8), width: px(W - U * 16) });
+      // A heap on the left: each terminal a little turned and a little
+      // further down, the way windows pile up over a morning.
+      const left = U * 4, top = wide ? U * 34 : U * 30;
+      repos.forEach((repo, i) => {
+        const turn = ((i * 37) % 11) - 5;
+        const tab = el("tab", statusOf(repo), {
+          left: px(left + ((i * 53) % 9) * U * 2.1 + (i % 2) * U * 5),
+          top: px(top + i * U * (wide ? 4.3 : 5.6)),
+          transform: `rotate(${turn * 0.9}deg)`,
+          zIndex: 1 + i,
+        });
+        // The ones underneath are dimmer, as if further away.
+        tab.style.filter = `brightness(${0.6 + (i / repos.length) * 0.4})`;
+      });
+      const shot = await crop("before-push", null, wide ? { x: W * 0.47, y: U * 30, w: W * 0.62 } : { x: W * 0.3, y: H * 0.5, w: W * 1.1 });
+      shot.win.style.zIndex = 20;
+      veil({ left: 0, right: 0, bottom: 0, height: px(U * 12), zIndex: 21, background: `linear-gradient(to top, ${ground} 20%, transparent)` });
+      lockup({ right: px(U * 8), top: px(U * 8) }).style.zIndex = 22;
+    },
+
+    // The carousel: a question a pile of terminals cannot answer, and the
+    // part of cohors that answers it.
+    "q-cover": async () => {
+      el("copy", `<h1>Five questions your repos can't answer.</h1><p>And the one screen that answers all of them.</p>`, { left: px(U * 8), top: px(U * 22), width: px(W - U * 16) });
+      await crop("before-push", null, { x: U * 8, y: H * 0.56, w: W * 1.45 });
+      lockup({ left: px(U * 8), top: px(U * 7) });
+    },
+    q1: () => feature("What only exists on this laptop?", "Five repositories hold commits or branches that are on no remote.", "before-push", "Not backed up", 3, { part: 0.5, q: "1 of 5" }),
+    q2: () => feature("What should I do first?", "Push, publish, pull, review: a short list, most urgent first.", "before-push", "Do next", 8, { q: "2 of 5" }),
+    q3: () => feature("Where is work about to be lost?", "Each repository at risk, with the reason and the step that fixes it.", "risk", "Work at risk", 8, { q: "3 of 5" }),
+    q4: () => feature("What did I ship this week?", "Every commit of yours, across every repository, ready to paste.", "standup", "Standup", 20, { from: 0.115, part: 0.77, q: "4 of 5" }),
+    q5: () => feature("What is waiting in each repo?", "Open tasks and the commands to run, written down in the repo itself.", "launchpad", "Launchpad", 26, { from: 0.115, part: 0.77, q: "5 of 5" }),
+    "q-end": async () => {
+      const lock = lockup({ left: px(U * 8), top: px(U * 18) });
+      lock.style.fontSize = px(U * 9);
+      lock.querySelector(".mark").style.cssText = `width:${U * 19}px;height:${U * 12.6}px`;
+      el("copy", `<h1>One screen answers all five.</h1><p>Free and open source. One Rust binary for the terminal, the editor and your agent.</p><span class="cmd"><i>$ </i>brew install rushirb2001/tap/cohors</span><br><span class="cmd" style="margin-top:${U * 1.6}px"><i>$ </i>pip install cohors</span>`, { left: px(U * 8), top: px(U * 40), width: px(W - U * 16) });
+    },
+
+    // The dashboard, whole, with nothing said over it: the README's picture
+    // of the terminal.
+    window: async () => { await crop("before-push", null, { x: U * 3.5, y: U * 3.5, w: W - U * 7 }); },
+
+    // The mark alone, for an extension or plugin icon.
+    icon: async () => { el("icon").appendChild(S.mark()); },
+  };
+
+  window.duration = 0;
+  window.seek = () => {};
+  window.ready = (async () => {
+    await S.fonts();
+    const card = new URLSearchParams(location.search).get("card") || "hero";
+    if (!CARDS[card]) throw new Error(`no card called ${card}`);
+    await CARDS[card]();
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,252 @@
+<!doctype html>
+<!--
+  The launch film: thirty-seven seconds, 1920 by 1080.
+
+  Every screen in it is a real capture of cohors on the made-up fleet (run
+  scripts/studio/capture.sh first). The film adds only a camera, captions and
+  the key that was pressed.
+
+  Render:   scripts/studio/render.mjs --page assets/studio/film.html --size 1920x1080 --frames target/assets/frames/film
+  Preview:  open this page with ?t=12000 for one instant, or ?play=1 to watch.
+
+  The shape, in milliseconds:
+       0  the mark assembles, the name is typed
+    3200  the whole dashboard
+    9000  Do next: one key pushes what exists only on this machine
+   16000  Work at risk
+   21500  the standup
+   27000  the launchpad
+   32500  where to get it
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>cohors: the film</title>
+<link rel="stylesheet" href="stage.css">
+<style>
+  .intro, .outro { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; text-align: center; }
+  .intro .mark { width: min(420px, 44vw); height: min(280px, 29.3vw); overflow: visible; }
+  .intro h1 { margin-top: 44px; font-size: min(128px, 13vw); font-weight: 800; letter-spacing: -0.06em; line-height: 1; color: var(--purple); }
+  .intro p { margin-top: 26px; font-size: min(34px, 3.6vw); color: var(--ink-2); letter-spacing: -0.02em; }
+  .outro .mark { width: 180px; height: 120px; }
+  .outro h1 { margin-top: 26px; font-size: 92px; font-weight: 800; letter-spacing: -0.06em; line-height: 1; color: var(--purple); }
+  .outro p { margin-top: 18px; font-size: 30px; color: var(--ink-2); letter-spacing: -0.02em; }
+  .install { display: grid; gap: 14px; margin-top: 54px; text-align: left; }
+  .install code { display: block; padding: 18px 28px; border-radius: 12px; background: var(--panel); box-shadow: 0 0 0 1px var(--line); font: 500 min(30px, 3.1vw) var(--mono); color: var(--ink); }
+  .install code i { font-style: normal; color: var(--ink-3); }
+  .outro small { margin-top: 40px; font-size: 26px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="world"></div>
+  <div class="scrim" id="scrim"></div>
+  <div class="caption" id="caption"><h2></h2><p></p></div>
+  <div class="keycap" id="keycap"><b></b><span></span></div>
+  <div class="intro" id="intro"><div id="intro-mark"></div><h1 id="intro-name"></h1><p id="intro-line">Every repo you own. One screen.</p></div>
+  <div class="outro" id="outro">
+    <div id="outro-mark"></div>
+    <h1>cohors</h1>
+    <p>Free and open source. One Rust binary.</p>
+    <div class="install"><code><i>$ </i>brew install rushirb2001/tap/cohors</code><code><i>$ </i>pip install cohors</code></div>
+    <small>github.com/rushirb2001/cohors</small>
+  </div>
+</div>
+<script src="stage.js"></script>
+<script>
+(() => {
+  const S = Stage;
+  // The film takes the size it is rendered at: 1920x1080 for the main cut,
+  // 1080x1080 and 1080x1920 for feeds that are square or upright. The camera
+  // frames each shot to fit, so nothing is cropped away.
+  const W = innerWidth, H = innerHeight;
+  const upright = H > W * 1.2;
+  const $ = (id) => document.getElementById(id);
+
+  // What the film says, and when. One plain sentence about what is on
+  // screen, and one line of detail under it.
+  const CAPTIONS = [
+    [4000, 8700, "Every repository you own, on one screen.", "Thirteen repos: what changed, what is unpushed, what is waiting."],
+    [9600, 13300, "It tells you what to do next.", "One key pushes everything that exists only on this machine."],
+    [13700, 15700, "Four repositories backed up with one key.", "Not backed up: five before, one after."],
+    [16600, 21100, "Work at risk is marked before it is lost.", "Unpushed commits, old stashes, branches that were never published."],
+    [22100, 26600, "A standup from every repo, in one key.", "Everything you committed this week, grouped by repository."],
+    [27600, 32100, "Each repo says what is waiting in it.", "Tasks and flows live in the repo, so they travel with the clone."],
+  ];
+  // The key pressed, and what it did.
+  const KEYS = [
+    [11600, 13900, "P", "push"],
+    [21700, 23600, "s", "standup"],
+    [27200, 29100, "t", "tasks"],
+  ];
+  // Which capture is showing. Each change is a short cross-fade, timed to the
+  // key that caused it.
+  const SCREENS = [
+    [0, "before-push"], [12300, "after-push"], [16000, "risk"], [21900, "standup"], [27400, "launchpad"],
+  ];
+  const FADE = 260;
+
+  let win, cam, shots, ring, introMark, outroMark;
+
+  window.duration = 37000;
+  window.ready = (async () => {
+    await S.fonts();
+    win = await S.terminal(["before-push", "after-push", "risk", "standup", "launchpad"], "cohors  ~/code");
+    $("world").appendChild(win);
+    cam = S.camera($("world"), W, H);
+
+    // The shots, measured once while nothing is transformed.
+    const whole = { x: 0, y: 0, w: win.offsetWidth, h: win.offsetHeight };
+    const next = S.find(win, "before-push", "Do next", { rows: 8, pad: 14 });
+    const pushRow = S.find(win, "before-push", "Push 4 commits", { rows: 1, pad: 3 });
+    const standup = S.find(win, "standup", "Standup", { rows: 21, pad: 10 });
+    const launchpad = S.find(win, "launchpad", "Launchpad", { rows: 30, pad: 10 });
+    // The row the key acts on gets a ring, in the window's own coordinates.
+    ring = document.createElement("div");
+    ring.className = "ring";
+    Object.assign(ring.style, { left: `${pushRow.x + 14}px`, top: `${pushRow.y}px`, width: `${pushRow.w * 0.62}px`, height: `${pushRow.h}px` });
+    win.appendChild(ring);
+    const tiles = S.find(win, "after-push", "Not backed up", { rows: 3, pad: 34 });
+    const risk = S.find(win, "risk", "Work at risk", { rows: 8, pad: 14 });
+    // An upright frame is narrower than the window. Rather than shrink the
+    // whole window to fit (and its text with it), each shot there takes the
+    // left part of what it is about, at a size that can be read on a phone.
+    const part = (rect, share) => (upright ? { ...rect, w: rect.w * share } : rect);
+    shots = {
+      wide: cam.frame(part(whole, 0.6), 0.94),
+      // Start a little further back, so the film opens on a slow push in.
+      far: { ...cam.frame(part(whole, 0.6), 0.94), zoom: cam.frame(part(whole, 0.6), 0.94).zoom * 0.9 },
+      // The left two thirds of the card: the steps, and the start of why.
+      next: cam.frame({ ...next, w: next.w * (upright ? 0.46 : 0.66) }, 0.94),
+      // The first three figure tiles, where the number changes.
+      tiles: cam.frame({ ...tiles, w: tiles.w * (upright ? 0.34 : 0.52) }, 0.78),
+      risk: cam.frame(part(risk, 0.52), 0.96),
+      // The overlays are centred on the window; sit a little lower so the
+      // caption does not cover their first rows.
+      // An overlay sits in the middle of the window, about three quarters
+      // of its width.
+      standup: cam.frame({ ...standup, x: whole.w * 0.12, w: whole.w * (upright ? 0.5 : 0.76) }, 0.9),
+      launchpad: cam.frame({ ...launchpad, x: whole.w * 0.12, w: whole.w * (upright ? 0.5 : 0.76) }, 0.9),
+    };
+    // A caption covers the bottom of the frame, so a shot of something low
+    // on the window is nudged up to keep it clear.
+    const lift = H * (upright ? 0.08 : 0.1);
+    for (const name of ["next", "risk", "standup", "launchpad", "tiles"]) shots[name].y += (name === "tiles" ? lift * 0.4 : lift) / shots[name].zoom;
+    shots.wide.y += (lift * 0.55) / shots.wide.zoom;
+    shots.far.y += (lift * 0.55) / shots.far.zoom;
+
+    introMark = S.mark(); $("intro-mark").appendChild(introMark);
+    outroMark = S.mark(); $("outro-mark").appendChild(outroMark);
+    const start = new URLSearchParams(location.search);
+    if (start.has("play")) {
+      const began = performance.now();
+      const tick = () => { window.seek((performance.now() - began) % window.duration); requestAnimationFrame(tick); };
+      tick();
+    } else {
+      window.seek(Number(start.get("t") || 0));
+    }
+  })();
+
+  // The camera's path through the film.
+  const path = () => S.track([
+    [3200, shots.far],
+    [8800, shots.wide],
+    [10300, shots.next],
+    [12600, shots.next],
+    [13900, shots.tiles],
+    [15400, shots.tiles],
+    [16900, shots.risk],
+    [20900, shots.risk],
+    [22300, shots.standup],
+    [26900, shots.standup],
+    [28000, shots.launchpad],
+    [32300, shots.launchpad],
+  ]);
+
+  // The colours a cell of the mark passes through as it falls into place:
+  // the severity colours first, the mark's own purple once it has landed.
+  const FALLING = ["#d9776e", "#cfa255", "#7fb08c", "#7e9cc2", "#5faea6"];
+
+  function drawMark(svg, t, begin) {
+    svg.cells.forEach((cell, i) => {
+      // Columns arrive left to right, the lower rows first, like blocks
+      // stacking up.
+      const delay = begin + cell.x * 55 + (10 - cell.y) * 26;
+      const k = S.span(t, delay, delay + 620, S.ease.out);
+      const drop = (1 - k) * -16;
+      cell.rect.setAttribute("transform", `translate(0 ${drop.toFixed(3)})`);
+      cell.rect.style.opacity = S.clamp(k * 1.6) * cell.base;
+      cell.rect.style.fill = k < 0.999 ? FALLING[i % FALLING.length] : "";
+    });
+  }
+
+  window.seek = (t) => {
+    // ── the opening ──
+    const introShown = 1 - S.span(t, 2900, 3300, S.ease.in);
+    $("intro").style.opacity = introShown;
+    $("intro").style.visibility = introShown > 0.001 ? "visible" : "hidden";
+    drawMark(introMark, t, 150);
+    const name = "cohors";
+    $("intro-name").textContent = name.slice(0, Math.round(S.span(t, 1500, 2050, S.ease.linear) * name.length)) || " ";
+    $("intro-line").style.opacity = S.span(t, 2100, 2500, S.ease.out);
+
+    // ── the dashboard ──
+    const body = S.span(t, 3100, 3700, S.ease.out) * (1 - S.span(t, 32200, 32700, S.ease.in));
+    $("world").style.opacity = body;
+    $("world").style.visibility = body > 0.001 ? "visible" : "hidden";
+    cam.set(path()(t));
+
+    const visible = {};
+    SCREENS.forEach(([at, screen], i) => {
+      const until = i + 1 < SCREENS.length ? SCREENS[i + 1][0] : Infinity;
+      // Each screen fades in over the one before it and stays until the
+      // next has fully covered it.
+      visible[screen] = i === 0 ? (t < until + FADE ? 1 : 0)
+        : (t >= until + FADE ? 0 : S.span(t, at, at + FADE, S.ease.out));
+    });
+    win.show(visible);
+
+    // The ring round the row, just before and while the key goes down.
+    ring.style.opacity = S.during(t, 10500, 12350, 260);
+
+    // ── words ──
+    let words = null, shown = 0;
+    for (const [on, off, head, sub] of CAPTIONS) {
+      const amount = S.during(t, on, off, 420);
+      if (amount > shown) { shown = amount; words = [head, sub]; }
+    }
+    const caption = $("caption");
+    caption.style.opacity = shown;
+    caption.style.transform = `translateY(${(1 - shown) * 18}px)`;
+    if (words) {
+      caption.querySelector("h2").textContent = words[0];
+      caption.querySelector("p").textContent = words[1];
+    }
+    $("scrim").style.opacity = Math.max(shown, 0) * body;
+
+    let key = null, pressed = 0;
+    for (const [on, off, cap, does] of KEYS) {
+      const amount = S.during(t, on, off, 220);
+      if (amount > pressed) { pressed = amount; key = [cap, does, on]; }
+    }
+    const keycap = $("keycap");
+    keycap.style.opacity = pressed;
+    if (key) {
+      keycap.querySelector("b").textContent = key[0];
+      keycap.querySelector("span").textContent = key[1];
+      // The cap goes down as it is pressed and comes back up.
+      const down = S.span(t, key[2], key[2] + 110, S.ease.out) * (1 - S.span(t, key[2] + 150, key[2] + 420, S.ease.out));
+      keycap.querySelector("b").style.transform = `translateY(${down * 5}px)`;
+      keycap.querySelector("b").style.boxShadow = `0 0 0 1px #3a3734, 0 ${5 - down * 5}px 0 #0c0b0b`;
+    }
+
+    // ── the close ──
+    const end = S.span(t, 32500, 33200, S.ease.out);
+    $("outro").style.opacity = end;
+    $("outro").style.visibility = end > 0.001 ? "visible" : "hidden";
+    drawMark(outroMark, t, 32500);
+  };
+})();
+</script>
+</body>
+</html>
