@@ -1,0 +1,38 @@
+# Steps cargo-dist runs before `dist build` in each release build job (see
+# `github-build-setup` in Cargo.toml). They build the browser dashboard once
+# per job and hand it to the `cohors` build, which compiles it into the binary
+# (crates/cohors-tui/build.rs). That is what lets an installed `cohors web`
+# work with no checkout and no toolchain.
+- name: Install Trunk (the WebAssembly bundler)
+  shell: bash
+  env:
+    TRUNK_VERSION: "0.21.14"
+  run: |
+    set -euo pipefail
+    case "$(uname -s)-$(uname -m)" in
+      Linux-x86_64)  asset=trunk-x86_64-unknown-linux-gnu.tar.gz ;;
+      Linux-aarch64) asset=trunk-aarch64-unknown-linux-gnu.tar.gz ;;
+      Darwin-arm64)  asset=trunk-aarch64-apple-darwin.tar.gz ;;
+      Darwin-x86_64) asset=trunk-x86_64-apple-darwin.tar.gz ;;
+      *) echo "no prebuilt Trunk for $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+    esac
+    base="https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}"
+    mkdir -p "$RUNNER_TEMP/trunk" && cd "$RUNNER_TEMP/trunk"
+    curl -fsSLO "$base/$asset"
+    curl -fsSLO "$base/$asset.sha256"
+    # The checksum file names the archive; check the download against it.
+    expected="$(awk '{print $1}' "$asset.sha256")"
+    actual="$(shasum -a 256 "$asset" | awk '{print $1}')"
+    test "$expected" = "$actual" || { echo "Trunk checksum mismatch" >&2; exit 1; }
+    tar -xzf "$asset"
+    echo "$RUNNER_TEMP/trunk" >> "$GITHUB_PATH"
+- name: Build the browser dashboard
+  shell: bash
+  run: |
+    set -euo pipefail
+    # rust-toolchain.toml already lists the wasm32 target; make sure it is in.
+    rustup target add wasm32-unknown-unknown
+    cd crates/cohors-web
+    trunk build --release --dist "$GITHUB_WORKSPACE/target/web-dist"
+    test -f "$GITHUB_WORKSPACE/target/web-dist/index.html"
+    echo "COHORS_WEB_DIST=$GITHUB_WORKSPACE/target/web-dist" >> "$GITHUB_ENV"

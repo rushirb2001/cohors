@@ -119,6 +119,10 @@ publish-jobs = ["homebrew"]
 pr-run-mode = "plan"
 # Install into the user's ~/.cargo/bin equivalent, adding it to PATH if needed.
 install-path = "CARGO_HOME"
+# Before each binary is built, build the browser dashboard so `cohors web`
+# ships inside the binary (.github/build-setup.yml, crates/cohors-tui/build.rs).
+# The path is relative to .github/workflows.
+github-build-setup = "../build-setup.yml"
 
 # cargo-dist's default runner pins (ubuntu-20.04, macos-13) are retired images, so
 # the release jobs queue forever waiting for machines that no longer exist. Point
