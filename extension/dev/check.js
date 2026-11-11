@@ -160,6 +160,18 @@ async function wiring() {
     assert(sent.size >= 8, "expected side.js to send its messages");
   });
 
+  await check("an untrusted workspace cannot steer which folders are scanned", () => {
+    // Its `cohors.roots` is ignored by the editor, and the open folder is
+    // only handed to cohors as its working directory when trusted.
+    assert(pkg.capabilities.untrustedWorkspaces.restrictedConfigurations.includes("cohors.roots"));
+    assert.strictEqual(pkg.contributes.configuration.properties["cohors.binaryPath"].scope, "machine");
+    const uses = [...host.matchAll(/\bcwd: ([^\n]+)/g)].map((m) => m[1]);
+    assert(uses.length >= 1, "expected the host to choose a working directory for cohors");
+    for (const use of uses) assert(/^vscode\.workspace\.isTrusted \? /.test(use), `not gated on trust: cwd: ${use}`);
+    // The trust change is followed by a fresh read, so granting trust takes effect at once.
+    assert(/onDidGrantWorkspaceTrust\(\(\) => refresh\(true\)\)/.test(host));
+  });
+
   await check("every message main.js sends is handled by the host", () => {
     const sent = new Set([...main.matchAll(/send\(\{ type: "([A-Za-z]+)"/g)].map((m) => m[1]));
     const handled = new Set([...host.matchAll(/case "([A-Za-z]+)":/g)].map((m) => m[1]));
@@ -960,8 +972,9 @@ async function gateChecks() {
     const host = read("src/extension.js");
     assert(!/flow\.run/.test(host), "the host must not read a flow's command line itself");
     assert(/gate\.flow\(\{ repo, entry, flowId, run: terminal \}\)/.test(host));
-    // Twice for the state sent to the view (normal and failed refresh), once for the gate.
-    assert.strictEqual((host.match(/vscode\.workspace\.isTrusted/g) || []).length, 3, "trust is read for the gate and for the state sent to the view, nowhere else");
+    // Twice for the state sent to the view (normal and failed refresh), once
+    // for the gate, and once to decide whether the open folder may steer the scan.
+    assert.strictEqual((host.match(/vscode\.workspace\.isTrusted/g) || []).length, 4, "trust is read for the gate, the scan's working directory and the state sent to the view, nowhere else");
     assert(/launchDeclared\("agent", /.test(host) && /launchDeclared\("task", /.test(host), "declared agents and tasks use the gated launch");
     assert(!/[^a-zA-Z]launch\("(agent|task)"/.test(host), "no ungated path starts a declared agent or task");
     assert(/if \(kind === "agent" \|\| kind === "task"\) throw/.test(host), "the ungated launch refuses those kinds outright");

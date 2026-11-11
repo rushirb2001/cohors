@@ -36,7 +36,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "In an untrusted workspace cohors still shows your repositories and can run its own fetch, pull, push, commit and stash. Every flow is disabled, whether a repository declared it or it was detected from the repository's scripts, and so is every agent and task a repository declares. The workspace also cannot set which folders are scanned.",
+      "description": "In an untrusted workspace cohors still shows your repositories and can run its own fetch, pull, push, commit and stash. Every flow is disabled, whether a repository declared it or it was detected from the repository's scripts, and so is every agent and task a repository declares. The workspace also cannot set which folders are scanned: its cohors.roots setting is ignored, and the open folder is not used to find your repositories.",
       "restrictedConfigurations": [
         "cohors.roots"
       ]

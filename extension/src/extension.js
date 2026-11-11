@@ -38,7 +38,13 @@ const output = vscode.window.createOutputChannel("cohors", { log: true });
 const cli = Cohors.create(() => ({
   binaryPath: cfg().get("binaryPath", ""),
   roots: cfg().get("roots", []),
-  cwd: workspaceFolders()[0] || "",
+  // With no roots configured, cohors looks around the folder it is run in.
+  // Only a TRUSTED workspace may be that folder. Otherwise merely opening a
+  // folder would add it (and its neighbours) to the fleet, and a later "Fetch
+  // all" would run git inside a repository the user never chose to trust:
+  // git obeys that repository's own config (its ssh command, its helpers).
+  // The same reason `cohors.roots` is ignored in an untrusted workspace.
+  cwd: vscode.workspace.isTrusted ? (workspaceFolders()[0] || "") : "",
 }), { log: (line) => output.info(line) });
 const agent = Agent.create(cli);
 

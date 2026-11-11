@@ -154,7 +154,9 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 - With no roots configured, cohors could treat `/` or the home directory as a
   root when started from there (an editor extension starts it in `/`), and list
   every tool's checkout on the disk as if it were your work. Neither is ever an
-  implied root now, and the VS Code extension runs cohors from the open folder.
+  implied root now, and the VS Code extension runs cohors from the open folder
+  (only in a trusted workspace, so opening an untrusted folder never adds it to
+  the fleet).
 - The VS Code extension read each Claude Code transcript whole on every change,
   which froze the editor for seconds on a long session. It reads the two ends of
   a large transcript instead.
