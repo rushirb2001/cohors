@@ -8,6 +8,10 @@
   },
   "homepage": "https://github.com/rushirb2001/cohors",
   "repository": "https://github.com/rushirb2001/cohors",
+  "documentationUrl": "https://github.com/rushirb2001/cohors#use-it-with-claude-code",
+  "supportUrl": "https://github.com/rushirb2001/cohors/issues",
+  "privacyPolicyUrl": "https://github.com/rushirb2001/cohors/blob/main/PRIVACY.md",
+  "termsOfServiceUrl": "https://github.com/rushirb2001/cohors/blob/main/LICENSE",
   "license": "MIT",
   "keywords": [
     "git",
