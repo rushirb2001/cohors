@@ -24,7 +24,7 @@ version = "0.7.0"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
-authors = ["Rushir Bhavsar <rbhavsa4@asu.edu>"]
+authors = ["Rushir Bhavsar"]
 repository = "https://github.com/rushirb2001/cohors"
 homepage = "https://github.com/rushirb2001/cohors"
 

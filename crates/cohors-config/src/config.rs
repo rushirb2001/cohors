@@ -36,7 +36,7 @@ pub struct Config {
     pub ignore: Vec<String>,
     /// Pretty names keyed by absolute path or repo directory name.
     pub aliases: BTreeMap<String, String>,
-    /// Named groups → repo name globs (e.g. `payments = ["sushrutalgs-*"]`). A
+    /// Named groups → repo name globs (e.g. `payments = ["pay-*"]`). A
     /// repo is stamped with every group whose globs match its directory name, so
     /// a surface can target a whole cluster with one selector.
     pub groups: BTreeMap<String, Vec<String>>,
@@ -376,7 +376,7 @@ follow_symlinks = false
 # with every group it matches (by directory name), so any surface (TUI/MCP/CLI)
 # can target a whole cluster at once.
 [groups]
-# payments = ["sushrutalgs-*", "billing"]
+# payments = ["pay-*", "billing"]
 
 # Safety knobs for the machine action surfaces (`cohors mcp` and the
 # `cohors web --allow-writes/--allow-run` action endpoint). `[mcp]` is accepted
@@ -536,7 +536,7 @@ mod tests {
             [aliases]
             "~/work/payments-service" = "payments"
             [groups]
-            payments = ["sushrutalgs-*", "billing"]
+            payments = ["pay-*", "billing"]
         "#;
         let c = Config::parse(toml, Utf8Path::new("test.toml")).expect("parse");
         assert_eq!(

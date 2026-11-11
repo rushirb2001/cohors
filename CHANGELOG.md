@@ -424,7 +424,7 @@ tool, and per-repo commit-activity data landed in the core.
 ### Added
 
 - **Config `[groups]` + a `group` selector — repo clusters as a fact, not a guess.**
-  Define named groups of repo-name globs (e.g. `payments = ["sushrutalgs-*"]`);
+  Define named groups of repo-name globs (e.g. `payments = ["pay-*"]`);
   cohors stamps each repo with every group it matches (by directory name) during
   the scan. The new `groups` field rides on every snapshot (so `list_repos` /
   `get_repo` show it), and `{ "group": "payments" }` is a first-class selector
@@ -437,7 +437,7 @@ tool, and per-repo commit-activity data landed in the core.
   and, with `include_patch: true`, a size-capped unified diff of the working tree
   (`max_bytes`, default 20 KB, flagged `truncated` when cut). Clean repos are
   omitted and an empty selector defaults to every dirty repo, so an agent can
-  summarize or review uncommitted work ("what's the work sitting in hybrid-flow?")
+  summarize or review uncommitted work ("what's the work sitting in payments?")
   without cd-ing in and shelling out to `git status` / `git diff`. Backed by new
   `cohors_core::RepoChanges` (WASM-safe) and `cohors_git::repo_changes`.
 

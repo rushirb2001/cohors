@@ -16,7 +16,7 @@ version.workspace = true
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
-authors = ["Rushir Bhavsar <rbhavsa4@asu.edu>"]
+authors = ["Rushir Bhavsar"]
 description = "cohors web dashboard — one Rust core; a native server half and a WASM (Leptos) browser half"
 
 [lib]

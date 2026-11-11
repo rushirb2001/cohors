@@ -354,7 +354,7 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "changes",
-            "description": "What is actually uncommitted in each selected repo: the changed-file list (each path with its git porcelain status) and, with include_patch:true, a size-capped unified diff of the working tree (diffs of sensitive files like .env or key material are withheld; the file list still names them). Use this to summarize or review uncommitted work — e.g. \"what's the work sitting in hybrid-flow?\" — instead of cd-ing in and running git status / git diff. Clean repos are omitted. Omit the selector to cover every dirty repo, or scope it (e.g. {\"name\": \"hybrid-flow\"}) to one.",
+            "description": "What is actually uncommitted in each selected repo: the changed-file list (each path with its git porcelain status) and, with include_patch:true, a size-capped unified diff of the working tree (diffs of sensitive files like .env or key material are withheld; the file list still names them). Use this to summarize or review uncommitted work — e.g. \"what's the work sitting in payments?\" — instead of cd-ing in and running git status / git diff. Clean repos are omitted. Omit the selector to cover every dirty repo, or scope it (e.g. {\"name\": \"payments\"}) to one.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
