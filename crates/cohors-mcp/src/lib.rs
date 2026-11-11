@@ -177,6 +177,10 @@ fn handle(request: &Value, ctx: &Ctx, now: i64) -> Option<Value> {
         "ping" => result_response(id, json!({})),
         "tools/list" => result_response(id, json!({ "tools": tool_catalog() })),
         "prompts/list" => result_response(id, json!({ "prompts": prompt_catalog() })),
+        // cohors offers no resources, but some clients and directory scanners
+        // ask anyway; an empty list is the honest answer, not "method not found".
+        "resources/list" => result_response(id, json!({ "resources": [] })),
+        "resources/templates/list" => result_response(id, json!({ "resourceTemplates": [] })),
         "prompts/get" => match get_prompt(&params, ctx) {
             Ok(value) => result_response(id, value),
             // An unknown prompt or repo is the caller's mistake: invalid params.
@@ -399,8 +403,64 @@ fn tool_catalog() -> Value {
         for def in cohors_actions::registry() {
             arr.push(action_tool(def, &selector_schema));
         }
+        // Every tool, hand-written or from the registry, gets its annotations
+        // here, in one place.
+        for tool in arr.iter_mut() {
+            let name = tool["name"].as_str().unwrap_or_default().to_string();
+            if let Some(hints) = annotations(&name) {
+                tool["title"] = hints["title"].clone();
+                tool["annotations"] = hints;
+            }
+        }
     }
     tools
+}
+
+/// The MCP tool annotations: a human title and hints a client shows before a
+/// call (read-only, may destroy work, safe to repeat, reaches the network).
+/// Clients and directories (Anthropic's among them) use these to decide what to
+/// ask the user about; they describe the tool, they do not enforce anything —
+/// the real gates are the `--allow-*` flags and `confirm`.
+///
+/// `None` for an unknown name, which the catalog test turns into a failure, so
+/// a new tool cannot ship without them.
+fn annotations(name: &str) -> Option<Value> {
+    // (title, read-only, destructive, idempotent, open-world)
+    let (title, read_only, destructive, idempotent, open_world) = match name {
+        "list_repos" => ("List repositories", true, false, true, false),
+        "get_repo" => ("Repository status", true, false, true, true),
+        "fleet_summary" => ("Fleet summary", true, false, true, false),
+        "overview" => ("What to do next", true, false, true, false),
+        "standup" => ("Standup", true, false, true, false),
+        "search" => ("Search across repositories", true, false, true, false),
+        "changes" => ("Uncommitted changes", true, false, true, false),
+        "repo_path" => ("Repository path", true, false, true, false),
+        "list_prs" => ("Open pull requests", true, false, true, true),
+        "ci_status" => ("CI status", true, false, true, true),
+        "launchpad" => ("Launchpad", true, false, true, false),
+        "read_contract" => ("Launchpad file rules", true, false, true, false),
+        "read_board" => ("Focus board", true, false, true, false),
+        // Both writes replace the whole document, so they can drop what was there.
+        "write_repo_contribution" => ("Write a repo's launchpad file", false, true, true, false),
+        "write_board" => ("Write the focus board", false, true, true, false),
+        "record_activity" => ("Record agent activity", false, false, false, false),
+        // Fetch, fast-forward pull and a normal push only add; none rewrites history.
+        "fetch" => ("Fetch", false, false, true, true),
+        "pull" => ("Pull (fast-forward only)", false, false, true, true),
+        "push" => ("Push", false, false, true, true),
+        "commit" => ("Commit", false, false, false, false),
+        // Stash clears the working tree (the work is kept in the stash).
+        "stash" => ("Stash", false, true, false, false),
+        "run" => ("Run a command in each repository", false, true, false, true),
+        _ => return None,
+    };
+    Some(json!({
+        "title": title,
+        "readOnlyHint": read_only,
+        "destructiveHint": destructive,
+        "idempotentHint": idempotent,
+        "openWorldHint": open_world,
+    }))
 }
 
 /// Build one action tool's catalog entry from its [`cohors_actions::ActionDef`]:
@@ -1397,6 +1457,42 @@ mod tests {
             NOW,
         );
         assert!(resp.is_none());
+    }
+
+    #[test]
+    fn every_tool_is_annotated() {
+        let resp = call(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }));
+        for tool in resp["result"]["tools"].as_array().unwrap() {
+            let name = tool["name"].as_str().unwrap();
+            let hints = &tool["annotations"];
+            assert!(hints["title"].is_string(), "`{name}` has no annotations");
+            assert_eq!(tool["title"], hints["title"], "`{name}`");
+            for key in [
+                "readOnlyHint",
+                "destructiveHint",
+                "idempotentHint",
+                "openWorldHint",
+            ] {
+                assert!(hints[key].is_boolean(), "`{name}` lacks {key}");
+            }
+            // A tool that writes must never claim to be read-only, and a read
+            // never claims to destroy anything.
+            let read_only = hints["readOnlyHint"] == true;
+            assert!(!(read_only && hints["destructiveHint"] == true), "`{name}`");
+        }
+        let hints = |name: &str| annotations(name).unwrap();
+        assert_eq!(hints("overview")["readOnlyHint"], true);
+        assert_eq!(hints("push")["readOnlyHint"], false);
+        assert_eq!(hints("run")["destructiveHint"], true);
+        assert_eq!(hints("write_board")["destructiveHint"], true);
+    }
+
+    #[test]
+    fn resources_are_an_empty_list_not_an_error() {
+        let resp = call(json!({ "jsonrpc": "2.0", "id": 3, "method": "resources/list" }));
+        assert_eq!(resp["result"]["resources"], json!([]));
+        let resp = call(json!({ "jsonrpc": "2.0", "id": 4, "method": "resources/templates/list" }));
+        assert_eq!(resp["result"]["resourceTemplates"], json!([]));
     }
 
     #[test]

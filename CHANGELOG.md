@@ -101,7 +101,13 @@ Release builds also carry the browser dashboard inside the binary.
 - **`push` publishes a branch that was never pushed** (`git push -u origin
   HEAD`) instead of skipping it. Nothing is forced.
 - **ARM Linux** release binaries and pip wheels.
-- **`server.json`**, the manifest for the official MCP Registry.
+- **`server.json`**, the manifest for the official MCP Registry. Each release
+  now lists itself there, and uploads its pip wheels, as soon as the release
+  build finishes, with no step by hand.
+- **Every MCP tool carries annotations**: a readable title and whether it only
+  reads, may destroy work, is safe to repeat, or reaches the network. Clients
+  and MCP directories show these before a call. The server also answers
+  `resources/list` with an empty list instead of an error.
 
 ### Changed
 
