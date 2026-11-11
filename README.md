@@ -14,7 +14,7 @@ What is unpushed, what is behind, what is about to be lost, and what to do next,
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
 
-[**Install**](#install) &emsp; [**Terminal**](#in-the-terminal) &emsp; [**VS Code**](#in-vs-code) &emsp; [**Browser**](#in-the-browser) &emsp; [**Your agent**](#for-your-coding-agent) &emsp; [**Launchpad**](#the-launchpad)
+[**Install**](#install) &emsp; [**With Claude Code**](#use-it-with-claude-code) &emsp; [**Terminal**](#use-it-in-the-terminal) &emsp; [**VS Code**](#use-it-in-vs-code) &emsp; [**Browser**](#use-it-in-the-browser) &emsp; [**Launchpad**](#the-launchpad)
 
 <img src="assets/demo.gif" alt="The cohors dashboard. Pressing P on Do next pushes every commit that exists only on this machine, and Not backed up drops from five repositories to one." width="100%">
 
@@ -31,6 +31,8 @@ cohors
 
 cohors looks in the folders where code usually lives and opens a dashboard of every repository it finds. Nothing is written until you press a key that says so. To look around on sample data first, run `cohors demo`. Other ways to install are [below](#install).
 
+Every example in this README is real output from cohors, run on the same thirteen sample repositories as the picture above.
+
 ## Five questions a pile of terminals cannot answer
 
 | | |
@@ -41,77 +43,365 @@ cohors looks in the folders where code usually lives and opens a dashboard of ev
 | **What did I ship this week?** | Your commits across every repository, ready to paste into a standup. |
 | **What is waiting in each repo?** | Open tasks and the commands to run, written down in the repo itself. |
 
-One Rust binary reads your repositories once and every place below draws from that same reading, so they always agree.
+One Rust binary reads your repositories once, and the terminal, the editor, the browser and your agent all draw from that same reading, so they always agree.
 
-### In the terminal
+## Use it with Claude Code
 
-Five cards on one screen, each in its own colour: what to do next, work at risk, open tasks, the week's commits, and every repository. A letter is one verb everywhere: `f` fetches, `p` pulls, `P` pushes, `c` commits, `S` stashes. On "Do next" a letter carries out that step for all its repositories; on a repository it acts on that one, or on the ones you marked.
+Claude can already run `git` in one repository at a time. With cohors it sees all of them at once: it answers "what needs my attention" in one call instead of `cd`-ing through every folder, and it can act across many repositories behind limits you set.
 
-<img src="assets/terminal.png" alt="The cohors terminal dashboard with its five cards" width="100%">
+### 1. Connect it
 
-### In VS Code
-
-The cohors icon in the activity bar opens the overview as six native panes, and the dashboard tab has the same cards, with a detail panel for each repository. Everything comes from the `cohors` binary, so the editor and the terminal never disagree.
-
-<img src="assets/vscode.png" alt="The cohors dashboard inside VS Code" width="100%">
-
-### In the browser
-
-`cohors web` serves the same scan on localhost. It is read-only unless you start it with write access, and your GitHub token stays on your machine: the page never sees it.
-
-<img src="assets/web.png" alt="The cohors browser dashboard" width="100%">
-
-### For your coding agent
-
-`cohors mcp` gives a coding agent the same view of your fleet that you have, behind limits you set. It works as **find, target, preview, act**:
+Install the plugin from inside Claude Code:
 
 ```text
-search("X-Tenant-Id", kind=content)      →  the 3 repos that still use it
-run("<codemod>", {ids:[…]}, dry_run)     →  "would run in 3 repos"  (nothing touched)
-#  …you approve the plan, then:
-run("<codemod>", {ids:[…]}, confirm)     →  per-repo { ok, exit_code, stdout, … }
+/plugin marketplace add rushirb2001/cohors
+/plugin install cohors@cohors
 ```
 
-**In Claude Code, install the plugin.** It registers the server, finds the binary wherever your install put it, and adds skills for fleet work, setting a repo up, and planning your focus:
+Or from your shell: `claude plugin marketplace add rushirb2001/cohors && claude plugin install cohors@cohors`.
+
+The plugin needs the `cohors` binary installed ([any channel](#install) works; the plugin finds it wherever it landed). It gives Claude:
+
+| | |
+|---|---|
+| **The cohors MCP server**, read-only | Every read tool below. Claude can look at anything and change nothing. |
+| **Three skills** | `fleet` (questions about all your repos), `launchpad-setup` ("set up this repo for the launchpad") and `plan-focus` ("plan my day"). Claude picks them up from what you ask. |
+| **Two subagents** | `cohors-setup` writes a repo's launchpad file; `cohors-plan` plans your focus across repos. |
+| **Session hooks** | Each Claude session's start and end is logged, so the launchpad shows which repos you worked in with an agent. |
+
+Check it worked: start a new session and ask **"what needs my attention across my repos?"**. Claude should answer from the `overview` tool rather than running `find` or `git status`.
+
+### 2. Ask it things
+
+These are things to say to Claude, the tool it calls, and what that tool really returns on the sample fleet. Claude then answers in its own words from that result.
+
+**"What needs my attention across my repos?"**
+
+Claude calls `overview` and gets every step worth taking, most urgent first, each with the reason and the repositories it applies to:
 
 ```text
-/plugin install cohors --marketplace rushirb2001/cohors
+{
+  "headline": "13 repositories. 6 have work at risk, 2 are clean.",
+  "actions": [
+    {
+      "severity": "risk",
+      "title": "Push 4 commits from 3 repositories",
+      "why": "They exist only on this machine: analytics, design-system and payments. …"
+    },
+    {
+      "severity": "warn",
+      "title": "Reconcile 1 diverged branch",
+      "why": "Local and remote both moved, so neither a push nor a fast-forward pull …"
+    },
+    { "severity": "warn", "title": "Publish 1 branch that has no upstream", … },
+    { "severity": "notice", "title": "Pull 2 repositories that are behind", … },
+    …
+  ]
+}
 ```
 
-**Or register the server by hand.** It is read-only until you add flags:
+**"What have I changed in web-app?"**
 
-```sh
-claude mcp add cohors -- "$(which cohors)" mcp                              # read-only
-claude mcp add cohors -- "$(which cohors)" mcp --allow-writes --allow-run   # + bulk actions
-claude mcp add cohors -- "$(which cohors)" mcp --allow-launchpad            # + launchpad writes
+Claude calls `changes` with `{"name": "web-app"}` and sees each uncommitted file (it can ask for the diff too, with `include_patch`):
+
+```text
+{
+  "repo": "web-app",
+  "files": [
+    { "path": "cart.tsx",     "status": " M" },
+    { "path": "checkout.tsx", "status": "??" },
+    { "path": "drawer.tsx",   "status": "??" },
+    { "path": "tax.ts",       "status": "??" },
+    …
+  ]
+}
 ```
 
-Use the absolute path, as above. An agent starts the server with a stripped `PATH`, so a bare `cohors mcp` often resolves to nothing and the agent quietly ends up with no tools. Any other client (Claude Desktop, Cursor, Zed, …) takes the same command and arguments in its `mcpServers` block; run `cohors mcp` by hand and it prints both, filled in with your install path.
+**"Where do we handle retries?"**
 
-**Why an MCP server and not a bash loop?** An agent can already loop over `git`. What it cannot give itself is a boundary:
+Claude calls `search` with `kind: "content"` and searches every repository at once, without opening any of them:
 
-- Read-only unless you start it armed, and `pull` is fast-forward only, so it cannot lose work.
-- Destructive actions need `confirm`; `dry_run` shows what would happen without touching anything, even on a read-only server.
-- Locked to your configured roots, and an empty selector matches **nothing**, so a fumbled argument cannot fan out across every repository.
-- A cap on how many repositories one call can touch, an optional allowlist for `run`, and an audit log of every action.
+```json
+{
+  "hits": [
+    { "repo": "payments", "path": "notes.md", "line": 6,
+      "text": "fix: duplicate charge on retry" },
+    { "repo": "payments", "path": "notes.md", "line": 9,
+      "text": "fix: retry charge on 5xx from the processor" }
+  ]
+}
+```
+
+**"Write my standup for this week."**
+
+Claude calls `standup` and gets your own commits (matched by your git email) grouped by repository, most active first. The same digest from the command line, `cohors standup`:
+
+```markdown
+## Standup — this week
+
+_18 commits across 9 repos_
+
+### mobile-app (4)
+- `f709cc0` feat: biometric unlock
+- `24a0e1d` test: unlock flows
+- `05ff817` fix: token refresh race
+
+### payments (4)
+- `169e66b` fix: back off when the processor rate-limits
+- `aba968d` feat: idempotency keys on retries
+…
+```
+
+**"Back up everything that only exists on this laptop."**
+
+This one changes things, so Claude works in three steps: find, preview, act. It finds the repos with `overview`, then previews the push with `dry_run`, which works even on a read-only server and touches nothing:
+
+```json
+{
+  "action": "push",
+  "dry_run": true,
+  "targets": 4,
+  "repos": [
+    { "name": "mobile-app" }, { "name": "payments" },
+    { "name": "design-system" }, { "name": "analytics" }
+  ]
+}
+```
+
+Claude shows you that list and waits for your yes. Then it pushes, if you have [let it act](#3-let-claude-act). On the plugin's read-only server, the real push is refused and Claude is told how to enable it:
+
+```text
+`push` is disabled: this server is read-only.
+Relaunch it with `cohors mcp --allow-writes` to enable write tools.
+```
+
+`push` never force-pushes, and `pull` is fast-forward only, so neither can lose work. A diverged branch (mobile-app here) is reported as failing, never forced.
+
+**"Run the tests in web-app and payments."**
+
+Claude calls `run` with `dry_run` to show where the command would run, then again with `confirm: true` once you agree. Each repository reports its own exit code and output, and a command that runs too long is stopped and marked as timed out. This needs `--allow-run`.
+
+**"Set up this repo for the launchpad."**
+
+Say it inside a repository. The `launchpad-setup` skill has Claude read the [launchpad contract](#the-launchpad) and the repository itself (README, build files, compose files), and write `.cohors/repo.json`: the commands worth running and the work in progress. It leaves out anything cohors already detects on its own, checks the file before writing, and never commits. The sample `payments` repo's file looks like this:
+
+```json
+{
+  "specVersion": 1,
+  "name": "payments",
+  "summary": "Charges, refunds and webhooks for every product",
+  "group": "backend",
+  "flows": [
+    { "id": "dev", "label": "Run locally", "kind": "server",
+      "run": "docker compose up -d && cargo run", "primary": true },
+    { "id": "test", "label": "Test", "kind": "test", "run": "cargo test" }
+  ],
+  "tasks": [
+    { "id": "idempotency-keys", "title": "Idempotency keys on charge retries",
+      "status": "doing", "priority": "high" },
+    { "id": "webhook-backoff", "title": "Back off webhook redelivery",
+      "status": "todo", "priority": "normal" }
+  ]
+}
+```
+
+**"Plan my day."**
+
+The `plan-focus` skill has Claude gather evidence before planning: `overview` for what is at risk, `read_board` for what you were already doing, `launchpad` for every repo's open tasks, `list_repos` for uncommitted or unpushed work nobody wrote a task for, and `standup` for what actually moved this week. It keeps everything you are still doing, proposes a short list with the first thing to start, and saves it to your focus board, which on the sample fleet holds:
+
+```json
+{
+  "focus": [
+    { "repo": "payments", "status": "doing",
+      "title": "Idempotency keys on charge retries" },
+    { "repo": "web-app", "status": "todo",
+      "title": "Cart drawer animation" },
+    { "repo": "data-pipeline", "status": "todo",
+      "title": "Reprocess late events without a full backfill" }
+  ]
+}
+```
+
+The board lives in `~/.cohors/board.json`, and the terminal, VS Code and the browser all show it.
+
+**"Which of my pull requests are failing CI?"**
+
+Claude calls `ci_status` with `{"ci": "failing"}` and `list_prs`. These read GitHub, so they need a token: cohors uses `GITHUB_TOKEN`, or your `gh` login. The token never leaves your machine.
 
 <details>
-<summary><b>Every tool the server offers</b></summary>
+<summary><b>Every tool, and the selector they share</b></summary>
 <br>
 
-**Reads, always on:** `overview`, `list_repos`, `get_repo`, `fleet_summary`, `search`, `changes`, `repo_path`, `list_prs`, `ci_status`, `standup`, and the launchpad reads `launchpad`, `read_contract`, `read_board`.
+| Tool | What Claude gets |
+|---|---|
+| `overview` | What to do next across the fleet and why, most urgent first. The best first call. |
+| `fleet_summary` | Counts only: total, needing attention, at risk. The cheapest check. |
+| `list_repos` | Every repository's state: branch, ahead and behind, uncommitted files, stashes, last commit. |
+| `get_repo` | One repository in depth. |
+| `changes` | The uncommitted files in each repository, with the diff on request. |
+| `search` | Code (`kind: "content"`) or repository names across the whole fleet. |
+| `standup` | Your commits for this week or today, grouped by repository. |
+| `repo_path` | Where a repository is on disk. |
+| `list_prs`, `ci_status` | Open pull requests and CI results from GitHub. |
+| `launchpad`, `read_contract`, `read_board` | Each repo's tasks and commands, the file format, and your focus board. |
+| `fetch`, `pull`, `push`, `commit`, `stash` | Git across many repositories. Needs `--allow-writes`; `commit` and `stash` also need `confirm`. |
+| `run` | One shell command in each repository. Needs `--allow-run` and `confirm`. |
+| `write_repo_contribution`, `write_board`, `record_activity` | Launchpad files only, never git. Needs `--allow-launchpad`. |
 
-**Actions, behind `--allow-writes` and `--allow-run`:** `fetch`, `pull`, `push`, `commit`, `stash`, `run`.
+Every tool that targets repositories takes the same selector. Fields combine with AND: `{"dirty": true}`, `{"behind": true}`, `{"name": "pay*"}`, `{"ci": "failing"}`, `{"any_of": [{"dirty": true}, {"ahead": true}]}`. The empty selector `{}` matches **nothing** for an action, so a fumbled argument cannot fan out across every repository; `{"all": true}` means all of them.
 
-**Launchpad writes, behind `--allow-launchpad`:** `write_repo_contribution`, `write_board`, `record_activity`.
-
-Every read reports the roots it searched and the config in effect, so an empty fleet explains itself instead of reading as "all clear."
+Every read also reports the roots it searched and the config in effect, so an empty fleet explains itself instead of reading as "all clear."
 
 </details>
 
+### 3. Let Claude act
+
+The plugin's server is read-only: Claude can look at everything and change nothing. To let it act, register the server yourself with the flags you want. Use the absolute path to `cohors`, because Claude starts servers with a stripped `PATH`:
+
+```sh
+# fetch, pull, push, commit and stash
+claude mcp add cohors -- "$(which cohors)" mcp --allow-writes
+
+# the same, and run commands
+claude mcp add cohors -- "$(which cohors)" mcp --allow-writes --allow-run
+
+# write launchpad files only
+claude mcp add cohors -- "$(which cohors)" mcp --allow-launchpad
+```
+
+| Flag | Lets Claude | Still guarded by |
+|---|---|---|
+| none | read everything | nothing to guard |
+| `--allow-writes` | `fetch`, `pull`, `push`, `commit`, `stash` | `pull` is fast-forward only, `push` never forces, `commit` and `stash` need `confirm` |
+| `--allow-run` | `run` a shell command in many repositories | `confirm`, a cap on how many repositories one call touches, an optional allowlist |
+| `--allow-launchpad` | write `.cohors/repo.json`, the focus board, the activity log | every write is validated first; never touches git |
+
+Every action is limited to your configured roots and written to an audit log. Other MCP clients (Claude Desktop, Cursor, Zed, …) take the same command and arguments in their `mcpServers` block; run `cohors mcp` by hand and it prints them, filled in with your install path.
+
+### 4. Start Claude from cohors
+
+cohors can also open a Claude Code session for you, already briefed:
+
+```sh
+cohors agent run setup-repo        # in a repo: Claude writes its launchpad file
+cohors agent run plan-day          # Claude plans your focus across every repo
+cohors agent runners               # which agents are installed
+
+# Claude starts on one task from a repo's launchpad file
+cohors agent run task --repo payments --task idempotency-keys
+```
+
+A task started this way is linked to its Claude conversation. Run the same command again and cohors resumes that conversation instead of starting a new one, so a task keeps its history across days. Codex, Gemini CLI and agy work too (`--runner`); without `--runner`, cohors uses the first one installed. A runner that cannot pick a conversation back up starts a fresh one. In VS Code the same thing is a button on every task.
+
+## Use it in the terminal
+
+<img src="assets/terminal.png" alt="The cohors terminal dashboard with its five cards" width="100%">
+
+Run `cohors` and the dashboard opens on five cards, each in its own colour: **Do next**, **Work at risk**, **Open tasks**, **Commits, last 7 days** and **Repositories**. A day with it looks like this:
+
+1. **Read "Do next".** It is the same list Claude gets from `overview`: what to do, why, and which repositories.
+2. **Press the letter on a step.** On "Do next", `P` pushes every repository in that step at once, `p` pulls them, `f` fetches them. Each step shows its letter.
+3. **Or act on chosen repositories.** Press `2` or `5` to go to a list of repositories, `Space` to mark the ones you want, then the letter. The same letters work everywhere: `f` fetch, `p` pull, `P` push, `c` commit, `S` stash.
+4. **Open one.** `Enter` shows a repository in full: its branch and upstream, what is staged and modified, what cohors noticed about it, its last commit and its tasks. On a repository with no launchpad file, `a` there starts your agent to set it up.
+5. **Finish the day.** `s` shows your standup and `Y` copies it as Markdown. `t` shows open tasks across every repo.
+
+Press `:` for the command line, where `Tab` completes and `↑` brings back earlier lines:
+
+```text
+:commit wip: cart drawer     commit the marked repositories with this message (asks first)
+:!npm test                   run a command in the marked repositories
+:jump payments               go to a repository by name
+:sort recent                 sort by last commit (also: name, dirty)
+:dirty                       show only repositories with uncommitted work
+/pay                         filter the list as you type
+```
+
+| Key | Does | Key | Does |
+|---|---|---|---|
+| `1`–`5` | go to a card | `f` `p` `P` | fetch, pull, push |
+| `Tab` | next card | `c` `S` | commit, stash |
+| `↑` `↓` | move | `F` | fetch everything |
+| `Enter` | open a repository | `s` `Y` | standup, copy it |
+| `/` | filter | `t` | tasks across the fleet |
+| `:` | command line | `?` | every key |
+| `Space` | mark a repository | `q` | quit |
+
+`cohors --watch` keeps the dashboard live, re-scanning every few seconds.
+
+### Without the dashboard
+
+Every view is also a command. At a terminal it prints a report; piped, it prints JSON. This is `cohors overview` on the sample fleet, with the command that carries out each step underneath it:
+
+```text
+  Do next
+  most urgent first; the command under each step starts it
+     RISK  Push 4 commits from 3 repositories
+           They exist only on this machine: analytics,
+           design-system and payments. Some are more than 2
+           days old.
+           cohors push --select 'ahead,!diverged'
+     WARN  Publish 1 branch that has no upstream
+           Not backed up anywhere: docs-site.
+           cohors push --select unpublished
+     NOTE  Pull 2 repositories that are behind
+           A fast-forward pull cannot lose work:
+           data-pipeline and web-app.
+           cohors pull --select 'behind,!diverged'
+```
+
+Every action takes `--dry-run`, and none runs without `--select`:
+
+```text
+$ cohors push --select ahead --dry-run
+
+  Dry run
+  would push 4 repos, nothing will change
+    ▸ mobile-app     ~/code/mobile-app
+    ▸ payments       ~/code/payments
+    ▸ design-system  ~/code/design-system
+    ▸ analytics      ~/code/analytics
+```
+
+`--select` picks repositories with a short language: `dirty`, `behind`, `ahead`, `diverged`, `unpublished`, `stale-fetch`, `attention`, `name:pay*`, `ci:failing`. Join them with a comma to require all of them, and put `!` in front to exclude: `'behind,!diverged'`. JSON works too: `--select '{"behind": true}'`.
+
+```sh
+cohors scan --select dirty                # what is uncommitted, grouped by urgency
+cohors fetch --select all                 # refresh every remote
+cohors pull --select 'behind,!diverged'   # fast-forward everything that is behind
+cohors run --select 'name:web-*' 'npm test'   # one command in many repositories
+
+# script against the same model Claude reads
+cohors overview --json | jq -r '.actions[].title'
+```
+
+## Use it in VS Code
+
+<img src="assets/vscode.png" alt="The cohors dashboard inside VS Code" width="100%">
+
+Click the cohors icon in the activity bar. The sidebar shows the overview as six native panes (the fleet, Do next, Work at risk, Open tasks, Commits and Repositories), and **cohors: Open dashboard** opens the full dashboard in a tab. From there you can:
+
+- **Act on repositories.** Each step and each repository has its buttons: push, pull, fetch, open in a new window, open a terminal there.
+- **Run a repo's commands.** The commands a repo declares (its flows) run in a VS Code terminal with one click.
+- **Start Claude on a task.** Each task has a button that opens Claude Code (or Codex, Gemini CLI or agy) in a terminal, briefed on that task. The second time, it resumes the same conversation, and the dashboard lists each repository's recent Claude sessions so you can go back to one.
+- **Set up a repo, or plan your day.** The commands **cohors: Set up this repo with an agent** and **cohors: Plan my day with an agent** start the same skills as above.
+
+It reads everything from the `cohors` binary, so it shows exactly what the terminal shows. Settings: `cohors.roots` (folders to scan; empty uses your cohors config), `cohors.binaryPath`, `cohors.refreshSeconds` and `cohors.openOnStartup`. In an untrusted workspace it reads but runs nothing.
+
+## Use it in the browser
+
+<img src="assets/web.png" alt="The cohors browser dashboard" width="100%">
+
+```sh
+cohors web --root ~/code --watch          # read-only, live
+cohors web --root ~/code --allow-writes   # with fetch, pull, push, commit and stash
+cohors web --demo                         # the sample fleet
+```
+
+The same scan in a browser tab on localhost, with GitHub pull requests and CI alongside. It is read-only unless you start it with `--allow-writes` or `--allow-run`, and your GitHub token stays on your machine: the page never sees it. For now `cohors web` builds the page from source, so run it from a clone of this repository; the first run installs Trunk, the WebAssembly bundler, unless you pass `--no-install`.
+
 ## The launchpad
 
-Status tells you what state a repo is in. The launchpad tells you what you can *do* there. A repository opts in by committing one small file, so its entry travels with the clone:
+Status tells you what state a repository is in. The launchpad tells you what you can *do* there: the commands worth running, the prompts it ships for agents, and the work in progress. A repository opts in by committing one small file, so its entry travels with the clone:
 
 ```text
 your-repo/.cohors/
@@ -119,16 +409,28 @@ your-repo/.cohors/
 └── agents/release.md  # a prompt this repo ships for recurring work
 ```
 
-You don't write it. In that repo, ask your agent to **"set up this repo for the launchpad"**: it reads the code and writes the file, and cohors rejects anything invalid with the full list of problems. Flows from npm, cargo, uv, Makefile and gradle are found with no file at all.
+You don't write it by hand: ask Claude to [set up this repo for the launchpad](#2-ask-it-things). Commands from npm, cargo, uv, Makefile and gradle are found with no file at all, so a repo declares only what detection cannot know.
 
-```sh
-cohors launchpad              # your focus board and every open task across the fleet
-cohors launchpad validate .   # check this repo's .cohors/repo.json
+```text
+$ cohors launchpad
+
+  Focus
+  your cross-repo board, the short list you chose
+    ◆ Idempotency keys on charge …  payments
+    ○ Cart drawer animation         web-app
+    ○ Reprocess late events witho…  data-pipeline
+
+  Open tasks
+  ◆ doing, ✕ blocked, ○ to do; most urgent first
+    ▸ payments  2 open
+      ◆ Idempotency keys on charge retries  high  doing
+      ○ Back off webhook redelivery
+    ▸ web-app  2 open
+      ✕ Keyboard order in the checkout fo…  blocked
+      ○ Cart drawer animation  high
 ```
 
-Then ask your agent to **"plan my day"**. It reads every repo's tasks, the uncommitted and unpushed work nobody wrote a task for, and failing CI, and proposes a focus board across all of them.
-
-The format is an open contract, written down in [spec/v1/SPEC.md](spec/v1/SPEC.md). Text inside a repo's launchpad files is treated as untrusted data: the agent is told so, and cohors never runs a declared flow on its own.
+`cohors launchpad validate .` checks a repo's file. The format is an open contract, written down in [spec/v1/SPEC.md](spec/v1/SPEC.md). Text inside a repo's launchpad files is treated as untrusted data: Claude is told so, and cohors never runs a declared command on its own.
 
 ## Install
 
@@ -171,45 +473,15 @@ python3 scripts/package-extension.py
 code --install-extension target/extension/cohors-*.vsix
 ```
 
-With no config, cohors looks in the folders where code usually lives. Scope it to one folder with `cohors --root ~/code`, or run `cohors init` to save a config you can edit (roots, aliases, groups, ignore rules). crates.io distribution is planned.
+**The Claude Code plugin:** see [Connect it](#1-connect-it).
 
-## Commands
-
-```sh
-cohors                     # find every repo and open the dashboard
-cohors --root ~/code       # only the repos under one folder
-cohors demo                # the whole dashboard on sample data (nothing written to disk)
-cohors init                # save an editable config to ~/.config/cohors/config.toml
-cohors overview            # what to do next across every repo, and why (JSON when piped)
-cohors scan                # what needs you, grouped by urgency
-cohors scan --select dirty # filter: dirty, behind, unpublished, 'name:pay*', or raw JSON
-cohors standup             # your commits across every repo, ready to paste
-cohors fetch --select all --dry-run   # preview any bulk action before it touches anything
-cohors launchpad           # focus board and open tasks across the fleet
-cohors agent run setup-repo --repo .  # start your coding agent on a repo, with a shipped prompt
-cohors mcp                 # the MCP server (read-only; --allow-writes / --allow-run to arm)
-cohors web                 # the same fleet in the browser (--root to scope, --watch for live)
-```
-
-Run an action without a selector and it explains itself: what it does, how safe it is, and how to pick repositories. Nothing writes without a selector, and every action takes `--dry-run`.
-
-**Keys in the dashboard**
-
-| Key | Does | Key | Does |
-|---|---|---|---|
-| `1`–`5` | focus a card | `f` `p` `P` | fetch, pull, push |
-| `Tab` | next card | `c` `S` | commit, stash |
-| `↑` `↓` | move | `F` | fetch everything |
-| `Enter` | open a repository | `s` | this week's standup |
-| `/` | filter | `t` | tasks across the fleet |
-| `:` | command line (`Tab` completes, `↑` recalls) | `?` | every key |
-| `Space` | mark a repository | `q` | quit |
+With no config, cohors looks in the folders where code usually lives. Scope it to one folder with `cohors --root ~/code` (repeat `--root` for several), or run `cohors init` to save a config you can edit at `~/.config/cohors/config.toml`: roots, aliases, groups and ignore rules. crates.io distribution is planned.
 
 ## Safe by default
 
 - `pull` is fast-forward only, and nothing ever force-pushes.
 - Every bulk action takes `--dry-run`, and nothing writes without a selector naming which repositories.
-- No action is bound to a bare keystroke that can destroy work.
+- No key that can destroy work is a single bare keystroke; commit asks first.
 - The browser dashboard and the MCP server are read-only until you start them with write access.
 - One repository that cannot be read is reported as such; it never takes the dashboard down.
 
