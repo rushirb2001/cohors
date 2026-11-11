@@ -59,6 +59,7 @@ pub fn detect_roots(home: Option<&Utf8Path>) -> Vec<String> {
             None
         };
         if let Some(candidate) = candidate
+            && !too_broad(&candidate, home)
             && !absolute.iter().any(|root| candidate.starts_with(root))
         {
             let shown = home
@@ -104,10 +105,40 @@ fn contains_repo(dir: &std::path::Path, depth: usize) -> bool {
     false
 }
 
+/// Whether `dir` is too much of the disk to be a root nobody asked for.
+///
+/// The current directory is a hint about where repos live, not a licence to
+/// scan the machine. A program started by a desktop app (an editor extension,
+/// a launcher) runs in `/` or in the home directory, and treating either as a
+/// root would list every tool's checkout on the disk (Homebrew, a shell
+/// framework, a version manager) as if it were the user's work. So the
+/// filesystem root, the home directory, and anything above home never count.
+fn too_broad(dir: &Utf8Path, home: Option<&Utf8Path>) -> bool {
+    dir.parent().is_none() || home.is_some_and(|home| home.starts_with(dir))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn the_whole_disk_and_the_home_directory_are_never_implied_roots() {
+        let home = Utf8Path::new("/Users/ada");
+        for dir in ["/", "/Users", "/Users/ada"] {
+            assert!(too_broad(Utf8Path::new(dir), Some(home)), "{dir}");
+        }
+        for dir in [
+            "/Users/ada/code",
+            "/Users/ada/Main/code/work",
+            "/srv/checkouts",
+        ] {
+            assert!(!too_broad(Utf8Path::new(dir), Some(home)), "{dir}");
+        }
+        // With no home known, only the filesystem root is ruled out.
+        assert!(too_broad(Utf8Path::new("/"), None));
+        assert!(!too_broad(Utf8Path::new("/srv"), None));
+    }
 
     fn touch_repo(at: &std::path::Path) {
         fs::create_dir_all(at.join(".git")).unwrap();
