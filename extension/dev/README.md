@@ -27,6 +27,12 @@ Query parameters set the starting state, which is handy for screenshots:
 `?theme=light&page=tasks`, `?page=repos&sel=demo/payments`,
 `?scenario=missing&bare` (`bare` hides the harness bar).
 
+`?from=/some/dir/` reads the fleet from another directory of real
+`cohors … --json` output instead of `fixtures/` (`overview.json`,
+`launchpad.json`, `standup.json`, `standuptoday.json`). The marketing studio
+uses it so the editor's picture shows the same made-up fleet as the terminal's:
+`scripts/studio/build.sh` passes `from=/target/assets/captures/`.
+
 ## Check it from Node
 
 ```sh

@@ -157,8 +157,23 @@ body.bare .detail { top: 0 !important; }
   // Fixtures, loaded once. The webview's first "ready" waits for them.
   const NAMES = ["host", "overview", "launchpad", "standup-week", "standup-today", "agent", "local", "devices"];
   const fixtures = {};
+  // `?from=DIR/` reads the fleet from another directory of real
+  // `cohors … --json` output (the marketing studio's captures of its made-up
+  // fleet, so the editor's picture shows the same repositories as the
+  // terminal's). What a fleet capture does not hold stays a fixture.
+  const FROM = params.get("from");
+  const CAPTURED = { overview: "overview", launchpad: "launchpad", "standup-week": "standup", "standup-today": "standuptoday" };
+  const fileFor = (n) => (FROM && CAPTURED[n] ? `${FROM}${CAPTURED[n]}.json` : `fixtures/${n}.json`);
   const loaded = Promise.all(NAMES.map((n) =>
-    fetch(`fixtures/${n}.json`).then((r) => r.json()).then((j) => { fixtures[n] = j; })));
+    fetch(fileFor(n)).then((r) => r.json()).then((j) => { fixtures[n] = j; }))).then(() => {
+    if (!FROM) return;
+    // The captured fleet lives under its own home directory, and has no
+    // agent sessions recorded against it.
+    const root = fixtures.overview.roots[0];
+    fixtures.host.home = root.replace(/\/[^/]+$/, "");
+    fixtures.host.here = [fixtures.overview.repos[0].path];
+    fixtures.local = { threads: {}, sessions: {} };
+  });
   const clone = (v) => JSON.parse(JSON.stringify(v));
 
   // The message the extension host would send for each scenario.
