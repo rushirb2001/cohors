@@ -113,13 +113,51 @@ async function wiring() {
   const view = read("media/view.js"), main = read("media/main.js"), host = read("src/extension.js");
   const pkg = JSON.parse(read("package.json"));
 
-  await check("every data-do the view emits has a case in main.js", () => {
+  const sideJs = fs.readFileSync(path.join(EXT, "media", "side.js"), "utf8");
+  await check("every data-do the view emits has a case in main.js or side.js", () => {
     const emitted = new Set([...view.matchAll(/\bdo: "([a-z-]+)"/g)].map((m) => m[1]));
     for (const m of view.matchAll(/data-do="([a-z-]+)"/g)) emitted.add(m[1]);
-    const handled = new Set([...main.matchAll(/case "([a-z-]+)":/g)].map((m) => m[1]));
+    const handled = new Set([...main.matchAll(/case "([a-z-]+)":/g), ...sideJs.matchAll(/case "([a-z-]+)":/g)].map((m) => m[1]));
     const missing = [...emitted].filter((d) => !handled.has(d));
     assert.deepStrictEqual(missing, [], `unhandled: ${missing.join(", ")}`);
     assert(emitted.size > 30, "expected the view to emit its controls");
+  });
+
+  await check("each sidebar pane handles every control it draws, and the host every message it sends", () => {
+    const handled = new Set([...sideJs.matchAll(/case "([a-z-]+)":/g)].map((m) => m[1]));
+    const demo = { status: "ok", home: "/home/x", generatedAt: fixture("overview").now, overview: fixture("overview"),
+      launchpad: fixture("launchpad"), binary: { path: "/x/cohors", version: "cohors 0" }, agent: null, local: {} };
+    const states = [demo, null, { status: "missing", problem: { message: "x" } }, { status: "error", problem: { message: "x" } },
+      Object.assign({}, demo, { overview: Object.assign({}, demo.overview, { repos: [] }) })];
+    const draw = (part, state, ui) => V.sidePart(part, state, ui || {}).map((s) => s.html).join("");
+    for (const state of states) for (const part of V.SIDE_PARTS) {
+      for (const m of draw(part, state).matchAll(/data-do="([a-z-]+)"/g)) assert(handled.has(m[1]), `side.js has no case for ${m[1]}`);
+    }
+    // The manifest contributes exactly one view per pane, in order, and the
+    // host registers a provider for each.
+    const views = pkg.contributes.views.cohors;
+    assert.deepStrictEqual(views.map((v) => v.type), V.SIDE_PARTS.map(() => "webview"));
+    for (const view of views) assert(host.includes(`"${view.id}": "`), `${view.id} has no provider`);
+    assert.deepStrictEqual([...host.matchAll(/"cohors\.[a-z]+": "([a-z]+)",/g)].map((m) => m[1]), V.SIDE_PARTS);
+
+    // What each pane shows for the demo fleet, and the number on its header.
+    const counts = V.sideCounts(demo);
+    assert.deepStrictEqual(Object.keys(counts), V.SIDE_PARTS.slice(1));
+    assert.strictEqual(counts.repos, demo.overview.repos.length);
+    assert.strictEqual((draw("risk", demo).match(/class="srow"/g) || []).length, counts.risk);
+    assert.strictEqual((draw("next", demo).match(/class="srow"/g) || []).length, counts.next);
+    assert(draw("fleet", demo).includes("Not backed up") && draw("commits", demo).includes("bar-row"));
+    assert.strictEqual(V.sideCounts(null), null);
+    // Only the first pane explains a problem; the rest point at it.
+    assert(draw("fleet", states[2]).includes("not installed") && !draw("next", states[2]).includes("not installed"));
+    // The filter narrows the repositories.
+    const one = demo.overview.repos[0].name;
+    assert((draw("repos", demo, { q: one }).match(/class="srow"/g) || []).length < counts.repos);
+
+    const sent = new Set([...sideJs.matchAll(/send\(\{ type: "([A-Za-z]+)"/g)].map((m) => m[1]));
+    const hostCases = new Set([...host.matchAll(/case "([A-Za-z]+)":/g)].map((m) => m[1]));
+    for (const t of sent) assert(hostCases.has(t), `the host has no case for ${t}`);
+    assert(sent.size >= 8, "expected side.js to send its messages");
   });
 
   await check("every message main.js sends is handled by the host", () => {

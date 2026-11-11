@@ -24,7 +24,8 @@ const EXT_DIR = path.join(__dirname, "..");
 const INSTALL_URL = "https://github.com/rushirb2001/cohors#install";
 
 let ctx = null;
-let panel = null, timer = null, tree = null;
+let panel = null, timer = null;
+const sides = new Map();   // pane name -> its view, for each sidebar pane VS Code has opened
 let refreshing = false, lastRefresh = 0, lastData = null;
 let pendingReveal = null;   // a page/repo to show once the webview is ready
 
@@ -37,11 +38,19 @@ const output = vscode.window.createOutputChannel("cohors", { log: true });
 const cli = Cohors.create(() => ({
   binaryPath: cfg().get("binaryPath", ""),
   roots: cfg().get("roots", []),
+  cwd: workspaceFolders()[0] || "",
 }), { log: (line) => output.info(line) });
 const agent = Agent.create(cli);
 
 const workspaceFolders = () => (vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath);
-const post = (m) => { if (panel) panel.webview.postMessage(m); };
+// To the dashboard tab, and (for the two things it shows) to the sidebar.
+const post = (m) => {
+  if (panel) panel.webview.postMessage(m);
+  if (m.type === "data" || m.type === "busy") {
+    for (const view of sides.values()) view.webview.postMessage(m);
+  }
+  if (m.type === "data") labelPanes();
+};
 const fail = (e) => vscode.window.showErrorMessage(`cohors: ${(e && e.message) || e}`);
 
 /* ───────── data ───────── */
@@ -134,6 +143,9 @@ async function refresh(force) {
   post({ type: "busy", on: true });
   try {
     const state = await collect();
+    output.info(state.status === "ok"
+      ? `read ${state.overview.repos.length} repositories under ${(state.overview.roots || []).join(", ") || "the configured roots"}`
+      : `could not read the fleet: ${(state.problem && state.problem.message) || state.status}`);
     post({ type: "data", state });
   } catch (e) {
     lastData = {
@@ -146,7 +158,6 @@ async function refresh(force) {
     refreshing = false;
     lastRefresh = Date.now();
     post({ type: "busy", on: false });
-    syncSidebar();
   }
 }
 
@@ -154,7 +165,7 @@ function armTimer() {
   clearInterval(timer);
   const s = cfg().get("refreshSeconds", 30);
   // `active`, not `visible`: a tab in a split you are not looking at costs nothing.
-  if (s > 0) timer = setInterval(() => { if (panel && panel.active) refresh(); }, Math.max(5, s) * 1000);
+  if (s > 0) timer = setInterval(() => { if ((panel && panel.active) || [...sides.values()].some((v) => v.visible)) refresh(); }, Math.max(5, s) * 1000);
 }
 
 // One write can fire several watcher events, and a git operation touches HEAD
@@ -477,7 +488,9 @@ async function pickRunner() {
 
 /* ───────── webview ───────── */
 
-function html(webview) {
+// `script` is the page's own script: main.js for the dashboard tab, side.js
+// for the sidebar. Both draw with view.js and share one stylesheet.
+function html(webview, script = "main.js", bodyClass = "", part = "") {
   const nonce = [...Array(32)].map(() => Math.floor(Math.random() * 36).toString(36)).join("");
   const u = (f) => webview.asWebviewUri(vscode.Uri.file(path.join(EXT_DIR, "media", f)));
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
@@ -487,9 +500,9 @@ function html(webview) {
 <link rel="stylesheet" href="${u("codicon.css")}">
 <link rel="stylesheet" href="${u("main.css")}">
 <title>cohors</title></head>
-<body><div id="app"></div>
+<body class="${bodyClass}"${part ? ` data-part="${part}"` : ""}><div id="app"></div>
 <script nonce="${nonce}" src="${u("view.js")}"></script>
-<script nonce="${nonce}" src="${u("main.js")}"></script></body></html>`;
+<script nonce="${nonce}" src="${u(script)}"></script></body></html>`;
 }
 
 // `reveal` is optional: { page, repo } to land on.
@@ -522,6 +535,7 @@ async function onMessage(m) {
   if (!m || typeof m.type !== "string") return;
   switch (m.type) {
     case "ready":
+      output.info("dashboard: ready");
       if (lastData) post({ type: "data", state: lastData });
       if (pendingReveal) { post({ type: "reveal", ...pendingReveal }); pendingReveal = null; }
       return refresh(true);
@@ -647,61 +661,85 @@ async function onMessage(m) {
   }
 }
 
-/* ───────── sidebar: the activity-bar view ───────── */
+/* ───────── sidebar: six panes in the activity-bar container ───────── */
 
-// A small native tree: what to do next and where work is at risk. It is a
-// way into the dashboard, not a second dashboard.
-class FleetTree {
-  constructor() {
-    this.changed = new vscode.EventEmitter();
-    this.onDidChangeTreeData = this.changed.event;
-  }
-  getTreeItem(node) { return node; }
-  getChildren(node) {
-    if (!lastData) { if (!refreshing) refresh(true); return []; }
-    if (lastData.status !== "ok") return [];
-    if (node) return node.children || [];
-    const o = lastData.overview;
+// The container holds one view per section of the overview, and VS Code draws
+// them as it draws Explorer's panes: each has a header that opens, closes,
+// reorders and hides it. media/side.js draws the inside of a pane and
+// `sidePart` in media/view.js says what is in it. Every pane shows the same
+// data the dashboard tab does, and its rows open that tab at the right place.
+const PANES = {
+  "cohors.fleet": "fleet",
+  "cohors.next": "next",
+  "cohors.risk": "risk",
+  "cohors.tasks": "tasks",
+  "cohors.commits": "commits",
+  "cohors.repos": "repos",
+};
 
-    // Shape carries the severity; the colour only reinforces it.
-    const icon = (sev) => sev === "risk" ? new vscode.ThemeIcon("warning", new vscode.ThemeColor("list.errorForeground"))
-      : sev === "warn" ? new vscode.ThemeIcon("debug-breakpoint-log", new vscode.ThemeColor("list.warningForeground"))
-      : new vscode.ThemeIcon("circle-outline");
-    const leaf = (label, description, tooltip, sev, reveal) => {
-      const it = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
-      it.description = description;
-      it.tooltip = tooltip;
-      it.iconPath = icon(sev);
-      it.command = { command: "cohors.show", title: "Open dashboard", arguments: [reveal] };
-      return it;
-    };
-    const group = (label, children, emptyText) => {
-      const g = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
-      g.description = String(children.length);
-      g.children = children.length ? children : [new vscode.TreeItem(emptyText)];
-      return g;
-    };
+function paneProvider(part) {
+  return {
+    resolveWebviewView(view) {
+      sides.set(part, view);
+      output.info(`sidebar: ${part} pane opened`);
+      view.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [vscode.Uri.file(path.join(EXT_DIR, "media"))],
+      };
+      view.webview.html = html(view.webview, "side.js", "side", part);
+      view.onDidDispose(() => { sides.delete(part); });
+      view.onDidChangeVisibility(() => {
+        if (view.visible && Date.now() - lastRefresh > 30000) refresh();
+      });
+      view.webview.onDidReceiveMessage((m) => onSideMessage(m, part).catch(fail));
+      labelPanes();
+      armTimer();
+    },
+  };
+}
 
-    const atRisk = o.repos.filter((r) => r.at_risk);
-    return [
-      group("Do next",
-        o.actions.map((a) => leaf(a.title, "", a.why, a.severity, { page: "overview" })),
-        "Nothing needs doing"),
-      group("Work at risk",
-        atRisk.map((r) => leaf(r.name, (r.reasons || [])[0] || "", (r.reasons || []).join(", "), r.severity, { page: "repos", repo: r.id })),
-        "No local work is at risk"),
-    ];
+// The count on each pane's header, and the number of repositories with work
+// at risk as a badge on the activity-bar icon, so it shows with the sidebar
+// closed.
+function labelPanes() {
+  const counts = lastData && lastData.status === "ok" ? {
+    next: lastData.overview.actions.length,
+    risk: lastData.overview.repos.filter((r) => r.at_risk).length,
+    tasks: (lastData.overview.figures && lastData.overview.figures.open_tasks) || 0,
+    commits: (lastData.overview.figures && lastData.overview.figures.commits_week) || 0,
+    repos: lastData.overview.repos.length,
+  } : null;
+  for (const [part, view] of sides) {
+    if (part === "fleet") continue;
+    view.description = counts ? String(counts[part]) : "";
+    if (part === "risk") {
+      view.badge = counts && counts.risk
+        ? { value: counts.risk, tooltip: `${counts.risk} ${counts.risk === 1 ? "repository has" : "repositories have"} work at risk` }
+        : undefined;
+    }
   }
 }
 
-// Which welcome text the sidebar shows when it has no tree to draw.
-function syncSidebar() {
-  const d = lastData;
-  const state = !d ? "loading"
-    : d.status !== "ok" ? d.status
-    : d.overview.repos.length ? "ok" : "empty";
-  vscode.commands.executeCommand("setContext", "cohors.state", state);
-  if (tree) tree.changed.fire();
+// A pane asks for very little: its data, the dashboard at some place, and
+// the handful of housekeeping actions the dashboard also offers. Anything
+// else it might send is ignored.
+async function onSideMessage(m, part) {
+  if (!m || typeof m.type !== "string") return;
+  switch (m.type) {
+    case "ready": {
+      // The pane's script ran and asked for its data.
+      output.info(`sidebar: ${part} pane ready`);
+      const view = sides.get(part);
+      if (lastData && view) view.webview.postMessage({ type: "data", state: lastData });
+      return refresh(!lastData);
+    }
+    case "show":
+      return show({ page: m.page || "overview", repo: m.repo || undefined });
+    // The housekeeping the dashboard offers too, handled the same way.
+    case "refresh": case "redetect": case "settings": case "installHelp":
+    case "useWorkspaceRoots": case "openFolder": case "copy":
+      return onMessage(m);
+  }
 }
 
 /* ───────── lifecycle ───────── */
@@ -733,19 +771,24 @@ function activate(context) {
   ctx = context;
   if (context.extensionMode === vscode.ExtensionMode.Development) devReload(context);
 
-  tree = new FleetTree();
-  syncSidebar();
 
   context.subscriptions.push(
-    vscode.window.registerTreeDataProvider("cohors.fleet", tree),
+    ...Object.entries(PANES).map(([id, part]) =>
+      vscode.window.registerWebviewViewProvider(id, paneProvider(part), {
+        webviewOptions: { retainContextWhenHidden: true },
+      })),
     vscode.workspace.registerTextDocumentContentProvider(PROMPT_SCHEME, promptProvider),
     vscode.commands.registerCommand("cohors.show", show),
     // vscode://rushirb2001.cohors/show opens the dashboard, so a terminal, a
     // README or an installer can link straight to it. Any page can open such a
-    // link, so it does exactly one harmless thing: show the view. It never
-    // runs a command, and it ignores every other path and all parameters.
+    // link, so it only ever shows a view. It never runs a command, and it
+    // ignores every other path and all parameters.
     vscode.window.registerUriHandler({
-      handleUri(uri) { if (uri.path === "/show") show(); },
+      handleUri(uri) {
+        if (uri.path === "/show") show();
+        // .../side brings the sidebar forward. Also only a view.
+        if (uri.path === "/side") vscode.commands.executeCommand("cohors.fleet.focus");
+      },
     }),
     vscode.commands.registerCommand("cohors.refresh", () => refresh(true)),
     vscode.commands.registerCommand("cohors.fetchAll", () => runVerb("fetch", { all: true })),
@@ -784,6 +827,11 @@ function activate(context) {
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(() => refresh(true)),
   );
+
+  // What the user asked to have open when a window starts.
+  const onStart = cfg().get("openOnStartup", "off");
+  if (onStart === "sidebar" || onStart === "both") vscode.commands.executeCommand("cohors.fleet.focus");
+  if (onStart === "dashboard" || onStart === "both") show();
 
   // Watchers, so the dashboard reflects reality without waiting for a poll.
   // A bare "**/…" glob only covers the OPEN workspace folders; anything

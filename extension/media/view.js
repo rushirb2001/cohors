@@ -144,7 +144,10 @@
     `<div class="caprow"><h2 class="cap2">${ico(icon)}<span>${esc(text)}</span>${n == null ? "" : `<b>${esc(n)}</b>`}</h2>${action || ""}</div>`;
   const block = (inner, foot) => `<div class="block">${inner}${foot ? `<div class="blockfoot">${foot}</div>` : ""}</div>`;
   const blank = (text, action) => `<div class="blank"><p>${text}</p>${action || ""}</div>`;
-  const numCell = (v, cls) => `<td class="n r${v ? (cls ? " " + cls : "") : " zero"}">${count(v)}</td>`;
+  // A count of zero is a small dot, not a digit, so the only numbers on a row
+  // are the ones that say something (the terminal dashboard does the same).
+  const num = (v) => (v ? count(v) : "·");
+  const numCell = (v, cls) => `<td class="n r${v ? (cls ? " " + cls : "") : " zero"}">${num(v)}</td>`;
 
   function top(title, lede, actions) {
     return `<header class="top"><h1>${esc(title)}</h1><p class="lede">${lede || ""}</p><div class="acts">${actions || ""}</div></header>`;
@@ -321,7 +324,8 @@
   function upstreamCell(r) {
     if (r.error) return `<span class="bad">Unreadable</span>`;
     if (r.upstream) {
-      if (!r.ahead && !r.behind) return "Level";
+      // Level with its upstream: nothing to say, so nothing is said.
+      if (!r.ahead && !r.behind) return "";
       const parts = [];
       if (r.ahead) parts.push(`${count(r.ahead)} ahead`);
       if (r.behind) parts.push(`${count(r.behind)} behind`);
@@ -339,8 +343,8 @@
       <td class="dim clip c-branch">${ico("git-branch")}${esc(r.branch)}</td>
       <td class="clip">${upstreamCell(r)}</td>
       ${numCell(r.staged)}${numCell(r.modified)}${numCell(r.untracked)}
-      <td class="n r c-extra${r.stashes ? " caution" : " zero"}">${count(r.stashes)}</td>
-      <td class="n r c-extra${r.tasks_open ? "" : " zero"}">${count(r.tasks_open)}</td>
+      <td class="n r c-extra${r.stashes ? " caution" : " zero"}">${num(r.stashes)}</td>
+      <td class="n r c-extra${r.tasks_open ? "" : " zero"}">${num(r.tasks_open)}</td>
       <td class="n r">${esc(r.commit ? age(r.commit.timestamp, m.now) : "")}</td>
       <td class="dim clip c-last">${r.commit ? `<span class="mono">${esc(r.commit.short_id)}</span> ${esc(r.commit.summary)}` : esc(r.error || "No commits")}</td>
     </tr>`).join("");
@@ -371,11 +375,32 @@
       `<div class="fig${c[4] ? " " + c[4] : ""}"><div class="k">${ico(c[0])}${c[1]}</div><div class="v">${count(c[2])}</div><div class="q">${esc(c[3])}</div></div>`).join("")}</div>`;
   }
 
+  // The dashboard's centrepiece: the mark, large, with the fleet's headline
+  // beside it and the last twelve weeks of commits on the right. It is the
+  // same header the terminal dashboard opens with.
+  function hero(state, m, actions) {
+    const weeks = (m.o.activity || []).slice(-12);
+    const tallest = Math.max(1, ...weeks);
+    const roots = (m.o.roots || []).map((r) => tilde(r, state.home));
+    return `<header class="hero">
+      <div class="heromark">${markSvg()}</div>
+      <div class="herotext">
+        <h1><span class="word">cohors</span><span class="tag">your git fleet</span></h1>
+        <p class="lede">${esc(m.o.headline || "")}</p>
+        ${roots.length ? `<p class="roots clip" title="${esc(roots.join("\n"))}">${esc(roots.join("   "))}</p>` : ""}
+      </div>
+      <div class="heroside">
+        ${weeks.length ? `<div class="spark" role="img" aria-label="Commits per week over the last ${weeks.length} weeks">${weeks.map((n) => `<i style="height:${Math.max(6, Math.round((n / tallest) * 100))}%" title="${count(n)}"></i>`).join("")}</div>
+        <p class="sparkcap">commits, ${weeks.length} weeks</p>` : ""}
+        <div class="acts">${actions || ""}</div>
+      </div></header>`;
+  }
+
   function overview(state, ui) {
     const m = model(state);
     const f = m.fig;
     const out = [];
-    out.push(sec("top", top("Overview", esc(m.o.headline || ""),
+    out.push(sec("hero", hero(state, m,
       btn("Fetch all", { do: "fetch-all" }, { icon: "sync", title: "git fetch in every repository. It never touches a working tree." })
       + btn("Act on selected", { do: "act" }, { primary: true, icon: "zap", title: "Fetch, pull, push, commit or stash in the repositories ticked below." }))));
 
@@ -564,7 +589,7 @@
 
     const sessions = m.sessions[r.id] || [];
     if (sessions.length) {
-      out.push(sec("d-sessions", `<h3>Claude Code sessions</h3>${sessions.map((s) => `<div class="frow"><div class="tmain"><div class="t">${esc(s.title || "(untitled)")}</div><div class="d"><span>${esc(ago(s.ts, state.generatedAt || m.now))}</span><span>${plural(s.turns, "turn")}</span>${s.branch ? `<span class="mono">${esc(s.branch)}</span>` : ""}</div></div>${agentBtn(m, "Resume", { do: "resume", id: r.id, session: s.id }, {})}</div>`).join("")}`));
+      out.push(sec("d-sessions", `<h3>Claude Code sessions</h3>${sessions.map((s) => `<div class="frow"><div class="tmain"><div class="t">${esc(s.title || "(untitled)")}</div><div class="d"><span>${esc(ago(s.ts, state.generatedAt || m.now))}</span>${s.turns == null ? "" : `<span>${plural(s.turns, "turn")}</span>`}${s.branch ? `<span class="mono">${esc(s.branch)}</span>` : ""}</div></div>${agentBtn(m, "Resume", { do: "resume", id: r.id, session: s.id }, {})}</div>`).join("")}`));
     }
 
     if (e.configured && r.path) {
@@ -765,6 +790,120 @@
     return out;
   }
 
+  /* ───────── the sidebar: the overview, one pane per section ─────────
+   *
+   * The activity-bar container holds six views, and the editor draws them the
+   * way it draws Explorer's: a header for each that opens, closes, reorders
+   * and hides it. So the accordion is the editor's own, and this file only
+   * says what goes inside each pane:
+   *
+   *   fleet    the mark, the headline, the six figures, the roots
+   *   next     what to do next
+   *   risk     work at risk
+   *   tasks    open tasks, the focus board first
+   *   commits  the week's commits by repository
+   *   repos    every repository, with a filter
+   *
+   * The count for a pane is on its header (the host sets it from
+   * `sideCounts`). Rows are ways in: choosing one opens the dashboard at that
+   * place. Nothing here changes a repository.
+   */
+  const SIDE_PARTS = ["fleet", "next", "risk", "tasks", "commits", "repos"];
+
+  // One row of a pane: a button that opens the dashboard somewhere.
+  const srow = (go, first, second, right) =>
+    `<button type="button" class="srow" data-do="show"${attrs(go)}><span class="l1">${first}${right ? `<span class="rt">${right}</span>` : ""}</span>${second ? `<span class="l2">${second}</span>` : ""}</button>`;
+  const none = (text) => `<p class="snone">${esc(text)}</p>`;
+
+  // The number each pane's header carries, or null before there is data.
+  function sideCounts(state) {
+    if (!state || state.status !== "ok") return null;
+    const m = model(state);
+    return {
+      next: (m.o.actions || []).length,
+      risk: m.repos.filter((r) => r.at_risk).length,
+      tasks: m.fig.open_tasks || 0,
+      commits: m.fig.commits_week || 0,
+      repos: m.repos.length,
+    };
+  }
+
+  function sidePart(part, state, ui) {
+    ui = ui || {};
+    // Only the first pane explains a problem; the others stay quiet under it.
+    if (!state) return part === "fleet" ? loading("Reading your repositories…") : [sec("wait", none("Reading…"))];
+    if (state.status !== "ok") return part === "fleet" ? problem(state) : [sec("wait", none("Nothing to show yet. The Overview pane says why."))];
+    const m = model(state);
+    const f = m.fig;
+    const body = (html) => [sec(part, `<div class="part h-${part}">${html}</div>`)];
+
+    if (part === "fleet") {
+      const roots = m.o.roots || [];
+      return [
+        sec("head", `<header class="shead">
+          <div class="brand">${markSvg()}<span class="word">cohors</span></div>
+          <p class="lede">${esc(m.o.headline || "")}</p></header>`),
+        sec("figs", m.repos.length ? figures(m) : noRepos(state, m)),
+        sec("foot", `<footer class="sfoot">
+          ${roots.length ? `<ul>${roots.map((r) => `<li title="${esc(r)}">${ico("folder")}<span class="clip">${esc(tilde(r, state.home))}</span></li>`).join("")}</ul>` : ""}
+          <p title="${esc((state.binary && state.binary.path) || "")}">Scanned ${esc(clock(m.now))}${state.binary && state.binary.version ? ` · ${esc(state.binary.version)}` : ""}${iconBtn("gear", "Change roots in settings", { do: "settings" })}</p></footer>`),
+      ];
+    }
+
+    if (part === "next") {
+      const actions = m.o.actions || [];
+      return body(actions.length
+        ? actions.map((a) => srow({ page: "overview" }, `${sevBlock(a.severity)}<span class="t say">${esc(a.title)}</span>`, esc(a.why))).join("")
+        : none("Nothing needs doing."));
+    }
+
+    if (part === "risk") {
+      const risky = m.repos.filter((r) => r.at_risk);
+      return body(risky.length
+        ? risky.map((r) => srow({ page: "repos", repo: r.id },
+            `${sevBlock(r.severity)}<span class="t">${esc(r.name)}</span>`,
+            `${ico("git-branch")}${esc(r.branch)} · ${esc((r.reasons || []).join(", "))}`,
+            esc(r.commit ? age(r.commit.timestamp, m.now) : ""))).join("")
+        : none("No local work is at risk."));
+    }
+
+    if (part === "tasks") {
+      const work = m.o.work || [];
+      const focus = m.board.slice(0, 5);
+      const unset = (f.repos || 0) - (f.configured_repos || 0);
+      return body(
+        (focus.length ? `<h3 class="sub3">In focus</h3>${focus.map((t) => srow({ page: "tasks" }, `<span class="t say">${esc(t.title)}</span>`, `${esc(t.repo || "")}${t.status ? ` · ${esc(t.status)}` : ""}`)).join("")}` : "")
+        + (work.length
+          ? `<h3 class="sub3">By repository</h3>${work.map((w) => srow({ page: "tasks" }, `<span class="t">${esc(w.name)}</span>`, "",
+              `${count(w.open)} open${w.high ? `<span class="caution"> · ${count(w.high)} high</span>` : ""}`)).join("")}`
+          : none("No open tasks."))
+        + (unset > 0 ? `<p class="snote">${plural(unset, "repository", "repositories")} ${unset === 1 ? "has" : "have"} no launchpad file.</p>` : ""));
+    }
+
+    if (part === "commits") {
+      const commits = m.o.commits || [];
+      const max = Math.max(1, ...commits.map((c) => c.count || 0));
+      return body(commits.length
+        ? `${commits.map((c) => `<div class="bar-row"><span class="clip">${esc(c.name)}</span><span class="track"><i style="width:${Math.max(2, Math.round((c.count / max) * 100))}%"></i></span><span class="num">${count(c.count)}</span></div>`).join("")}
+           <p class="snote">Previous week: ${count(f.commits_prev_week)}.</p>${btn("Open the standup", { do: "show", page: "standup" }, { link: true })}`
+        : none("No commits in the last 7 days."));
+    }
+
+    // repos
+    const q = String(ui.q || "").trim().toLowerCase();
+    const shown = q ? m.repos.filter((r) => String(r.name).toLowerCase().includes(q)) : m.repos;
+    const changes = (r) => (r.staged || 0) + (r.modified || 0) + (r.untracked || 0);
+    return body(
+      `<label class="search"><span class="sr">Filter repositories</span>${ico("search")}<input id="side-q" type="search" placeholder="Filter by name" value="${esc(ui.q || "")}" autocomplete="off" spellcheck="false"></label>`
+      + (shown.length
+        ? shown.map((r) => srow({ page: "repos", repo: r.id },
+            `${sevBlock(r.severity)}<span class="t${r.at_risk ? "" : " plain"}">${esc(r.name)}</span>`,
+            "",
+            [r.ahead ? `${count(r.ahead)}↑` : "", r.behind ? `${count(r.behind)}↓` : "", changes(r) ? `${count(changes(r))} changed` : "", r.stashes ? `${count(r.stashes)} stashed` : ""].filter(Boolean).join(" · ")
+              || `<span class="dim">${esc(r.commit ? age(r.commit.timestamp, m.now) : "")}</span>`)).join("")
+        : none("No repository matches.")));
+  }
+
   /* ───────── entry point ───────── */
 
   const RENDER = { overview, repos: repositories, tasks, standup, devices };
@@ -779,7 +918,7 @@
   return {
     esc, ico, age, ago, tilde, plural, count, cap, mark, sevBlock, markSvg, markRects, btn,
     model, filterRepos, agentState, VIEWS, PAGES, SEVERITY,
-    shell, rail, page, detail, problem,
+    shell, rail, page, detail, problem, sidePart, sideCounts, SIDE_PARTS,
     overview, repositories, tasks, standup, devices,
   };
 });

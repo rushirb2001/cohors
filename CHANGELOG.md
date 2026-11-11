@@ -61,6 +61,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   dashboard `a` on a repo does the same after asking.
 - **A VS Code extension** (`extension/`): the same overview, repositories, tasks and standup in an editor
   tab that follows your theme, reading everything from the `cohors` binary.
+- **The VS Code sidebar is the overview.** The cohors container in the activity
+  bar holds six panes drawn by the editor itself, so they open, close, reorder
+  and hide like Explorer's: Overview (the figures), Do next, Work at risk, Open
+  tasks, Commits and Repositories. Each carries its count on its header, the
+  activity-bar icon shows how many repositories have work at risk, and a row
+  opens the dashboard at that place.
+- **The dashboard has the look the terminal has.** The mark, large, leads the
+  page with the headline and twelve weeks of commits; each section is a card in
+  its own colour; a count of zero is a dot. `cohors.openOnStartup` opens the
+  sidebar, the dashboard or both when a window starts.
 - **The extension says what it is doing.** The Output panel has a "cohors"
   channel with the binary in use and each command it ran, how long it took and
   whether it worked. `vscode://rushirb2001.cohors/show` opens the dashboard from
@@ -141,6 +151,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Fixed
 
+- With no roots configured, cohors could treat `/` or the home directory as a
+  root when started from there (an editor extension starts it in `/`), and list
+  every tool's checkout on the disk as if it were your work. Neither is ever an
+  implied root now, and the VS Code extension runs cohors from the open folder.
+- The VS Code extension read each Claude Code transcript whole on every change,
+  which froze the editor for seconds on a long session. It reads the two ends of
+  a large transcript instead.
 - The VS Code extension used the first `cohors` on the PATH, which on a machine
   with two installs (an older Homebrew or pip one ahead of a newer cargo one,
   both reporting the same version) was the one without `cohors overview`, so the

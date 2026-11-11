@@ -410,3 +410,175 @@ body.vscode-high-contrast .btn { border-color: var(--vscode-contrastBorder); }
   .brand .word, .brand .grow { display: none; }
   .main { padding: 12px 14px 24px; }
 }
+
+
+/* ══ The look ════════════════════════════════════════════════════════════
+ * Surfaces, a colour for each section, and the mark as the centrepiece.
+ *
+ * The same decisions as the terminal dashboard, in an editor's terms:
+ *  - A card is a surface a shade off the editor's own background, with no
+ *    line around it. The shade is mixed from the theme's two colours, so it
+ *    is right in every theme (a webview knows its background; a terminal has
+ *    to ask).
+ *  - Each of the five sections has one colour: purple for what to do next,
+ *    brick for work at risk, sage for tasks, slate for commits, teal for the
+ *    repositories. It is on the section's title band and nowhere it could be
+ *    mistaken for a severity.
+ *  - High-contrast themes get borders and their own foreground instead.
+ */
+
+body {
+  --h-next: #8e3f7e; --h-risk: #b4483f; --h-tasks: #3f7d57; --h-commits: #4a6a94; --h-repos: #2f7f78;
+  --surface: transparent; --surface-2: var(--hover);
+  --radius: 8px;
+}
+body.vscode-dark { --h-next: #c98ac0; --h-risk: #e08a81; --h-tasks: #86bd95; --h-commits: #8aaad2; --h-repos: #66bcb3; }
+body.vscode-high-contrast, body.vscode-high-contrast-light {
+  --h-next: var(--fg); --h-risk: var(--fg); --h-tasks: var(--fg); --h-commits: var(--fg); --h-repos: var(--fg);
+}
+@supports (color: color-mix(in srgb, red, blue)) {
+  body:not(.vscode-high-contrast):not(.vscode-high-contrast-light) {
+    --surface: color-mix(in srgb, var(--fg) 4.5%, var(--bg));
+    --surface-2: color-mix(in srgb, var(--fg) 9%, var(--bg));
+  }
+}
+
+/* Which colour a section is. Pages other than the overview are one colour. */
+.sec, .pair > div { --hue: var(--fg-2); }
+.sec[data-sec$=":next"] { --hue: var(--h-next); }
+.sec[data-sec$=":risk"] { --hue: var(--h-risk); }
+.sec[data-sec^="tasks:"], .pair > div:first-child { --hue: var(--h-tasks); }
+.sec[data-sec^="standup:"], .pair > div:last-child { --hue: var(--h-commits); }
+.sec[data-sec$=":all"], .sec[data-sec^="repos:"] { --hue: var(--h-repos); }
+
+/* A section is a card: a title band in its colour, then its surface. */
+.main { gap: 22px; padding: 20px 26px 32px; }
+.caprow { margin: 0; padding: 8px 12px; border-radius: var(--radius) var(--radius) 0 0; background: var(--surface-2); }
+.cap2 { font-size: 1em; letter-spacing: 0; text-transform: none; color: var(--hue); }
+#app .cap2 .codicon { color: var(--hue); }
+.cap2 b { margin-left: 8px; padding: 0 7px; border-radius: 9px; font-size: 0.9em; color: var(--fg); background: var(--surface-2); }
+.block { border: 0; border-radius: var(--radius); background: var(--surface); }
+.caprow + .block { border-radius: 0 0 var(--radius) var(--radius); }
+.blockfoot { border-top-color: var(--line-soft); }
+@supports (color: color-mix(in srgb, red, blue)) {
+  .caprow { background: color-mix(in srgb, var(--hue) 17%, var(--surface)); }
+  .cap2 b { background: color-mix(in srgb, var(--hue) 26%, transparent); }
+}
+body.vscode-high-contrast .block, body.vscode-high-contrast-light .block,
+body.vscode-high-contrast .caprow, body.vscode-high-contrast-light .caprow,
+body.vscode-high-contrast .fig, body.vscode-high-contrast-light .fig,
+body.vscode-high-contrast .hero, body.vscode-high-contrast-light .hero { border: 1px solid var(--line); }
+
+/* Figures: six separate tiles, not one ruled strip. */
+.figs { gap: 10px; background: none; border: 0; border-radius: 0; overflow: visible; }
+.fig { padding: 12px 14px; border-radius: var(--radius); background: var(--surface); }
+.fig .v { font-size: 2.2em; }
+
+/* Rows. */
+td { height: 30px; }
+th { padding-top: 7px; border-bottom-color: var(--line-soft); }
+tr[data-repo]:hover { background: var(--surface-2); }
+.todo { padding: 9px 12px; }
+.bar-row .track { background: var(--surface-2); }
+.bar-row .track i { background: var(--hue, var(--accent)); }
+
+/* ── The centrepiece ───────────────────────────────────────────────────── */
+
+.hero { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 26px; padding: 22px 26px; border-radius: 12px; background: var(--surface); }
+.heromark { color: var(--h-next); line-height: 0; }
+.heromark .mk { display: block; width: 168px; height: 112px; }
+.herotext h1 { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 14px; font-size: 2.3em; font-weight: 700; letter-spacing: -0.025em; line-height: 1.05; }
+.herotext .word { color: var(--h-next); }
+.herotext .tag { font-size: 0.42em; font-weight: 400; letter-spacing: 0; color: var(--fg-2); }
+.herotext .lede { margin-top: 10px; font-size: 1.15em; }
+.herotext .roots { margin-top: 3px; font-family: var(--mono); font-size: 0.92em; color: var(--fg-2); }
+.heroside { display: grid; justify-items: end; gap: 4px; }
+.spark { display: flex; align-items: flex-end; gap: 4px; height: 46px; }
+.spark i { display: block; width: 9px; border-radius: 2px 2px 0 0; background: var(--h-next); opacity: 0.85; forced-color-adjust: none; }
+.sparkcap { font-size: 0.9em; color: var(--fg-2); }
+.heroside .acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.rail .brand { height: auto; padding: 2px 4px 4px 8px; }
+.brand .mk { width: 39px; height: 26px; color: var(--h-next); }
+.brand .word { font-size: 1.15em; }
+
+@container main (max-width: 900px) {
+  .hero { grid-template-columns: auto minmax(0, 1fr); gap: 18px; padding: 18px; }
+  .heromark .mk { width: 120px; height: 80px; }
+  .heroside { grid-column: 1 / -1; grid-template-columns: auto auto 1fr; align-items: end; justify-items: start; gap: 10px; }
+  .heroside .acts { justify-self: end; margin-top: 0; }
+}
+@container main (max-width: 560px) {
+  .heromark .mk { width: 84px; height: 56px; }
+  .herotext h1 { font-size: 1.7em; }
+  .heroside { grid-template-columns: 1fr; }
+  .heroside .acts { justify-self: start; justify-content: flex-start; }
+}
+
+/* ── The sidebar: the inside of one pane ───────────────────────────────
+ * The editor draws the panes and their headers. A pane's content sits on the
+ * sidebar's own background, with rows that span it edge to edge the way the
+ * editor's lists do.
+ */
+
+body.side { height: auto; overflow: auto; background: var(--vscode-sideBar-background, var(--bg)); --bg: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
+body.side #app { display: block; height: auto; padding: 0 0 10px; }
+.ssec[data-sec="head"], .ssec[data-sec="figs"], .ssec[data-sec="foot"] { padding: 0 12px; }
+.ssec[data-sec="head"] { padding-top: 10px; }
+.ssec[data-sec="figs"] { margin-top: 10px; }
+.ssec[data-sec="foot"] { margin-top: 10px; }
+.ssec[data-sec="loading"] .problem, .ssec[data-sec="problem"] .problem { padding: 6vh 12px 0; }
+
+.shead .brand { height: auto; padding: 0; gap: 10px; }
+/* The dashboard hides its wordmark in a narrow tab; a sidebar is always
+   narrow, and here the wordmark is the heading. */
+body.side .brand .word { display: inline; }
+.shead .brand .mk { width: 60px; height: 40px; }
+.shead .brand .word { font-size: 1.45em; font-weight: 700; letter-spacing: -0.02em; color: var(--h-next); }
+.shead .lede { margin-top: 8px; }
+
+body.side .figs { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+body.side .fig { padding: 8px 9px 9px; border-radius: 6px; }
+body.side .fig .k .codicon { display: none; }
+/* Three tiles across leaves little room: a label may take two lines. */
+body.side .fig .k, body.side .fig .q { font-size: 0.86em; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+body.side .fig .v { margin-top: 0; font-size: 1.6em; }
+@media (max-width: 250px) { body.side .figs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* A pane keeps its section's colour as a thin line under the editor's
+   header, the same colour its card has in the dashboard. */
+.part { --hue: var(--fg-2); padding: 4px 0 2px; border-top: 2px solid var(--hue); }
+.part.h-next { --hue: var(--h-next); }
+.part.h-risk { --hue: var(--h-risk); }
+.part.h-tasks { --hue: var(--h-tasks); }
+.part.h-commits { --hue: var(--h-commits); }
+.part.h-repos { --hue: var(--h-repos); }
+
+.srow { display: block; width: 100%; padding: 5px 12px; border: 0; background: none; text-align: left; }
+.srow:hover { background: var(--hover); }
+.srow:focus-visible { outline-offset: -1px; }
+.srow .l1 { display: flex; align-items: baseline; min-width: 0; }
+.srow .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.srow .t.plain { font-weight: 400; }
+/* A step is a sentence and is read whole; a name stays on one line. */
+.srow .t.say { white-space: normal; overflow-wrap: anywhere; }
+.srow .rt { flex: none; margin-left: 8px; font-size: 0.9em; color: var(--fg-2); white-space: nowrap; }
+.srow .l2 { display: block; margin-top: 1px; font-size: 0.92em; color: var(--fg-2); white-space: normal; overflow-wrap: anywhere; }
+/* The second line starts where the first line's text does, past the block. */
+.srow:has(.blk) .l2 { padding-left: calc(3.4em * 0.8 + 8px); }
+#app .srow .l2 .codicon { font-size: 12px; margin-right: 3px; }
+.sub3 { margin: 6px 12px 2px; font-size: 0.86em; font-weight: 600; color: var(--fg-2); }
+.snone, .snote { padding: 5px 12px; color: var(--fg-2); }
+.part .bar-row { grid-template-columns: minmax(0, 96px) minmax(0, 1fr) 30px; gap: 8px; min-height: 22px; padding: 3px 12px; border-top: 0; }
+.part > .link { margin: 2px 12px 4px; }
+.part .search { max-width: none; margin: 4px 12px 6px; }
+.part .search input { padding-right: 8px; }
+
+.sfoot { font-size: 0.92em; color: var(--fg-2); }
+.sfoot li { display: flex; align-items: center; min-width: 0; min-height: 20px; }
+.sfoot p { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.sfoot .ib { margin-left: auto; }
+
+/* The dev preview stacks several panes in one page and stands in for the
+   editor's pane headers with this. */
+.panehead { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; background: var(--vscode-sideBarSectionHeader-background, transparent); border-top: 1px solid var(--line); }
+.panehead span { font-weight: 400; color: var(--fg-2); }

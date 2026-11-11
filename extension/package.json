@@ -102,33 +102,43 @@
     "views": {
       "cohors": [
         {
+          "type": "webview",
           "id": "cohors.fleet",
-          "name": "Fleet"
+          "name": "Overview",
+          "initialSize": 3
+        },
+        {
+          "type": "webview",
+          "id": "cohors.next",
+          "name": "Do next",
+          "initialSize": 4
+        },
+        {
+          "type": "webview",
+          "id": "cohors.risk",
+          "name": "Work at risk",
+          "initialSize": 4
+        },
+        {
+          "type": "webview",
+          "id": "cohors.tasks",
+          "name": "Open tasks",
+          "visibility": "collapsed"
+        },
+        {
+          "type": "webview",
+          "id": "cohors.commits",
+          "name": "Commits, 7 days",
+          "visibility": "collapsed"
+        },
+        {
+          "type": "webview",
+          "id": "cohors.repos",
+          "name": "Repositories",
+          "visibility": "collapsed"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "cohors.fleet",
-        "contents": "Reading your repositories…",
-        "when": "cohors.state == loading"
-      },
-      {
-        "view": "cohors.fleet",
-        "contents": "The cohors command-line tool was not found. Install it, or point the cohors.binaryPath setting at it.\n[How to install](command:cohors.installHelp)\n[Open settings](command:cohors.openSettings)\n[Try again](command:cohors.refresh)",
-        "when": "cohors.state == missing"
-      },
-      {
-        "view": "cohors.fleet",
-        "contents": "cohors could not read your repositories. The dashboard says why.\n[Open dashboard](command:cohors.show)\n[Try again](command:cohors.refresh)",
-        "when": "cohors.state == error"
-      },
-      {
-        "view": "cohors.fleet",
-        "contents": "No repositories were found under your roots.\n[Use this workspace's folders](command:cohors.useWorkspaceRoots)\n[Open settings](command:cohors.openSettings)",
-        "when": "cohors.state == empty"
-      }
-    ],
     "menus": {
       "view/title": [
         {
@@ -169,17 +179,19 @@
         "cohors.openOnStartup": {
           "type": "string",
           "enum": [
-            "never",
-            "emptyWindow",
-            "always"
+            "off",
+            "sidebar",
+            "dashboard",
+            "both"
           ],
+          "default": "off",
           "enumDescriptions": [
-            "Only when you ask for it.",
-            "When a window opens with no folder.",
-            "Every time a window opens."
+            "Open nothing; cohors waits in the activity bar.",
+            "Bring the cohors sidebar forward.",
+            "Open the dashboard tab.",
+            "Open the dashboard tab and bring the sidebar forward."
           ],
-          "default": "emptyWindow",
-          "description": "When to open the dashboard automatically."
+          "description": "What cohors opens when a window starts."
         }
       }
     }

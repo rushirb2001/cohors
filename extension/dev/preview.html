@@ -109,6 +109,7 @@ body.t-hc {
 body.bare #harness { display: none; }
 #app { margin-top: 34px; height: calc(100vh - 34px) !important; }
 body.bare #app { margin-top: 0; height: 100vh !important; }
+body.side #app { height: auto !important; }
 .detail { top: 34px !important; }
 body.bare .detail { top: 0 !important; }
 </style>
@@ -144,7 +145,7 @@ body.bare .detail { top: 0 !important; }
   ];
   let theme = Math.max(0, THEMES.findIndex((t) => t.id === params.get("theme")));
   function applyTheme() {
-    document.body.className = THEMES[theme].cls.join(" ") + (params.has("bare") ? " bare" : "");
+    document.body.className = THEMES[theme].cls.join(" ") + (params.has("bare") ? " bare" : "") + (params.has("side") ? " side" : "");
     document.getElementById("theme").textContent = "Theme: " + THEMES[theme].label;
   }
   applyTheme();
@@ -237,6 +238,13 @@ body.bare .detail { top: 0 !important; }
   for (const k of ["page", "sel", "view", "q"]) if (params.get(k)) seed[k] = params.get(k);
   if (params.get("window")) seed.standupWindow = params.get("window");
   if (Object.keys(seed).length) stored = { ui: seed };
+  // ?side=fleet,next,risk shows sidebar panes instead of the dashboard tab
+  // (size the window to a sidebar's width). ?side=all shows all six.
+  if (params.has("side")) {
+    const which = params.get("side");
+    document.body.dataset.part = !which || which === "all" || which === "1" ? "fleet,next,risk,tasks,commits,repos" : which;
+    stored = { q: params.get("q") || "" };
+  }
   window.acquireVsCodeApi = () => ({
     postMessage: host,
     getState: () => stored,
@@ -245,6 +253,9 @@ body.bare .detail { top: 0 !important; }
 })();
 </script>
 <script src="../media/view.js"></script>
-<script src="../media/main.js"></script>
+<script>
+  // The dashboard tab's script, or the sidebar's.
+  document.write(`<script src="../media/${new URLSearchParams(location.search).has("side") ? "side" : "main"}.js"><\/script>`);
+</script>
 </body>
 </html>

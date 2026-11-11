@@ -49,13 +49,37 @@ const CLAUDE_PROJECTS = path.join(HOME, ".claude", "projects");
 // have changed. This is what makes a short refresh interval affordable.
 const sessionCache = new Map();   // file -> { mtime, parsed }
 
+// A long session's transcript runs to hundreds of megabytes, and reading one
+// whole (synchronously, on every change to it) froze the editor for seconds.
+// What is wanted is at the two ends: the first message and the branch at the
+// start, a later rename at the end. So a big file is read as its first and
+// last stretch only, and `onPartial` is told the middle was skipped.
+const WHOLE_LIMIT = 2 << 20;      // read whole up to 2 MB
+const END_BYTES = 256 << 10;      // else 256 KB from each end
+
+function readBounded(file, onPartial) {
+  const size = fs.statSync(file).size;
+  if (size <= WHOLE_LIMIT) { onPartial(false); return fs.readFileSync(file, "utf8"); }
+  onPartial(true);
+  const fd = fs.openSync(file, "r");
+  try {
+    const head = Buffer.alloc(END_BYTES), tail = Buffer.alloc(END_BYTES);
+    fs.readSync(fd, head, 0, END_BYTES, 0);
+    fs.readSync(fd, tail, 0, END_BYTES, size - END_BYTES);
+    // Each stretch is cut mid-line at its inner end; the parser skips a line
+    // that is not valid JSON, so the broken halves drop out by themselves.
+    return head.toString("utf8") + "\n" + tail.toString("utf8");
+  } finally { fs.closeSync(fd); }
+}
+
 function parseSession(file, mtime) {
   const hit = sessionCache.get(file);
   if (hit && hit.mtime === mtime) return hit.parsed;
 
   let firstMsg = "", customTitle = "", branch = "", turns = 0;
+  let whole = true;
   try {
-    for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    for (const line of readBounded(file, (partial) => { whole = !partial; }).split("\n")) {
       if (!line) continue;
       let o;
       try { o = JSON.parse(line); } catch { continue; }
@@ -76,7 +100,8 @@ function parseSession(file, mtime) {
 
   const parsed = {
     title: (customTitle || firstMsg || "(untitled)").replace(/\s+/g, " ").trim().slice(0, 140),
-    turns,
+    // Not counted for a transcript too long to read whole.
+    turns: whole ? turns : null,
     branch,
   };
   sessionCache.set(file, { mtime, parsed });

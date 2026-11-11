@@ -42,6 +42,10 @@ function expandHome(p) {
   return p;
 }
 
+function isDirectory(p) {
+  try { return fs.statSync(p).isDirectory(); } catch { return false; }
+}
+
 function isExecutable(p) {
   try {
     if (!fs.statSync(p).isFile()) return false;
@@ -91,7 +95,7 @@ function supportsOverview(file) {
 }
 
 /**
- * @param {() => {binaryPath?: string, roots?: string[], configPath?: string}} getConfig
+ * @param {() => {binaryPath?: string, roots?: string[], configPath?: string, cwd?: string}} getConfig
  *   Read on every call, so a settings change takes effect on the next refresh.
  * @param {{searchDirs?: () => Promise<string[]>, log?: (line: string) => void}} [opts]
  *   `searchDirs` replaces where the binary is looked for (the checks use it).
@@ -169,6 +173,13 @@ function create(getConfig, opts = {}) {
   // or changed the setting.
   function reset() { located = null; loginPathPromise = null; }
 
+  // Where cohors is run: the folder the caller says the user is in, else
+  // their home directory. Never the process's own directory.
+  function workingDir() {
+    const dir = String(getConfig().cwd || "").trim();
+    return dir && isDirectory(dir) ? dir : HOME;
+  }
+
   // Global flags go before the subcommand.
   function globalArgs() {
     const c = getConfig();
@@ -187,7 +198,10 @@ function create(getConfig, opts = {}) {
     const started = Date.now();
     return new Promise((resolve, reject) => {
       cp.execFile(bin.path, full,
-        { encoding: "utf8", timeout: opts.timeout || 60000, maxBuffer: 64 << 20, cwd: opts.cwd, windowsHide: true },
+        // With no roots configured, cohors looks around the directory it is
+        // run in. An editor's own working directory is `/`, which says
+        // nothing; the open folder is where the user is working.
+        { encoding: "utf8", timeout: opts.timeout || 60000, maxBuffer: 64 << 20, cwd: opts.cwd || workingDir(), windowsHide: true },
         (err, stdout, stderr) => {
           log(`cohors ${full.join(" ")}: ${err ? `failed (${String(stderr || err.message).trim().split("\n")[0]})` : `ok, ${String(stdout).length} bytes`} in ${Date.now() - started} ms`);
           if (!err) return resolve(String(stdout));
