@@ -28,6 +28,11 @@
 //   --still FILE          save one image (at --at ms, default 0)
 //   --frames DIR          save every frame as DIR/000001.png ...
 //   --fps N               frames per second (default 30)
+//   --scheme light|dark   the colour scheme the page is told the reader
+//                         prefers (to check a page's light and dark versions)
+//   --transparent 1       keep what the page leaves unpainted transparent
+//                         (for a logo that sits on GitHub's light and dark
+//                         pages alike)
 //   --from MS --to MS     the stretch of the page's timeline to render
 //                         (default: all of it, from the page's `duration`)
 
@@ -157,6 +162,8 @@ async function main() {
     const page = await session(endpoint);
     await page.send("Page.enable");
     await page.send("Emulation.setDeviceMetricsOverride", { width: o.width, height: o.height, deviceScaleFactor: o.scale, mobile: false });
+    if (o.scheme) await page.send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: o.scheme }] });
+    if (o.transparent) await page.send("Emulation.setDefaultBackgroundColorOverride", { color: { r: 0, g: 0, b: 0, a: 0 } });
     const loaded = page.once("Page.loadEventFired");
     await page.send("Page.navigate", { url: o.url || `http://127.0.0.1:${server.address().port}/${o.page}` });
     await loaded;

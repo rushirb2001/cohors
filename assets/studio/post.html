@@ -58,6 +58,18 @@
   .roll b { flex: none; font-size: calc(var(--u) * 3.5); font-weight: 700; letter-spacing: -0.045em; color: var(--ink); }
   .roll span { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: right; font-size: calc(var(--u) * 2.15); letter-spacing: -0.02em; color: var(--ink-2); }
   .roll .ok ~ .words b, .roll .ok ~ .words span { color: var(--ink-3); }
+  /* The name, for the top of the README: the mark and the word side by side
+     on no ground at all, so the page under it shows through. GitHub has a
+     light and a dark page, so there is a version for each: a deeper purple
+     on white, the mark's own on dark. */
+  html.clear, html.clear body, html.clear #stage { background: transparent; }
+  .lockup { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 30px; }
+  .lockup .mark { width: 162px; height: 108px; } /* 9 px a cell: every edge on a whole pixel */
+  .lockup span { font-size: 116px; font-weight: 800; letter-spacing: -0.065em; line-height: 1; transform: translateY(-4px); }
+  .lockup.dark .mark { fill: var(--purple-deep); }
+  .lockup.dark span { color: var(--purple); }
+  .lockup.light .mark { fill: #9c4a8e; }
+  .lockup.light span { color: #8f4383; }
   .icon { position: absolute; inset: 0; display: grid; place-items: center; background: var(--panel); }
   .icon .mark { width: 72%; height: 48%; fill: var(--purple); }
 </style>
@@ -271,6 +283,14 @@
     // of the terminal. (After the push, as the editor's and the browser's
     // pictures beside it are.)
     window: async () => { await crop("after-push", null, { x: U * 3.5, y: U * 3.5, w: W - U * 7 }); },
+
+    // The mark and the name, for the top of the README (?tone=dark|light).
+    lockup: async () => {
+      document.documentElement.classList.add("clear");
+      const tone = new URLSearchParams(location.search).get("tone") === "light" ? "light" : "dark";
+      const lock = el(`lockup ${tone}`, "<span>cohors</span>");
+      lock.prepend(S.mark());
+    },
 
     // The mark alone, for an extension or plugin icon.
     icon: async () => { el("icon").appendChild(S.mark()); },

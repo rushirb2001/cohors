@@ -176,13 +176,18 @@ window.Stage = (() => {
     }));
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("viewBox", "0 0 18 12");
+    // Cells meet edge to edge; without crisp edges each seam is drawn as a
+    // faint line where two anti-aliased edges overlap.
+    svg.setAttribute("shape-rendering", "crispEdges");
     svg.classList.add("mark");
     svg.cells = cells.map((cell) => {
       const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
       rect.setAttribute("x", cell.x);
       rect.setAttribute("y", cell.y);
-      rect.setAttribute("width", 1.03);
-      rect.setAttribute("height", 2.03);
+      rect.setAttribute("width", 1);
+      rect.setAttribute("height", 2);
+      // The shaded block is the same cell, fainter.
+      if (cell.faint) rect.style.opacity = 0.45;
       svg.appendChild(rect);
       return { ...cell, rect, base: cell.faint ? 0.45 : 1 };
     });
