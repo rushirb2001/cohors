@@ -285,6 +285,14 @@ claude mcp add cohors -- "$(which cohors)" mcp --allow-launchpad  # + Launchpad 
 
 Combine the flags as you like. Run `cohors mcp` by hand and it prints the lines for Claude Code and for an `mcpServers` block, filled in with your install path.
 
+**One click, in VS Code or Cursor.** These add the read-only server, run through [`uvx`](https://docs.astral.sh/uv/), so there is nothing to install first beyond `uv`:
+
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_cohors-0098FF?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=cohors&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22cohors%22%2C%22mcp%22%5D%7D)
+[![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_cohors-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=cohors&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22cohors%22%2C%22mcp%22%5D%7D&quality=insiders)
+[![Install in Cursor](https://img.shields.io/badge/Cursor-Install_cohors-000000?logo=cursor&logoColor=white)](https://cursor.com/en/install-mcp?name=cohors&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJjb2hvcnMiLCJtY3AiXX0%3D)
+
+Any other client takes the same entry: `{"command": "uvx", "args": ["cohors", "mcp"]}`. cohors is also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
+
 ### 4. Start Claude from cohors
 
 cohors can also open a Claude Code session for you, already briefed:
@@ -451,6 +459,13 @@ Every channel installs the same prebuilt binary from the [latest release](https:
 brew install rushirb2001/tap/cohors
 ```
 
+Or add the tap once, and from then on it is plain `brew install cohors` and `brew upgrade cohors`:
+
+```sh
+brew tap rushirb2001/tap
+brew install cohors
+```
+
 > Newer Homebrew versions that enforce tap trust can skip the install without saying so. Trust the formula once, then install:
 > ```sh
 > brew trust --formula rushirb2001/tap/cohors
@@ -462,6 +477,8 @@ brew install rushirb2001/tap/cohors
 ```sh
 pip install cohors
 ```
+
+Or run it without installing, with [uv](https://docs.astral.sh/uv/): `uvx cohors`.
 
 **Shell installer** (checksum-verified)
 
@@ -493,6 +510,7 @@ With no config, cohors looks in the folders where code usually lives. Scope it t
 - No key that can destroy work is a single bare keystroke; commit asks first.
 - The browser dashboard and the MCP server are read-only until you allow more: a flag for the browser, a setting for the plugin.
 - One repository that cannot be read is reported as such; it never takes the dashboard down.
+- No account, no analytics, no telemetry. The only connection cohors makes by itself is to GitHub's API, with your token, for CI and pull requests. The [privacy policy](PRIVACY.md) lists everything it reads, connects to and writes.
 
 ## How it compares
 
