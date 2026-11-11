@@ -1,61 +1,44 @@
 #!/bin/sh
-# Find the installed `cohors` binary and exec it with the given arguments.
+# Start the installed `cohors` binary for the plugin.
 #
-# Why a launcher: an agent spawns MCP servers and hooks with a stripped PATH, so
+# Why a launcher: an agent starts MCP servers with a stripped PATH, so
 # a bare `cohors` often resolves to nothing and the agent silently ends up with
-# no tools. This looks in the places every install channel puts the binary.
+# no tools. This looks in the places every install channel puts the binary,
+# each spelled out, and runs the first one found.
 #
-# Override with COHORS_BIN=/path/to/cohors.
+#   sh cohors-launch mcp    the MCP server (.mcp.json)
 #
-# For `mcp`, it also turns the plugin's settings into the server's flags. The
-# plugin passes each setting in an environment variable (see .mcp.json); only
-# the word "true" switches one on, so an unset or unsubstituted value, such as
-# a Claude Code too old to fill it in, leaves the server read-only.
+# For `mcp`, it also turns the plugin's settings into the server's flags.
+# Claude Code passes each setting in a CLAUDE_PLUGIN_OPTION_* variable (see
+# .mcp.json); only the word "true" switches one on, so an unset or unfilled
+# value, such as from a Claude Code too old to fill it in, leaves the server
+# read-only.
 
 if [ "${1:-}" = mcp ]; then
-  [ "${COHORS_PLUGIN_GIT_ACTIONS:-}" = true ] && set -- "$@" --allow-writes
-  [ "${COHORS_PLUGIN_RUN_COMMANDS:-}" = true ] && set -- "$@" --allow-run
-  [ "${COHORS_PLUGIN_LAUNCHPAD_WRITES:-}" = true ] && set -- "$@" --allow-launchpad
+  [ "${CLAUDE_PLUGIN_OPTION_GIT_ACTIONS:-}" = true ] && set -- "$@" --allow-writes
+  [ "${CLAUDE_PLUGIN_OPTION_RUN_COMMANDS:-}" = true ] && set -- "$@" --allow-run
+  [ "${CLAUDE_PLUGIN_OPTION_LAUNCHPAD_WRITES:-}" = true ] && set -- "$@" --allow-launchpad
+  # Tells the server it was started by the plugin, so a refusal names the
+  # plugin setting to turn on rather than a command-line flag.
+  export COHORS_MCP_FROM_PLUGIN=1
 fi
 
-if [ -n "${COHORS_BIN:-}" ] && [ -x "$COHORS_BIN" ]; then
-  exec "$COHORS_BIN" "$@"
-fi
-
-if command -v cohors >/dev/null 2>&1; then
-  exec cohors "$@"
-fi
-
-for candidate in \
-  "$HOME/.cargo/bin/cohors" \
-  "/opt/homebrew/bin/cohors" \
-  "/usr/local/bin/cohors" \
-  "/home/linuxbrew/.linuxbrew/bin/cohors" \
-  "$HOME/.local/bin/cohors" \
-  "$HOME/.nix-profile/bin/cohors"; do
-  if [ -x "$candidate" ]; then
-    exec "$candidate" "$@"
-  fi
-done
-
-# No cohors installed, but uv is: run the newest release from PyPI. `@latest`
-# makes uv check for a newer version on each start, so this path keeps itself
-# up to date. uv lives in ~/.local/bin or ~/.cargo/bin when not on the PATH.
-for uvx in "$(command -v uvx 2>/dev/null)" "$HOME/.local/bin/uvx" "$HOME/.cargo/bin/uvx" \
-  "/opt/homebrew/bin/uvx" "/usr/local/bin/uvx"; do
-  if [ -n "$uvx" ] && [ -x "$uvx" ]; then
-    exec "$uvx" cohors@latest "$@"
-  fi
-done
+# The first install found wins: on the PATH, then each channel's own place.
+if command -v cohors >/dev/null 2>&1; then exec cohors "$@"; fi
+if [ -x "$HOME/.cargo/bin/cohors" ]; then exec "$HOME/.cargo/bin/cohors" "$@"; fi
+if [ -x /opt/homebrew/bin/cohors ]; then exec /opt/homebrew/bin/cohors "$@"; fi
+if [ -x /usr/local/bin/cohors ]; then exec /usr/local/bin/cohors "$@"; fi
+if [ -x /home/linuxbrew/.linuxbrew/bin/cohors ]; then exec /home/linuxbrew/.linuxbrew/bin/cohors "$@"; fi
+if [ -x "$HOME/.local/bin/cohors" ]; then exec "$HOME/.local/bin/cohors" "$@"; fi
+if [ -x "$HOME/.nix-profile/bin/cohors" ]; then exec "$HOME/.nix-profile/bin/cohors" "$@"; fi
 
 cat >&2 <<'MSG'
-cohors: the `cohors` binary is not installed, so this plugin has no tools yet.
+cohors: the `cohors` program is not installed, so this plugin has no tools yet.
 
-Install it with any one of (or install uv, and the plugin runs it for you):
-  brew install rushirb2001/tap/cohors
-  pip install cohors
-  curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh
+Install it with Homebrew (brew install rushirb2001/tap/cohors) or pip
+(pip install cohors); every way to install it is listed at
+https://github.com/rushirb2001/cohors#install
 
-Then restart the session. If it is installed somewhere unusual, set COHORS_BIN.
+Then start a new session.
 MSG
 exit 127

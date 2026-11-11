@@ -67,7 +67,7 @@ The plugin needs the `cohors` binary installed ([any channel](#install) works; t
 | **The cohors MCP server** | Every read tool below. It starts read-only: Claude can look at anything and change nothing until you [turn on its settings](#3-let-claude-act). |
 | **Three skills** | `fleet` (questions about all your repos), `launchpad-setup` ("set up this repo for the launchpad") and `plan-focus` ("plan my day"). Claude picks them up from what you ask. |
 | **Two subagents** | `cohors-setup` writes a repo's launchpad file; `cohors-plan` plans your focus across repos. |
-| **Session hooks** | Each Claude session's start and end is logged, so the launchpad shows which repos you worked in with an agent. |
+| **Session log** | Each Claude session's start and end is logged, so the launchpad shows which repos you worked in with an agent. |
 
 Check it worked: start a new session and ask **"what needs my attention across my repos?"**. Claude should answer from the `overview` tool rather than running `find` or `git status`.
 
@@ -513,7 +513,7 @@ With no config, cohors looks in the folders where code usually lives. Scope it t
 | Shell installer | Run the install command again; it replaces the binary in place |
 | The Claude Code plugin | In Claude Code, run `/plugin`, open the **Marketplaces** tab, select **cohors** and choose **Enable auto-update**. Without that, `claude plugin marketplace update cohors` and then `claude plugin update cohors@cohors`. |
 
-The plugin finds the `cohors` you installed and updates with it. With none installed, it runs `uvx cohors@latest`, so it stays current on its own.
+The plugin runs the `cohors` you installed, so it is as new as that is. Install cohors first; with none installed, the plugin says how.
 
 ## Safe by default
 

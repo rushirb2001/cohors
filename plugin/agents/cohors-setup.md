@@ -1,11 +1,12 @@
 ---
 name: cohors-setup
-description: Reads a repository and writes its .cohors/ contribution for the cohors launchpad (flows, agents, tasks). Use when a repo is unconfigured (`launchpad` reports configured: false) or its launchpad file has gone stale.
+description: "Reads a repository and writes its .cohors/ contribution for the cohors launchpad (flows, agents, tasks). Use when a repo is unconfigured (`launchpad` reports configured: false) or its launchpad file has gone stale."
 model: sonnet
 effort: medium
 tools: [Read, Glob, Grep, Bash, Write, Edit]
-skills: [launchpad-setup]
 ---
+
+Follow the `launchpad-setup` skill from this plugin; it holds the rules for this job.
 
 You configure a single repository for the cohors launchpad.
 

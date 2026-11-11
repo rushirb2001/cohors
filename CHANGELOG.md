@@ -21,8 +21,10 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
-- **The Claude Code plugin works with nothing installed** when `uv` is
-  available: it runs `uvx cohors@latest`, so it also keeps itself up to date.
+- **The Claude Code plugin passes Anthropic's plugin directory checks.** It
+  ships no hooks (the MCP server logs each session's start and end itself),
+  starts its server through `sh` with every program named, and reads its
+  settings under the directory's standard names.
 - **One-click install for VS Code and Cursor**, through `uvx cohors@latest`.
 - **A "Staying up to date" guide** in the README for every install channel, and
   a privacy policy (`PRIVACY.md`).

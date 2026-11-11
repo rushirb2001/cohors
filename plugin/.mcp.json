@@ -1,15 +1,15 @@
 {
   "mcpServers": {
     "cohors": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/cohors-launch",
+      "command": "sh",
       "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/cohors-launch",
         "mcp"
       ],
       "env": {
-        "COHORS_MCP_FROM_PLUGIN": "1",
-        "COHORS_PLUGIN_GIT_ACTIONS": "${user_config.git_actions}",
-        "COHORS_PLUGIN_RUN_COMMANDS": "${user_config.run_commands}",
-        "COHORS_PLUGIN_LAUNCHPAD_WRITES": "${user_config.launchpad_writes}"
+        "CLAUDE_PLUGIN_OPTION_GIT_ACTIONS": "${user_config.git_actions}",
+        "CLAUDE_PLUGIN_OPTION_RUN_COMMANDS": "${user_config.run_commands}",
+        "CLAUDE_PLUGIN_OPTION_LAUNCHPAD_WRITES": "${user_config.launchpad_writes}"
       }
     }
   }

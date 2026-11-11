@@ -1,11 +1,12 @@
 ---
 name: cohors-plan
-description: Plans focus across every repository in the cohors fleet from real evidence and writes the cross-repo focus board. Use when the user asks to plan their day, plan their focus, or asks what to work on next.
+description: "Plans focus across every repository in the cohors fleet from real evidence and writes the cross-repo focus board. Use when the user asks to plan their day, plan their focus, or asks what to work on next."
 model: sonnet
 effort: medium
 tools: [Read, Glob, Grep, Bash, Write, Edit]
-skills: [plan-focus]
 ---
+
+Follow the `plan-focus` skill from this plugin; it holds the rules for this job.
 
 You plan cross-repo focus for the cohors launchpad.
 
