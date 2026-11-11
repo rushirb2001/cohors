@@ -303,9 +303,12 @@ class Screen:
         return (
             "<!doctype html><meta charset=utf-8><title>%s</title>"
             "<style>.t{margin:0;padding:14px 16px;background:%s;color:%s;"
-            "font:13px/16px 'SF Mono',Menlo,'DejaVu Sans Mono',Consolas,monospace;"
-            "width:max-content}.r{height:16px;white-space:pre}"
-            ".r span{display:inline-block;height:16px;vertical-align:top}</style>"
+            # 15px type in a face whose advance is 0.6em gives a cell of exactly
+            # 9 by 18 pixels; a fractional cell leaves hairlines between fills.
+            "font:15px/18px 'JetBrains Mono','SF Mono',Menlo,'DejaVu Sans Mono',Consolas,monospace;"
+            "font-variant-ligatures:none;"
+            "width:max-content}.r{height:18px;white-space:pre}"
+            ".r span{display:inline-block;height:18px;vertical-align:top}.r span.b{width:1ch}</style>"
             "<body style='margin:0;background:%s'><div class=t>%s</div></body>\n"
         ) % (html.escape(title), t["bg"], t["fg"], t["bg"], body)
 
@@ -317,6 +320,59 @@ class Screen:
         parts = [round(int(a[i:i + 2], 16) * share + int(b[i:i + 2], 16) * (1 - share)) for i in (1, 3, 5)]
         return "#%02x%02x%02x" % tuple(parts)
 
+    # Block-drawing characters, as which quarters of the cell they fill:
+    # (upper-left, upper-right, lower-left, lower-right).
+    QUARTERS = {
+        "\u2588": (1, 1, 1, 1), "\u2580": (1, 1, 0, 0), "\u2584": (0, 0, 1, 1),
+        "\u258c": (1, 0, 1, 0), "\u2590": (0, 1, 0, 1), "\u259c": (1, 1, 0, 1),
+        "\u259b": (1, 1, 1, 0), "\u259f": (0, 1, 1, 1), "\u2599": (1, 0, 1, 1),
+        "\u2596": (0, 0, 1, 0), "\u2597": (0, 0, 0, 1), "\u2598": (1, 0, 0, 0),
+        "\u259d": (0, 1, 0, 0), "\u2592": (1, 1, 1, 1),
+    }
+
+    @staticmethod
+    def blocks(text, fg, bg, theme):
+        """Draw a run of block characters as painted cells, not font glyphs.
+
+        A terminal draws these edge to edge. A font's glyph for them rarely
+        fills the line box exactly, which leaves hairline seams between rows
+        of a filled panel or through a logo built from them. Painting each
+        quarter of the cell with a background layer has no seams at any zoom.
+        """
+        out = []
+        ground = bg if bg != theme["bg"] else "transparent"
+        # The whole cell, or one half of it, is a single flat layer: a run of
+        # them (a bar, a panel's edge) is then one unbroken colour.
+        simple = {
+            (1, 1, 1, 1): "%s",
+            (1, 1, 0, 0): "linear-gradient(to bottom,%s 50%%,{g} 50%%)",
+            (0, 0, 1, 1): "linear-gradient(to bottom,{g} 50%%,%s 50%%)",
+            (1, 0, 1, 0): "linear-gradient(to right,%s 50%%,{g} 50%%)",
+            (0, 1, 0, 1): "linear-gradient(to right,{g} 50%%,%s 50%%)",
+        }
+        import itertools
+        for ch, group in itertools.groupby(text):
+            count = len(list(group))
+            quarters = Screen.QUARTERS[ch]
+            colour = Screen.mix(fg, bg, 0.45) if ch == "\u2592" else fg
+            if quarters in simple:
+                # A run of the same block is one element as wide as the run,
+                # so there is no boundary between cells to show through.
+                paint = simple[quarters].replace("{g}", ground) % colour
+                out.append("<span class=b style='width:%dch;background:%s'>%s</span>" % (count, paint, " " * count))
+                continue
+            for _ in range(count):
+                # Three quarters or one: a layer per quarter, a hair over half
+                # the cell so neighbours overlap instead of leaving a seam.
+                layers = [
+                    "linear-gradient(%s,%s) %s %s/51%% 51%% no-repeat" % (colour, colour, x, y)
+                    for on, (x, y) in zip(quarters, (("left", "top"), ("right", "top"), ("left", "bottom"), ("right", "bottom")))
+                    if on
+                ]
+                paint = ",".join(layers) + ("" if ground == "transparent" else "," + ground)
+                out.append("<span class=b style='background:%s'> </span>" % paint)
+        return "".join(out)
+
     @staticmethod
     def span(text, key, theme):
         fg, bg, bold, dim, italic, underline, reverse = key
@@ -327,6 +383,20 @@ class Screen:
             # Dim fades the text towards its background and leaves the
             # background alone, which is what a terminal does.
             fg = Screen.mix(fg, bg, 0.55)
+        # Split out runs of block characters and paint them.
+        if any(ch in Screen.QUARTERS for ch in text):
+            parts, run, painted = [], "", None
+            for ch in text + "\0":
+                is_block = ch in Screen.QUARTERS
+                if run and is_block != painted:
+                    parts.append(Screen.blocks(run, fg, bg, theme) if painted else Screen.span(run, key, theme))
+                    run = ""
+                painted = is_block
+                if ch != "\0":
+                    run += ch
+            if run:  # the text ended in ordinary characters
+                parts.append(Screen.span(run, key, theme))
+            return "".join(parts)
         css = []
         if fg != theme["fg"]:
             css.append("color:%s" % fg)
