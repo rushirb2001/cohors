@@ -458,11 +458,288 @@ def update(theme):
     return svg(h, "Updating cohors by hand", desc, "".join(b), theme)
 
 
+# ── Real terminal output, drawn as a terminal window ────────────────────────
+#
+# `--capture` builds the sample fleet (scripts/demo-fleet.sh) in a temp folder,
+# runs each command below in a real pseudo-terminal 72 columns wide, and saves
+# its coloured output to assets/readme/captures/. Every other run draws from
+# those saved captures, so nothing here needs the fleet to rebuild the images.
+
+import os
+import pty
+import re
+import struct
+import subprocess
+import sys
+
+CAPTURES = OUT / "captures"
+FLEET = Path("/tmp/cohors-demo")
+COMMANDS = {
+    "overview": ["cohors", "overview", "--root", "~/code"],
+    "dry-run": ["cohors", "push", "--select", "ahead", "--dry-run", "--root", "~/code"],
+    "launchpad": ["cohors", "launchpad", "--root", "~/code"],
+}
+
+
+def run_in_terminal(argv, cols=72, rows=60):
+    import fcntl
+    import termios
+    home = FLEET / "home"
+    argv = [a.replace("~", str(home)) for a in argv]
+    env = dict(os.environ, HOME=str(home), COHORS_NO_UPDATE="1", COLORTERM="truecolor",
+               TERM="xterm-256color", COLUMNS=str(cols))
+    env.pop("NO_COLOR", None)
+    leader, follower = pty.openpty()
+    fcntl.ioctl(follower, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+    proc = subprocess.Popen(argv, stdin=follower, stdout=follower, stderr=follower,
+                            env=env, cwd=str(home), close_fds=True)
+    os.close(follower)
+    chunks = []
+    while True:
+        try:
+            data = os.read(leader, 65536)
+        except OSError:
+            break
+        if not data:
+            break
+        chunks.append(data)
+    proc.wait()
+    os.close(leader)
+    out = b"".join(chunks).decode("utf-8", "replace").replace("\r", "")
+    # The fake home is a temp folder; show it the way a user sees theirs.
+    real = os.path.realpath(home)
+    return out.replace(real + "/", "~/").replace(str(home) + "/", "~/")
+
+
+def capture():
+    subprocess.run(["bash", str(Path(__file__).parent / "demo-fleet.sh"), str(FLEET)], check=True)
+    CAPTURES.mkdir(parents=True, exist_ok=True)
+    for name, argv in COMMANDS.items():
+        (CAPTURES / f"{name}.ansi").write_text(run_in_terminal(argv))
+    print(f"captured {len(COMMANDS)} commands to {CAPTURES}")
+
+
+SGR = re.compile(r"\x1b\[([0-9;]*)m")
+NAMED = {"36": "#7CC3BB", "97": "#FFFFFF", "37": "#F2E9F0"}
+TERM_INK, TERM_DIM = "#F2E9F0", "#A99AA6"
+
+
+def parse_ansi(line):
+    """Split one line into runs of (text, fg, bg, bold, dim)."""
+    runs, state = [], {"fg": None, "bg": None, "bold": False, "dim": False}
+    pos = 0
+    for m in SGR.finditer(line):
+        if m.start() > pos:
+            runs.append((line[pos:m.start()], dict(state)))
+        codes = [c for c in m.group(1).split(";") if c] or ["0"]
+        i = 0
+        while i < len(codes):
+            code = codes[i]
+            if code == "0":
+                state = {"fg": None, "bg": None, "bold": False, "dim": False}
+            elif code == "1":
+                state["bold"] = True
+            elif code == "2":
+                state["dim"] = True
+            elif code == "22":
+                state["bold"] = state["dim"] = False
+            elif code == "39":
+                state["fg"] = None
+            elif code == "49":
+                state["bg"] = None
+            elif code in ("38", "48") and i + 4 < len(codes) and codes[i + 1] == "2":
+                rgb = "#%02X%02X%02X" % tuple(int(v) for v in codes[i + 2:i + 5])
+                state["fg" if code == "38" else "bg"] = rgb
+                i += 4
+            elif code in NAMED:
+                state["fg"] = NAMED[code]
+            i += 1
+        pos = m.end()
+    if pos < len(line):
+        runs.append((line[pos:], dict(state)))
+    return runs
+
+
+# Block elements as quadrants (top-left, top-right, bottom-left, bottom-right),
+# so the logo's pixel creature is drawn exactly, whatever the reader's font.
+QUADS = {
+    "█": "1111", "▀": "1100", "▄": "0011", "▌": "1010", "▐": "0101", "▘": "1000",
+    "▝": "0100", "▖": "0010", "▗": "0001", "▚": "1001", "▞": "0110", "▙": "1011",
+    "▛": "1110", "▜": "1101", "▟": "0111",
+}
+
+
+def terminal_lines(x0, y0, lines, fs=14, lh=19):
+    """Draw ANSI lines on a character grid. Each run is pinned to its column
+    with textLength, so columns line up in any monospace font."""
+    cw = fs * 0.6
+    out = []
+    for r, line in enumerate(lines):
+        col = 0
+        top = y0 + r * lh
+        for chunk, st in parse_ansi(line):
+            fg = st["fg"] or (TERM_DIM if st["dim"] else TERM_INK)
+            if st["dim"] and st["fg"] is None:
+                fg = TERM_DIM
+            if st["bg"]:
+                out.append(f'<rect x="{x0 + col * cw}" y="{top}" width="{len(chunk) * cw}" '
+                           f'height="{lh}" fill="{st["bg"]}"/>')
+            text_buf, text_col = "", col
+            for ch in chunk + "\0":
+                if ch in QUADS or ch == "▒" or ch == "\0":
+                    if text_buf.strip():
+                        weight = ' font-weight="700"' if st["bold"] else ""
+                        out.append(
+                            f'<text x="{x0 + text_col * cw}" y="{top + lh * 0.74}" font-family="{MONO}" '
+                            f'font-size="{fs}" fill="{fg}"{weight} xml:space="preserve" '
+                            f'textLength="{len(text_buf) * cw:.1f}" lengthAdjust="spacing">'
+                            f'{escape(text_buf)}</text>'
+                        )
+                    if ch == "\0":
+                        break
+                    cx = x0 + col * cw
+                    if ch == "▒":
+                        out.append(f'<rect x="{cx}" y="{top}" width="{cw}" height="{lh}" fill="{fg}" opacity="0.45"/>')
+                    else:
+                        for q, on in enumerate(QUADS[ch]):
+                            if on == "1":
+                                out.append(f'<rect x="{cx + (q % 2) * cw / 2}" y="{top + (q // 2) * lh / 2}" '
+                                           f'width="{cw / 2 + 0.3}" height="{lh / 2 + 0.3}" fill="{fg}" '
+                                           f'shape-rendering="crispEdges"/>')
+                    col += 1
+                    text_buf, text_col = "", col
+                else:
+                    if not text_buf:
+                        text_col = col
+                    text_buf += ch
+                    col += 1
+    return "".join(out)
+
+
+def window(title, body_lines, theme, desc, fs=14, lh=19):
+    """A pixel-style terminal window around ANSI lines."""
+    bar = 38
+    h = bar + 20 + len(body_lines) * lh + 18
+    b = [notched(0, 0, W, h, "term"), notched(0, 0, W, bar, "term-bar")]
+    for i, fill in enumerate(("orchid", "lavender", "band")):
+        b.append(f'<rect x="{20 + i * 16}" y="{bar / 2 - 5}" width="10" height="10" class="f-{fill}"/>')
+    b.append(text(W / 2, bar / 2 + 5, title, 13, "term-sub", 600, "middle", MONO))
+    b.append(terminal_lines(28, bar + 16, body_lines, fs, lh))
+    return svg(h, title, desc, "".join(b), theme)
+
+
+def capture_lines(name):
+    lines = (CAPTURES / f"{name}.ansi").read_text().split("\n")
+    # Drop the pty's leading control noise and trailing blank lines.
+    while lines and not SGR.sub("", lines[0]).strip():
+        lines.pop(0)
+    while lines and not SGR.sub("", lines[-1]).strip():
+        lines.pop()
+    return lines
+
+
+def prompt(cmd):
+    return f"\x1b[1;38;2;201;138;192m$\x1b[0m \x1b[1m{cmd}\x1b[0m"
+
+
+ELLIPSIS = "\x1b[2m           …\x1b[0m"
+
+
+def scripts_window(theme):
+    over = capture_lines("overview")
+    # Keep the header and the first three steps of Do next.
+    cut = next(i for i, l in enumerate(over) if "Publish" in l)
+    dry = capture_lines("dry-run")
+    lines = [prompt("cohors overview"), ""] + over[:cut] + [ELLIPSIS, "", prompt("cohors push --select ahead --dry-run"), ""] + dry
+    plain_text = "\n".join(SGR.sub("", l) for l in lines)
+    return window("cohors overview, then a dry run", lines, theme, plain_text)
+
+
+def launchpad_window(theme):
+    lp = capture_lines("launchpad")
+    cut = next((i for i, l in enumerate(lp) if "Not set up yet" in l), len(lp))
+    lines = [prompt("cohors launchpad"), ""] + lp[:cut]
+    while lines and not SGR.sub("", lines[-1]).strip():
+        lines.pop()
+    return window("cohors launchpad", lines, theme, "\n".join(SGR.sub("", l) for l in lines))
+
+
+# What Claude receives: the real overview JSON, trimmed, with its syntax coloured.
+CLAUDE_JSON = """{
+  "headline": "13 repositories. 6 have work at risk, 2 are clean.",
+  "actions": [
+    { "severity": "risk", "title": "Push 4 commits from 3 repositories" },
+    { "severity": "warn", "title": "Reconcile 1 diverged branch" },
+    { "severity": "warn", "title": "Publish 1 branch that has no upstream" },
+    …
+  ]
+}"""
+
+
+def json_ansi(line):
+    key = "\x1b[38;2;217;166;207m"   # lavender keys
+    val = "\x1b[38;2;242;233;240m"   # light strings
+    punct = "\x1b[2m"
+    reset = "\x1b[0m"
+    out = re.sub(r'"([^"]+)"(\s*:)', lambda m: f'{key}"{m.group(1)}"{reset}{punct}{m.group(2)}{reset}', line)
+    out = re.sub(r'(:\s*)"([^"]*)"', lambda m: f'{m.group(1)}{val}"{m.group(2)}"{reset}', out)
+    return out
+
+
+def claude_window(theme):
+    ask_line = "\x1b[38;2;201;138;192m>\x1b[0m \x1b[1mwhat needs my attention across my repos?\x1b[0m"
+    call = "\x1b[38;2;181;92;164m●\x1b[0m \x1b[2mcohors · overview\x1b[0m"
+    lines = [ask_line, "", call, ""] + [json_ansi(l) for l in CLAUDE_JSON.split("\n")]
+    return window("what Claude receives", lines, theme, CLAUDE_JSON)
+
+
+# ── The .cohors/ folder, as a pixel file tree ───────────────────────────────
+
+TREE = [
+    (0, "folder", "your-repo/", ""),
+    (1, "folder", ".cohors/", "travels with every clone"),
+    (2, "file", "repo.json", "commands to run, tasks in progress"),
+    (2, "folder", "agents/", ""),
+    (3, "file", "release.md", "a prompt this repo ships for agents"),
+]
+
+
+def tree(theme):
+    row, indent = 40, 34
+    h = len(TREE) * row + 24
+    b = [notched(0, 0, W, h, "panel")]
+    for n, (depth, kind, name, note) in enumerate(TREE):
+        y = 12 + n * row
+        mid = y + row / 2
+        x = 28 + depth * indent
+        if depth:
+            # A pixel elbow from the parent's column into this row.
+            px = 28 + (depth - 1) * indent + 7
+            last = all(d < depth for d, *_ in TREE[n + 1:]) or (
+                next((d for d, *_ in TREE[n + 1:]), 0) < depth)
+            b.append(f'<rect x="{px}" y="{y - row / 2 + 14}" width="3" height="{row / 2 + 2 - 14 + row / 2 if not last else row / 2 - 12 + 14}" class="f-off"/>')
+            b.append(f'<rect x="{px}" y="{mid - 1}" width="{indent - 12}" height="3" class="f-off"/>')
+        if kind == "folder":
+            b.append(f'<rect x="{x}" y="{mid - 9}" width="8" height="4" class="f-bar"/>')
+            b.append(f'<rect x="{x}" y="{mid - 6}" width="18" height="14" class="f-bar"/>')
+        else:
+            b.append(f'<rect x="{x + 2}" y="{mid - 9}" width="14" height="18" class="f-cap-edge"/>')
+            b.append(f'<rect x="{x + 5}" y="{mid - 4}" width="8" height="2" class="f-accent"/>')
+            b.append(f'<rect x="{x + 5}" y="{mid + 1}" width="8" height="2" class="f-accent"/>')
+        b.append(text(x + 30, mid + 5, name, 15, "ink" if kind == "file" else "accent", 700, family=MONO))
+        if note:
+            b.append(text(520, mid + 5, note, 14, "sub", 400))
+    desc = "; ".join(f"{'  ' * d}{name}" + (f": {note}" if note else "") for d, _, name, note in TREE)
+    return svg(h, "A repo's .cohors folder", desc, "".join(b), theme)
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     builders = {
         "answers": answers, "compare": compare, "keys": keys, "ask": ask,
         "permissions": permissions, "select": select, "update": update,
+        "claude": claude_window, "scripts": scripts_window, "launchpad": launchpad_window,
+        "tree": tree,
     }
     for name, build in builders.items():
         for theme in ("light", "dark", "auto"):
@@ -472,4 +749,6 @@ def main():
 
 
 if __name__ == "__main__":
+    if "--capture" in sys.argv:
+        capture()
     main()

@@ -1,0 +1,29 @@
+
+  [1;38;2;181;92;164m▜▒▟███▙▒▛[0m   [1;38;2;181;92;164mcohors[0m
+  [1;38;2;181;92;164m▟██▌█▐██▙[0m   [2mlaunchpad: flows, agents and tasks across your repos[0m
+  [1;38;2;181;92;164m▀▐▖▀█▀▗▌▀[0m   [2m13 repositories, 3 set up, 5 open tasks[0m
+
+  [1;38;2;181;92;164mFocus[0m
+  [2myour cross-repo board, the short list you chose[0m
+    ◆ [1mIdempotency keys on charge retries      [0m  [2mpayments[0m
+    ○ [1mCart drawer animation                   [0m  [2mweb-app[0m
+    ○ [1mReprocess late events without a full ba…[0m  [2mdata-pipeline[0m
+
+  [1;38;2;181;92;164mOpen tasks[0m
+  [2m◆ doing, ✕ blocked, ○ to do; most urgent first[0m
+    [2m▸[0m [1;38;2;181;92;164mdata-pipeline[0m  [2m1 open[0m
+      ○ Reprocess late events without a full backfill  [1mhigh[0m
+    [2m▸[0m [1;38;2;181;92;164mpayments[0m  [2m2 open[0m
+      ◆ Idempotency keys on charge retries  [1mhigh[0m  [2mdoing[0m
+      ○ Back off webhook redelivery
+    [2m▸[0m [1;38;2;181;92;164mweb-app[0m  [2m2 open[0m
+      ✕ Keyboard order in the checkout form  [2mblocked[0m
+      ○ Cart drawer animation  [1mhigh[0m
+
+  [1;38;2;181;92;164mNot set up yet[0m
+  [2m10 repositories with no launchpad file[0m
+    [2manalytics, auth-service, cli-tools, design-system, docs-site,[0m
+    [2mexperiments, infra, marketing-site, mobile-app, notifications[0m
+    [2m▸[0m [1mcohors agent run setup-repo[0m
+      [2mrun it inside one; your agent writes the file[0m
+

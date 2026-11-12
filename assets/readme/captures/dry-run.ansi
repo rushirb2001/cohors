@@ -1,0 +1,12 @@
+
+  [1;38;2;181;92;164m▜▒▟███▙▒▛[0m   [1;38;2;181;92;164mcohors[0m
+  [1;38;2;181;92;164m▟██▌█▐██▙[0m   [2mpush: git push across the repos you pick[0m
+  [1;38;2;181;92;164m▀▐▖▀█▀▗▌▀[0m   [2mnever force-pushes, so remote history stays safe[0m
+
+  [1;38;2;181;92;164mDry run[0m
+  [2mwould push 4 repos, nothing will change[0m
+    [2m▸[0m [1mmobile-app   [0m  [2m~/code/mobile-app[0m
+    [2m▸[0m [1mpayments     [0m  [2m~/code/payments[0m
+    [2m▸[0m [1mdesign-system[0m  [2m~/code/design-system[0m
+    [2m▸[0m [1manalytics    [0m  [2m~/code/analytics[0m
+

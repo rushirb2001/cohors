@@ -70,11 +70,15 @@ Prebuilt for macOS and Linux; Cargo builds it anywhere Rust runs. All it needs i
 
 ## What it answers
 
+<br>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/answers-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/answers-light.svg">
   <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/answers.svg" alt="What cohors answers: what to do first (Do next), what is about to be lost (Work at risk), what is waiting in each repo (Open tasks), what you shipped this week (Commits), and what exists only on this laptop (Repositories)." width="100%">
 </picture>
+
+<br>
 
 **Where it looks.** With no config, the folders where code usually lives. Point it at yours with `cohors --root ~/code` (repeat for more), or save them with `cohors init`, which writes `~/.config/cohors/config.toml` for roots, aliases, groups and ignore rules.
 
@@ -88,15 +92,19 @@ cohors
 
 **Do next** lists what to do, most urgent first. Press a step's letter to act on every repo in it, or mark repos with <kbd>Space</kbd> and press the letter yourself.
 
+<br>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys-light.svg">
   <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys.svg" alt="Dashboard keys: P p f push, pull, fetch; c S commit, stash (asks first); F fetch everything; 1 to 5 jump to a card; colon for the command line; Enter opens a repo; slash filters; s and Y show and copy the standup; t shows tasks; question mark lists every key." width="100%">
 </picture>
 
+<br>
+
 From the <kbd>:</kbd> line: `:commit wip: cart drawer` commits the marked repos, `:!npm test` runs a command in them, `:jump payments` goes to one. `cohors --watch` keeps it all live.
 
-## Use it with Claude Code
+## <img src="https://cdn.simpleicons.org/claude/D97757" alt="" height="26" align="top"> Use it with Claude Code
 
 ```text
 /plugin marketplace add rushirb2001/cohors
@@ -107,19 +115,19 @@ From the <kbd>:</kbd> line: `:commit wip: cart drawer` commits the marked repos,
 
 Ask *"what needs my attention across my repos?"* and Claude gets the whole fleet in one call:
 
-```json
-{
-  "headline": "13 repositories. 6 have work at risk, 2 are clean.",
-  "actions": [
-    { "severity": "risk", "title": "Push 4 commits from 3 repositories" },
-    { "severity": "warn", "title": "Reconcile 1 diverged branch" },
-    { "severity": "warn", "title": "Publish 1 branch that has no upstream" },
-    …
-  ]
-}
-```
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude.svg" alt="Claude asks cohors what needs attention; overview returns: 13 repositories, 6 have work at risk, 2 are clean, then the actions: push 4 commits from 3 repositories (risk), reconcile 1 diverged branch, publish 1 branch with no upstream (warn)." width="100%">
+</picture>
+
+<br>
 
 More to ask:
+
+<br>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/ask-dark.svg">
@@ -127,13 +135,19 @@ More to ask:
   <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/ask.svg" alt="More to ask Claude: what have I changed (changes), where do we handle retries (search), write my standup (standup), back up everything only on this laptop (push, as a dry run first), which PRs are failing CI (ci_status and list_prs), plan my day (plan-focus)." width="100%">
 </picture>
 
+<br>
+
 It starts **read-only**. Turn on what Claude may do with `claude plugin configure cohors@cohors`, then start a new session:
+
+<br>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/permissions-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/permissions-light.svg">
   <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/permissions.svg" alt="What Claude may do, each off by default: Git actions (fetch, pull, push, commit, stash; no force push, fast-forward-only pull, confirm to commit), Run commands (confirm and a per-call cap), Launchpad writes (validated, never touches git)." width="100%">
 </picture>
+
+<br>
 
 Or let cohors brief Claude for you: `cohors agent run plan-day`, or `cohors agent run task --repo payments --task idempotency-keys` to start on one task (run it again to resume the same conversation).
 
@@ -154,37 +168,27 @@ Or with cohors installed: `claude mcp add cohors -- "$(which cohors)" mcp`, addi
 
 Every view is a command. At a terminal it prints a report; piped, it prints JSON.
 
-```text
-$ cohors overview
-  13 repositories. 6 have work at risk, 2 are clean.
+<br>
 
-  Do next
-     RISK  Push 4 commits from 3 repositories
-           They exist only on this machine: analytics,
-           design-system and payments.
-           cohors push --select 'ahead,!diverged'
-     WARN  Reconcile 1 diverged branch
-           cohors scan --select diverged
-     NOTE  Pull 2 repositories that are behind
-           cohors pull --select 'behind,!diverged'
-     …
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts.svg" alt="cohors overview prints the fleet headline and Do next: RISK push 4 commits from 3 repositories, with the command cohors push --select ahead,!diverged; WARN reconcile 1 diverged branch. Then cohors push --select ahead --dry-run would push 4 repos, nothing will change: mobile-app, payments, design-system, analytics." width="100%">
+</picture>
 
-$ cohors push --select ahead --dry-run
-  Dry run
-  would push 4 repos, nothing will change
-    ▸ mobile-app     ~/code/mobile-app
-    ▸ payments       ~/code/payments
-    ▸ design-system  ~/code/design-system
-    ▸ analytics      ~/code/analytics
-```
+<br>
 
 `--select` picks the repos. Join terms with a comma (all must match) and put `!` in front to exclude:
+
+<br>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/select-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/select-light.svg">
   <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/select.svg" alt="--select terms: dirty, ahead, behind, diverged; unpublished, stale-fetch, attention; name:pay* and ci:failing; all. A comma means all must match, ! excludes, as in behind,!diverged." width="100%">
 </picture>
+
+<br>
 
 ```sh
 cohors fetch --select all                      # refresh every remote
@@ -194,6 +198,8 @@ cohors overview --json | jq -r '.actions[].title'
 ```
 
 ## Use it in VS Code and the browser
+
+<br>
 
 <table>
 <tr>
@@ -214,30 +220,33 @@ The cohors icon in the activity bar shows the fleet as native panes. Push, pull 
 </tr>
 </table>
 
+<br>
+
 ## The launchpad
 
 A repo can commit one small file saying what to run there and what's in progress, so it travels with every clone:
 
-```text
-your-repo/.cohors/
-├── repo.json          # commands to run, tasks in progress
-└── agents/release.md  # a prompt this repo ships for agents
-```
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/tree-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/tree-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/tree.svg" alt="A repo .cohors folder: repo.json holds commands to run and tasks in progress; agents/release.md is a prompt the repo ships for agents. It travels with every clone." width="100%">
+</picture>
+
+<br>
 
 Ask Claude to *set up this repo for the launchpad* and it writes the file. Commands from npm, Cargo, uv, Makefiles and Gradle are found without one.
 
-```text
-$ cohors launchpad
-  13 repositories, 3 set up, 5 open tasks
+<br>
 
-  Open tasks
-    ▸ payments  2 open
-      ◆ Idempotency keys on charge retries  high  doing
-      ○ Back off webhook redelivery
-    ▸ web-app  2 open
-      ✕ Keyboard order in the checkout fo…  blocked
-      ○ Cart drawer animation  high
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/launchpad-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/launchpad-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/launchpad.svg" alt="cohors launchpad: 13 repositories, 3 set up, 5 open tasks. Your focus board, then open tasks per repo: data-pipeline, payments (idempotency keys on charge retries, doing), web-app (keyboard order in the checkout form, blocked)." width="100%">
+</picture>
+
+<br>
 
 Check a file with `cohors launchpad validate .`. The format is an open spec: [spec/v1/SPEC.md](spec/v1/SPEC.md).
 
@@ -256,6 +265,7 @@ Once a day cohors checks for a release. Installed with Homebrew, pip or the shel
 
 <details>
 <summary>Updating by hand</summary>
+
 <br>
 
 <picture>
@@ -264,15 +274,21 @@ Once a day cohors checks for a release. Installed with Homebrew, pip or the shel
   <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/update.svg" alt="Updating by hand: brew update && brew upgrade cohors; pip install -U cohors; npm install -g @cohors/cli@latest; cargo install cohors; rerun the shell installer; uvx and npx with @latest need nothing." width="100%">
 </picture>
 
+<br>
+
 </details>
 
 ## How it compares
+
+<br>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/compare-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/compare-light.svg">
   <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/compare.svg" alt="How cohors compares with git-scope, mani or gita, and lazygit or gitui: only cohors covers every repo at once, bulk fetch, pull, push and run, pull requests and CI, cross-repo search and standup, and an MCP server for coding agents." width="100%">
 </picture>
+
+<br>
 
 <div align="center">
 <br>

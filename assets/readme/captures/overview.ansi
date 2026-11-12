@@ -1,0 +1,48 @@
+
+  [1;38;2;181;92;164m▜▒▟███▙▒▛[0m   [1;38;2;181;92;164mcohors[0m
+  [1;38;2;181;92;164m▟██▌█▐██▙[0m   [2m13 repositories. 6 have work at risk, 2 are clean.[0m
+  [1;38;2;181;92;164m▀▐▖▀█▀▗▌▀[0m   [2m~/code[0m
+
+  [1;38;2;181;92;164mDo next[0m
+  [2mmost urgent first; the command under each step starts it[0m
+    [1;97;48;2;180;72;63m RISK [0m [1mPush 4 commits from 3 repositories[0m
+           [2mThey exist only on this machine: analytics, design-system[0m
+           [2mand payments. Some are more than 2 days old.[0m
+           [36mcohors push --select 'ahead,!diverged'[0m
+    [1;97;48;2;168;116;42m WARN [0m [1mReconcile 1 diverged branch[0m
+           [2mLocal and remote both moved, so neither a push nor a[0m
+           [2mfast-forward pull will work: mobile-app.[0m
+           [36mcohors scan --select diverged[0m
+    [1;97;48;2;168;116;42m WARN [0m [1mPublish 1 branch that has no upstream[0m
+           [2mNot backed up anywhere: docs-site.[0m
+           [36mcohors push --select unpublished[0m
+    [2m NOTE [0m [1mPull 2 repositories that are behind[0m
+           [2mA fast-forward pull cannot lose work: data-pipeline and[0m
+           [2mweb-app.[0m
+           [36mcohors pull --select 'behind,!diverged'[0m
+    [2m NOTE [0m [1mCommit or discard 21 uncommitted files[0m
+           [2mIn 6 repositories. Largest: web-app with 7.[0m
+           [36mcohors scan --select dirty[0m
+    [2m INFO [0m [1mFetch 1 repository[0m
+           [2mNot fetched in over 14 days, so their ahead and behind[0m
+           [2mcounts cannot be trusted. Oldest: 40 days.[0m
+           [36mcohors fetch --select stale-fetch[0m
+
+  [1;38;2;181;92;164mAt a glance[0m
+  [2mthe fleet in six numbers[0m
+    [1m 5[0m  not backed up       [2m1 never pushed, 4 with unpushed commits[0m
+    [1m 0[0m  stashes             [2min 0 repos, 0 older than a week[0m
+    [1m21[0m  uncommitted files   [2macross 6 repos[0m
+    [1m 1[0m  stale fetches       [2moldest 40 days[0m
+    [1m 5[0m  open tasks          [2m3 high priority, 1 in progress[0m
+    [1m18[0m  commits, 7 days     [2m7 the week before[0m
+
+  [1;38;2;181;92;164mWork at risk[0m
+  [2m6 where local work could be lost[0m
+    [1;97;48;2;180;72;63m RISK [0m [1manalytics    [0m  1 ahead            [2m  4d[0m  1 commit not pushed…
+    [1;97;48;2;168;116;42m WARN [0m [1mdesign-system[0m  1 ahead            [2m  5h[0m  1 commit not pushed
+    [1;97;48;2;168;116;42m WARN [0m [1mdocs-site    [0m  no upstream        [2m  1d[0m  branch never pushed
+    [1;97;48;2;168;116;42m WARN [0m [1mmobile-app   [0m  4 ahead, 1 behind  [2m  1d[0m  diverged, 4 ahead a…
+    [1;97;48;2;168;116;42m WARN [0m [1mpayments     [0m  2 ahead            [2m  6m[0m  2 commits not pushe…
+    [1;97;48;2;168;116;42m WARN [0m [1mweb-app      [0m  5 behind           [2m  2d[0m  5 commits behind; 7…
+
