@@ -70,13 +70,11 @@ Prebuilt for macOS and Linux; Cargo builds it anywhere Rust runs. All it needs i
 
 ## What it answers
 
-| You wonder                       | cohors shows                                                      |
-| -------------------------------- | ----------------------------------------------------------------- |
-| What exists only on this laptop? | Commits never pushed and branches never published, by repo        |
-| What should I do first?          | Next steps, most urgent first, each with the command that does it |
-| What's about to be lost?         | Every repo at risk, why, and the fix                              |
-| What did I ship this week?       | Your commits across every repo, ready for standup                 |
-| What's waiting in each repo?     | Open tasks and the commands worth running                         |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/answers-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/answers-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/answers.svg" alt="What cohors answers: what to do first (Do next), what is about to be lost (Work at risk), what is waiting in each repo (Open tasks), what you shipped this week (Commits), and what exists only on this laptop (Repositories)." width="100%">
+</picture>
 
 **Where it looks.** With no config, the folders where code usually lives. Point it at yours with `cohors --root ~/code` (repeat for more), or save them with `cohors init`, which writes `~/.config/cohors/config.toml` for roots, aliases, groups and ignore rules.
 
@@ -90,13 +88,11 @@ cohors
 
 **Do next** lists what to do, most urgent first. Press a step's letter to act on every repo in it, or mark repos with <kbd>Space</kbd> and press the letter yourself.
 
-| Key                                    | Does                       | Key                       | Does               |
-| -------------------------------------- | -------------------------- | ------------------------- | ------------------ |
-| <kbd>P</kbd> <kbd>p</kbd> <kbd>f</kbd> | Push, pull, fetch          | <kbd>Enter</kbd>          | Open a repo        |
-| <kbd>c</kbd> <kbd>S</kbd>              | Commit, stash (asks first) | <kbd>/</kbd>              | Filter as you type |
-| <kbd>F</kbd>                           | Fetch everything           | <kbd>s</kbd> <kbd>Y</kbd> | Standup, copy it   |
-| <kbd>1</kbd>–<kbd>5</kbd>              | Jump to a card             | <kbd>t</kbd>              | Tasks across repos |
-| <kbd>:</kbd>                           | Command line               | <kbd>?</kbd>              | Every key          |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys.svg" alt="Dashboard keys: P p f push, pull, fetch; c S commit, stash (asks first); F fetch everything; 1 to 5 jump to a card; colon for the command line; Enter opens a repo; slash filters; s and Y show and copy the standup; t shows tasks; question mark lists every key." width="100%">
+</picture>
 
 From the <kbd>:</kbd> line: `:commit wip: cart drawer` commits the marked repos, `:!npm test` runs a command in them, `:jump payments` goes to one. `cohors --watch` keeps it all live.
 
@@ -125,22 +121,19 @@ Ask *"what needs my attention across my repos?"* and Claude gets the whole fleet
 
 More to ask:
 
-| Say                                              | Claude uses                                                     |
-| ------------------------------------------------ | --------------------------------------------------------------- |
-| "What have I changed in web-app?"                | `changes`, with the diff if you want it                         |
-| "Where do we handle retries?"                    | `search`, across every repo at once                             |
-| "Write my standup for this week."                | `standup`                                                       |
-| "Back up everything that's only on this laptop." | a `push` dry run first, then the push once you agree            |
-| "Which of my PRs are failing CI?"                | `ci_status` and `list_prs` (needs a GitHub token or `gh` login) |
-| "Plan my day."                                   | the `plan-focus` skill, which saves a short list to your board  |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/ask-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/ask-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/ask.svg" alt="More to ask Claude: what have I changed (changes), where do we handle retries (search), write my standup (standup), back up everything only on this laptop (push, as a dry run first), which PRs are failing CI (ci_status and list_prs), plan my day (plan-focus)." width="100%">
+</picture>
 
 It starts **read-only**. Turn on what Claude may do with `claude plugin configure cohors@cohors`, then start a new session:
 
-| Setting          | Allows                                           | Still guarded by                                                     |
-| ---------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
-| Git actions      | `fetch` `pull` `push` `commit` `stash`           | no force push, fast-forward-only pull, `confirm` on commit and stash |
-| Run commands     | one command across many repos                    | `confirm`, a per-call cap                                            |
-| Launchpad writes | each repo's `.cohors/` file and your focus board | validated first, never touches git                                   |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/permissions-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/permissions-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/permissions.svg" alt="What Claude may do, each off by default: Git actions (fetch, pull, push, commit, stash; no force push, fast-forward-only pull, confirm to commit), Run commands (confirm and a per-call cap), Launchpad writes (validated, never touches git)." width="100%">
+</picture>
 
 Or let cohors brief Claude for you: `cohors agent run plan-day`, or `cohors agent run task --repo payments --task idempotency-keys` to start on one task (run it again to resume the same conversation).
 
@@ -187,12 +180,11 @@ $ cohors push --select ahead --dry-run
 
 `--select` picks the repos. Join terms with a comma (all must match) and put `!` in front to exclude:
 
-| Term                                    | Matches                                                  |
-| --------------------------------------- | -------------------------------------------------------- |
-| `dirty` `ahead` `behind` `diverged`     | Repos in that state                                      |
-| `unpublished` `stale-fetch` `attention` | No upstream, not fetched lately, anything needing a look |
-| `name:pay*` `ci:failing`                | By name, or by CI result                                 |
-| `all`                                   | Every repo                                               |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/select-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/select-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/select.svg" alt="--select terms: dirty, ahead, behind, diverged; unpublished, stale-fetch, attention; name:pay* and ci:failing; all. A comma means all must match, ! excludes, as in behind,!diverged." width="100%">
+</picture>
 
 ```sh
 cohors fetch --select all                      # refresh every remote
@@ -266,26 +258,21 @@ Once a day cohors checks for a release. Installed with Homebrew, pip or the shel
 <summary>Updating by hand</summary>
 <br>
 
-| Installed with               | Run                                  |
-| ---------------------------- | ------------------------------------ |
-| Homebrew                     | `brew update && brew upgrade cohors` |
-| pip                          | `pip install -U cohors`              |
-| npm                          | `npm install -g @cohors/cli@latest`  |
-| Cargo                        | `cargo install cohors`               |
-| Shell installer              | the install line again               |
-| `uvx` / `npx` with `@latest` | nothing, each run is the newest      |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/update-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/update-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/update.svg" alt="Updating by hand: brew update && brew upgrade cohors; pip install -U cohors; npm install -g @cohors/cli@latest; cargo install cohors; rerun the shell installer; uvx and npx with @latest need nothing." width="100%">
+</picture>
 
 </details>
 
 ## How it compares
 
-|                               | cohors | git-scope | mani / gita | lazygit / gitui |
-| ----------------------------- | :----: | :-------: | :---------: | :-------------: |
-| Every repo at once            |   ✓    |     ✓     |  text only  |        —        |
-| Bulk fetch, pull, push, run   |   ✓    | read-only |      ✓      |        —        |
-| Pull requests and CI          |   ✓    |     —     |      —      |    one repo     |
-| Cross-repo search and standup |   ✓    |     —     |      —      |        —        |
-| MCP server for coding agents  |   ✓    |     —     |      —      |        —        |
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/compare-dark.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/compare-light.svg">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/compare.svg" alt="How cohors compares with git-scope, mani or gita, and lazygit or gitui: only cohors covers every repo at once, bulk fetch, pull, push and run, pull requests and CI, cross-repo search and standup, and an MCP server for coding agents." width="100%">
+</picture>
 
 <div align="center">
 <br>
