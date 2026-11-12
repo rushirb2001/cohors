@@ -97,6 +97,14 @@ jobs:
           trunk build --release --dist "$GITHUB_WORKSPACE/crates/cohors-tui/dist"
           test -f "$GITHUB_WORKSPACE/crates/cohors-tui/dist/index.html"
 
+      # The crates are the tagged release, but the publishing script is the
+      # newest one on main, so a fix to how we publish (waiting out crates.io's
+      # pace for new crates, say) also helps a tag that is already out.
+      - name: Use the newest publish script
+        run: |
+          git fetch --depth=1 origin main
+          git show FETCH_HEAD:scripts/publish-crates.sh > scripts/publish-crates.sh
+
       - name: Publish every crate
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
