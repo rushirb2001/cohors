@@ -53,11 +53,11 @@ pub enum Channel {
     /// Run through `uvx`, from uv's cache. Nothing to install: `uvx
     /// cohors@latest` fetches the newest release when it next starts.
     Uvx,
-    /// `npm install -g cohors`. The npm package keeps the binary inside
-    /// itself (`node_modules/cohors/node_modules/.bin_real/`). Only told, never
+    /// `npm install -g @cohors/cli`. The npm package keeps the binary inside
+    /// itself (`node_modules/@cohors/cli/node_modules/.bin_real/`). Only told, never
     /// updated in place: a global npm prefix often needs elevated rights.
     Npm,
-    /// Run through `npx`, from npm's cache. Like uvx, `npx cohors@latest`
+    /// Run through `npx`, from npm's cache. Like uvx, `npx @cohors/cli@latest`
     /// fetches the newest release when it next starts.
     Npx,
     /// The release's shell installer, which leaves an install receipt.
@@ -90,12 +90,12 @@ pub fn detect_channel(
     if launcher == Some("pip") || exe.contains("/site-packages/cohors/") {
         return Channel::Pip { python };
     }
-    // npx runs from npm's cache (`_npx/<hash>/node_modules/cohors/`), so test
-    // for it before the plain npm install it otherwise looks like.
+    // npx runs from npm's cache (`_npx/<hash>/node_modules/@cohors/cli/`), so
+    // test for it before the plain npm install it otherwise looks like.
     if exe.contains("/_npx/") {
         return Channel::Npx;
     }
-    if exe.contains("/node_modules/cohors/") {
+    if exe.contains("/node_modules/@cohors/cli/") {
         return Channel::Npm;
     }
     if exe.contains("/Cellar/cohors/") {
@@ -140,8 +140,8 @@ impl Channel {
             Channel::Homebrew => "brew upgrade cohors",
             Channel::Pip { .. } => "pip install -U cohors",
             Channel::Uvx => "uvx cohors@latest",
-            Channel::Npm => "npm install -g cohors@latest",
-            Channel::Npx => "npx cohors@latest",
+            Channel::Npm => "npm install -g @cohors/cli@latest",
+            Channel::Npx => "npx @cohors/cli@latest",
             Channel::Installer => {
                 "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-installer.sh | sh"
             }
@@ -246,11 +246,13 @@ mod tests {
             Channel::Uvx
         );
         assert_eq!(
-            detect("/opt/homebrew/lib/node_modules/cohors/node_modules/.bin_real/cohors"),
+            detect("/opt/homebrew/lib/node_modules/@cohors/cli/node_modules/.bin_real/cohors"),
             Channel::Npm
         );
         assert_eq!(
-            detect("/Users/a/.npm/_npx/3f2a/node_modules/cohors/node_modules/.bin_real/cohors"),
+            detect(
+                "/Users/a/.npm/_npx/3f2a/node_modules/@cohors/cli/node_modules/.bin_real/cohors"
+            ),
             Channel::Npx
         );
         assert_eq!(detect("/Users/a/.cargo/bin/cohors"), Channel::Source);

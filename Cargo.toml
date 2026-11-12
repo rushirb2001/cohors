@@ -105,9 +105,13 @@ cargo-dist-version = "0.28.0"
 ci = "github"
 # The easy-install channels, all pointing at the same GitHub Release: a
 # checksummed curl|sh script, a Homebrew formula pushed to our tap, and an npm
-# package (`npx cohors`) that fetches the matching binary from the release.
+# package (`npx @cohors/cli`) that fetches the matching binary from the release.
 installers = ["shell", "homebrew", "npm"]
 tap = "rushirb2001/homebrew-tap"
+# npm refuses the bare name `cohors` (too close to `cors` and `colors`), so the
+# package is `@cohors/cli`; its command is still `cohors`.
+npm-scope = "@cohors"
+npm-package = "cli"
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",

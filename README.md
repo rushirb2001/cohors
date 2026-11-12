@@ -13,7 +13,7 @@ What is unpushed, what is behind, what is about to be lost, and what to do next,
 [![Release](https://img.shields.io/github/v/tag/rushirb2001/cohors?label=release&sort=semver&color=brightgreen)](https://github.com/rushirb2001/cohors/releases)
 [![Homebrew](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Frushirb2001%2Fhomebrew-tap%2Fmain%2FFormula%2Fcohors.rb&search=version%20%22(%5B%5E%22%5D%2B)%22&replace=%241&label=homebrew&color=FBB040)](https://github.com/rushirb2001/homebrew-tap)
 [![PyPI](https://img.shields.io/pypi/v/cohors?label=pypi&color=3775A9)](https://pypi.org/project/cohors/)
-[![npm](https://img.shields.io/npm/v/cohors?label=npm&color=CB3837)](https://www.npmjs.com/package/cohors)
+[![npm](https://img.shields.io/npm/v/%40cohors%2Fcli?label=npm&color=CB3837)](https://www.npmjs.com/package/@cohors/cli)
 [![crates.io](https://img.shields.io/crates/v/cohors?label=crates.io&color=E57324)](https://crates.io/crates/cohors)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
@@ -33,7 +33,7 @@ brew install rushirb2001/tap/cohors
 cohors
 ```
 
-No Homebrew? `pip install cohors`, `npm install -g cohors` or `cargo install cohors` work the same, or try it without installing anything with `npx cohors@latest` or `uvx cohors@latest`. Every option is [below](#install).
+No Homebrew? `pip install cohors`, `npm install -g @cohors/cli` or `cargo install cohors` work the same, or try it without installing anything with `npx @cohors/cli@latest` or `uvx cohors@latest`. Every option is [below](#install).
 
 cohors looks in the folders where code usually lives and opens a dashboard of every repository it finds. Nothing is written until you press a key that says so. To look around on sample data first, run `cohors demo`.
 
@@ -297,7 +297,7 @@ Combine the flags as you like. Run `cohors mcp` by hand and it prints the lines 
 [![Install in VS Code Insiders](https://img.shields.io/badge/VS_Code_Insiders-Install_cohors-24bfa5?logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=cohors&config=%7B%22command%22%3A%22uvx%22%2C%22args%22%3A%5B%22cohors%40latest%22%2C%22mcp%22%5D%7D&quality=insiders)
 [![Install in Cursor](https://img.shields.io/badge/Cursor-Install_cohors-000000?logo=cursor&logoColor=white)](https://cursor.com/en/install-mcp?name=cohors&config=eyJjb21tYW5kIjoidXZ4IiwiYXJncyI6WyJjb2hvcnNAbGF0ZXN0IiwibWNwIl19)
 
-Any other client takes the same entry: `{"command": "uvx", "args": ["cohors@latest", "mcp"]}`. With Node instead of uv, use `{"command": "npx", "args": ["-y", "cohors@latest", "mcp"]}`. cohors is also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
+Any other client takes the same entry: `{"command": "uvx", "args": ["cohors@latest", "mcp"]}`. With Node instead of uv, use `{"command": "npx", "args": ["-y", "@cohors/cli@latest", "mcp"]}`. cohors is also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
 
 ### 4. Start Claude from cohors
 
@@ -463,7 +463,7 @@ Every channel installs the same prebuilt binary from the [latest release](https:
 |---|---|---|
 | [Homebrew](#homebrew) | `brew install rushirb2001/tap/cohors` | |
 | [pip](#pip) | `pip install cohors` | `uvx cohors@latest` |
-| [npm](#npm) | `npm install -g cohors` | `npx cohors@latest` |
+| [npm](#npm) | `npm install -g @cohors/cli` | `npx @cohors/cli@latest` |
 | [Cargo](#cargo) | `cargo install cohors` | |
 | [Shell installer](#shell-installer) | `curl … \| sh` (below) | |
 | [Claude Code plugin](#1-connect-it) | `/plugin install cohors@cohors` | |
@@ -502,10 +502,10 @@ Or run it without installing, with [uv](https://docs.astral.sh/uv/): `uvx cohors
 Needs Node 14 or newer. The package downloads the same binary from the GitHub release when it installs.
 
 ```sh
-npm install -g cohors
+npm install -g @cohors/cli
 ```
 
-Or run it without installing: `npx cohors@latest`.
+Or run it without installing: `npx @cohors/cli@latest`. The package is scoped because npm keeps the bare name `cohors` back as too close to other packages; the command it installs is still `cohors`.
 
 #### Cargo
 
@@ -554,9 +554,9 @@ With no config, cohors looks in the folders where code usually lives. Scope it t
 |---|---|
 | Homebrew | `brew upgrade cohors`, or let Homebrew's own auto-update do it |
 | pip | `pip install -U cohors` |
-| npm | `npm install -g cohors@latest` |
+| npm | `npm install -g @cohors/cli@latest` |
 | Cargo | `cargo install cohors` (it replaces an older version) |
-| `uvx cohors@latest`, `npx cohors@latest`, or the one-click buttons | Nothing to do: each new session runs the newest release |
+| `uvx cohors@latest`, `npx @cohors/cli@latest`, or the one-click buttons | Nothing to do: each new session runs the newest release |
 | Shell installer | Run the install command again; it replaces the binary in place |
 | The Claude Code plugin | In Claude Code, run `/plugin`, open the **Marketplaces** tab, select **cohors** and choose **Enable auto-update**. Without that, `claude plugin marketplace update cohors` and then `claude plugin update cohors@cohors`. |
 

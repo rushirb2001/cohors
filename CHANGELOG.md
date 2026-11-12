@@ -19,6 +19,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **cohors is on npm, as `@cohors/cli`.** npm refused the bare name `cohors`
+  (too close to `cors` and `colors`), so 0.7.2 and 0.7.4 never reached npm. Run
+  `npx @cohors/cli@latest`, install with `npm install -g @cohors/cli`, or give
+  MCP clients `npx -y @cohors/cli@latest mcp`; the command is still `cohors`.
+
 ## [0.7.4] — 2026-11-12
 
 0.7.3 was tagged but never published (its release step failed), so its
