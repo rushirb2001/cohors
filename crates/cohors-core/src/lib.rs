@@ -35,6 +35,7 @@ pub mod select;
 pub mod sort;
 pub mod standup;
 pub mod time;
+pub mod update;
 pub mod view;
 
 // Re-export the most-used types at the crate root so adapters can write

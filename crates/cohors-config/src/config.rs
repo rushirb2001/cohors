@@ -56,6 +56,22 @@ pub struct Config {
     /// What the dashboard assumes about the terminal's background
     /// (auto / dark / light).
     pub theme: ThemeMode,
+    /// Keeping cohors itself up to date (auto / notify / off).
+    pub updates: UpdatesMode,
+}
+
+/// Keeping cohors itself up to date. The default `auto` looks for a new
+/// release at most once a day and installs it in the background the way cohors
+/// was installed (Homebrew, pip or the shell installer); it then says "Restart
+/// to update". `notify` only says that a new version exists and how to get it.
+/// `off` never looks. `COHORS_NO_UPDATE=1` is the same as `off`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UpdatesMode {
+    #[default]
+    Auto,
+    Notify,
+    Off,
 }
 
 /// What the dashboard assumes about the terminal's background. The default
@@ -130,6 +146,7 @@ impl Default for Config {
             actions: ActionsConfig::default(),
             icons: IconMode::default(),
             theme: ThemeMode::default(),
+            updates: UpdatesMode::default(),
         }
     }
 }
@@ -157,6 +174,7 @@ const KNOWN_KEYS: &[&str] = &[
     "mcp",
     "icons",
     "theme",
+    "updates",
 ];
 
 impl Config {
@@ -367,6 +385,11 @@ follow_symlinks = false
 # not answer gets a look that works on any background. Say "dark" or "light" if
 # yours cannot be asked and you want the filled panels.
 # theme = "auto"
+
+# Keeping cohors up to date: "auto" looks for a new release at most once a day
+# and installs it in the background the way cohors was installed, then asks you
+# to restart; "notify" only tells you; "off" never looks.
+# updates = "auto"
 
 # Optional pretty names, keyed by absolute path or repo dir name.
 [aliases]

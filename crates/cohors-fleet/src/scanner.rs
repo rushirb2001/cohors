@@ -119,6 +119,11 @@ impl Scanner {
     pub fn theme_mode(&self) -> cohors_config::ThemeMode {
         self.config.theme
     }
+
+    /// The configured way of keeping cohors itself up to date.
+    pub fn updates_mode(&self) -> cohors_config::UpdatesMode {
+        self.config.updates
+    }
 }
 
 /// The user's configured git email (`git config user.email`), for the standup.

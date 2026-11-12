@@ -23,7 +23,7 @@ pub mod paths;
 pub mod prefs;
 
 pub use config::{
-    ActionsConfig, Config, IconMode, McpConfig, STARTER_CONFIG, ThemeMode, expand_tilde,
-    starter_config, write_starter,
+    ActionsConfig, Config, IconMode, McpConfig, STARTER_CONFIG, ThemeMode, UpdatesMode,
+    expand_tilde, starter_config, write_starter,
 };
 pub use error::ConfigError;
