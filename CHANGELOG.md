@@ -19,6 +19,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-11-12
+
 ### Added
 
 - **cohors keeps itself up to date.** Once a day the dashboard looks for a
