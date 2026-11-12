@@ -513,6 +513,10 @@ With no config, cohors looks in the folders where code usually lives. Scope it t
 | Shell installer | Run the install command again; it replaces the binary in place |
 | The Claude Code plugin | In Claude Code, run `/plugin`, open the **Marketplaces** tab, select **cohors** and choose **Enable auto-update**. Without that, `claude plugin marketplace update cohors` and then `claude plugin update cohors@cohors`. |
 
+cohors also keeps itself up to date. Once a day the dashboard asks GitHub for the newest release and, when there is one, installs it in the background the way you installed cohors (Homebrew, pip or the shell installer). The header then says **New version available → 0.7.1 → Restart to update**, and `R` restarts into it. `cohors update` does the same on the spot, and `cohors update --check` only looks. A build from source, or `uvx`, gets the notice and the command to run, never an install.
+
+To be told without installing, set `updates = "notify"` in the config; `updates = "off"` (or `COHORS_NO_UPDATE=1`) stops the check. It never runs in CI.
+
 The plugin runs the `cohors` you installed, so it is as new as that is. Install cohors first; with none installed, the plugin says how.
 
 ## Safe by default
@@ -522,7 +526,7 @@ The plugin runs the `cohors` you installed, so it is as new as that is. Install 
 - No key that can destroy work is a single bare keystroke; commit asks first.
 - The browser dashboard and the MCP server are read-only until you allow more: a flag for the browser, a setting for the plugin.
 - One repository that cannot be read is reported as such; it never takes the dashboard down.
-- No account, no analytics, no telemetry. The only connection cohors makes by itself is to GitHub's API, with your token, for CI and pull requests. The [privacy policy](PRIVACY.md) lists everything it reads, connects to and writes.
+- No account, no analytics, no telemetry. cohors connects by itself only to GitHub: its API with your token, for CI and pull requests, and once a day to look for a newer cohors (which you can turn off). The [privacy policy](PRIVACY.md) lists everything it reads, connects to and writes.
 
 ## How it compares
 

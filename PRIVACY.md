@@ -26,13 +26,23 @@ the Claude Code plugin, the browser dashboard and the VS Code extension.
 - **Your own git remotes**, only when you, or an agent you have allowed to,
   run fetch, pull or push. Git makes these connections, with your existing
   credentials.
+- **cohors' own latest release on GitHub**
+  (`api.github.com/repos/rushirb2001/cohors/releases/latest`), at most once a
+  day, to see whether a newer cohors exists. The request carries no token and
+  nothing about you or your repositories, only cohors' version in its
+  User-Agent. When a newer release exists and updates are automatic, cohors
+  installs it with the tool that installed it: Homebrew, pip, or the release's
+  own installer, downloaded from GitHub and checksum-verified. Turn this off
+  with `updates = "off"` in the config (or `"notify"` to only be told), or set
+  `COHORS_NO_UPDATE=1`. It never runs in CI.
 
-Nothing else. With no GitHub token cohors makes no network connections at all,
-apart from the git actions you start.
+Nothing else. With no GitHub token and updates off, cohors makes no network
+connections at all, apart from the git actions you start.
 
 ## What it writes, all on your machine
 
 - A cache of the last scan, so it opens instantly next time.
+- What the last update check found, so it asks GitHub at most once a day.
 - An audit log of every action it carries out (fetch, pull, push, commit,
   stash, run), with the repositories it touched.
 - The launchpad's focus board and agent activity log.

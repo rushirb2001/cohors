@@ -21,6 +21,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
+- **cohors keeps itself up to date.** Once a day the dashboard looks for a
+  newer release and installs it in the background the way cohors was
+  installed (Homebrew, pip or the shell installer), then says "New version
+  available → 0.7.1 → Restart to update"; `R` restarts into it. A failed
+  install is reported and not retried for a day. `cohors update` updates on the
+  spot (`--check` only looks), one-off commands end with a one-line notice, and
+  the MCP server tells your agent in every read's `meta`. A source build or
+  `uvx` only gets the notice. The `updates` setting (`auto`, `notify`, `off`)
+  and `COHORS_NO_UPDATE=1` control it; it never runs in CI.
 - **The Claude Code plugin passes Anthropic's plugin directory checks.** It
   ships no hooks (the MCP server logs each session's start and end itself),
   starts its server through `sh` with every program named, and reads its
