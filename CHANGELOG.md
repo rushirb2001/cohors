@@ -19,6 +19,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-11-12
+
 ### Added
 
 - **cohors is on crates.io: `cargo install cohors`.** Every crate is published,

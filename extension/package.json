@@ -2,7 +2,7 @@
   "name": "cohors",
   "displayName": "cohors",
   "description": "The state of every git repository you own, and what to do next, in one editor tab. Needs the cohors command-line tool.",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "publisher": "rushirb2001",
   "license": "MIT",
   "repository": {

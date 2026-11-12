@@ -8,6 +8,6 @@
   "rootsSetting": [],
   "binary": {
     "path": "/home/dev/.cargo/bin/cohors",
-    "version": "cohors 0.7.2"
+    "version": "cohors 0.7.3"
   }
 }
