@@ -88,7 +88,8 @@ if [ "$WHAT" = all ] || [ "$WHAT" = film ]; then
   # One film, framed three ways: the page takes the size it is given and
   # frames every shot to fit, so the square and upright cuts are renders of
   # their own, not crops that lose the captions.
-  for cut in 1080p:1920x1080 square:1080x1080 upright:1080x1920; do
+  # portrait (4:5) is the shape that gets the most room in a LinkedIn feed.
+  for cut in 1080p:1920x1080 square:1080x1080 upright:1080x1920 portrait:1080x1350; do
     name="${cut%%:*}" size="${cut#*:}"
     $RENDER --page assets/studio/film.html --size "$size" --fps 30 --frames "$F/frames/$name"
     ffmpeg -y -loglevel error -framerate 30 -i "$F/frames/$name/%06d.png" \
@@ -115,11 +116,12 @@ if [ "$WHAT" = all ] || [ "$WHAT" = film ]; then
     "$F/demo-raw.gif"
   gifsicle -O3 "$F/demo-raw.gif" -o assets/demo.gif 2>/dev/null
   rm -f "$F/demo-raw.gif"
-  # The same stretch as a video, 3840x2160 at 120 frames a second, for places
-  # that play video (X, YouTube, a GitHub upload).
-  $RENDER --page assets/studio/film.html --size 1920x1080 --scale 2 --fps 120 --from 7000 --to 15800 --frames "$F/frames/clip4k"
-  ffmpeg -y -loglevel error -framerate 120 -i "$F/frames/clip4k/%06d.png" \
-    -c:v libx264 -preset slow -crf 16 -profile:v high -level:v 5.2 -pix_fmt yuv420p -movflags +faststart "$F/cohors-push-4k120.mp4"
+  # The whole film in 4K, 3840x2160 at 60 frames a second, for places that
+  # play video at full size (YouTube, X, a GitHub upload). The page is drawn at
+  # twice its size, so the text is sharp at 4K rather than scaled up.
+  $RENDER --page assets/studio/film.html --size 1920x1080 --scale 2 --fps 60 --frames "$F/frames/film4k"
+  ffmpeg -y -loglevel error -framerate 60 -i "$F/frames/film4k/%06d.png" \
+    -c:v libx264 -preset slow -crf 16 -profile:v high -level:v 5.2 -pix_fmt yuv420p -movflags +faststart "$F/cohors-film-4k60.mp4"
   rm -rf "$F/frames"
   ls -la "$F"/*.mp4 assets/demo.gif | awk '{printf "%.1f MB  %s\n", $5 / 1048576, $NF}'
 fi
