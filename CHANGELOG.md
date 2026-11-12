@@ -19,6 +19,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-11-12
+
 ### Fixed
 
 - **Updating through Homebrew refreshes the tap first.** Homebrew refreshes
