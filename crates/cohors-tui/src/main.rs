@@ -16,6 +16,7 @@ mod logging;
 mod scan;
 mod tui;
 mod ui;
+mod update;
 /// The browser dashboard's files, compiled in by `build.rs` when a release
 /// build provides them (empty otherwise).
 mod web_assets {
@@ -43,12 +44,13 @@ fn main() -> anyhow::Result<()> {
     let cli = parse_cli();
     logging::init();
 
-    match &cli.command {
+    let result = match &cli.command {
         Some(Command::Init { force }) => commands::init(&cli, *force),
         Some(Command::Scan { select, json }) => commands::scan(&cli, select.as_deref(), *json),
         Some(Command::Overview { json }) => commands::overview(&cli, *json),
         Some(Command::Standup { today, json }) => commands::standup(&cli, *today, *json),
         Some(Command::Demo) => commands::run_demo(),
+        Some(Command::Update { check }) => update::run_command(*check),
         Some(Command::Fetch(a)) => commands::run_action(
             &cli,
             commands::CliAction::Fetch,
@@ -130,5 +132,29 @@ fn main() -> anyhow::Result<()> {
             },
         ),
         None => commands::run_tui(&cli),
+    };
+    // One-off commands end with a line about a newer cohors, when one is known.
+    // Not the dashboard (it shows it in the header), the servers (their output
+    // belongs to a client) or `update` (it just said everything).
+    let one_off = matches!(
+        cli.command,
+        Some(
+            Command::Init { .. }
+                | Command::Scan { .. }
+                | Command::Overview { .. }
+                | Command::Standup { .. }
+                | Command::Fetch(_)
+                | Command::Pull(_)
+                | Command::Push(_)
+                | Command::Commit { .. }
+                | Command::Stash(_)
+                | Command::Run { .. }
+                | Command::Launchpad { .. }
+        )
+    );
+    if one_off {
+        let config = cohors_config::Config::load(cli.config.as_deref().map(camino::Utf8Path::new));
+        update::print_notice(config.map(|c| c.updates).unwrap_or_default());
     }
+    result
 }

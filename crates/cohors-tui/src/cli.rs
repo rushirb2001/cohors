@@ -118,6 +118,17 @@ pub enum Command {
     /// A zero-setup way to try cohors: every column and view is populated with
     /// privacy-safe demo data. Actions are stubbed (nothing touches your disk).
     Demo,
+    /// Update cohors to the newest release, the way this copy was installed.
+    ///
+    /// Asks GitHub for the newest release and installs it with Homebrew, pip,
+    /// or the release's shell installer, whichever installed this copy. A
+    /// build from source, or a copy run through `uvx`, only says how to get it.
+    /// The dashboard does this by itself once a day (the `updates` setting).
+    Update {
+        /// Only say whether a newer release exists; install nothing.
+        #[arg(long)]
+        check: bool,
+    },
     /// git fetch across the selected repos (non-destructive).
     Fetch(ActionArgs),
     /// git pull --ff-only across the selected repos, never merging or losing work.

@@ -580,6 +580,7 @@ dependencies = [
  "tiny_http",
  "tracing",
  "tracing-subscriber",
+ "ureq",
 ]
 
 [[package]]

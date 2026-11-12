@@ -24,7 +24,7 @@ expression: "render_to_string(&app, 120, 50)"
 ╭─  2  ▲ Work at║    /                  filter the repository table by name                            ║───────────────╮
 │  RISK  legacy-║    s  t               the standup / the launchpad (tasks and flows)                  ║               │
 │  WARN  payment║    F  Y               fetch every repository / copy the standup as markdown          ║      2h  Push │
-│  WARN  web-app║    r  ?  q            rescan / this help / quit (Ctrl-C also quits)                  ║     20m  Pull │
+│  WARN  web-app║    r  R  ?  q         rescan / restart into an installed update / this help / quit   ║     20m  Pull │
 ╰───────────────║                                                                                      ║───────────────╯
                 ║  1 Do next, 3 Open tasks, 4 Commits                                                  ║                
 ╭─  3  ✓ Open ta║    ⏎                  do the step / that repository's tasks / its commits            ║───────────────╮

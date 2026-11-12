@@ -113,6 +113,8 @@ enum BgMsg {
         // Boxed: a RepoSnapshot is large relative to the other variant.
         snapshot: Option<Box<RepoSnapshot>>,
     },
+    /// A newer cohors was found, is installing, or is ready after a restart.
+    Update(cohors_core::update::UpdateState),
 }
 
 /// What is known about the terminal's background.
@@ -221,7 +223,11 @@ pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Re
     let mut terminal = setup_terminal().context("setting up the terminal")?;
     let result = run_loop(&mut terminal, scanner, cli, use_cache, watch, ground);
     let _ = restore_terminal(&mut terminal);
-    result
+    // `R` after an update: start the new binary in this same terminal.
+    if let Ok(true) = result {
+        return Err(crate::update::restart());
+    }
+    result.map(|_| ())
 }
 
 /// How often `--watch` re-scans while the dashboard is idle.
@@ -272,6 +278,8 @@ fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
                         && took_ground_reply(&mut ground_reply, &key, &mut app) => {}
                 Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
                     Cmd::Quit => break,
+                    // The demo never installs anything, so there is nothing to restart into.
+                    Cmd::Restart => {}
                     // The standup works for real — seeded from demo commits.
                     Cmd::OpenStandup | Cmd::StandupNextWindow => {
                         app.show_standup(cohors_core::demo::standup(now));
@@ -410,8 +418,10 @@ fn run_loop(
     use_cache: bool,
     watch: bool,
     ground: Ground,
-) -> Result<()> {
+) -> Result<bool> {
     let (tx, rx) = mpsc::channel::<BgMsg>();
+    // Set by `R`: the caller restarts cohors once the terminal is restored.
+    let mut restart = false;
 
     let mut app = App::new(scanner.roots(), scanner.config_path());
     app.icons = scanner.icon_mode();
@@ -438,6 +448,7 @@ fn run_loop(
     }
     app.scanning = true;
     spawn_scan(&scanner, tx.clone());
+    spawn_update_check(&scanner, tx.clone());
 
     // An in-flight bulk batch (fetch-all / bulk stash), for aggregate progress.
     let mut batch: Option<Batch> = None;
@@ -467,6 +478,10 @@ fn run_loop(
                         && took_ground_reply(&mut ground_reply, &key, &mut app) => {}
                 Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
                     Cmd::Quit => break,
+                    Cmd::Restart => {
+                        restart = true;
+                        break;
+                    }
                     Cmd::Refresh => start_refresh(&mut app, &scanner, &tx),
                     Cmd::FetchSelected => {
                         start_action_targets(&mut app, &tx, ActionKind::Fetch, &mut batch)
@@ -553,7 +568,7 @@ fn run_loop(
             last_watch = Instant::now();
         }
     }
-    Ok(())
+    Ok(restart)
 }
 
 /// Roots auto-detected elsewhere that aren't already being searched — the
@@ -621,6 +636,7 @@ fn drain_background(
 ) {
     while let Ok(msg) = rx.try_recv() {
         match msg {
+            BgMsg::Update(state) => app.update = Some(state),
             BgMsg::Scanned(mut repos) => {
                 // Carry over already-fetched remote info so the Remote column
                 // stays put across a refresh instead of blanking to "—" until
@@ -1293,6 +1309,17 @@ fn run_interactive_then_refresh(
 }
 
 // ----- background workers ---------------------------------------------------
+
+/// Look for a newer cohors off the UI thread and, in `auto` mode, install it.
+/// Each step arrives as a message, so the header can say where it stands.
+fn spawn_update_check(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
+    let mode = crate::update::effective_mode(scanner.updates_mode());
+    std::thread::spawn(move || {
+        crate::update::run_in_background(mode, now_secs(), |state| {
+            let _ = tx.send(BgMsg::Update(state));
+        });
+    });
+}
 
 fn spawn_scan(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
     let scanner = Arc::clone(scanner);

@@ -59,6 +59,10 @@ pub struct Caps {
 /// and the binary can supply a real scan.
 type ScanFn<'a> = dyn Fn() -> Vec<RepoSnapshot> + 'a;
 
+/// Whether a newer cohors is known (and where its install stands), asked on
+/// every read so a long-running server notices one found while it runs.
+pub type UpdateFn<'a> = dyn Fn() -> Option<cohors_core::update::UpdateState> + 'a;
+
 /// Everything a tool call needs: how to scan, *where* we're scanning + the
 /// config in effect (for the fail-loud diagnostics — see [`meta`]), and which
 /// tiers are enabled.
@@ -80,6 +84,8 @@ struct Ctx<'a> {
     /// Whose commits `standup` lists (`git config user.email`); `None` when
     /// git has no identity configured.
     author: Option<&'a str>,
+    /// A newer cohors, if one is known; reported in every read's `meta`.
+    update: &'a UpdateFn<'a>,
 }
 
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
@@ -94,6 +100,7 @@ pub fn serve_stdio(
     allowlist: &[String],
     max_targets: usize,
     author: Option<&str>,
+    update: &UpdateFn<'_>,
 ) -> Result<()> {
     let home = cohors_launchpad::launchpad_home();
     let ctx = Ctx {
@@ -106,6 +113,7 @@ pub fn serve_stdio(
         max_targets,
         home: home.as_deref(),
         author,
+        update,
     };
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
@@ -1218,6 +1226,15 @@ fn meta(ctx: &Ctx, snaps: &[RepoSnapshot]) -> Value {
         // (CI / PRs) is live, instead of silently seeing fewer rows.
         "github_token": has_token,
     });
+    // A newer cohors: the agent can pass it on, in the same words every other
+    // surface uses.
+    if let Some(update) = (ctx.update)() {
+        m["update"] = json!({
+            "version": update.version(),
+            "notice": update.notice(),
+            "detail": update,
+        });
+    }
     if !has_token {
         m["github_note"] = json!(
             "No GitHub token — CI and PR data are unavailable (remote results will be empty). Run `gh auth login` (or set $GITHUB_TOKEN) and reconnect the server to enable them."
@@ -1348,6 +1365,7 @@ mod tests {
             max_targets: 0,
             home: None,
             author: None,
+            update: &|| None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1366,6 +1384,7 @@ mod tests {
             max_targets: 0,
             home: None,
             author: None,
+            update: &|| None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1384,6 +1403,7 @@ mod tests {
             max_targets,
             home: None,
             author: None,
+            update: &|| None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1450,6 +1470,7 @@ mod tests {
             max_targets: 0,
             home: None,
             author: None,
+            update: &|| None,
         };
         let resp = handle(
             &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
@@ -1717,6 +1738,7 @@ mod tests {
             max_targets: 0,
             home: None,
             author: None,
+            update: &|| None,
         };
         let resp = handle(
             &json!({
@@ -2046,6 +2068,7 @@ mod tests {
             max_targets: 0,
             home: Some(home),
             author: None,
+            update: &|| None,
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }

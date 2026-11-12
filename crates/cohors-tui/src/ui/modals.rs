@@ -72,8 +72,8 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
             "fetch every repository / copy the standup as markdown",
         ),
         row(
-            key("r  ?  q"),
-            "rescan / this help / quit (Ctrl-C also quits)",
+            key("r  R  ?  q"),
+            "rescan / restart into an installed update / this help / quit",
         ),
         Line::from(""),
         head("1 Do next, 3 Open tasks, 4 Commits"),

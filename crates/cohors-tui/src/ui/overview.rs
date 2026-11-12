@@ -279,11 +279,16 @@ fn render_header_card(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         0
     };
     let text_width = (left.width as usize).saturating_sub(mark_width + 2);
+    // A newer cohors takes the tagline's place, right beside the name.
+    let tagline = match update_notice(app, theme) {
+        Some((notice, style)) => {
+            let room = text_width.saturating_sub("cohors  ".len());
+            Span::styled(format!("  {}", text::clip(&notice, room, ell)), style)
+        }
+        None => Span::styled("  your git fleet", theme.dim()),
+    };
     let texts = [
-        vec![
-            Span::styled("cohors", brand),
-            Span::styled("  your git fleet", theme.dim()),
-        ],
+        vec![Span::styled("cohors", brand), tagline],
         vec![Span::styled(
             text::clip(&header_roots(app), text_width, ell),
             theme.dim(),
@@ -338,11 +343,32 @@ fn header_side_lines(app: &App, now: i64, theme: &Theme) -> Vec<Line<'static>> {
     ]
 }
 
+/// The notice about a newer cohors, in the same words as every other surface,
+/// plus the key once a restart is all that is left, and its style.
+fn update_notice(app: &App, theme: &Theme) -> Option<(String, Style)> {
+    use cohors_core::update::UpdateState;
+    let state = app.update.as_ref()?;
+    let style = match state {
+        UpdateState::Ready { .. } => theme.ok().add_modifier(Modifier::BOLD),
+        UpdateState::Failed { .. } => theme.warn(),
+        _ => theme.accent(),
+    };
+    let key = if app.update_ready() { "  R" } else { "" };
+    Some((format!("{}{key}", state.notice()), style))
+}
+
 /// The header on a short screen: everything that matters, on one line.
 fn render_header_line(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
     let ell = theme.glyphs.ellipsis();
     let status = scan_status(app, now, theme);
-    let status_width = status.chars().count();
+    // A newer cohors, when there is one, sits before the scan status: the
+    // same words as every other surface, plus the key once a restart is all
+    // that is left.
+    let update = update_notice(app, theme);
+    let update_width = update
+        .as_ref()
+        .map_or(0, |(text, _)| text.chars().count() + 3);
+    let status_width = status.chars().count() + update_width;
     // One column of margin each side, and two between the text and the status.
     let room = (area.width as usize).saturating_sub(2 + status_width + 2 + 8);
     let rest = format!("{}   {}", header_roots(app), headline(app, theme));
@@ -352,9 +378,14 @@ fn render_header_line(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
         Span::styled(text::clip(&rest, room, ell), theme.dim()),
     ]);
     frame.render_widget(Paragraph::new(line), area);
+    let mut right = Vec::new();
+    if let Some((text, style)) = update {
+        right.push(Span::styled(text, style));
+        right.push(Span::raw("   "));
+    }
+    right.push(Span::styled(format!("{status} "), theme.dim()));
     frame.render_widget(
-        Paragraph::new(Line::from(Span::styled(format!("{status} "), theme.dim())))
-            .alignment(Alignment::Right),
+        Paragraph::new(Line::from(right)).alignment(Alignment::Right),
         area,
     );
 }

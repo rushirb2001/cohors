@@ -227,6 +227,8 @@ pub enum Mode {
 pub enum Cmd {
     None,
     Quit,
+    /// Quit and start again, so an update installed in the background runs.
+    Restart,
     /// Re-run the scan.
     Refresh,
     /// Fetch the selected repo.
@@ -585,6 +587,9 @@ pub struct App {
     /// it is). `None` means not known: the dashboard then paints nothing that
     /// would only look right on one kind of background.
     pub ground: Option<(u8, u8, u8)>,
+    /// A newer cohors: found, installing, or installed and waiting for a
+    /// restart. Shown in the header; `R` restarts once it is ready.
+    pub update: Option<cohors_core::update::UpdateState>,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -715,6 +720,7 @@ impl App {
             icons: cohors_config::IconMode::default(),
             dark: false,
             ground: None,
+            update: None,
         }
     }
 
@@ -1103,6 +1109,9 @@ impl App {
         match key.code {
             KeyCode::Char('q') => return Some(Cmd::Quit),
             KeyCode::Char('r') => return Some(Cmd::Refresh),
+            // Only while an installed update waits: at any other time `R`
+            // does nothing, so a slip of the shift key never restarts.
+            KeyCode::Char('R') if self.update_ready() => return Some(Cmd::Restart),
             // The standup and the launchpad open from anywhere, not only
             // from the cards that summarise them.
             KeyCode::Char('s') => return Some(self.open_standup()),
@@ -1141,6 +1150,14 @@ impl App {
             _ => return None,
         }
         Some(Cmd::None)
+    }
+
+    /// Is an installed update waiting for a restart?
+    pub fn update_ready(&self) -> bool {
+        matches!(
+            self.update,
+            Some(cohors_core::update::UpdateState::Ready { .. })
+        )
     }
 
     /// Open the command palette with `text` already typed.

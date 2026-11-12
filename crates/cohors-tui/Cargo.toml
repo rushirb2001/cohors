@@ -38,6 +38,9 @@ arboard = { workspace = true }
 # `cohors web`: a local server that serves the WASM dashboard and the local scan
 # as JSON (remote enrichment runs server-side via cohors-github).
 tiny_http = { workspace = true }
+# Looking up cohors' own latest release, and fetching its installer, to keep
+# cohors up to date (src/update.rs). The same client the GitHub adapter uses.
+ureq = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }

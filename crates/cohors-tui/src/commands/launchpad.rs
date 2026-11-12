@@ -341,7 +341,12 @@ pub(super) fn head_branch(root: &Path) -> String {
         .unwrap_or_default()
 }
 
-fn record(phase: &str, runner: &str, agent: Option<&str>, repo: Option<&str>) -> Result<()> {
+pub(crate) fn record(
+    phase: &str,
+    runner: &str,
+    agent: Option<&str>,
+    repo: Option<&str>,
+) -> Result<()> {
     let home = lp::launchpad_home().context("no home directory for the launchpad")?;
     let start = match repo {
         Some(path) => PathBuf::from(path),

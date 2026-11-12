@@ -1591,3 +1591,43 @@ fn a_card_lists_its_keys_only_while_it_has_the_focus() {
     app.focus = Card::Repos;
     assert!(render_to_string(&app, 119, 53).contains("pull   P"));
 }
+
+#[test]
+fn every_update_state_shows_in_the_header() {
+    use cohors_core::update::UpdateState;
+    let states = [
+        UpdateState::Available {
+            version: "0.7.1".into(),
+            command: "brew upgrade cohors".into(),
+        },
+        UpdateState::Installing {
+            version: "0.7.1".into(),
+        },
+        UpdateState::Ready {
+            version: "0.7.1".into(),
+        },
+        UpdateState::Failed {
+            version: "0.7.1".into(),
+            command: "pip install -U cohors".into(),
+            reason: "no matching distribution".into(),
+        },
+    ];
+    for state in states {
+        let mut app = small_app();
+        app.update = Some(state.clone());
+        // Both headers: the card on a tall screen, one line on a short one.
+        for (height, header_rows) in [(40, 5), (14, 1)] {
+            let text = render_to_string(&app, 170, height);
+            let header: String = text.lines().take(header_rows).collect();
+            assert!(
+                header.contains(&state.notice()),
+                "{state:?} not in the header at height {height}:\n{text}"
+            );
+            // The rest of the dashboard still draws.
+            assert!(
+                text.contains("Do next"),
+                "{state:?} blanked the dashboard at height {height}:\n{text}"
+            );
+        }
+    }
+}

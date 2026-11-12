@@ -30,12 +30,19 @@ def main():
         pass
 
     argv = [exe, *sys.argv[1:]]
+    # Tell cohors how it was installed, so it can keep itself up to date:
+    # `uvx` runs it from uv's own folders (a new release arrives on the next
+    # `uvx cohors@latest`), anything else is pip, through this interpreter.
+    env = dict(os.environ)
+    from_uv = os.sep + "uv" + os.sep in os.path.abspath(sys.prefix)
+    env["COHORS_INSTALLER"] = "uvx" if from_uv else "pip"
+    env["COHORS_PYTHON"] = sys.executable
     if os.name == "nt":
         import subprocess
 
-        raise SystemExit(subprocess.run(argv).returncode)
+        raise SystemExit(subprocess.run(argv, env=env).returncode)
     # POSIX: replace this process so signals/TTY behave exactly as the binary's.
-    os.execv(exe, argv)
+    os.execve(exe, argv, env)
 
 
 if __name__ == "__main__":
