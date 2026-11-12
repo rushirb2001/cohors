@@ -35,7 +35,12 @@ for crate in $CRATES; do
   attempt=1
   while :; do
     log=$(mktemp)
-    if cargo publish -p "$crate" --allow-dirty 2>&1 | tee "$log"; then
+    # Not `cargo publish | tee`: a pipeline's status is its last command's, so
+    # a failed publish would look like a success.
+    status=0
+    cargo publish -p "$crate" --allow-dirty >"$log" 2>&1 || status=$?
+    cat "$log"
+    if [ "$status" -eq 0 ]; then
       rm -f "$log"
       break
     fi
