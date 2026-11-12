@@ -21,15 +21,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [0.7.4] — 2026-11-12
 
-### Fixed
-
-- **Updating through Homebrew refreshes the tap first.** Homebrew refreshes
-  taps only about once a day, so `brew upgrade` could find the old formula,
-  change nothing and still succeed, and cohors then asked for a restart that
-  came back as the old version. It now runs `brew update` first and checks that
-  Homebrew really has the new version before saying "Restart to update".
-
-## [0.7.3] — 2026-11-12
+0.7.3 was tagged but never published (its release step failed), so its
+changes ship here.
 
 ### Added
 
@@ -50,6 +43,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   to 0.7.2, and older instructions, keep working. The shell installer's
   settings are now `COHORS_INSTALL_DIR` and `COHORS_NO_MODIFY_PATH`; the old
   `COHORS_TUI_*` names still work through that script.
+
+### Fixed
+
+- **Updating through Homebrew refreshes the tap first.** Homebrew refreshes
+  taps only about once a day, so `brew upgrade` could find the old formula,
+  change nothing and still succeed, and cohors then asked for a restart that
+  came back as the old version. It now runs `brew update` first and checks that
+  Homebrew really has the new version before saying "Restart to update".
 
 ## [0.7.2] — 2026-11-12
 
