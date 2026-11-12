@@ -20,6 +20,12 @@ on:
 permissions:
   contents: read
 
+# One publish at a time, oldest first: two releases close together must not
+# race each other to create the same crates.
+concurrency:
+  group: crates-io
+  cancel-in-progress: false
+
 jobs:
   release:
     name: find the release
