@@ -104,6 +104,8 @@ cohors
 
 From the <kbd>:</kbd> line: `:commit wip: cart drawer` commits the marked repos, `:!npm test` runs a command in them, `:jump payments` goes to one. `cohors --watch` keeps it all live.
 
+<a name="use-it-with-claude-code"></a>
+
 ## <img src="https://cdn.simpleicons.org/claude/D97757" alt="" height="26" align="top"> Use it with Claude Code
 
 ```text
