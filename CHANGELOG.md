@@ -19,6 +19,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-11-12
+
 ### Fixed
 
 - **cohors is on npm, as `@cohors/cli`.** npm refused the bare name `cohors`
