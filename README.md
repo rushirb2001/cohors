@@ -70,13 +70,13 @@ Prebuilt for macOS and Linux; Cargo builds it anywhere Rust runs. All it needs i
 
 ## What it answers
 
-| You wonder | cohors shows |
-|---|---|
-| What exists only on this laptop? | Commits never pushed and branches never published, by repo |
-| What should I do first? | Next steps, most urgent first, each with the command that does it |
-| What's about to be lost? | Every repo at risk, why, and the fix |
-| What did I ship this week? | Your commits across every repo, ready for standup |
-| What's waiting in each repo? | Open tasks and the commands worth running |
+| You wonder                       | cohors shows                                                      |
+| -------------------------------- | ----------------------------------------------------------------- |
+| What exists only on this laptop? | Commits never pushed and branches never published, by repo        |
+| What should I do first?          | Next steps, most urgent first, each with the command that does it |
+| What's about to be lost?         | Every repo at risk, why, and the fix                              |
+| What did I ship this week?       | Your commits across every repo, ready for standup                 |
+| What's waiting in each repo?     | Open tasks and the commands worth running                         |
 
 **Where it looks.** With no config, the folders where code usually lives. Point it at yours with `cohors --root ~/code` (repeat for more), or save them with `cohors init`, which writes `~/.config/cohors/config.toml` for roots, aliases, groups and ignore rules.
 
@@ -90,13 +90,13 @@ cohors
 
 **Do next** lists what to do, most urgent first. Press a step's letter to act on every repo in it, or mark repos with <kbd>Space</kbd> and press the letter yourself.
 
-| Key | Does | Key | Does |
-|---|---|---|---|
-| <kbd>P</kbd> <kbd>p</kbd> <kbd>f</kbd> | Push, pull, fetch | <kbd>Enter</kbd> | Open a repo |
-| <kbd>c</kbd> <kbd>S</kbd> | Commit, stash (asks first) | <kbd>/</kbd> | Filter as you type |
-| <kbd>F</kbd> | Fetch everything | <kbd>s</kbd> <kbd>Y</kbd> | Standup, copy it |
-| <kbd>1</kbd>–<kbd>5</kbd> | Jump to a card | <kbd>t</kbd> | Tasks across repos |
-| <kbd>:</kbd> | Command line | <kbd>?</kbd> | Every key |
+| Key                                    | Does                       | Key                       | Does               |
+| -------------------------------------- | -------------------------- | ------------------------- | ------------------ |
+| <kbd>P</kbd> <kbd>p</kbd> <kbd>f</kbd> | Push, pull, fetch          | <kbd>Enter</kbd>          | Open a repo        |
+| <kbd>c</kbd> <kbd>S</kbd>              | Commit, stash (asks first) | <kbd>/</kbd>              | Filter as you type |
+| <kbd>F</kbd>                           | Fetch everything           | <kbd>s</kbd> <kbd>Y</kbd> | Standup, copy it   |
+| <kbd>1</kbd>–<kbd>5</kbd>              | Jump to a card             | <kbd>t</kbd>              | Tasks across repos |
+| <kbd>:</kbd>                           | Command line               | <kbd>?</kbd>              | Every key          |
 
 From the <kbd>:</kbd> line: `:commit wip: cart drawer` commits the marked repos, `:!npm test` runs a command in them, `:jump payments` goes to one. `cohors --watch` keeps it all live.
 
@@ -125,22 +125,22 @@ Ask *"what needs my attention across my repos?"* and Claude gets the whole fleet
 
 More to ask:
 
-| Say | Claude uses |
-|---|---|
-| "What have I changed in web-app?" | `changes`, with the diff if you want it |
-| "Where do we handle retries?" | `search`, across every repo at once |
-| "Write my standup for this week." | `standup` |
-| "Back up everything that's only on this laptop." | a `push` dry run first, then the push once you agree |
-| "Which of my PRs are failing CI?" | `ci_status` and `list_prs` (needs a GitHub token or `gh` login) |
-| "Plan my day." | the `plan-focus` skill, which saves a short list to your board |
+| Say                                              | Claude uses                                                     |
+| ------------------------------------------------ | --------------------------------------------------------------- |
+| "What have I changed in web-app?"                | `changes`, with the diff if you want it                         |
+| "Where do we handle retries?"                    | `search`, across every repo at once                             |
+| "Write my standup for this week."                | `standup`                                                       |
+| "Back up everything that's only on this laptop." | a `push` dry run first, then the push once you agree            |
+| "Which of my PRs are failing CI?"                | `ci_status` and `list_prs` (needs a GitHub token or `gh` login) |
+| "Plan my day."                                   | the `plan-focus` skill, which saves a short list to your board  |
 
 It starts **read-only**. Turn on what Claude may do with `claude plugin configure cohors@cohors`, then start a new session:
 
-| Setting | Allows | Still guarded by |
-|---|---|---|
-| Git actions | `fetch` `pull` `push` `commit` `stash` | no force push, fast-forward-only pull, `confirm` on commit and stash |
-| Run commands | one command across many repos | `confirm`, a per-call cap |
-| Launchpad writes | each repo's `.cohors/` file and your focus board | validated first, never touches git |
+| Setting          | Allows                                           | Still guarded by                                                     |
+| ---------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| Git actions      | `fetch` `pull` `push` `commit` `stash`           | no force push, fast-forward-only pull, `confirm` on commit and stash |
+| Run commands     | one command across many repos                    | `confirm`, a per-call cap                                            |
+| Launchpad writes | each repo's `.cohors/` file and your focus board | validated first, never touches git                                   |
 
 Or let cohors brief Claude for you: `cohors agent run plan-day`, or `cohors agent run task --repo payments --task idempotency-keys` to start on one task (run it again to resume the same conversation).
 
@@ -187,12 +187,12 @@ $ cohors push --select ahead --dry-run
 
 `--select` picks the repos. Join terms with a comma (all must match) and put `!` in front to exclude:
 
-| Term | Matches |
-|---|---|
-| `dirty` `ahead` `behind` `diverged` | Repos in that state |
+| Term                                    | Matches                                                  |
+| --------------------------------------- | -------------------------------------------------------- |
+| `dirty` `ahead` `behind` `diverged`     | Repos in that state                                      |
 | `unpublished` `stale-fetch` `attention` | No upstream, not fetched lately, anything needing a look |
-| `name:pay*` `ci:failing` | By name, or by CI result |
-| `all` | Every repo |
+| `name:pay*` `ci:failing`                | By name, or by CI result                                 |
+| `all`                                   | Every repo                                               |
 
 ```sh
 cohors fetch --select all                      # refresh every remote
@@ -266,26 +266,26 @@ Once a day cohors checks for a release. Installed with Homebrew, pip or the shel
 <summary>Updating by hand</summary>
 <br>
 
-| Installed with | Run |
-|---|---|
-| Homebrew | `brew update && brew upgrade cohors` |
-| pip | `pip install -U cohors` |
-| npm | `npm install -g @cohors/cli@latest` |
-| Cargo | `cargo install cohors` |
-| Shell installer | the install line again |
-| `uvx` / `npx` with `@latest` | nothing, each run is the newest |
+| Installed with               | Run                                  |
+| ---------------------------- | ------------------------------------ |
+| Homebrew                     | `brew update && brew upgrade cohors` |
+| pip                          | `pip install -U cohors`              |
+| npm                          | `npm install -g @cohors/cli@latest`  |
+| Cargo                        | `cargo install cohors`               |
+| Shell installer              | the install line again               |
+| `uvx` / `npx` with `@latest` | nothing, each run is the newest      |
 
 </details>
 
 ## How it compares
 
-| | cohors | git-scope | mani / gita | lazygit / gitui |
-|---|:---:|:---:|:---:|:---:|
-| Every repo at once | ✓ | ✓ | text only | — |
-| Bulk fetch, pull, push, run | ✓ | read-only | ✓ | — |
-| Pull requests and CI | ✓ | — | — | one repo |
-| Cross-repo search and standup | ✓ | — | — | — |
-| MCP server for coding agents | ✓ | — | — | — |
+|                               | cohors | git-scope | mani / gita | lazygit / gitui |
+| ----------------------------- | :----: | :-------: | :---------: | :-------------: |
+| Every repo at once            |   ✓    |     ✓     |  text only  |        —        |
+| Bulk fetch, pull, push, run   |   ✓    | read-only |      ✓      |        —        |
+| Pull requests and CI          |   ✓    |     —     |      —      |    one repo     |
+| Cross-repo search and standup |   ✓    |     —     |      —      |        —        |
+| MCP server for coding agents  |   ✓    |     —     |      —      |        —        |
 
 <div align="center">
 <br>
