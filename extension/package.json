@@ -19,14 +19,21 @@
   },
   "categories": [
     "SCM Providers",
+    "Visualization",
+    "AI",
     "Other"
   ],
   "keywords": [
     "git",
     "multi-repo",
+    "monorepo",
     "dashboard",
     "standup",
-    "agents"
+    "agents",
+    "claude",
+    "mcp",
+    "worktree",
+    "productivity"
   ],
   "main": "./src/extension.js",
   "activationEvents": [
@@ -196,5 +203,10 @@
       }
     }
   },
-  "icon": "media/icon.png"
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#1A1219",
+    "theme": "dark"
+  },
+  "qna": false
 }

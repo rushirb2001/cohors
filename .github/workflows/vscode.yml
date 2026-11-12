@@ -1,0 +1,130 @@
+name: VS Code extension
+
+# Publishes the VS Code extension after a GitHub Release is out: to the Visual
+# Studio Marketplace (for VS Code) and to Open VSX (for Cursor, Windsurf,
+# VSCodium and the other VS Code-based editors), and attaches the .vsix to the
+# release.
+#
+# The Marketplace needs no stored secret: it trusts this workflow through a
+# Trusted Publishing policy on the `rushirb2001` publisher (repository
+# rushirb2001/cohors, workflow vscode.yml), and the job proves who it is with
+# GitHub's OIDC token. If this file is renamed, that policy must be updated.
+# Open VSX uses the OVSX_PAT secret, a publish-only token for rushirb2001.cohors.
+#
+# Like the PyPI and crates.io workflows, it starts when the cargo-dist Release
+# workflow finishes on a version tag, and asks GitHub whether the release is
+# published instead of trusting that run's overall result.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.7.6)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: find the release
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion != 'cancelled' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    outputs:
+      tag: ${{ steps.find.outputs.tag }}
+      published: ${{ steps.find.outputs.published }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$RUN_TAG}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null)" = false ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No published release for $tag, so there is nothing to publish."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  package:
+    name: package the extension
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # vsce is Microsoft's own packager, so the Marketplace gets exactly what
+      # it validates. The extension has no dependencies to bundle.
+      - name: Package with vsce
+        working-directory: extension
+        run: npx --yes @vscode/vsce@4 package --no-dependencies -o ../cohors.vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: cohors.vsix
+
+  marketplace:
+    name: publish to the VS Code Marketplace
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # Trusted Publishing: the job's OIDC token stands in for a key
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Publish
+        run: npx --yes @vscode/vsce@4 publish --oidc --packagePath cohors.vsix --skip-duplicate
+
+  open-vsx:
+    name: publish to Open VSX
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Publish
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: npx --yes ovsx publish cohors.vsix --pat "$OVSX_PAT" --skip-duplicate
+
+  attach:
+    name: attach the .vsix to the release
+    needs: [release, package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: vsix
+      - name: Upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          version="${TAG#v}"
+          mv cohors.vsix "cohors-$version.vsix"
+          gh release upload "$TAG" "cohors-$version.vsix" --clobber --repo "$GITHUB_REPOSITORY"

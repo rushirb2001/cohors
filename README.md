@@ -213,6 +213,11 @@ cohors overview --json | jq -r '.actions[].title'
 
 The cohors icon in the activity bar shows the fleet as native panes. Push, pull and fetch from any step, run a repo's commands in a terminal, or start Claude on a task.
 
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/rushirb2001.cohors?label=VS%20Code&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=rushirb2001.cohors)
+[![Open VSX](https://img.shields.io/open-vsx/v/rushirb2001/cohors?label=Open%20VSX&color=A60EE5)](https://open-vsx.org/extension/rushirb2001/cohors)
+
+Search **cohors** in the Extensions view. Cursor, Windsurf and VSCodium install it from Open VSX.
+
 </td>
 <td valign="top">
 
