@@ -325,11 +325,32 @@ pub fn run_in_background(mode: UpdatesMode, now: i64, report: impl Fn(UpdateStat
 pub fn install(channel: &Channel, version: &str) -> Result<()> {
     let _lock = Lock::take().ok_or_else(|| anyhow!("another cohors is already updating"))?;
     match channel {
-        Channel::Homebrew => run_quietly(
-            Command::new("brew")
-                .args(["upgrade", "rushirb2001/tap/cohors"])
-                .env("HOMEBREW_NO_ENV_HINTS", "1"),
-        )?,
+        Channel::Homebrew => {
+            // Homebrew refreshes taps only about once a day, so a plain
+            // `upgrade` can find the old formula and change nothing. Refresh
+            // first; if that fails (offline), the upgrade still gets its try.
+            let _ = run_quietly(
+                Command::new("brew")
+                    .args(["update", "--quiet"])
+                    .env("HOMEBREW_NO_ENV_HINTS", "1"),
+            );
+            run_quietly(
+                Command::new("brew")
+                    .args(["upgrade", "rushirb2001/tap/cohors"])
+                    .env("HOMEBREW_NO_ENV_HINTS", "1"),
+            )?;
+            // "Nothing to upgrade" is a success to brew, so ask what it has.
+            let listed = Command::new("brew")
+                .args(["list", "--versions", "cohors"])
+                .output()
+                .map(|out| String::from_utf8_lossy(&out.stdout).into_owned())
+                .unwrap_or_default();
+            if !lists_version(&listed, version) {
+                return Err(anyhow!(
+                    "Homebrew does not have cohors {version} yet; try `brew update && brew upgrade cohors` later"
+                ));
+            }
+        }
         Channel::Pip { python } => {
             let python = python
                 .clone()
@@ -355,6 +376,12 @@ pub fn install(channel: &Channel, version: &str) -> Result<()> {
     memo.failed = None;
     save_memo(&memo);
     Ok(())
+}
+
+/// Does `brew list --versions cohors` (e.g. `cohors 0.7.2 0.7.3`) include
+/// `version`?
+fn lists_version(listed: &str, version: &str) -> bool {
+    listed.split_whitespace().skip(1).any(|v| v == version)
 }
 
 /// For a pip install, the interpreter next to the package: the binary sits at
@@ -571,6 +598,16 @@ pub fn restart() -> anyhow::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_homebrew_upgrade_counts_only_when_brew_lists_the_version() {
+        assert!(lists_version("cohors 0.7.3\n", "0.7.3"));
+        assert!(lists_version("cohors 0.7.2 0.7.3", "0.7.3"));
+        // A stale tap upgrades nothing, and brew still says it succeeded.
+        assert!(!lists_version("cohors 0.7.0\n", "0.7.3"));
+        assert!(!lists_version("", "0.7.3"));
+        assert!(!lists_version("cohors 0.7.30", "0.7.3"));
+    }
 
     #[test]
     fn a_crates_io_install_is_recognised_by_name_and_version() {

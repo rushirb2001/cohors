@@ -19,6 +19,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Updating through Homebrew refreshes the tap first.** Homebrew refreshes
+  taps only about once a day, so `brew upgrade` could find the old formula,
+  change nothing and still succeed, and cohors then asked for a restart that
+  came back as the old version. It now runs `brew update` first and checks that
+  Homebrew really has the new version before saying "Restart to update".
+
 ## [0.7.3] — 2026-11-12
 
 ### Added
