@@ -2,7 +2,7 @@
   "name": "cohors",
   "displayName": "cohors",
   "description": "Every git repo you own as one fleet your agent can see, search, plan across, and (opt-in) act on. Fleet status, cross-repo search, per-repo tasks and flows, and a focus board.",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "author": {
     "name": "Rushir Bhavsar"
   },

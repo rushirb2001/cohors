@@ -448,7 +448,7 @@ dependencies = [
 
 [[package]]
 name = "cohors"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "anyhow",
  "arboard",
@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-actions"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "camino",
  "cohors-core",
@@ -489,7 +489,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-config"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "camino",
  "directories",
@@ -504,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-core"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "camino",
  "nucleo-matcher",
@@ -514,7 +514,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-fleet"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "camino",
  "cohors-config",
@@ -530,7 +530,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-git"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "camino",
  "cohors-core",
@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-github"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "cohors-core",
  "rayon",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-launchpad"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "cohors-core",
  "serde_json",
@@ -571,7 +571,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-mcp"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "anyhow",
  "cohors-actions",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "cohors-web"
-version = "0.7.5"
+version = "0.7.6"
 dependencies = [
  "anyhow",
  "camino",

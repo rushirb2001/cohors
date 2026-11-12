@@ -19,6 +19,25 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-11-12
+
+### Added
+
+- **The VS Code extension is in the VS Code Marketplace and on Open VSX**, so
+  VS Code, Cursor, Windsurf and VSCodium install it by searching "cohors". It
+  publishes with every release (the Marketplace through Trusted Publishing, so
+  no token is stored), and the `.vsix` is attached to each GitHub release. The
+  extension has a proper listing page: what it shows, how to install the
+  `cohors` tool first, its commands and settings.
+- **The launch film's closing card lists every way to install** (Homebrew,
+  pip, npm and Cargo), and the studio build renders the whole film in 4K and a
+  4:5 cut for social feeds.
+
+### Fixed
+
+- **crates.io publishing waits out the pace for new crates** and always uses the
+  newest publish script, so a release that is already tagged still publishes.
+
 ## [0.7.5] — 2026-11-12
 
 ### Fixed
