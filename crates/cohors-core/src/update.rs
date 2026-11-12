@@ -53,6 +53,13 @@ pub enum Channel {
     /// Run through `uvx`, from uv's cache. Nothing to install: `uvx
     /// cohors@latest` fetches the newest release when it next starts.
     Uvx,
+    /// `npm install -g cohors`. The npm package keeps the binary inside
+    /// itself (`node_modules/cohors/node_modules/.bin_real/`). Only told, never
+    /// updated in place: a global npm prefix often needs elevated rights.
+    Npm,
+    /// Run through `npx`, from npm's cache. Like uvx, `npx cohors@latest`
+    /// fetches the newest release when it next starts.
+    Npx,
     /// The release's shell installer, which leaves an install receipt.
     Installer,
     /// Built from source (`cargo install`, a checkout). Never updated
@@ -78,6 +85,14 @@ pub fn detect_channel(
     if launcher == Some("pip") || exe.contains("/site-packages/cohors/") {
         return Channel::Pip { python };
     }
+    // npx runs from npm's cache (`_npx/<hash>/node_modules/cohors/`), so test
+    // for it before the plain npm install it otherwise looks like.
+    if exe.contains("/_npx/") {
+        return Channel::Npx;
+    }
+    if exe.contains("/node_modules/cohors/") {
+        return Channel::Npm;
+    }
     if exe.contains("/Cellar/cohors/") {
         return Channel::Homebrew;
     }
@@ -102,6 +117,8 @@ impl Channel {
             Channel::Homebrew => "Homebrew",
             Channel::Pip { .. } => "pip",
             Channel::Uvx => "uvx",
+            Channel::Npm => "npm",
+            Channel::Npx => "npx",
             Channel::Installer => "the shell installer",
             Channel::Source => "a build from source",
         }
@@ -114,6 +131,8 @@ impl Channel {
             Channel::Homebrew => "brew upgrade cohors",
             Channel::Pip { .. } => "pip install -U cohors",
             Channel::Uvx => "uvx cohors@latest",
+            Channel::Npm => "npm install -g cohors@latest",
+            Channel::Npx => "npx cohors@latest",
             Channel::Installer => {
                 "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh"
             }
@@ -129,7 +148,8 @@ impl Channel {
 #[serde(rename_all = "snake_case", tag = "state")]
 pub enum UpdateState {
     /// A newer release exists. `command` is how to get it when cohors will not
-    /// install it itself (updates switched to notify-only, a source build, uvx).
+    /// install it itself (updates switched to notify-only, a source build, uvx,
+    /// npm or npx).
     Available { version: String, command: String },
     /// Installing in the background.
     Installing { version: String },
@@ -217,6 +237,14 @@ mod tests {
             detect("/Users/a/.cache/uv/archive-v0/abc/lib/python3.12/site-packages/cohors/cohors"),
             Channel::Uvx
         );
+        assert_eq!(
+            detect("/opt/homebrew/lib/node_modules/cohors/node_modules/.bin_real/cohors"),
+            Channel::Npm
+        );
+        assert_eq!(
+            detect("/Users/a/.npm/_npx/3f2a/node_modules/cohors/node_modules/.bin_real/cohors"),
+            Channel::Npx
+        );
         assert_eq!(detect("/Users/a/.cargo/bin/cohors"), Channel::Source);
         assert_eq!(
             detect_channel("/Users/a/.cargo/bin/cohors", None, None, true),
@@ -244,6 +272,8 @@ mod tests {
         assert!(Channel::Installer.installs_itself());
         assert!(Channel::Pip { python: None }.installs_itself());
         assert!(!Channel::Uvx.installs_itself());
+        assert!(!Channel::Npm.installs_itself());
+        assert!(!Channel::Npx.installs_itself());
         assert!(!Channel::Source.installs_itself());
     }
 

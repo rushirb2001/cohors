@@ -104,9 +104,12 @@ cohors-web = { path = "crates/cohors-web" }
 cargo-dist-version = "0.28.0"
 ci = "github"
 # The easy-install channels, all pointing at the same GitHub Release: a
-# checksummed curl|sh script and a Homebrew formula pushed to our tap.
-installers = ["shell", "homebrew"]
+# checksummed curl|sh script, a Homebrew formula pushed to our tap, and an npm
+# package (`npx cohors`) that fetches the matching binary from the release.
+installers = ["shell", "homebrew", "npm"]
 tap = "rushirb2001/homebrew-tap"
+# The binary's crate is `cohors-tui`; on npm it is just `cohors`.
+npm-package = "cohors"
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
@@ -114,8 +117,9 @@ targets = [
     # ARM Linux: Graviton/Ampere servers, Raspberry Pi, and Linux on Apple Silicon.
     "aarch64-unknown-linux-gnu",
 ]
-# Push the generated Homebrew formula to the tap on every release.
-publish-jobs = ["homebrew"]
+# Push the generated Homebrew formula to the tap and publish the npm package on
+# every release (the npm job needs the NPM_TOKEN secret).
+publish-jobs = ["homebrew", "npm"]
 pr-run-mode = "plan"
 # Install into the user's ~/.cargo/bin equivalent, adding it to PATH if needed.
 install-path = "CARGO_HOME"

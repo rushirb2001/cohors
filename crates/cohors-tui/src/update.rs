@@ -308,7 +308,7 @@ pub fn install(channel: &Channel, version: &str) -> Result<()> {
             ]))?
         }
         Channel::Installer => run_installer(version)?,
-        Channel::Uvx | Channel::Source => {
+        Channel::Uvx | Channel::Npm | Channel::Npx | Channel::Source => {
             return Err(anyhow!("this copy of cohors does not update itself"));
         }
     }

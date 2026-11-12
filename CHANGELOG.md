@@ -19,6 +19,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Added
+
+- **cohors is on npm.** `npm install -g cohors`, or `npx cohors@latest` with
+  nothing to install; MCP clients can run `npx -y cohors@latest mcp`. The
+  package fetches the same binary from the GitHub release. An npm or
+  npx copy is told about new releases and the command to get them, never
+  updated in place.
+- **The README's install section lists every channel in one table**, with
+  the install command and the run-without-installing command for each, and PyPI
+  and npm version badges.
+
 ## [0.7.1] — 2026-11-12
 
 ### Added
