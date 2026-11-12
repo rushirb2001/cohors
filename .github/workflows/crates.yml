@@ -1,0 +1,97 @@
+name: crates.io
+
+# Publishes cohors to crates.io after a GitHub Release is out, so
+# `cargo install cohors` works: every library crate first, then the `cohors`
+# binary crate with the browser dashboard built into it.
+#
+# Like the PyPI workflow, it starts when the cargo-dist Release workflow
+# finishes on a version tag, and asks GitHub whether the release is published
+# instead of trusting that run's overall result.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.7.3)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: find the release
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion != 'cancelled' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    outputs:
+      tag: ${{ steps.find.outputs.tag }}
+      published: ${{ steps.find.outputs.published }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$RUN_TAG}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null)" = false ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No published release for $tag, so there is nothing to publish."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    name: publish to crates.io
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    # The first release creates ten new crates, and crates.io paces new crates,
+    # so that one can take about an hour. Later releases take minutes.
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      # rust-toolchain.toml pins the compiler and lists the wasm32 target.
+      - name: Install the pinned Rust toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - name: Install Trunk (the WebAssembly bundler)
+        env:
+          TRUNK_VERSION: "0.21.14"
+        run: |
+          set -euo pipefail
+          asset=trunk-x86_64-unknown-linux-gnu.tar.gz
+          base="https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}"
+          mkdir -p "$RUNNER_TEMP/trunk" && cd "$RUNNER_TEMP/trunk"
+          curl -fsSLO "$base/$asset"
+          curl -fsSLO "$base/$asset.sha256"
+          expected="$(awk '{print $1}' "$asset.sha256")"
+          actual="$(sha256sum "$asset" | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "Trunk checksum mismatch" >&2; exit 1; }
+          tar -xzf "$asset"
+          echo "$RUNNER_TEMP/trunk" >> "$GITHUB_PATH"
+
+      # Built into the `cohors` crate's own dist/ folder, which its build script
+      # compiles into the binary.
+      - name: Build the browser dashboard into the cohors crate
+        run: |
+          set -euo pipefail
+          rustup target add wasm32-unknown-unknown
+          cd crates/cohors-web
+          trunk build --release --dist "$GITHUB_WORKSPACE/crates/cohors-tui/dist"
+          test -f "$GITHUB_WORKSPACE/crates/cohors-tui/dist/index.html"
+
+      - name: Publish every crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: sh scripts/publish-crates.sh

@@ -62,6 +62,9 @@ pub enum Channel {
     Npx,
     /// The release's shell installer, which leaves an install receipt.
     Installer,
+    /// `cargo install cohors`, from crates.io. Only told, never updated in
+    /// place: updating means compiling from source, which takes minutes.
+    Cargo,
     /// Built from source (`cargo install`, a checkout). Never updated
     /// automatically: whoever built it chose what to build.
     Source,
@@ -70,12 +73,14 @@ pub enum Channel {
 /// Recognise the channel from the running binary's path and what the launcher
 /// said. `launcher` is `COHORS_INSTALLER` (the pip wrapper sets `pip`, or
 /// `uvx` when it runs from uv's cache); `receipt` is whether the shell
-/// installer's receipt exists.
+/// installer's receipt claims this binary; `crates_io` is whether cargo's
+/// record of installs says it put this version here from crates.io.
 pub fn detect_channel(
     exe: &str,
     launcher: Option<&str>,
     python: Option<&str>,
     receipt: bool,
+    crates_io: bool,
 ) -> Channel {
     let exe = exe.replace('\\', "/");
     let python = python.map(str::to_string);
@@ -99,6 +104,9 @@ pub fn detect_channel(
     if receipt {
         return Channel::Installer;
     }
+    if crates_io {
+        return Channel::Cargo;
+    }
     Channel::Source
 }
 
@@ -120,6 +128,7 @@ impl Channel {
             Channel::Npm => "npm",
             Channel::Npx => "npx",
             Channel::Installer => "the shell installer",
+            Channel::Cargo => "cargo",
             Channel::Source => "a build from source",
         }
     }
@@ -134,11 +143,10 @@ impl Channel {
             Channel::Npm => "npm install -g cohors@latest",
             Channel::Npx => "npx cohors@latest",
             Channel::Installer => {
-                "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh"
+                "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-installer.sh | sh"
             }
-            Channel::Source => {
-                "cargo install --git https://github.com/rushirb2001/cohors cohors-tui"
-            }
+            Channel::Cargo => "cargo install cohors",
+            Channel::Source => "cargo install --git https://github.com/rushirb2001/cohors cohors",
         }
     }
 }
@@ -148,8 +156,8 @@ impl Channel {
 #[serde(rename_all = "snake_case", tag = "state")]
 pub enum UpdateState {
     /// A newer release exists. `command` is how to get it when cohors will not
-    /// install it itself (updates switched to notify-only, a source build, uvx,
-    /// npm or npx).
+    /// install it itself (updates switched to notify-only, a source build, cargo,
+    /// uvx, npm or npx).
     Available { version: String, command: String },
     /// Installing in the background.
     Installing { version: String },
@@ -220,7 +228,7 @@ mod tests {
 
     #[test]
     fn the_channel_follows_where_the_binary_lives() {
-        let detect = |exe: &str| detect_channel(exe, None, None, false);
+        let detect = |exe: &str| detect_channel(exe, None, None, false, false);
         assert_eq!(
             detect("/opt/homebrew/Cellar/cohors/0.7.0/bin/cohors"),
             Channel::Homebrew
@@ -247,21 +255,25 @@ mod tests {
         );
         assert_eq!(detect("/Users/a/.cargo/bin/cohors"), Channel::Source);
         assert_eq!(
-            detect_channel("/Users/a/.cargo/bin/cohors", None, None, true),
+            detect_channel("/Users/a/.cargo/bin/cohors", None, None, true, false),
             Channel::Installer
+        );
+        assert_eq!(
+            detect_channel("/Users/a/.cargo/bin/cohors", None, None, false, true),
+            Channel::Cargo
         );
     }
 
     #[test]
     fn what_the_launcher_says_wins() {
         assert_eq!(
-            detect_channel("/x/cohors", Some("pip"), Some("/v/bin/python3"), true),
+            detect_channel("/x/cohors", Some("pip"), Some("/v/bin/python3"), true, true),
             Channel::Pip {
                 python: Some("/v/bin/python3".into())
             }
         );
         assert_eq!(
-            detect_channel("/x/cohors", Some("uvx"), None, false),
+            detect_channel("/x/cohors", Some("uvx"), None, false, false),
             Channel::Uvx
         );
     }
@@ -274,6 +286,7 @@ mod tests {
         assert!(!Channel::Uvx.installs_itself());
         assert!(!Channel::Npm.installs_itself());
         assert!(!Channel::Npx.installs_itself());
+        assert!(!Channel::Cargo.installs_itself());
         assert!(!Channel::Source.installs_itself());
     }
 

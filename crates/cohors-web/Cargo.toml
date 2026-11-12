@@ -17,6 +17,8 @@ edition = "2024"
 rust-version = "1.96"
 license = "MIT"
 authors = ["Rushir Bhavsar"]
+repository = "https://github.com/rushirb2001/cohors"
+homepage = "https://github.com/rushirb2001/cohors"
 description = "cohors web dashboard — one Rust core; a native server half and a WASM (Leptos) browser half"
 
 [lib]

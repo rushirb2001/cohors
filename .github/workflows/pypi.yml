@@ -87,7 +87,11 @@ jobs:
           TAG: ${{ needs.release.outputs.tag }}
           TARGET: ${{ matrix.target }}
         run: |
+          # Archives are named after the crate: `cohors-…` since 0.7.3,
+          # `cohors-tui-…` before (so older tags can still be rebuilt).
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern "cohors-$TARGET.tar.xz" --output bin.tar.xz \
+          || gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern "cohors-tui-$TARGET.tar.xz" --output bin.tar.xz
           mkdir -p extracted packaging/pypi/src/cohors
           tar -xf bin.tar.xz -C extracted

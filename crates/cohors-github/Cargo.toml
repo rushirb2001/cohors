@@ -6,7 +6,8 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
-publish = false
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 cohors-core = { workspace = true }

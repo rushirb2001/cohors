@@ -12,6 +12,7 @@ use std::path::Path;
 
 /// The front-end crates the rule applies to. Add new surfaces here as they
 /// appear — forgetting to is caught by `every_front_end_is_listed`.
+// Folder names under crates/ (the `cohors` binary crate lives in cohors-tui/).
 const FRONT_ENDS: &[&str] = &["cohors-tui", "cohors-mcp", "cohors-web"];
 
 /// Adapters no front-end may name directly.

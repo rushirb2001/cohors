@@ -8,8 +8,12 @@
 //! file in it is then compiled into the binary with `include_bytes!`, and an
 //! installed `cohors web` serves them from memory: no checkout, no toolchain.
 //!
-//! Without `COHORS_WEB_DIST` the list is empty, and `cohors web` falls back to
-//! building the page itself, which works inside a checkout of cohors.
+//! The crates.io package carries the built page in its own `dist/` folder (the
+//! publish workflow puts it there), so `cargo install cohors` gets it the same
+//! way, from that folder, when `COHORS_WEB_DIST` is not set.
+//!
+//! With neither, the list is empty, and `cohors web` falls back to building the
+//! page itself, which works inside a checkout of cohors.
 //!
 //! The output is `$OUT_DIR/web_assets.rs`, one static:
 //!
@@ -23,9 +27,20 @@ fn main() {
     println!("cargo:rerun-if-env-changed=COHORS_WEB_DIST");
     let out = PathBuf::from(env::var("OUT_DIR").expect("cargo sets OUT_DIR")).join("web_assets.rs");
 
+    let bundled =
+        PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("cargo sets it")).join("dist");
+    // Watch the folder only when it is there: cargo treats a missing path as
+    // always changed, which would rebuild the binary on every `cargo build`.
+    if bundled.is_dir() {
+        println!("cargo:rerun-if-changed={}", bundled.display());
+    }
+    let dist = env::var_os("COHORS_WEB_DIST")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| bundled.join("index.html").is_file().then_some(bundled));
+
     let mut files = Vec::new();
-    if let Some(dist) = env::var_os("COHORS_WEB_DIST").filter(|v| !v.is_empty()) {
-        let dist = PathBuf::from(dist);
+    if let Some(dist) = dist {
         // A mistake here would ship a binary whose dashboard is a blank page,
         // so stop the build instead.
         assert!(

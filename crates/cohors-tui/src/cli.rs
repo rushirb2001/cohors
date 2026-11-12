@@ -162,10 +162,11 @@ pub enum Command {
     ///
     /// The same local scan as the TUI, in the browser: `cohors web --root ~/code`
     /// shows that folder's repos (local status + remote CI/PRs). With `--watch`
-    /// the page re-scans live. Release builds carry the page inside the binary,
-    /// so it starts at once. A build from source has no page inside it: run it
-    /// in a checkout of cohors and it builds the page with Trunk (installing
-    /// Trunk the first time unless `--no-install`). Ctrl-C to stop.
+    /// the page re-scans live. Release builds and `cargo install cohors` carry
+    /// the page inside the binary, so it starts at once. A build from a
+    /// checkout has no page inside it: run it in that checkout and it builds the
+    /// page with Trunk (installing Trunk the first time unless `--no-install`).
+    /// Ctrl-C to stop.
     Web {
         /// Port to serve on.
         #[arg(long, default_value_t = 8080)]

@@ -109,15 +109,23 @@ pub fn channel() -> Channel {
         launcher.as_deref(),
         python.as_deref(),
         installer_owns(&exe),
+        cargo_installed(&exe),
     )
 }
 
-/// The shell installer's receipt, which records where it installed.
-fn receipt_path() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
+/// The shell installer's receipts, newest name first. The installer was named
+/// after the crate, which was `cohors-tui` up to 0.7.2 and is `cohors` since.
+fn receipt_paths() -> Vec<PathBuf> {
+    let Some(base) = std::env::var_os("XDG_CONFIG_HOME")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".config")))?;
-    Some(base.join("cohors-tui").join("cohors-tui-receipt.json"))
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".config")))
+    else {
+        return Vec::new();
+    };
+    vec![
+        base.join("cohors").join("cohors-receipt.json"),
+        base.join("cohors-tui").join("cohors-tui-receipt.json"),
+    ]
 }
 
 #[derive(Deserialize)]
@@ -130,8 +138,10 @@ struct Receipt {
 }
 
 fn read_receipt() -> Option<Receipt> {
-    let bytes = std::fs::read(receipt_path()?).ok()?;
-    serde_json::from_slice(&bytes).ok()
+    receipt_paths().into_iter().find_map(|path| {
+        let bytes = std::fs::read(path).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    })
 }
 
 /// Did the shell installer put *this* binary here? A receipt alone is not
@@ -143,6 +153,34 @@ fn installer_owns(exe: &str) -> bool {
             && exe.starts_with(&receipt.install_prefix)
             && receipt.version == CURRENT
     })
+}
+
+/// Did `cargo install cohors` put *this* binary here, from crates.io? Cargo
+/// records every install in `$CARGO_HOME/.crates2.json`, keyed like
+/// `cohors 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)`.
+fn cargo_installed(exe: &str) -> bool {
+    let Some(home) = std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|home| Path::new(&home).join(".cargo")))
+    else {
+        return false;
+    };
+    let home = home.canonicalize().unwrap_or(home);
+    if !Path::new(exe).starts_with(home.join("bin")) {
+        return false;
+    }
+    std::fs::read(home.join(".crates2.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .is_some_and(|record| crates_io_install_of(&record, CURRENT))
+}
+
+/// Does cargo's install record list `cohors` at `version` from crates.io?
+fn crates_io_install_of(record: &serde_json::Value, version: &str) -> bool {
+    let wanted = format!("cohors {version} (registry+");
+    record["installs"]
+        .as_object()
+        .is_some_and(|installs| installs.keys().any(|key| key.starts_with(&wanted)))
 }
 
 /// Ask GitHub for the newest release's version (without its `v`).
@@ -308,7 +346,7 @@ pub fn install(channel: &Channel, version: &str) -> Result<()> {
             ]))?
         }
         Channel::Installer => run_installer(version)?,
-        Channel::Uvx | Channel::Npm | Channel::Npx | Channel::Source => {
+        Channel::Uvx | Channel::Npm | Channel::Npx | Channel::Cargo | Channel::Source => {
             return Err(anyhow!("this copy of cohors does not update itself"));
         }
     }
@@ -335,8 +373,7 @@ fn python_beside_package() -> Option<String> {
 /// Run the release's own shell installer for `version`, quietly, into the
 /// place the first install chose. It checks the download's checksum itself.
 fn run_installer(version: &str) -> Result<()> {
-    let url =
-        format!("https://github.com/{REPO}/releases/download/v{version}/cohors-tui-installer.sh");
+    let url = format!("https://github.com/{REPO}/releases/download/v{version}/cohors-installer.sh");
     let script = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(30))
         .build()
@@ -353,13 +390,13 @@ fn run_installer(version: &str) -> Result<()> {
     command
         .args(["-s", "--", "--quiet"])
         // The first install already put cohors on the PATH.
-        .env("COHORS_TUI_NO_MODIFY_PATH", "1");
+        .env("COHORS_NO_MODIFY_PATH", "1");
     // A first install into a chosen folder ("flat" layout) goes back there;
     // the default layout finds its own way to the same place.
     if let Some(receipt) = read_receipt()
         && receipt.install_layout == "flat"
     {
-        command.env("COHORS_TUI_INSTALL_DIR", &receipt.install_prefix);
+        command.env("COHORS_INSTALL_DIR", &receipt.install_prefix);
     }
     run_with_input(&mut command, Some(script.as_bytes()))
 }
@@ -534,6 +571,24 @@ pub fn restart() -> anyhow::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_crates_io_install_is_recognised_by_name_and_version() {
+        let record = serde_json::json!({
+            "installs": {
+                "cohors 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)": {"bins": ["cohors"]},
+                "ripgrep 14.1.1 (registry+https://github.com/rust-lang/crates.io-index)": {"bins": ["rg"]}
+            }
+        });
+        assert!(crates_io_install_of(&record, "0.7.3"));
+        // Another version, a git install or another crate is not this binary.
+        assert!(!crates_io_install_of(&record, "0.7.2"));
+        let from_git = serde_json::json!({
+            "installs": {"cohors 0.7.3 (git+https://github.com/rushirb2001/cohors#abc)": {}}
+        });
+        assert!(!crates_io_install_of(&from_git, "0.7.3"));
+        assert!(!crates_io_install_of(&serde_json::json!({}), "0.7.3"));
+    }
 
     #[test]
     fn quiet_environments_switch_updates_off() {

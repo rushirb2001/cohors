@@ -19,6 +19,26 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Added
+
+- **cohors is on crates.io: `cargo install cohors`.** Every crate is published,
+  and the browser dashboard ships prebuilt inside the `cohors` crate, so
+  `cohors web` works with no Trunk and no checkout. A crates.io install is told
+  about new releases and the command to get them (`cargo install cohors`), never
+  rebuilt in place.
+- **Homebrew and crates.io version badges** in the README, and a Cargo row in
+  its install table.
+
+### Changed
+
+- **The binary's crate is now named `cohors`** (it was `cohors-tui`), so every
+  channel uses one name. Release files follow: `cohors-installer.sh` and
+  `cohors-<target>.tar.xz`. Each release still carries a
+  `cohors-tui-installer.sh` that runs the new installer, so copies of cohors up
+  to 0.7.2, and older instructions, keep working. The shell installer's
+  settings are now `COHORS_INSTALL_DIR` and `COHORS_NO_MODIFY_PATH`; the old
+  `COHORS_TUI_*` names still work through that script.
+
 ## [0.7.2] — 2026-11-12
 
 ### Added

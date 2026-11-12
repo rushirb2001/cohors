@@ -1,6 +1,9 @@
 [package]
-name = "cohors-tui"
-description = "Terminal dashboard for cohors; builds the `cohors` binary."
+# Published as `cohors`, so every channel uses one name: `cargo install cohors`,
+# `brew install …/cohors`, `pip install cohors`, `npm install -g cohors`. The
+# folder keeps its old name, crates/cohors-tui.
+name = "cohors"
+description = "Every git repo you own, on one screen: a terminal dashboard, CLI and MCP server for your whole fleet of repositories."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,10 +11,16 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-publish = false
-# We want the binary to be named `cohors`, not `cohors-tui`. Declaring the bin
-# explicitly and disabling auto-discovery avoids a duplicate target from the
-# same `src/main.rs`.
+readme = "../../README.md"
+keywords = ["git", "tui", "dashboard", "mcp", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+# What goes into the crates.io package. `dist/` is the browser dashboard, built
+# by the publish workflow just before publishing (it is gitignored, which is why
+# it has to be listed): build.rs compiles it into the binary, so `cohors web`
+# works after `cargo install cohors` with no Trunk and no checkout.
+include = ["src/**/*.rs", "build.rs", "dist/**/*"]
+# Declaring the bin explicitly and disabling auto-discovery avoids a duplicate
+# target from the same `src/main.rs`.
 autobins = false
 
 [[bin]]
@@ -48,9 +57,9 @@ tempfile = { workspace = true }
 serde_json = { workspace = true }
 insta = { workspace = true }
 
-# Ship this crate's `cohors` binary as the prebuilt release artifact. The
-# Homebrew formula is named `cohors` (not the crate name `cohors-tui`), so the
-# install command reads `brew install rushirb2001/tap/cohors`.
+# Ship this crate's `cohors` binary as the prebuilt release artifact (archives
+# `cohors-<target>.tar.xz`, the `cohors-installer.sh` script, the `cohors`
+# Homebrew formula and npm package).
 [package.metadata.dist]
 dist = true
 formula = "cohors"

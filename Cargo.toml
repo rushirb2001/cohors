@@ -64,7 +64,7 @@ globset = "0.4"
 glob = "0.3"
 rayon = "1"
 
-# TUI / CLI front-end (cohors-tui).
+# TUI / CLI front-end (the `cohors` crate, in crates/cohors-tui).
 clap = { version = "4", features = ["derive"] }
 # ratatui re-exports crossterm, so the TUI uses `ratatui::crossterm` rather than
 # a separate crossterm dep — that keeps the two versions in lockstep.
@@ -87,15 +87,15 @@ insta = "1"
 
 # Internal crates referenced by path. Front-ends depend on these, never on the
 # concrete data source directly (everything funnels through cohors-core).
-cohors-core = { path = "crates/cohors-core" }
-cohors-config = { path = "crates/cohors-config" }
-cohors-git = { path = "crates/cohors-git" }
-cohors-github = { path = "crates/cohors-github" }
-cohors-actions = { path = "crates/cohors-actions" }
-cohors-launchpad = { path = "crates/cohors-launchpad" }
-cohors-fleet = { path = "crates/cohors-fleet" }
-cohors-mcp = { path = "crates/cohors-mcp" }
-cohors-web = { path = "crates/cohors-web" }
+cohors-core = { path = "crates/cohors-core", version = "0.7.2" }
+cohors-config = { path = "crates/cohors-config", version = "0.7.2" }
+cohors-git = { path = "crates/cohors-git", version = "0.7.2" }
+cohors-github = { path = "crates/cohors-github", version = "0.7.2" }
+cohors-actions = { path = "crates/cohors-actions", version = "0.7.2" }
+cohors-launchpad = { path = "crates/cohors-launchpad", version = "0.7.2" }
+cohors-fleet = { path = "crates/cohors-fleet", version = "0.7.2" }
+cohors-mcp = { path = "crates/cohors-mcp", version = "0.7.2" }
+cohors-web = { path = "crates/cohors-web", version = "0.7.2" }
 
 # Release config for cargo-dist (the `dist` tool). After changing anything here,
 # run `cargo dist generate` to regenerate `.github/workflows/release.yml`; its
@@ -108,8 +108,6 @@ ci = "github"
 # package (`npx cohors`) that fetches the matching binary from the release.
 installers = ["shell", "homebrew", "npm"]
 tap = "rushirb2001/homebrew-tap"
-# The binary's crate is `cohors-tui`; on npm it is just `cohors`.
-npm-package = "cohors"
 targets = [
     "aarch64-apple-darwin",
     "x86_64-apple-darwin",
@@ -127,6 +125,13 @@ install-path = "CARGO_HOME"
 # ships inside the binary (.github/build-setup.yml, crates/cohors-tui/build.rs).
 # The path is relative to .github/workflows.
 github-build-setup = "../build-setup.yml"
+
+# The installer used to be named cohors-tui-installer.sh (the crate was
+# `cohors-tui` up to 0.7.2). Each release also carries a script under that name
+# that runs the real installer, so older copies keep updating themselves.
+[[workspace.metadata.dist.extra-artifacts]]
+artifacts = ["cohors-tui-installer.sh"]
+build = ["sh", "packaging/compat/make-tui-installer.sh"]
 
 # cargo-dist's default runner pins (ubuntu-20.04, macos-13) are retired images, so
 # the release jobs queue forever waiting for machines that no longer exist. Point

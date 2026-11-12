@@ -13,7 +13,7 @@ cohors               # auto-detects your repos and launches the dashboard
 
 With no config, `cohors` scans every folder it finds git repos in (your "super fleet"). Point it at a single folder with `cohors --root ~/code`, or run `cohors init` to save an editable config.
 
-`pip install cohors` bundles a prebuilt binary for macOS (Apple Silicon / Intel) and Linux (x86_64 / ARM64). On other platforms, build from source: `cargo install --git https://github.com/rushirb2001/cohors cohors-tui`.
+`pip install cohors` bundles a prebuilt binary for macOS (Apple Silicon / Intel) and Linux (x86_64 / ARM64). On other platforms, build from source: `cargo install cohors`.
 
 ## What you get
 

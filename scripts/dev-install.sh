@@ -18,7 +18,7 @@ cd "$(dirname "$0")/.."
 profile_dir="debug"
 case " $* " in *" --release "*) profile_dir="release" ;; esac
 
-cargo build -p cohors-tui "$@"
+cargo build -p cohors "$@"
 dest="${CARGO_HOME:-$HOME/.cargo}/bin/cohors"
 install -m 0755 "target/${profile_dir}/cohors" "$dest"
 echo "✓ cohors (${profile_dir}) → ${dest}"

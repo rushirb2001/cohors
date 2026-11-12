@@ -14,6 +14,7 @@ What is unpushed, what is behind, what is about to be lost, and what to do next,
 [![Homebrew](https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fraw.githubusercontent.com%2Frushirb2001%2Fhomebrew-tap%2Fmain%2FFormula%2Fcohors.rb&search=version%20%22(%5B%5E%22%5D%2B)%22&replace=%241&label=homebrew&color=FBB040)](https://github.com/rushirb2001/homebrew-tap)
 [![PyPI](https://img.shields.io/pypi/v/cohors?label=pypi&color=3775A9)](https://pypi.org/project/cohors/)
 [![npm](https://img.shields.io/npm/v/cohors?label=npm&color=CB3837)](https://www.npmjs.com/package/cohors)
+[![crates.io](https://img.shields.io/crates/v/cohors?label=crates.io&color=E57324)](https://crates.io/crates/cohors)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
 
@@ -32,7 +33,7 @@ brew install rushirb2001/tap/cohors
 cohors
 ```
 
-No Homebrew? `pip install cohors` or `npm install -g cohors` work the same, or try it without installing anything with `npx cohors@latest` or `uvx cohors@latest`. Every option is [below](#install).
+No Homebrew? `pip install cohors`, `npm install -g cohors` or `cargo install cohors` work the same, or try it without installing anything with `npx cohors@latest` or `uvx cohors@latest`. Every option is [below](#install).
 
 cohors looks in the folders where code usually lives and opens a dashboard of every repository it finds. Nothing is written until you press a key that says so. To look around on sample data first, run `cohors demo`.
 
@@ -463,11 +464,11 @@ Every channel installs the same prebuilt binary from the [latest release](https:
 | [Homebrew](#homebrew) | `brew install rushirb2001/tap/cohors` | |
 | [pip](#pip) | `pip install cohors` | `uvx cohors@latest` |
 | [npm](#npm) | `npm install -g cohors` | `npx cohors@latest` |
+| [Cargo](#cargo) | `cargo install cohors` | |
 | [Shell installer](#shell-installer) | `curl … \| sh` (below) | |
-| [From source](#from-source) | `cargo install --git …` (below) | |
 | [Claude Code plugin](#1-connect-it) | `/plugin install cohors@cohors` | |
 
-Prebuilt for macOS (Apple Silicon and Intel) and Linux (x86_64 and ARM64).
+Homebrew, pip, npm and the shell installer bring a prebuilt binary for macOS (Apple Silicon and Intel) and Linux (x86_64 and ARM64). Cargo compiles it on your machine, so it works wherever Rust does.
 
 #### Homebrew
 
@@ -506,20 +507,28 @@ npm install -g cohors
 
 Or run it without installing: `npx cohors@latest`.
 
+#### Cargo
+
+Builds cohors from [crates.io](https://crates.io/crates/cohors) with your [Rust](https://rustup.rs) toolchain (Rust 1.96 or newer). The browser dashboard comes prebuilt inside the crate, so `cohors web` works without extra tools.
+
+```sh
+cargo install cohors
+```
+
 #### Shell installer
 
 Checksum-verified, and installs into `~/.cargo/bin`:
 
 ```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-tui-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/rushirb2001/cohors/releases/latest/download/cohors-installer.sh | sh
 ```
 
 #### From source
 
-Needs [Rust](https://rustup.rs):
+The newest code on `main`, built with [Rust](https://rustup.rs):
 
 ```sh
-cargo install --git https://github.com/rushirb2001/cohors cohors-tui   # installs the `cohors` binary
+cargo install --git https://github.com/rushirb2001/cohors cohors
 ```
 
 #### The VS Code extension
@@ -537,7 +546,7 @@ See [Connect it](#1-connect-it). It needs the binary from any channel above.
 
 ### First run
 
-With no config, cohors looks in the folders where code usually lives. Scope it to one folder with `cohors --root ~/code` (repeat `--root` for several), or run `cohors init` to save a config you can edit at `~/.config/cohors/config.toml`: roots, aliases, groups and ignore rules. crates.io distribution is planned.
+With no config, cohors looks in the folders where code usually lives. Scope it to one folder with `cohors --root ~/code` (repeat `--root` for several), or run `cohors init` to save a config you can edit at `~/.config/cohors/config.toml`: roots, aliases, groups and ignore rules.
 
 ### Staying up to date
 
@@ -546,11 +555,12 @@ With no config, cohors looks in the folders where code usually lives. Scope it t
 | Homebrew | `brew upgrade cohors`, or let Homebrew's own auto-update do it |
 | pip | `pip install -U cohors` |
 | npm | `npm install -g cohors@latest` |
+| Cargo | `cargo install cohors` (it replaces an older version) |
 | `uvx cohors@latest`, `npx cohors@latest`, or the one-click buttons | Nothing to do: each new session runs the newest release |
 | Shell installer | Run the install command again; it replaces the binary in place |
 | The Claude Code plugin | In Claude Code, run `/plugin`, open the **Marketplaces** tab, select **cohors** and choose **Enable auto-update**. Without that, `claude plugin marketplace update cohors` and then `claude plugin update cohors@cohors`. |
 
-cohors also keeps itself up to date. Once a day the dashboard asks GitHub for the newest release and, when there is one, installs it in the background the way you installed cohors (Homebrew, pip or the shell installer). The header then says **New version available → 0.7.1 → Restart to update**, and `R` restarts into it. `cohors update` does the same on the spot, and `cohors update --check` only looks. A build from source, npm, `npx` or `uvx` gets the notice and the command to run, never an install.
+cohors also keeps itself up to date. Once a day the dashboard asks GitHub for the newest release and, when there is one, installs it in the background the way you installed cohors (Homebrew, pip or the shell installer). The header then says **New version available → 0.7.1 → Restart to update**, and `R` restarts into it. `cohors update` does the same on the spot, and `cohors update --check` only looks. Cargo, a build from source, npm, `npx` or `uvx` gets the notice and the command to run, never an install.
 
 To be told without installing, set `updates = "notify"` in the config; `updates = "off"` (or `COHORS_NO_UPDATE=1`) stops the check. It never runs in CI.
 
@@ -590,7 +600,7 @@ A Rust workspace around a pure, I/O-free core with thin adapters, so the *same* 
 - `cohors-launchpad`: reads each repo's `.cohors/` contribution and makes validated, symlink-safe writes of contributions, the focus board and the activity log.
 - `cohors-fleet`: the composition layer, with one `Scanner` (config, git and GitHub wired once) and the read facade every front-end goes through, enforced by tests rather than convention.
 - `cohors-mcp`: the MCP server (hand-rolled JSON-RPC over stdio), started by `cohors mcp`.
-- `cohors-tui` ([ratatui](https://ratatui.rs)): the `cohors` binary (dashboard and CLI).
+- `cohors` (in `crates/cohors-tui`, [ratatui](https://ratatui.rs)): the `cohors` binary (dashboard and CLI).
 - `cohors-web` ([Leptos](https://leptos.dev), WASM): the browser front-end and the native `cohors web` server.
 - `extension/`: the VS Code extension, plain JavaScript with no dependencies, which runs the binary.
 
