@@ -19,6 +19,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-11-12
+
 ### Added
 
 - **cohors is on npm.** `npm install -g cohors`, or `npx cohors@latest` with

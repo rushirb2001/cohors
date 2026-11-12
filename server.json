@@ -3,7 +3,7 @@
   "name": "io.github.rushirb2001/cohors",
   "title": "cohors",
   "description": "Every git repo you own as one fleet: status, search, tasks, and gated bulk actions.",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "repository": {
     "url": "https://github.com/rushirb2001/cohors",
     "source": "github"
@@ -12,7 +12,7 @@
     {
       "registryType": "pypi",
       "identifier": "cohors",
-      "version": "0.7.1",
+      "version": "0.7.2",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
