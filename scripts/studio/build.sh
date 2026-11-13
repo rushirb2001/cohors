@@ -103,14 +103,17 @@ if [ "$WHAT" = all ] || [ "$WHAT" = film ]; then
     ffmpeg -y -loglevel error -framerate 30 -i "$F/frames/sting-$name/%06d.png" \
       -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart "$F/cohors-sting-$name.mp4"
   done
-  # The README loop: the push, from the whole dashboard to the number
-  # changing. It is rendered from the page itself, not cut from the video, so
-  # the text is drawn sharp at its own size rather than scaled down from a
-  # compressed frame. 50 frames a second is the fastest a GIF plays in a
-  # browser (a frame shorter than 2/100 s is slowed to 1/10 s). One palette
-  # of 256 colours for the whole loop, no dithering (it speckles text) and no
-  # lossy pass: about 25 MB.
-  $RENDER --page assets/studio/film.html --size 1280x720 --fps 50 --from 7000 --to 15800 --frames "$F/frames/gif"
+  # The README loop (film.html?readme=1): the mark assembling and the name,
+  # then straight to the push and the number changing, then a fade back to
+  # the empty ground it starts on, so it loops without a seam. About ten
+  # seconds, faster than the film, with no sudden change of pace. Rendered in
+  # 4K from the page itself (sharp text, not scaled down from a video) at 50
+  # frames a second, the fastest a GIF plays in a browser (a frame shorter
+  # than 2/100 s is slowed to 1/10 s). One palette of 256 colours for the
+  # whole loop, no dithering (it speckles text) and no lossy pass. It comes to
+  # about 75 MB; GitHub refuses files over 100 MB, so watch that if the loop
+  # gets longer.
+  $RENDER --page "assets/studio/film.html?readme=1" --size 1920x1080 --scale 2 --fps 50 --frames "$F/frames/gif"
   ffmpeg -y -loglevel error -framerate 50 -i "$F/frames/gif/%06d.png" \
     -vf "split[a][b];[a]palettegen=max_colors=256:stats_mode=full[p];[b][p]paletteuse=dither=none:diff_mode=rectangle" \
     "$F/demo-raw.gif"

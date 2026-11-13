@@ -10,6 +10,8 @@
   Preview:  open this page with ?t=12000 for one instant, or ?play=1 to watch.
   The sting: ?sting=1 is the opening alone (the mark assembling, the name,
             the line), held at the end: a four-second ident.
+  The README loop: ?readme=1 is the opening, then straight to the push,
+            faster, fading back to the ground it starts on (assets/demo.gif).
 
   The shape, in milliseconds:
        0  the mark assembles, the name is typed
@@ -133,10 +135,36 @@
   const TAGS = { risk: "RISK", warn: "WARN", notice: "NOTE", info: "INFO" };
   // The sting is the opening alone, held once it has assembled.
   const STING = new URLSearchParams(location.search).has("sting");
-
-  let win, cam, shots, ring, introMark, outroMark, places, agentAt;
-
-  window.duration = STING ? 4600 : 48000;
+  // The README loop: the opening, then straight to the push, then a fade back
+  // to the empty ground the opening starts on, so it loops without a jump.
+  // It plays the film faster than the film itself, and fastest across the
+  // slow drift over the dashboard (whose caption it skips, since it would
+  // only flash by). The speed never jumps: it glides from one pace to the
+  // next, so the camera never lurches where two paces meet.
+  const README = new URLSearchParams(location.search).has("readme");
+  const PACE = [[0, 1.35], [3300, 4.2], [8600, 1.5], [13600, 1.05]]; // [film ms, speed] from there on
+  const GLIDE = 700; // film ms over which one pace eases into the next
+  const LAST = 15800; // the film ms the loop ends on: the push, done
+  const FADE_OUT = 650; // loop ms
+  const pace = (t) => {
+    let v = PACE[0][1];
+    for (let i = 1; i < PACE.length; i++) {
+      const [at, speed] = PACE[i];
+      const k = Stage.span(t, at - GLIDE / 2, at + GLIDE / 2, Stage.ease.inOut);
+      v += (speed - PACE[i - 1][1]) * k;
+    }
+    return v;
+  };
+  // Film time for every loop millisecond, by stepping through the paces.
+  const WARP = [0];
+  for (let t = 0; t < LAST; ) { t = Math.min(LAST, t + pace(t)); WARP.push(t); }
+  const LOOP_END = WARP.length - 1 + FADE_OUT;
+  const filmTime = (u) => {
+    const i = Math.floor(u), k = u - i;
+    if (i >= WARP.length - 1) return LAST;
+    return WARP[i] + (WARP[i + 1] - WARP[i]) * k;
+  };
+  window.duration = STING ? 4600 : README ? LOOP_END : 48000;
   window.ready = (async () => {
     await S.fonts();
     win = await S.terminal(["before-push", "after-push", "risk", "standup", "launchpad"], "cohors  ~/code");
@@ -282,6 +310,9 @@
   window.seek = (t) => {
     // The sting stops the clock just before the opening would give way.
     if (STING) t = Math.min(t, 2890);
+    // The README loop fades everything out at its end.
+    const fadeOut = README ? 1 - S.span(t, LOOP_END - FADE_OUT, LOOP_END, S.ease.inOut) : 1;
+    if (README) t = filmTime(t);
     // ── the opening ──
     const introShown = 1 - S.span(t, 2900, 3300, S.ease.in);
     $("intro").style.opacity = introShown;
@@ -356,6 +387,7 @@
     // ── words ──
     let words = null, shown = 0;
     for (const [on, off, head, sub] of CAPTIONS) {
+      if (README && on < 8800) continue;
       const amount = S.during(t, on, off, 420);
       if (amount > shown) { shown = amount; words = [head, sub]; }
     }
@@ -389,6 +421,13 @@
     $("outro").style.opacity = end;
     $("outro").style.visibility = end > 0.001 ? "visible" : "hidden";
     drawMark(outroMark, t, CLOSE);
+
+    if (fadeOut < 1) {
+      for (const id of ["world", "caption", "scrim", "keycap"]) {
+        const node = $(id);
+        node.style.opacity = Number(node.style.opacity || 1) * fadeOut;
+      }
+    }
   };
 })();
 </script>

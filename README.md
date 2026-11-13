@@ -25,7 +25,7 @@ What's unpushed, what's behind, and what to do next, across every repository on 
 <kbd>&nbsp;[VS Code & browser](#use-it-in-vs-code-and-the-browser)&nbsp;</kbd>&ensp;
 <kbd>&nbsp;[Launchpad](#the-launchpad)&nbsp;</kbd>
 
-<img src="assets/demo.gif" alt="The cohors dashboard. Pressing P on Do next pushes every commit that exists only on this machine." width="100%">
+<img src="assets/demo.gif" alt="The cohors mark assembles, then the dashboard: pressing P on Do next pushes every commit that exists only on this machine, and Not backed up drops from five to one." width="100%">
 
 </div>
 
