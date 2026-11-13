@@ -1,0 +1,3 @@
+# The Dockerfile installs the released binary and copies nothing from the
+# repository, so the build context can stay empty.
+*

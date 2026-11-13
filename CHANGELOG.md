@@ -19,6 +19,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Added
+
+- **A Docker image, `ghcr.io/rushirb2001/cohors`**, for linux/amd64 and
+  linux/arm64. It runs the MCP server over the repositories mounted at `/repos`
+  (`docker run -i --rm -v "$HOME/code:/repos" ghcr.io/rushirb2001/cohors`), and
+  any other cohors command works too. It installs the release's own Linux
+  binary after checking its checksum, and is published with every release.
+
 ## [0.7.6] — 2026-11-12
 
 ### Added

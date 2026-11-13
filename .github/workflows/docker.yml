@@ -1,0 +1,89 @@
+name: Docker image
+
+# Publishes the cohors container image to the GitHub Container Registry
+# (ghcr.io/rushirb2001/cohors) after a GitHub Release is out, for linux/amd64
+# and linux/arm64. The Dockerfile installs that release's own Linux binary, so
+# the image is exactly what the other channels ship.
+#
+# Like the PyPI, crates.io and VS Code workflows, it starts when the cargo-dist
+# Release workflow finishes on a version tag, and asks GitHub whether the
+# release is published instead of trusting that run's overall result. Pushing
+# needs no stored secret: the job's own GITHUB_TOKEN can write packages.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish (e.g. v0.7.6)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: find the release
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion != 'cancelled' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    outputs:
+      tag: ${{ steps.find.outputs.tag }}
+      published: ${{ steps.find.outputs.published }}
+    steps:
+      - id: find
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$RUN_TAG}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null)" = false ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No published release for $tag, so there is nothing to publish."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  image:
+    name: build and push the image
+    needs: release
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      # The newest Dockerfile on the default branch, not the tag's: it takes the
+      # version as an argument, and a fix to it then reaches an already-tagged
+      # release too (the same reason crates.yml uses main's publish script).
+      - uses: actions/checkout@v4
+      - id: version
+        env:
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          version="${TAG#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "minor=${version%.*}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          build-args: COHORS_VERSION=${{ steps.version.outputs.version }}
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/cohors:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/cohors:${{ steps.version.outputs.minor }}
+            ghcr.io/${{ github.repository_owner }}/cohors:latest

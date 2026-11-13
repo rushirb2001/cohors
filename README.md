@@ -160,7 +160,10 @@ Or let cohors brief Claude for you: `cohors agent run plan-day`, or `cohors agen
 ```json
 { "command": "uvx", "args": ["cohors@latest", "mcp"] }
 { "command": "npx", "args": ["-y", "@cohors/cli@latest", "mcp"] }
+{ "command": "docker", "args": ["run", "-i", "--rm", "-v", "/path/to/your/code:/repos", "ghcr.io/rushirb2001/cohors"] }
 ```
+
+The Docker image serves every repository in the folder mounted at `/repos`. It's built for linux/amd64 and linux/arm64.
 
 Or with cohors installed: `claude mcp add cohors -- "$(which cohors)" mcp`, adding `--allow-writes`, `--allow-run` or `--allow-launchpad`. Listed in the [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
 
