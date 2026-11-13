@@ -29,22 +29,51 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [0.7.6] — 2026-11-12
 
+A distribution and documentation release: cohors now installs from every
+common place, including your editor's extension store. The `cohors` binary
+itself is unchanged from 0.7.5, so updating is optional.
+
 ### Added
 
-- **The VS Code extension is in the VS Code Marketplace and on Open VSX**, so
-  VS Code, Cursor, Windsurf and VSCodium install it by searching "cohors". It
-  publishes with every release (the Marketplace through Trusted Publishing, so
-  no token is stored), and the `.vsix` is attached to each GitHub release. The
-  extension has a proper listing page: what it shows, how to install the
-  `cohors` tool first, its commands and settings.
-- **The launch film's closing card lists every way to install** (Homebrew,
-  pip, npm and Cargo), and the studio build renders the whole film in 4K and a
+- **The VS Code extension is in the VS Code Marketplace and on Open VSX.**
+  Search "cohors" in the Extensions view of VS Code, Cursor, Windsurf or
+  VSCodium, or run `code --install-extension rushirb2001.cohors`. It still
+  needs the `cohors` tool installed.
+- **A listing page for the extension**: what it shows, how to install the
+  `cohors` tool first, and its commands and settings. The extension also has
+  better categories, keywords and a gallery banner, so it's easier to find.
+- **The `.vsix` is attached to every GitHub release**, for installing offline
+  or in editors without a store.
+- **Every release publishes the extension automatically**: to the Marketplace
+  through Trusted Publishing (GitHub proves the build's identity, so no
+  Marketplace token is stored) and to Open VSX with a publish-only token.
+
+### Changed
+
+- **A rewritten README.** Every install command (Homebrew, pip, npm, Cargo, the
+  shell installer, and `uvx`/`npx` to run once) sits at the top, each in its
+  own block to copy. Below it is a shorter tour that shows real output from
+  the `cohors demo` sample fleet rather than describing it.
+- **The README's tables and terminal output are drawn images** in the cohors
+  palette, each with a light and a dark version that follows your GitHub
+  theme. They're generated from real captures by `scripts/readme-art.py`, so
+  they can be rebuilt when the output changes, and every image has a text
+  description for screen readers.
+- **The launch film's closing card lists all four installs** (Homebrew, pip,
+  npm and Cargo). The studio build now renders the full film in 4K and adds a
   4:5 cut for social feeds.
 
 ### Fixed
 
-- **crates.io publishing waits out the pace for new crates** and always uses the
-  newest publish script, so a release that is already tagged still publishes.
+- **A failed crates.io publish now fails the release job.** Before, piping the
+  output through `tee` hid the failure, and a release could look published
+  when it wasn't.
+- **crates.io publishing waits out the limit on new crates.** When crates.io
+  says "try again after", it waits ten minutes and tries again instead of
+  giving up. It also always uses the newest publish script from main, so a
+  fix to publishing also reaches a release that's already tagged.
+- **The README's "Use it with Claude Code" link** still works now that the
+  heading carries Claude's icon.
 
 ## [0.7.5] — 2026-11-12
 
