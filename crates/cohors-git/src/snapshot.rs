@@ -9,8 +9,8 @@
 
 use camino::Utf8Path;
 use cohors_core::{
-    Branch, BranchInfo, CommitMeta, RepoOperation, RepoRef, RepoSnapshot, TagInfo, Upstream,
-    WorktreeStatus,
+    Branch, BranchInfo, CommitMeta, LinkedWorktree, RepoOperation, RepoRef, RepoSnapshot, TagInfo,
+    Upstream, WorktreeStatus,
 };
 use gix::bstr::{BStr, ByteSlice};
 
@@ -74,6 +74,7 @@ pub fn snapshot_repo(repo_ref: &RepoRef, now: i64) -> RepoSnapshot {
         // Stamped after the scan by the Scanner (it holds the config `[groups]`).
         groups: Vec::new(),
         branches: extras.branches,
+        worktrees: extras.worktrees,
     }
 }
 
@@ -144,6 +145,7 @@ struct Extras {
     latest_tag: Option<TagInfo>,
     activity: Vec<u8>,
     branches: Vec<BranchInfo>,
+    worktrees: Vec<LinkedWorktree>,
 }
 
 /// The history inputs a [`HistoryMemo`] is keyed on. If none of these moved,
@@ -279,6 +281,10 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
         .and_then(|h| h.shorthand().ok().map(String::from));
     extras.branches = crate::detail::local_branches(&repo, current.as_deref());
 
+    // Linked worktrees, each read like a small repo of its own. Fresh every
+    // scan, like the main checkout's status: files change without a ref moving.
+    extras.worktrees = linked_worktrees(&repo, extras.remote_url.is_some());
+
     // `stash_foreach` needs `&mut`, so do it last after the shared borrows end.
     // Index 0 is the most recent stash; capture its oid to time it afterward.
     let mut stash_count = 0u32;
@@ -412,9 +418,22 @@ fn worktree_status(repo: &git2::Repository) -> WorktreeStatus {
     let modified_flags =
         Status::WT_MODIFIED | Status::WT_DELETED | Status::WT_RENAMED | Status::WT_TYPECHANGE;
 
+    // A linked worktree checked out inside this one (an agent's, under
+    // `.claude/worktrees/`) shows up here as an untracked folder. It is not a
+    // file someone forgot to commit: what it holds is reported as that
+    // worktree's own state, so counting the folder too would say it twice.
+    let nested = nested_worktree_dirs(repo);
+
     let mut status = WorktreeStatus::default();
     for entry in statuses.iter() {
         let s = entry.status();
+        if s.contains(Status::WT_NEW)
+            && entry
+                .path()
+                .is_ok_and(|path| nested.iter().any(|dir| dir == path.trim_end_matches('/')))
+        {
+            continue;
+        }
         // An unmerged path is *only* counted as conflicted — it carries WT_/INDEX_
         // flags too, but folding it into modified/staged would hide the conflict.
         if s.contains(Status::CONFLICTED) {
@@ -431,6 +450,159 @@ fn worktree_status(repo: &git2::Repository) -> WorktreeStatus {
         }
     }
     status
+}
+
+/// The repository's linked worktrees that are checked out inside this
+/// checkout, as paths relative to its root (`.claude/worktrees/agent-a`), the
+/// form a status entry has. Empty for a bare repo, and when there are none,
+/// which costs one directory listing.
+pub(crate) fn nested_worktree_dirs(repo: &git2::Repository) -> Vec<String> {
+    let Some(root) = repo.workdir().and_then(|dir| dir.canonicalize().ok()) else {
+        return Vec::new();
+    };
+    let Ok(names) = repo.worktrees() else {
+        return Vec::new();
+    };
+    names
+        .iter()
+        .flatten()
+        .flatten()
+        .filter_map(|name| repo.find_worktree(name).ok())
+        .filter_map(|worktree| worktree.path().canonicalize().ok())
+        .filter_map(|path| {
+            let inside = path.strip_prefix(&root).ok()?;
+            // Git's own separator, on every platform.
+            Some(inside.to_str()?.replace('\\', "/"))
+        })
+        .filter(|inside| !inside.is_empty())
+        .collect()
+}
+
+/// How many linked worktrees of one repo are read. Each costs a status walk,
+/// so a repo with hundreds of leftover worktrees cannot stall the scan; the
+/// first [`MAX_WORKTREES`] by name are read and the rest are left out.
+#[cfg(feature = "git2-fallback")]
+const MAX_WORKTREES: usize = 64;
+
+/// Where counting a worktree's unpushed commits stops. Past this the exact
+/// number tells nobody anything more.
+#[cfg(feature = "git2-fallback")]
+const UNPUSHED_CAP: usize = 1000;
+
+/// The repo's linked worktrees (`git worktree add`), wherever they are on
+/// disk, each with its own uncommitted and unpushed state (ADR-071).
+///
+/// Only the main checkout lists them: opened from inside a linked worktree,
+/// git reports the same list again, which would repeat every sibling under
+/// each of them. `has_remote` says whether "not pushed" means anything here
+/// (a repo with no remote is local on purpose, so nothing in it is unpushed).
+#[cfg(feature = "git2-fallback")]
+fn linked_worktrees(repo: &git2::Repository, has_remote: bool) -> Vec<LinkedWorktree> {
+    if repo.is_worktree() {
+        return Vec::new();
+    }
+    let Ok(names) = repo.worktrees() else {
+        return Vec::new();
+    };
+    // Each entry is `Result<Option<&str>>`: a name that is not UTF-8 is skipped.
+    let mut names: Vec<&str> = names.iter().flatten().flatten().collect();
+    names.sort_unstable();
+    // What the main checkout has checked out. Commits it reaches are its own
+    // to report (as "ahead"), so no worktree counts them a second time.
+    let main_head = repo.head().ok().and_then(|head| head.target());
+    names
+        .into_iter()
+        .take(MAX_WORKTREES)
+        .filter_map(|name| linked_worktree(repo, name, has_remote, main_head))
+        .collect()
+}
+
+/// Read one linked worktree. `None` only when git cannot find it by the name
+/// it just listed; a worktree whose folder is gone still comes back, marked
+/// [`missing`](LinkedWorktree::missing), so the stale entry can be reported.
+#[cfg(feature = "git2-fallback")]
+fn linked_worktree(
+    repo: &git2::Repository,
+    name: &str,
+    has_remote: bool,
+    main_head: Option<git2::Oid>,
+) -> Option<LinkedWorktree> {
+    let worktree = repo.find_worktree(name).ok()?;
+    let raw = worktree.path();
+    // Canonical when the folder exists, the spelling discovery uses, so a
+    // worktree that is also a row of the fleet can be matched to that row.
+    let path = raw
+        .canonicalize()
+        .ok()
+        .and_then(|p| camino::Utf8PathBuf::from_path_buf(p).ok())
+        .or_else(|| camino::Utf8PathBuf::from_path_buf(raw.to_path_buf()).ok())?;
+    let mut found = LinkedWorktree {
+        name: name.to_string(),
+        path,
+        branch: Branch::Unborn,
+        status: WorktreeStatus::default(),
+        unpushed: 0,
+        last_commit: None,
+        locked: matches!(
+            worktree.is_locked(),
+            Ok(git2::WorktreeLockStatus::Locked(_))
+        ),
+        missing: false,
+    };
+
+    // Git keeps listing a worktree after its folder is deleted, until
+    // `git worktree prune`. Nothing can be read from it then.
+    let Ok(checkout) = git2::Repository::open_from_worktree(&worktree) else {
+        found.missing = true;
+        return Some(found);
+    };
+    found.status = worktree_status(&checkout);
+    if let Ok(head) = checkout.head() {
+        let commit = head.peel_to_commit().ok();
+        found.last_commit = commit.as_ref().map(crate::detail::commit_meta_of);
+        found.branch = match head.shorthand().ok().filter(|_| head.is_branch()) {
+            Some(branch) => Branch::Named(branch.to_string()),
+            None => Branch::Detached(
+                found
+                    .last_commit
+                    .as_ref()
+                    .map(|c| c.short_id.clone())
+                    .unwrap_or_default(),
+            ),
+        };
+        if has_remote && let Some(commit) = &commit {
+            found.unpushed = unpushed_commits(repo, commit.id(), main_head);
+        }
+    }
+    Some(found)
+}
+
+/// How many commits reachable from `tip` are on no remote-tracking branch
+/// and not in the main checkout either: the commits that exist only in this
+/// worktree, on this machine. Counted this way, rather than against the
+/// branch's own upstream, so it also covers a branch that was never pushed
+/// and a detached `HEAD`, which is what an agent's worktree usually is.
+/// Stops at [`UNPUSHED_CAP`].
+///
+/// It cannot tell that a commit's changes reached the remote some other way
+/// (a squash merge, a rebase): those commits still count, since git has no
+/// record that they are the same work.
+#[cfg(feature = "git2-fallback")]
+fn unpushed_commits(repo: &git2::Repository, tip: git2::Oid, main_head: Option<git2::Oid>) -> u32 {
+    let Ok(mut walk) = repo.revwalk() else {
+        return 0;
+    };
+    if walk.push(tip).is_err() {
+        return 0;
+    }
+    if let Some(main_head) = main_head {
+        let _ = walk.hide(main_head);
+    }
+    // Everything a remote-tracking branch reaches is on a remote already. No
+    // such branch (a remote added but never fetched or pushed to) hides
+    // nothing, and then every commit counts, which is the truth.
+    let _ = walk.hide_glob("refs/remotes/*");
+    walk.take(UNPUSHED_CAP).count() as u32
 }
 
 #[cfg(feature = "git2-fallback")]

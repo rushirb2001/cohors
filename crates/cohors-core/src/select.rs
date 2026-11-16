@@ -95,6 +95,9 @@ pub struct Selector {
     pub stale_fetch: bool,
     /// At least one stash.
     pub has_stash: bool,
+    /// A linked worktree of the repo holds uncommitted files or commits that
+    /// were never pushed (`worktree-work` in the shorthand).
+    pub worktree_work: bool,
     /// Detached `HEAD`.
     pub detached: bool,
     /// Repos with unmerged (conflicted) files.
@@ -142,6 +145,7 @@ impl Selector {
             && !self.unpublished
             && !self.stale_fetch
             && !self.has_stash
+            && !self.worktree_work
             && !self.detached
             && !self.conflicted
             && !self.in_operation
@@ -204,6 +208,9 @@ impl Selector {
             return false;
         }
         if self.has_stash && repo.stash_count == 0 {
+            return false;
+        }
+        if self.worktree_work && !repo.worktrees.iter().any(|w| w.holds_work()) {
             return false;
         }
         if self.conflicted && repo.worktree.conflicted == 0 {
@@ -821,6 +828,7 @@ enum Flag {
     Unpublished,
     StaleFetch,
     Stash,
+    WorktreeWork,
     Detached,
     Conflicted,
     Operation,
@@ -844,6 +852,7 @@ const FLAGS: &[(&str, &[&str], Flag)] = &[
     ("unpublished", &["never-pushed"], Flag::Unpublished),
     ("stale-fetch", &[], Flag::StaleFetch),
     ("stash", &["has-stash"], Flag::Stash),
+    ("worktree-work", &["worktrees"], Flag::WorktreeWork),
     ("detached", &[], Flag::Detached),
     ("conflicted", &["conflicts"], Flag::Conflicted),
     ("operation", &["in-progress"], Flag::Operation),
@@ -981,6 +990,7 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
             Flag::Unpublished => sel.unpublished = true,
             Flag::StaleFetch => sel.stale_fetch = true,
             Flag::Stash => sel.has_stash = true,
+            Flag::WorktreeWork => sel.worktree_work = true,
             Flag::Detached => sel.detached = true,
             Flag::Conflicted => sel.conflicted = true,
             Flag::Operation => sel.in_operation = true,
@@ -1006,6 +1016,10 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
                     },
                     Selector {
                         has_stash: true,
+                        ..Default::default()
+                    },
+                    Selector {
+                        worktree_work: true,
                         ..Default::default()
                     },
                     Selector {
@@ -1100,7 +1114,52 @@ mod parse_tests {
     fn clean_is_negation_of_attention_states() {
         let sel = parse_shorthand("clean").unwrap();
         let not = sel.not.expect("clean sets `not`");
-        assert_eq!(not.any_of.len(), 5);
+        // Dirty, ahead, behind, stashed, work in a worktree, unreadable.
+        assert_eq!(not.any_of.len(), 6);
+    }
+
+    #[test]
+    fn worktree_work_picks_repos_whose_worktrees_hold_work() {
+        use crate::model::{LinkedWorktree, WorktreeStatus, sample};
+        let linked = |unpushed: u32, files: u32| LinkedWorktree {
+            name: "agent-a".to_string(),
+            path: "/repos/x/.claude/worktrees/agent-a".into(),
+            branch: crate::model::Branch::Named("worktree-agent-a".to_string()),
+            status: WorktreeStatus {
+                untracked: files,
+                ..Default::default()
+            },
+            unpushed,
+            last_commit: None,
+            locked: false,
+            missing: false,
+        };
+        let with = |id: &str, worktrees: Vec<LinkedWorktree>| {
+            let mut repo = sample(id, id, false, 0, 0, None);
+            repo.worktrees = worktrees;
+            repo
+        };
+        let fleet = [
+            with("commits", vec![linked(2, 0)]),
+            with("files", vec![linked(0, 1)]),
+            with("idle", vec![linked(0, 0)]),
+            with("none", Vec::new()),
+        ];
+        let pick = |query: &str| -> Vec<String> {
+            let sel = parse_shorthand(query).unwrap();
+            resolve(&fleet, &sel, SortMode::Name, 0)
+                .into_iter()
+                .map(|id| id.0)
+                .collect()
+        };
+        assert_eq!(pick("worktree-work"), ["commits", "files"]);
+        // The alias, and the JSON form an agent sends.
+        assert_eq!(pick("worktrees"), ["commits", "files"]);
+        let json: Selector = serde_json::from_str(r#"{"worktree_work": true}"#).unwrap();
+        assert!(json.worktree_work && !json.is_empty());
+        // A repo with work in a worktree is not clean, though its own
+        // checkout is.
+        assert_eq!(pick("clean"), ["idle", "none"]);
     }
 
     #[test]

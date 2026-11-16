@@ -12,6 +12,10 @@ the Claude Code plugin, the browser dashboard and the VS Code extension.
 - **Your git repositories**, under the folders you point it at: branches,
   status, commits, stashes and changed files. It reads them with git, on your
   machine.
+- **Each repository's linked worktrees** (`git worktree add`, where coding
+  agents often work), wherever git says they are, including outside the
+  folders you pointed it at: their branch, status and commits, the same things
+  it reads for the repository itself.
 - **Each repository's `.cohors/` launchpad file**, if it has one.
 - **Its own config**, at `~/.config/cohors/config.toml` (or your platform's
   equivalent).

@@ -502,6 +502,7 @@ fn action_command(action: &cohors_core::NextAction) -> &'static str {
         K::Commit => "cohors scan --select dirty",
         K::Fetch => "cohors fetch --select stale-fetch",
         K::StartTask => "cohors launchpad",
+        K::Worktrees => "cohors scan --select worktree-work",
     }
 }
 

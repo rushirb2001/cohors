@@ -62,6 +62,25 @@ pub enum AttentionReason {
     Stash { count: u32, stale: bool },
     /// Detached HEAD.
     Detached,
+    /// Commits in linked worktrees that are on no remote: `commits` across
+    /// `worktrees` of them, `aging` if any of those worktrees' newest commit is
+    /// past the threshold. `name` is the worktree when there is exactly one, so
+    /// the reason can say which.
+    WorktreeUnpushed {
+        worktrees: u32,
+        commits: u32,
+        aging: bool,
+        name: Option<String>,
+    },
+    /// Uncommitted files in linked worktrees: `files` across `worktrees` of
+    /// them. `name` as in [`WorktreeUnpushed`](Self::WorktreeUnpushed).
+    WorktreeUncommitted {
+        worktrees: u32,
+        files: u32,
+        name: Option<String>,
+    },
+    /// Linked worktrees git still lists whose folder is gone.
+    WorktreeMissing { worktrees: u32 },
 }
 
 impl AttentionReason {
@@ -84,7 +103,25 @@ impl AttentionReason {
             AttentionReason::Stash { stale: false, .. } => Severity::Info,
             AttentionReason::Detached => Severity::Info,
             AttentionReason::StaleRemote { .. } => Severity::Info,
+            // Work in a linked worktree is out of sight from the main
+            // checkout, and removing the worktree deletes what was never
+            // pushed. So even uncommitted files there are work at risk, where
+            // in the main checkout they are only a Notice (ADR-071).
+            AttentionReason::WorktreeUnpushed { aging: true, .. } => Severity::Risk,
+            AttentionReason::WorktreeUnpushed { aging: false, .. } => Severity::Warn,
+            AttentionReason::WorktreeUncommitted { .. } => Severity::Warn,
+            AttentionReason::WorktreeMissing { .. } => Severity::Info,
         }
+    }
+
+    /// Whether this is unfinished work held in a linked worktree. A worktree's
+    /// unpushed commits and its uncommitted files are one piece of work, so
+    /// [`assess`] counts the pair once when it looks for compound trouble.
+    fn is_worktree_work(&self) -> bool {
+        matches!(
+            self,
+            AttentionReason::WorktreeUnpushed { .. } | AttentionReason::WorktreeUncommitted { .. }
+        )
     }
 
     /// Short, presentation-neutral reason for the row (no color/glyph styling).
@@ -127,6 +164,30 @@ impl AttentionReason {
                 }
             }
             AttentionReason::Detached => "detached HEAD".to_string(),
+            AttentionReason::WorktreeUnpushed {
+                worktrees,
+                commits,
+                aging,
+                name,
+            } => {
+                let place = worktree_place(*worktrees, name.as_deref(), "");
+                if *aging {
+                    format!("↑{commits} in {place} · aging")
+                } else {
+                    format!("↑{commits} in {place}")
+                }
+            }
+            AttentionReason::WorktreeUncommitted {
+                worktrees,
+                files,
+                name,
+            } => format!(
+                "{files} uncommitted in {}",
+                worktree_place(*worktrees, name.as_deref(), "")
+            ),
+            AttentionReason::WorktreeMissing { worktrees } => {
+                format!("{worktrees} worktree{} gone", plural_s(*worktrees))
+            }
         }
     }
 
@@ -177,7 +238,54 @@ impl AttentionReason {
                 }
             }
             AttentionReason::Detached => "detached HEAD".to_string(),
+            AttentionReason::WorktreeUnpushed {
+                worktrees,
+                commits,
+                aging,
+                name,
+            } => {
+                let base = format!(
+                    "{} in {}",
+                    n(*commits, "commit not pushed", "commits not pushed"),
+                    worktree_place(*worktrees, name.as_deref(), "worktree ")
+                );
+                if *aging {
+                    format!("{base}, older than 2 days")
+                } else {
+                    base
+                }
+            }
+            AttentionReason::WorktreeUncommitted {
+                worktrees,
+                files,
+                name,
+            } => format!(
+                "{} in {}",
+                n(*files, "uncommitted file", "uncommitted files"),
+                worktree_place(*worktrees, name.as_deref(), "worktree ")
+            ),
+            AttentionReason::WorktreeMissing { worktrees } => {
+                if *worktrees == 1 {
+                    "1 worktree folder is gone".to_string()
+                } else {
+                    format!("{worktrees} worktree folders are gone")
+                }
+            }
         }
+    }
+}
+
+/// `s` unless there is exactly one.
+fn plural_s(count: u32) -> &'static str {
+    if count == 1 { "" } else { "s" }
+}
+
+/// Where worktree work sits: the worktree's own name when there is exactly
+/// one (`agent-a`, or `worktree agent-a` with a `lead`), else `2 worktrees`.
+fn worktree_place(worktrees: u32, name: Option<&str>, lead: &str) -> String {
+    match name {
+        Some(name) if worktrees == 1 => format!("{lead}{name}"),
+        _ => format!("{worktrees} worktree{}", plural_s(worktrees)),
     }
 }
 
@@ -263,6 +371,45 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
                 days: (now - fetched) / (24 * 60 * 60),
             });
         }
+
+        // Linked worktrees: second checkouts with their own files, where work
+        // can sit unseen from the main one. Summed per kind of trouble, so a
+        // repo with ten agent worktrees still reads as one or two reasons.
+        let only_name = |holding: &[&crate::model::LinkedWorktree]| match holding {
+            [one] => Some(one.name.clone()),
+            _ => None,
+        };
+        let unpushed: Vec<_> = repo.worktrees.iter().filter(|w| w.unpushed > 0).collect();
+        if !unpushed.is_empty() {
+            reasons.push(AttentionReason::WorktreeUnpushed {
+                worktrees: unpushed.len() as u32,
+                commits: unpushed.iter().map(|w| w.unpushed).sum(),
+                aging: unpushed.iter().any(|w| {
+                    w.last_commit
+                        .as_ref()
+                        .is_some_and(|c| now - c.timestamp > UNPUSHED_AGING_SECS)
+                }),
+                name: only_name(&unpushed),
+            });
+        }
+        let dirty: Vec<_> = repo
+            .worktrees
+            .iter()
+            .filter(|w| w.status.is_dirty())
+            .collect();
+        if !dirty.is_empty() {
+            reasons.push(AttentionReason::WorktreeUncommitted {
+                worktrees: dirty.len() as u32,
+                files: dirty.iter().map(|w| w.status.total()).sum(),
+                name: only_name(&dirty),
+            });
+        }
+        let missing = repo.worktrees.iter().filter(|w| w.missing).count();
+        if missing > 0 {
+            reasons.push(AttentionReason::WorktreeMissing {
+                worktrees: missing as u32,
+            });
+        }
     }
 
     // Most urgent first (stable sort, so ties keep insertion order).
@@ -277,14 +424,20 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
     // repo with the single worst one. Two reasons at Warn+ read as Risk; a
     // Notice-level repo with a second Notice reason reads as Warn. A single
     // reason is never escalated — its own severity stands.
+    // A worktree's unpushed commits and its uncommitted files are one piece
+    // of unfinished work, not two independent problems: together they count
+    // once, or every agent worktree left mid-task would read as Risk.
+    let worktree_pair = usize::from(reasons.iter().filter(|r| r.is_worktree_work()).count() == 2);
     let warn_plus = reasons
         .iter()
         .filter(|r| r.severity() >= Severity::Warn)
-        .count();
+        .count()
+        - worktree_pair;
     let notice_plus = reasons
         .iter()
         .filter(|r| r.severity() >= Severity::Notice)
-        .count();
+        .count()
+        - worktree_pair;
     let severity = if warn_plus >= 2 {
         Severity::Risk
     } else if base == Severity::Notice && notice_plus >= 2 {
@@ -417,7 +570,10 @@ pub fn fleet_summary(repos: &[RepoSnapshot], now: i64) -> FleetSummary {
                 AttentionReason::Unpublished
                 | AttentionReason::Operation(_)
                 | AttentionReason::StaleRemote { .. }
-                | AttentionReason::Detached => {}
+                | AttentionReason::Detached
+                | AttentionReason::WorktreeUnpushed { .. }
+                | AttentionReason::WorktreeUncommitted { .. }
+                | AttentionReason::WorktreeMissing { .. } => {}
             }
         }
     }
@@ -539,6 +695,7 @@ mod tests {
             activity: Vec::new(),
             groups: Vec::new(),
             branches: Vec::new(),
+            worktrees: Vec::new(),
         }
     }
 
@@ -787,5 +944,129 @@ mod tests {
         let s = fleet_summary(&[diverged], NOW);
         assert_eq!((s.unpushed, s.behind), (1, 1));
         assert_eq!(s.needs_attention, 1);
+    }
+
+    // ── Linked worktrees (ADR-071) ──
+
+    /// A linked worktree with `unpushed` commits, `files` untracked files and
+    /// a newest commit `commit_age` seconds old.
+    fn linked(
+        name: &str,
+        unpushed: u32,
+        files: u32,
+        commit_age: i64,
+    ) -> crate::model::LinkedWorktree {
+        crate::model::LinkedWorktree {
+            name: name.into(),
+            path: format!("/r/.claude/worktrees/{name}").into(),
+            branch: Branch::Named(format!("worktree-{name}")),
+            status: WorktreeStatus {
+                untracked: files,
+                ..Default::default()
+            },
+            unpushed,
+            last_commit: Some(CommitMeta {
+                short_id: "abc1234".into(),
+                author: "agent".into(),
+                timestamp: NOW - commit_age,
+                summary: "wip".into(),
+            }),
+            locked: false,
+            missing: false,
+        }
+    }
+
+    fn clean_repo() -> RepoSnapshot {
+        repo(main_branch(), 0, 0, (0, 0, 0), 0, None, Some(NOW), None)
+    }
+
+    #[test]
+    fn work_in_a_linked_worktree_is_at_risk_and_says_which_worktree() {
+        // Uncommitted files alone are work at risk there, where in the main
+        // checkout they are only a Notice.
+        let mut r = clean_repo();
+        r.worktrees = vec![linked("agent-a", 0, 3, 3600)];
+        let a = assess(&r, NOW);
+        assert_eq!(a.severity, Severity::Warn);
+        assert_eq!(
+            a.reasons[0].phrase(),
+            "3 uncommitted files in worktree agent-a"
+        );
+        assert_eq!(a.reasons[0].label(), "3 uncommitted in agent-a");
+
+        // Commits on no remote: Warn while fresh, Risk past two days.
+        r.worktrees = vec![linked("agent-a", 5, 0, 3600)];
+        let a = assess(&r, NOW);
+        assert_eq!(a.severity, Severity::Warn);
+        assert_eq!(
+            a.reasons[0].phrase(),
+            "5 commits not pushed in worktree agent-a"
+        );
+        r.worktrees = vec![linked("agent-a", 5, 0, 9 * DAY)];
+        let a = assess(&r, NOW);
+        assert_eq!(a.severity, Severity::Risk);
+        assert_eq!(
+            a.reasons[0].phrase(),
+            "5 commits not pushed in worktree agent-a, older than 2 days"
+        );
+        assert_eq!(a.reasons[0].label(), "↑5 in agent-a · aging");
+    }
+
+    #[test]
+    fn a_worktrees_commits_and_files_are_one_trouble_not_two() {
+        // An agent left mid-task has both. Counted as two independent
+        // problems, every such repo would escalate to Risk.
+        let mut r = clean_repo();
+        r.worktrees = vec![linked("agent-a", 1, 1, 3600)];
+        let a = assess(&r, NOW);
+        assert_eq!(a.reasons.len(), 2);
+        assert_eq!(a.severity, Severity::Warn);
+
+        // A second, unrelated trouble still escalates.
+        r.stash_count = 1;
+        r.stash_latest = Some(NOW - 30 * DAY);
+        assert_eq!(assess(&r, NOW).severity, Severity::Risk);
+    }
+
+    #[test]
+    fn several_worktrees_are_summed_into_one_reason_each() {
+        let mut r = clean_repo();
+        r.worktrees = vec![
+            linked("a", 2, 0, 3600),
+            linked("b", 3, 4, 3600),
+            linked("idle", 0, 0, 3600),
+        ];
+        let phrases: Vec<String> = assess(&r, NOW)
+            .reasons
+            .iter()
+            .map(AttentionReason::phrase)
+            .collect();
+        assert_eq!(
+            phrases,
+            [
+                "5 commits not pushed in 2 worktrees",
+                "4 uncommitted files in worktree b"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_clean_worktree_is_nothing_and_a_missing_one_is_only_information() {
+        let mut r = clean_repo();
+        // Old, but everything in it is pushed and committed.
+        r.worktrees = vec![linked("idle", 0, 0, 90 * DAY)];
+        let a = assess(&r, NOW);
+        assert_eq!(a.severity, Severity::Ok);
+        assert!(a.reasons.is_empty());
+
+        let mut gone = linked("gone", 0, 0, 0);
+        gone.missing = true;
+        gone.last_commit = None;
+        r.worktrees = vec![gone];
+        let a = assess(&r, NOW);
+        assert_eq!(a.severity, Severity::Info);
+        assert!(!a.needs_attention());
+        assert_eq!(a.reasons[0].phrase(), "1 worktree folder is gone");
+        assert_eq!(a.reasons[0].label(), "1 worktree gone");
     }
 }

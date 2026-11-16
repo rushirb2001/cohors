@@ -76,7 +76,8 @@ pub struct KeyFigures {
     pub at_risk: usize,
     /// Repositories whose current branch has a remote but was never pushed.
     pub unpublished: usize,
-    /// Repositories with commits that are not on the remote (diverged included).
+    /// Repositories with commits that are not on the remote (diverged
+    /// included, and commits held only in a linked worktree).
     pub unpushed_repos: usize,
     /// How many commits those are.
     pub unpushed_commits: u32,
@@ -110,6 +111,17 @@ pub struct KeyFigures {
     pub commits_total: u32,
     /// Repositories with at least one commit in the last seven days.
     pub active_repos: usize,
+    /// Linked worktrees (`git worktree add`) across every repository.
+    pub worktrees: usize,
+    /// Of `worktrees`, how many hold uncommitted files or unpushed commits.
+    pub worktrees_holding_work: usize,
+    /// Uncommitted files in linked worktrees (not part of `uncommitted_files`,
+    /// which counts the main checkouts).
+    pub worktree_files: u32,
+    /// Unpushed commits in linked worktrees. Part of `unpushed_commits`; a
+    /// repository whose only unpushed work is in a worktree is part of
+    /// `unpushed_repos`, and so of `not_backed_up`.
+    pub worktree_commits: u32,
 }
 
 /// What kind of step a [`NextAction`] is. Front-ends use it to pick an icon and
@@ -127,6 +139,8 @@ pub enum ActionKind {
     Commit,
     Fetch,
     StartTask,
+    /// Work sitting in linked worktrees: unpushed commits, uncommitted files.
+    Worktrees,
 }
 
 /// One line of "Do next".
@@ -235,7 +249,12 @@ pub fn suggest(reason: &AttentionReason) -> Option<SuggestedAction> {
         AttentionReason::Diverged { .. } => (None, "Reconcile"),
         AttentionReason::Stash { .. } => (None, "Review stash"),
         AttentionReason::Uncommitted { .. } => (None, "Review changes"),
-        AttentionReason::Unreadable | AttentionReason::Detached => return None,
+        AttentionReason::WorktreeUnpushed { .. } | AttentionReason::WorktreeUncommitted { .. } => {
+            (None, "Review worktree")
+        }
+        AttentionReason::Unreadable
+        | AttentionReason::Detached
+        | AttentionReason::WorktreeMissing { .. } => return None,
     };
     Some(SuggestedAction {
         verb: verb.map(str::to_string),
@@ -344,6 +363,8 @@ pub fn overview(
         if week > 0 {
             figures.active_repos += 1;
         }
+        figures.worktrees += repo.worktrees.len();
+        figures.worktrees_holding_work += repo.worktrees.iter().filter(|w| w.holds_work()).count();
 
         lines.push(RepoLine {
             id: repo.id.0.clone(),
@@ -399,12 +420,18 @@ pub fn overview(
     let mut behind = Bucket::default();
     let mut dirty = Bucket::default();
     let mut stale_fetch = Bucket::default();
+    let mut worktree_work = Bucket::default();
     let mut unpushed_aging = false;
+    let mut worktree_aging = false;
+    // Repositories whose only unpushed work is in a linked worktree.
+    let mut worktree_only_repos = 0usize;
     let mut largest: Option<(&str, u32)> = None;
 
     for repo in &seen {
         // A repository stopped mid-merge shows up once, however many reasons say so.
         let mut is_blocked = false;
+        // Likewise one with work in its worktrees, whether commits, files or both.
+        let mut has_worktree_work = false;
         for reason in &repo.reasons {
             match reason {
                 AttentionReason::Unreadable => unreadable.push(repo),
@@ -459,13 +486,44 @@ pub fn overview(
                     figures.oldest_fetch_days = figures.oldest_fetch_days.max(*days);
                     stale_fetch.push(repo);
                 }
-                AttentionReason::Detached => {}
+                AttentionReason::Detached | AttentionReason::WorktreeMissing { .. } => {}
+                AttentionReason::WorktreeUnpushed { commits, aging, .. } => {
+                    figures.worktree_commits += commits;
+                    worktree_aging |= aging;
+                    has_worktree_work = true;
+                }
+                AttentionReason::WorktreeUncommitted { files, .. } => {
+                    figures.worktree_files += files;
+                    has_worktree_work = true;
+                }
             }
         }
         if is_blocked {
             blocked.push(repo);
         }
+        if has_worktree_work {
+            // Not backed up, unless the repository is already counted for its
+            // main checkout.
+            let counted = repo.reasons.iter().any(|r| {
+                matches!(
+                    r,
+                    AttentionReason::Unpushed { .. }
+                        | AttentionReason::Diverged { .. }
+                        | AttentionReason::Unpublished
+                )
+            });
+            let unpushed_there = repo
+                .reasons
+                .iter()
+                .any(|r| matches!(r, AttentionReason::WorktreeUnpushed { .. }));
+            worktree_only_repos += usize::from(unpushed_there && !counted);
+            worktree_work.push(repo);
+        }
     }
+    // A repository whose only unpushed commits sit in a worktree has commits
+    // that are not on the remote like any other, so every surface's "not
+    // backed up" wording covers it without a new case.
+    figures.unpushed_repos += worktree_only_repos;
     figures.not_backed_up = figures.unpublished + figures.unpushed_repos;
 
     // ── Tasks.
@@ -646,6 +704,51 @@ pub fn overview(
             unpublished,
         );
     }
+    if !worktree_work.is_empty() {
+        // One step for all of it, commits and files together: what to do is
+        // the same (go and look in the worktree), and one line keeps "Do
+        // next" short.
+        let mut held = Vec::new();
+        if figures.worktree_commits > 0 {
+            held.push(count(
+                figures.worktree_commits as usize,
+                "commit",
+                "commits",
+            ));
+        }
+        if figures.worktree_files > 0 {
+            held.push(count(
+                figures.worktree_files as usize,
+                "uncommitted file",
+                "uncommitted files",
+            ));
+        }
+        let age = if worktree_aging {
+            " Some commits are more than 2 days old."
+        } else {
+            ""
+        };
+        add(
+            ActionKind::Worktrees,
+            if worktree_aging {
+                Severity::Risk
+            } else {
+                Severity::Warn
+            },
+            format!(
+                "Back up {} sitting in {}",
+                held.join(" and "),
+                count(figures.worktrees_holding_work, "worktree", "worktrees")
+            ),
+            format!(
+                "A worktree is easy to forget, and removing it deletes what was never pushed: {}.{age}",
+                names(&worktree_work.names)
+            ),
+            "Open".to_string(),
+            None,
+            worktree_work,
+        );
+    }
     if !stale_stash.is_empty() {
         let n = stale_stash.len();
         add(
@@ -749,6 +852,10 @@ pub fn overview(
         );
     }
     actions.sort_by_key(|a| std::cmp::Reverse(a.severity));
+    // Commits in worktrees are not backed up either. Added only now, because
+    // the "Push N commits" step above counts what a push of the main
+    // checkouts would send, which is not these.
+    figures.unpushed_commits += figures.worktree_commits;
 
     // Every repo lands in exactly one of three groups, and the headline names
     // all three, so the numbers add up to the total.
@@ -1053,5 +1160,100 @@ mod tests {
         let json = serde_json::to_string(&o).unwrap();
         let back: Overview = serde_json::from_str(&json).unwrap();
         assert_eq!(back, o);
+    }
+
+    /// A linked worktree with `unpushed` commits, `files` untracked files and
+    /// a newest commit `commit_age` seconds old.
+    fn linked(
+        name: &str,
+        unpushed: u32,
+        files: u32,
+        commit_age: i64,
+    ) -> crate::model::LinkedWorktree {
+        crate::model::LinkedWorktree {
+            name: name.to_string(),
+            path: format!("/repos/x/.claude/worktrees/{name}").into(),
+            branch: crate::model::Branch::Named(format!("worktree-{name}")),
+            status: WorktreeStatus {
+                untracked: files,
+                ..Default::default()
+            },
+            unpushed,
+            last_commit: Some(crate::model::CommitMeta {
+                short_id: "abc1234".to_string(),
+                author: "agent".to_string(),
+                timestamp: NOW - commit_age,
+                summary: "wip".to_string(),
+            }),
+            locked: false,
+            missing: false,
+        }
+    }
+
+    #[test]
+    fn work_in_worktrees_is_one_step_and_counts_as_not_backed_up() {
+        let mut a = clean("a");
+        a.worktrees = vec![linked("agent-a", 5, 1, 9 * DAY)];
+        let mut b = clean("b");
+        b.worktrees = vec![linked("fix", 0, 2, 3600), linked("idle", 0, 0, 3600)];
+        let o = overview(&[a, b, clean("c")], &[], &Board::default(), NOW);
+
+        // One step for commits and files together, naming the repositories.
+        let step = o
+            .actions
+            .iter()
+            .find(|x| x.kind == ActionKind::Worktrees)
+            .expect("a worktrees step");
+        assert_eq!(
+            step.title,
+            "Back up 5 commits and 3 uncommitted files sitting in 2 worktrees"
+        );
+        assert_eq!(step.severity, Severity::Risk, "some commits are 9 days old");
+        assert!(step.why.contains("a and b"), "{}", step.why);
+        assert!(step.why.contains("more than 2 days old"), "{}", step.why);
+        // No verb reaches into a worktree: a person has to look.
+        assert_eq!(step.verb, None);
+        assert_eq!(step.repos, ["a", "b"]);
+        // And no "Push N commits" step: a push of the main checkouts would
+        // send none of these.
+        assert!(!o.actions.iter().any(|x| x.kind == ActionKind::Push));
+
+        let f = o.figures;
+        assert_eq!((f.worktrees, f.worktrees_holding_work), (3, 2));
+        assert_eq!((f.worktree_commits, f.worktree_files), (5, 3));
+        // `a` has commits on no remote, so it is not backed up; `b` only has
+        // files, which is not what "backed up" counts.
+        assert_eq!((f.unpushed_repos, f.not_backed_up), (1, 1));
+        assert_eq!(f.unpushed_commits, 5);
+        // The main checkouts are clean, and stay counted that way.
+        assert_eq!((f.dirty_repos, f.uncommitted_files), (0, 0));
+        assert_eq!(f.at_risk, 2);
+        assert_eq!(
+            o.headline,
+            "3 repositories. 2 have work at risk, 1 is clean."
+        );
+    }
+
+    #[test]
+    fn a_repo_already_unpushed_is_not_counted_twice_for_its_worktree() {
+        let mut a = clean("a");
+        a.upstream = Some(Upstream {
+            name: "origin/main".to_string(),
+            ahead: 2,
+            behind: 0,
+        });
+        a.worktrees = vec![linked("agent-a", 3, 0, 3600)];
+        let o = overview(&[a], &[], &Board::default(), NOW);
+        assert_eq!(o.figures.unpushed_repos, 1);
+        assert_eq!(o.figures.not_backed_up, 1);
+        // Both kinds of commit are not backed up; only the main checkout's
+        // are what a push sends.
+        assert_eq!(o.figures.unpushed_commits, 5);
+        let push = o
+            .actions
+            .iter()
+            .find(|x| x.kind == ActionKind::Push)
+            .expect("a push step");
+        assert_eq!(push.title, "Push 2 commits from 1 repository");
     }
 }

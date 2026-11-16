@@ -61,6 +61,7 @@ fn snap(
         activity: Vec::new(),
         groups: Vec::new(),
         branches: Vec::new(),
+        worktrees: Vec::new(),
     }
 }
 

@@ -158,6 +158,7 @@ pub fn action_args(kind: ActionKind) -> &'static [&'static str] {
         K::Commit => &["scan", "--select", "dirty"],
         K::Fetch => &["fetch", "--select", "stale-fetch"],
         K::StartTask => &["launchpad"],
+        K::Worktrees => &["scan", "--select", "worktree-work"],
     }
 }
 

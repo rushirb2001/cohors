@@ -46,6 +46,16 @@ narrow with a selector, raise `limit`, name the keys you want with `fields`
 (`["branches"]` for every branch's ahead/behind), or call `get_repo` for one
 repo in depth.
 
+## Work left in worktrees
+
+A repo's linked worktrees (where coding agents work, for example under
+`.claude/worktrees/`) are part of that repo, not repos of their own. When one
+holds commits that were never pushed or files that were never committed, the
+repo's reasons say so, `overview` has a step for it, and `list_repos` lists the
+worktree under `worktrees` with its `path`. Select those repos with
+`{"worktree_work": true}`. No cohors action reaches into a worktree: give the
+user its path, or work in that folder yourself if they ask you to.
+
 ## Selectors
 
 Every tool that targets repos takes the same selector object. Fields AND

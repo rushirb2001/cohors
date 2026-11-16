@@ -223,7 +223,8 @@ impl Scanner {
     /// (so a report can say which repos only a deep search reaches).
     pub fn scan_discovered(&self, deep: bool) -> (Vec<RepoSnapshot>, Discovery) {
         let found = self.discover(deep);
-        let snapshots = self.snapshot_repos(&found.repos);
+        let mut snapshots = self.snapshot_repos(&found.repos);
+        dedupe_worktrees(&mut snapshots);
         (snapshots, found)
     }
 
@@ -500,6 +501,31 @@ fn discovery_options(
 /// Stamp each repo with the config groups whose name globs match it (matched
 /// against the repo's directory name, using the same glob matcher selectors use).
 /// Runs before aliasing so a cosmetic rename can't change membership.
+/// Show each linked worktree once.
+///
+/// A worktree kept beside its repo, under a root, is found by discovery and
+/// is a row of the fleet in its own right (ADR-058). Its repo's snapshot
+/// lists it too, since git reports every linked worktree wherever it is. The
+/// row wins: it is dropped from the owner's list, so its work is not counted
+/// twice. Worktrees that are not rows (inside the repo, or outside every
+/// root) stay with their repo, which is the only place they appear.
+///
+/// It needs the whole fleet, so it runs on a complete set of snapshots, not
+/// on the few a watcher re-read.
+pub(crate) fn dedupe_worktrees(snapshots: &mut [RepoSnapshot]) {
+    if snapshots.iter().all(|snap| snap.worktrees.is_empty()) {
+        return;
+    }
+    let rows: std::collections::HashSet<Utf8PathBuf> = snapshots
+        .iter()
+        .filter_map(|snap| snap.path.clone())
+        .collect();
+    for snap in snapshots {
+        snap.worktrees
+            .retain(|worktree| !rows.contains(&worktree.path));
+    }
+}
+
 fn apply_groups(config: &Config, snapshots: &mut [RepoSnapshot]) {
     if config.groups.is_empty() {
         return;
@@ -556,5 +582,43 @@ mod tests {
             "a/ab is not nesting"
         );
         assert_eq!(found.nested_in(&p("/c")), None);
+    }
+
+    #[test]
+    fn a_worktree_that_is_a_fleet_row_is_dropped_from_its_repo() {
+        let repo = |path: &str| {
+            let mut snap = RepoSnapshot::errored(
+                cohors_core::RepoId(path.to_string()),
+                path.rsplit('/').next().unwrap_or(path),
+                Some(path.into()),
+                "",
+            );
+            snap.error = None;
+            snap
+        };
+        let linked = |name: &str, path: &str| cohors_core::LinkedWorktree {
+            name: name.to_string(),
+            path: path.into(),
+            branch: cohors_core::Branch::Named(name.to_string()),
+            status: cohors_core::WorktreeStatus::default(),
+            unpushed: 0,
+            last_commit: None,
+            locked: false,
+            missing: false,
+        };
+        let mut api = repo("/code/api");
+        api.worktrees = vec![
+            // Kept beside the repo, under a root: discovery lists it as a row.
+            linked("beside", "/code/api-hotfix"),
+            // Inside the repo, and outside every root: only here.
+            linked("agent-a", "/code/api/.claude/worktrees/agent-a"),
+            linked("elsewhere", "/tmp/api-elsewhere"),
+        ];
+        let mut fleet = vec![api, repo("/code/api-hotfix"), repo("/code/web")];
+        dedupe_worktrees(&mut fleet);
+        let kept: Vec<&str> = fleet[0].worktrees.iter().map(|w| w.name.as_str()).collect();
+        assert_eq!(kept, ["agent-a", "elsewhere"]);
+        // The row itself is untouched.
+        assert_eq!(fleet.len(), 3);
     }
 }

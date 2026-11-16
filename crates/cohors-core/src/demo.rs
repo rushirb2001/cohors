@@ -251,6 +251,7 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         activity: demo_activity(s.name, s.error.is_some()),
         groups: Vec::new(),
         branches: demo_branches(s.name, now),
+        worktrees: Vec::new(),
     }
 }
 

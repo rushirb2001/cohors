@@ -172,7 +172,9 @@ pub fn action_key(kind: ActionKind) -> Option<char> {
         | ActionKind::Resolve
         | ActionKind::Reconcile
         | ActionKind::ReviewStash
-        | ActionKind::Commit => None,
+        | ActionKind::Commit
+        // Work in a worktree needs a person to look: no verb reaches into it.
+        | ActionKind::Worktrees => None,
     }
 }
 
@@ -2105,6 +2107,7 @@ mod tests {
             activity: Vec::new(),
             groups: Vec::new(),
             branches: Vec::new(),
+            worktrees: Vec::new(),
         }
     }
 

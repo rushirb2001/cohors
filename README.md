@@ -143,6 +143,8 @@ More to ask:
 
 <br>
 
+**Agent worktrees are covered.** When a coding agent works in a git worktree (Claude Code keeps them under `.claude/worktrees/`), cohors reads it as part of its repo: commits that were never pushed and files that were never committed show up as work at risk, with the folder to go to. `cohors scan --select worktree-work` lists the repos that have any.
+
 It starts **read-only**. Turn on what Claude may do with `claude plugin configure cohors@cohors`, then start a new session:
 
 <br>

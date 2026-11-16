@@ -626,6 +626,10 @@ impl Worker {
     /// Publish the current snapshots and launchpad if they differ from the
     /// last published state; record the stats either way.
     fn publish(&mut self, reason: Reason) {
+        // Every path here re-reads some or all of the repos, and a fresh
+        // snapshot lists every linked worktree again. Drop the ones that are
+        // rows of the fleet, which needs the whole fleet, so it happens here.
+        crate::scanner::dedupe_worktrees(&mut self.snapshots);
         self.stats.probe_every = self.probe_interval();
         self.stats.rescan_every = self.rescan_interval();
         let mut inner = lock(&self.shared.inner);

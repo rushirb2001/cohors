@@ -468,6 +468,90 @@ fn show_report(
         out.push('\n');
     }
 
+    // ── Linked worktrees: second checkouts, each with its own work. The
+    // folder is on its own line because it is what you `cd` into.
+    if !snap.worktrees.is_empty() {
+        let holding = snap.worktrees.iter().filter(|w| w.holds_work()).count();
+        out.push_str(&section(
+            "worktrees",
+            &format!(
+                "{}, {} holding work that is not pushed",
+                plural(snap.worktrees.len(), "linked checkout", "linked checkouts"),
+                holding
+            ),
+            color,
+        ));
+        let nw = snap
+            .worktrees
+            .iter()
+            .map(|w| safe(&w.name).chars().count())
+            .max()
+            .unwrap_or(0)
+            .min(width / 3);
+        for w in &snap.worktrees {
+            let label = format!("{:<nw$}", clip(&safe(&w.name), nw));
+            let label = if w.holds_work() {
+                bold(color, &label)
+            } else {
+                label
+            };
+            let mut state: Vec<String> = Vec::new();
+            if w.missing {
+                state.push("folder is gone (git worktree prune)".to_string());
+            } else {
+                state.push(format!("on {}", safe(&w.branch.label())));
+                if w.unpushed > 0 {
+                    state.push(plural(
+                        w.unpushed as usize,
+                        "commit not pushed",
+                        "commits not pushed",
+                    ));
+                }
+                if w.status.is_dirty() {
+                    state.push(plural(
+                        w.status.total() as usize,
+                        "uncommitted file",
+                        "uncommitted files",
+                    ));
+                }
+                if !w.holds_work() {
+                    state.push("nothing unsaved".to_string());
+                }
+                if let Some(c) = &w.last_commit {
+                    state.push(format!("last commit {}", ago(c.timestamp, now)));
+                }
+                if w.locked {
+                    state.push("locked".to_string());
+                }
+            }
+            out.push_str(&format!(
+                "      {label}  {}\n",
+                dim(
+                    color,
+                    &clip(&state.join(", "), width.saturating_sub(8 + nw))
+                )
+            ));
+            if !w.missing {
+                // Inside the repo (an agent's, under `.claude/worktrees/`),
+                // the path from the repo's own folder is the short, exact one.
+                let folder = snap
+                    .path
+                    .as_ref()
+                    .and_then(|repo| w.path.strip_prefix(repo).ok())
+                    .map_or_else(
+                        || abbrev_home(&safe(w.path.as_str())),
+                        |inside| format!("./{}", safe(inside.as_str())),
+                    );
+                out.push_str(&format!(
+                    "      {:<nw$}  {}\n",
+                    "",
+                    dim(color, &clip(&folder, width.saturating_sub(8 + nw)))
+                ));
+            }
+        }
+        out.push('\n');
+    }
+
     // ── Stashes.
     if let Some(d) = detail
         && !d.stashes.is_empty()
@@ -1622,6 +1706,66 @@ mod tests {
             ..RemoteDetail::default()
         };
         (s, detail, remote)
+    }
+
+    #[test]
+    fn show_lists_linked_worktrees_with_their_work_and_folder() {
+        let linked =
+            |name: &str, path: &str, unpushed: u32, files: u32| cohors_core::LinkedWorktree {
+                name: name.into(),
+                path: path.into(),
+                branch: Branch::Named(format!("worktree-{name}")),
+                status: WorktreeStatus {
+                    untracked: files,
+                    ..Default::default()
+                },
+                unpushed,
+                last_commit: Some(CommitMeta {
+                    short_id: "abc1234".into(),
+                    author: "agent".into(),
+                    timestamp: NOW - 3 * 86_400,
+                    summary: "wip".into(),
+                }),
+                locked: false,
+                missing: false,
+            };
+        let mut s = snap("payments", "/code/payments");
+        let mut gone = linked("gone", "/code/payments/wt/gone", 0, 0);
+        gone.missing = true;
+        s.worktrees = vec![
+            linked("agent-a", "/code/payments/.claude/worktrees/agent-a", 5, 1),
+            linked("hotfix", "/elsewhere/payments-hotfix", 0, 0),
+            gone,
+        ];
+        let r = show_report(&s, None, None, false, NOW, 100, false);
+        for want in [
+            // The reasons lead, as on every surface.
+            "5 commits not pushed in worktree agent-a, older than 2 days",
+            "1 uncommitted file in worktree agent-a",
+            "3 linked checkouts, 1 holding work that is not pushed",
+            "on worktree-agent-a, 5 commits not pushed, 1 uncommitted file, last commit 3d ago",
+            // Inside the repo: the path from the repo's own folder.
+            "./.claude/worktrees/agent-a",
+            // Elsewhere on disk: the whole path.
+            "/elsewhere/payments-hotfix",
+            "nothing unsaved",
+            "folder is gone (git worktree prune)",
+        ] {
+            assert!(r.contains(want), "missing {want:?} in:\n{r}");
+        }
+        assert!(fits(&r, 100), "{r}");
+
+        // A repo with no linked worktrees has no such section.
+        let plain = show_report(
+            &snap("web", "/code/web"),
+            None,
+            None,
+            false,
+            NOW,
+            100,
+            false,
+        );
+        assert!(!plain.contains("linked checkout"), "{plain}");
     }
 
     #[test]

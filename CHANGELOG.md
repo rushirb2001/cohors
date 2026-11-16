@@ -31,6 +31,39 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.24] — 2026-11-16
+
+### Added
+
+- **cohors sees the work left in linked worktrees.** A coding agent usually
+  works in a git worktree (Claude Code keeps them under `.claude/worktrees/`),
+  and what it leaves there was invisible: a repo with five unpushed commits in
+  an agent's worktree read "No work is at risk". Each repo's linked worktrees
+  are now read with it, wherever they are on disk: commits that are on no
+  remote, and files that were never committed. Either one puts the repo under
+  **Work at risk** (unpushed commits older than two days are a RISK), with a
+  reason that names the worktree, `5 commits not pushed in worktree agent-a`,
+  and one **Do next** step, `Back up 5 commits and 3 uncommitted files sitting
+  in 2 worktrees`. Those commits count in **Not backed up**. A worktree whose
+  folder was deleted is reported too.
+- **`cohors show`** lists a repo's worktrees with what each holds and its
+  folder; `cohors scan --select worktree-work` (and `{"worktree_work": true}`
+  for an agent) picks the repos that have any; the MCP `list_repos` returns
+  the worktrees that hold work, each with its path. The scan JSON gains
+  `worktrees` on every repo.
+
+### Changed
+
+- **A worktree's folder is no longer counted as an uncommitted file of the
+  repo around it.** `git status` lists a worktree checked out inside a repo as
+  an untracked folder, so every repo with agent worktrees read as dirty; what
+  the worktree holds is reported as its own state instead.
+- **A worktree stays a part of its repo**, not a repo of its own: the count of
+  repositories does not change, and fetch, pull, push, commit, stash and run
+  still act on the main checkout only. A worktree kept beside its repo, under
+  a folder cohors searches, is still its own row, as before, and is then not
+  listed a second time under its repo.
+
 ## [0.8.23] — 2026-11-16
 
 ### Added

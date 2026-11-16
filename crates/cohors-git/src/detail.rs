@@ -212,6 +212,10 @@ fn changed_files(repo: &git2::Repository) -> Vec<ChangedFile> {
         return Vec::new();
     };
 
+    // The same rule as the status counts: a linked worktree checked out
+    // inside this one is not an untracked file (see `nested_worktree_dirs`).
+    let nested = crate::snapshot::nested_worktree_dirs(repo);
+
     let mut out = Vec::new();
     for entry in statuses.iter() {
         let status = porcelain_status(entry.status());
@@ -219,6 +223,11 @@ fn changed_files(repo: &git2::Repository) -> Vec<ChangedFile> {
         // root); `None` only for non-UTF-8 paths, which we skip rather than
         // mangle.
         if let Ok(path) = entry.path() {
+            if entry.status().contains(git2::Status::WT_NEW)
+                && nested.iter().any(|dir| dir == path.trim_end_matches('/'))
+            {
+                continue;
+            }
             out.push(ChangedFile {
                 status,
                 path: path.to_string(),

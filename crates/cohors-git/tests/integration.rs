@@ -264,6 +264,171 @@ fn ahead_of_upstream_counts_commits() {
     assert_eq!(upstream.behind, 0);
 }
 
+// ----- linked worktrees (ADR-071) --------------------------------------------
+
+/// A repo pushed to a bare remote, so "not pushed" has something to mean.
+fn repo_with_remote(tmp: &Path) -> std::path::PathBuf {
+    let remote = tmp.join("origin.git");
+    std::fs::create_dir_all(&remote).unwrap();
+    git(
+        &remote,
+        &["-c", "init.defaultBranch=main", "init", "-q", "--bare"],
+    );
+    let work = tmp.join("work");
+    init_repo_with_commit(&work, "a.txt", "1", "c1");
+    git(
+        &work,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    git(&work, &["push", "-q", "-u", "origin", "main"]);
+    work
+}
+
+#[test]
+fn a_worktree_inside_the_repo_is_read_with_its_own_work() {
+    let tmp = TempDir::new().unwrap();
+    let work = repo_with_remote(tmp.path());
+    // Where Claude Code puts an agent's checkout.
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            ".claude/worktrees/agent-a",
+            "-b",
+            "worktree-agent-a",
+        ],
+    );
+    let agent = work.join(".claude/worktrees/agent-a");
+    write(&agent, "done.txt", "finished");
+    git(&agent, &["add", "."]);
+    git(&agent, &["commit", "-q", "-m", "agent work"]);
+    write(&agent, "left.txt", "never committed");
+
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+    assert_eq!(snap.worktrees.len(), 1, "{:?}", snap.worktrees);
+    let found = &snap.worktrees[0];
+    assert_eq!(found.name, "agent-a");
+    assert_eq!(found.branch, Branch::Named("worktree-agent-a".to_string()));
+    assert!(found.path.ends_with(".claude/worktrees/agent-a"));
+    // One commit on no remote, and one file nobody committed.
+    assert_eq!(found.unpushed, 1);
+    assert_eq!(found.status.untracked, 1);
+    assert_eq!(found.status.total(), 1);
+    assert_eq!(
+        found.last_commit.as_ref().map(|c| c.summary.as_str()),
+        Some("agent work")
+    );
+    assert!(found.holds_work() && !found.missing && !found.locked);
+
+    // The main checkout is clean: the worktree's folder is not one of its
+    // untracked files, though `git status` there lists it as one.
+    assert!(!snap.is_dirty(), "{:?}", snap.worktree);
+    assert!(git_output(&work, &["status", "--porcelain"]).contains(".claude/"));
+    // A real untracked file beside it still counts.
+    write(&work, "notes.txt", "mine");
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+    assert_eq!(snap.worktree.untracked, 1);
+
+    // A commit the main checkout has not pushed is the main checkout's to
+    // report. A worktree made from it has nothing of its own yet.
+    write(&work, "m.txt", "main work");
+    git(&work, &["add", "m.txt"]);
+    git(&work, &["commit", "-q", "-m", "main, not pushed"]);
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            ".claude/worktrees/fresh",
+            "-b",
+            "fresh",
+        ],
+    );
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+    assert_eq!(snap.ahead(), 1);
+    let fresh = snap.worktrees.iter().find(|w| w.name == "fresh").unwrap();
+    assert_eq!(fresh.unpushed, 0, "main's commit is not counted again");
+    assert!(!fresh.holds_work());
+    let agent_a = snap.worktrees.iter().find(|w| w.name == "agent-a").unwrap();
+    assert_eq!(agent_a.unpushed, 1, "its own commit still is");
+
+    // Pushed, the commit is on a remote and no longer counts.
+    git(&agent, &["push", "-q", "-u", "origin", "worktree-agent-a"]);
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+    let agent_a = snap.worktrees.iter().find(|w| w.name == "agent-a").unwrap();
+    assert_eq!(agent_a.unpushed, 0);
+    assert!(agent_a.holds_work(), "the file is still there");
+}
+
+#[test]
+fn a_worktree_outside_the_repo_and_a_detached_one_are_read_too() {
+    let tmp = TempDir::new().unwrap();
+    let work = repo_with_remote(tmp.path());
+    let beside = tmp.path().join("beside");
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            beside.to_str().unwrap(),
+        ],
+    );
+    write(&beside, "b.txt", "2");
+    git(&beside, &["add", "."]);
+    git(&beside, &["commit", "-q", "-m", "detached work"]);
+
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+    assert_eq!(snap.worktrees.len(), 1);
+    let found = &snap.worktrees[0];
+    // No branch and no upstream, yet the commit is counted: it is on no remote.
+    assert!(
+        matches!(found.branch, Branch::Detached(_)),
+        "{:?}",
+        found.branch
+    );
+    assert_eq!(found.unpushed, 1);
+    assert_eq!(
+        found.path,
+        Utf8PathBuf::from_path_buf(beside.canonicalize().unwrap()).unwrap()
+    );
+
+    // Seen from the linked worktree itself, nothing is listed: only the main
+    // checkout owns the list, or every sibling would repeat under each one.
+    let from_inside = snapshot_repo(&repo_ref(&beside), COMMIT_TS);
+    assert!(!from_inside.has_error());
+    assert!(from_inside.worktrees.is_empty());
+}
+
+#[test]
+fn a_deleted_worktree_is_reported_missing_and_a_local_only_repo_has_nothing_unpushed() {
+    let tmp = TempDir::new().unwrap();
+    // No remote at all: local on purpose, so nothing in it is "not pushed".
+    let work = tmp.path().join("local");
+    init_repo_with_commit(&work, "a.txt", "1", "c1");
+    git(&work, &["worktree", "add", "-q", "wt/kept", "-b", "kept"]);
+    git(&work, &["worktree", "add", "-q", "wt/gone", "-b", "gone"]);
+    let kept = work.join("wt/kept");
+    write(&kept, "k.txt", "k");
+    git(&kept, &["add", "."]);
+    git(&kept, &["commit", "-q", "-m", "local commit"]);
+    std::fs::remove_dir_all(work.join("wt/gone")).unwrap();
+
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+    let names: Vec<&str> = snap.worktrees.iter().map(|w| w.name.as_str()).collect();
+    assert_eq!(names, ["gone", "kept"], "sorted by name");
+    let gone = &snap.worktrees[0];
+    assert!(gone.missing && !gone.holds_work());
+    let kept = &snap.worktrees[1];
+    assert!(!kept.missing);
+    assert_eq!(kept.unpushed, 0, "no remote, so nothing is unpushed");
+    assert!(!kept.holds_work());
+}
+
 #[test]
 fn unreadable_repo_becomes_error_snapshot_not_panic() {
     // A path that exists but isn't a git repo → gix open fails → error snapshot.

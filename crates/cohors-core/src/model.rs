@@ -118,6 +118,50 @@ impl WorktreeStatus {
     }
 }
 
+/// A linked worktree of a repo (`git worktree add`): a second checkout that
+/// shares the repo's history but has its own `HEAD`, index and files.
+///
+/// Coding agents work in these (Claude Code under `<repo>/.claude/worktrees/`,
+/// others elsewhere on disk), so finished work can sit in one, uncommitted or
+/// never pushed, where the main checkout does not show it. A linked worktree
+/// belongs to its repo: it is listed here, not as a repo of its own (ADR-071).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkedWorktree {
+    /// Git's name for it (the folder under `.git/worktrees/`).
+    pub name: String,
+    /// Where it is checked out.
+    pub path: Utf8PathBuf,
+    /// What it has checked out.
+    pub branch: Branch,
+    /// Its own uncommitted changes (a linked worktree has its own index).
+    #[serde(default)]
+    pub status: WorktreeStatus,
+    /// Commits reachable from its `HEAD` that are on no remote-tracking
+    /// branch and not in the main checkout: work that exists only in this
+    /// worktree, on this machine. Always 0 when the repo has no remote, which
+    /// is local on purpose (as with an unpublished branch).
+    #[serde(default)]
+    pub unpushed: u32,
+    /// The commit it has checked out.
+    #[serde(default)]
+    pub last_commit: Option<CommitMeta>,
+    /// Locked with `git worktree lock`, so git will not prune or remove it.
+    #[serde(default)]
+    pub locked: bool,
+    /// Git still lists it but its folder is gone (`git worktree prune` clears
+    /// the entry). The other fields then hold what little is known.
+    #[serde(default)]
+    pub missing: bool,
+}
+
+impl LinkedWorktree {
+    /// Whether it holds anything that is not safely on a remote: uncommitted
+    /// files, or commits that were never pushed.
+    pub fn holds_work(&self) -> bool {
+        self.status.is_dirty() || self.unpushed > 0
+    }
+}
+
 /// Metadata about the most recent commit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommitMeta {
@@ -393,6 +437,12 @@ pub struct RepoSnapshot {
     /// carried in `branch`, and its worktree state lives in `worktree`.
     #[serde(default)]
     pub branches: Vec<BranchInfo>,
+    /// The repo's linked worktrees (`git worktree add`), each with its own
+    /// uncommitted and unpushed state. Empty for a repo that has none, for a
+    /// snapshot of a linked worktree itself (only the main checkout lists
+    /// them), and for old caches.
+    #[serde(default)]
+    pub worktrees: Vec<LinkedWorktree>,
 }
 
 impl RepoSnapshot {
@@ -425,6 +475,7 @@ impl RepoSnapshot {
             activity: Vec::new(),
             groups: Vec::new(),
             branches: Vec::new(),
+            worktrees: Vec::new(),
         }
     }
 
@@ -524,6 +575,7 @@ pub(crate) fn sample(
         activity: Vec::new(),
         groups: Vec::new(),
         branches: Vec::new(),
+        worktrees: Vec::new(),
     }
 }
 
