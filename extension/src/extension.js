@@ -90,13 +90,7 @@ async function binaryVersion(binPath) {
 }
 
 async function collect() {
-  const base = {
-    generatedAt: Math.floor(Date.now() / 1000),
-    home: os.homedir(),
-    here: workspaceFolders(),
-    trusted: vscode.workspace.isTrusted,
-    rootsSetting: cfg().get("roots", []),
-  };
+  const base = baseState();
 
   const bin = await cli.locate();
   if (!bin.path) {
@@ -116,7 +110,13 @@ async function collect() {
     };
     return lastData;
   }
+  // One-off reads carry no suggestions: keep the stream's last ones.
+  return assemble(base, bin, overview, launchpad, lastSuggestions);
+}
 
+// The state the webviews draw, from one reading of the fleet (a one-off
+// `overview` + `launchpad`, or a `cohors watch` line).
+async function assemble(base, bin, overview, launchpad, suggestions) {
   const [info, version] = await Promise.all([loadAgentInfo(), binaryVersion(bin.path)]);
 
   // Machine-local extras, only for repositories that opted in with a
@@ -136,19 +136,32 @@ async function collect() {
     ...base, status: "ok",
     binary: { path: bin.path, version },
     overview, launchpad,
+    // null: this cohors cannot suggest (no `cohors watch`), so the pane says so.
+    suggestions: suggestions || null,
     agent: info,
     local: { threads, sessions },
   };
   return lastData;
 }
 
+const baseState = () => ({
+  generatedAt: Math.floor(Date.now() / 1000),
+  home: os.homedir(),
+  here: workspaceFolders(),
+  trusted: vscode.workspace.isTrusted,
+  rootsSetting: cfg().get("roots", []),
+});
+
 async function refresh(force) {
   if (refreshing) return;
   if (!force && Date.now() - lastRefresh < 3000) return;
   refreshing = true;
   post({ type: "busy", on: true });
+  const began = Date.now();
   try {
-    const state = await collect();
+    let state = await collect();
+    // A stream line that landed while this read ran is newer: keep it.
+    if (lineState && lineAt > began) state = lastData = lineState;
     output.info(state.status === "ok"
       ? `read ${state.overview.repos.length} repositories under ${(state.overview.roots || []).join(", ") || "the configured roots"}`
       : `could not read the fleet: ${(state.problem && state.problem.message) || state.status}`);
@@ -167,19 +180,96 @@ async function refresh(force) {
   }
 }
 
+// The fallback when there is no live stream (a cohors older than `cohors
+// watch`, or while it restarts): read the fleet every `refreshSeconds`.
 function armTimer() {
   clearInterval(timer);
   const s = cfg().get("refreshSeconds", 30);
   // `active`, not `visible`: a tab in a split you are not looking at costs nothing.
-  if (s > 0) timer = setInterval(() => { if ((panel && panel.active) || [...sides.values()].some((v) => v.visible)) refresh(); }, Math.max(5, s) * 1000);
+  if (s > 0) timer = setInterval(() => { if (!streamLive && ((panel && panel.active) || [...sides.values()].some((v) => v.visible))) refresh(); }, Math.max(5, s) * 1000);
 }
 
 // One write can fire several watcher events, and a git operation touches HEAD
-// and the index together. Coalesce them into one refresh.
+// and the index together. Coalesce them into one refresh. With the stream
+// live, cohors itself reports the change; nothing to do.
 let nudgeTimer = null;
 function nudge(delay) {
+  if (streamLive) return;
   clearTimeout(nudgeTimer);
   nudgeTimer = setTimeout(() => refresh(true), delay || 300);
+}
+
+/* ───────── live stream ───────── */
+
+// While a cohors view is visible, one `cohors watch --json` runs and every
+// line it prints (one per change of the fleet) redraws the views at once:
+// a commit, a fetch, a dirty file, a new repository, a launchpad task. A
+// cohors without `watch` is remembered and polled instead. A stream that
+// stops is started again, waiting longer each time; polling covers the gap.
+let stream = null;              // the running `cohors watch`, or null
+let streamLive = false;         // it has printed since it started
+let streamFailures = 0;
+let streamRetry = null, streamIdle = null;
+let lastSuggestions = null;     // from the last line, for one-off reads
+let lineState = null, lineAt = 0;   // the state drawn from the last line, and when
+const noWatch = new Set();      // binaries without `cohors watch`
+const viewsVisible = () => !!(panel && panel.visible) || [...sides.values()].some((v) => v.visible);
+
+async function startStream() {
+  clearTimeout(streamIdle); streamIdle = null;
+  if (stream || streamRetry || !viewsVisible()) return;
+  const bin = await cli.locate();
+  if (!bin.path || noWatch.has(bin.path) || stream) return;
+  const handle = { stopped: false };
+  stream = handle;
+  try {
+    handle.child = await cli.watch({
+      onLine: (line) => {
+        if (stream !== handle) return;
+        streamLive = true;
+        streamFailures = 0;
+        lastSuggestions = line.suggestions;
+        // Draw it; one-off reads of the same moment are now redundant.
+        assemble(baseState(), bin, line.overview, line.launchpad, line.suggestions)
+          .then((state) => { lineState = state; lineAt = Date.now(); post({ type: "data", state }); })
+          .catch((e) => output.error(`could not draw a watch line: ${e.message}`));
+      },
+      onExit: (info) => {
+        if (stream === handle) { stream = null; streamLive = false; }
+        if (info.unsupported) {
+          noWatch.add(info.path);
+          output.info(`${info.path} has no \`cohors watch\`; reading the fleet every ${cfg().get("refreshSeconds", 30)} seconds instead`);
+          return;
+        }
+        if (handle.stopped || !viewsVisible()) return;
+        streamFailures += 1;
+        const wait = Math.min(30000, 1000 * 2 ** Math.min(streamFailures - 1, 5));
+        output.warn(`cohors watch stopped${info.stderr ? `: ${info.stderr.split("\n")[0]}` : ""}; starting it again in ${wait / 1000}s`);
+        streamRetry = setTimeout(() => { streamRetry = null; startStream(); }, wait);
+      },
+    });
+  } catch (e) {
+    if (stream === handle) stream = null;
+    output.warn(`could not start cohors watch: ${e.message}`);
+  }
+}
+
+function stopStream() {
+  clearTimeout(streamRetry); streamRetry = null;
+  clearTimeout(streamIdle); streamIdle = null;
+  const handle = stream;
+  stream = null; streamLive = false;
+  if (handle) {
+    handle.stopped = true;
+    if (handle.child) handle.child.stop();
+  }
+}
+
+// A view was shown or hidden: run the stream while any is visible, and stop
+// it a minute after the last one went away (a quick tab switch keeps it).
+function viewsChanged() {
+  if (viewsVisible()) return void startStream();
+  if (stream && !streamIdle) streamIdle = setTimeout(() => { streamIdle = null; if (!viewsVisible()) stopStream(); }, 60000);
 }
 
 const repoById = (id) => (lastData && lastData.overview && lastData.overview.repos.find((r) => r.id === id)) || null;
@@ -207,9 +297,9 @@ function terminal(cwd, text, name) {
 
 // How a command line is SHOWN. The process itself is started with the
 // argument array, so this quoting is for the reader only.
+const shellWord = (a) => (/^[A-Za-z0-9_\-./:=@~]+$/.test(a) ? a : `'${String(a).replace(/'/g, "'\\''")}'`);
 function shown(bin, args) {
-  const q = (a) => (/^[A-Za-z0-9_\-./:=@~]+$/.test(a) ? a : `'${String(a).replace(/'/g, "'\\''")}'`);
-  return [path.basename(bin), ...args].map(q).join(" ");
+  return [path.basename(bin), ...args].map(shellWord).join(" ");
 }
 
 // Run cohors where the user can watch it: a terminal whose "shell" is the
@@ -326,6 +416,47 @@ async function actOn(ids) {
     Cohors.VERBS.map((v) => ({ label: VERB_INFO[v].title, detail: VERB_INFO[v].detail, verb: v })),
     { title: `Act on ${describe(selector)}`, placeHolder: "Choose what to run. Anything that changes a repository asks first." });
   if (pick) await runVerb(pick.verb, selector);
+}
+
+/* ───────── suggestions ───────── */
+
+// A suggestion the user picked in the sidebar. The webview names it by its
+// place in the list and its command; the host acts on its own copy, so a
+// message can never smuggle in a command or a path. A resume reopens the
+// conversation in a terminal through `cohors agent command resume`; any
+// other suggestion is typed into a terminal for the user to read and run
+// (Enter), or copied.
+async function actOnSuggestion(m) {
+  const list = (lastData && lastData.suggestions) || [];
+  const s = list[Number(m.index)];
+  if (!s || s.command !== m.command) return void fail(new Error("that suggestion has changed; choose it again."));
+  if (m.act === "copy") {
+    await vscode.env.clipboard.writeText(s.command);
+    vscode.window.setStatusBarMessage("cohors: command copied", 2500);
+    return void post({ type: "toast", text: "Command copied" });
+  }
+  if (m.act === "resume" && s.kind === "resume" && s.session) {
+    const repo = repoWithPath(s.session.repo);
+    if (!repo) return void fail(new Error("that conversation's repository is not in the fleet any more."));
+    return launch("resume", { repo: repo.path, session: s.session.id, runner: s.session.runner });
+  }
+  if (m.act !== "run") return;
+  const bin = await cli.locate();
+  if (!bin.path) return void fail(new Error(bin.reason));
+  // The command names `cohors`: with a binary set in the settings, name that,
+  // and add the roots and config the views were read with (global flags may
+  // come anywhere), so it acts on the fleet the user is looking at.
+  let text = s.command;
+  if (text.startsWith("cohors ")) {
+    const extra = cli.globalArgs().map(shellWord).join(" ");
+    text = (bin.configured ? shellWord(bin.path) : "cohors") + text.slice("cohors".length) + (extra ? ` ${extra}` : "");
+  }
+  // In the repository it concerns, else the home folder.
+  const repo = s.repo ? repoWithPath(s.repo) : null;
+  const cwd = repo ? repo.path : os.homedir();
+  const t = vscode.window.createTerminal({ name: "cohors: suggestion", cwd });
+  t.sendText(text, false);   // typed, not run: Enter is the user's
+  t.show(false);
 }
 
 /* ───────── opening repositories ───────── */
@@ -529,12 +660,14 @@ function show(reveal) {
     dark: vscode.Uri.file(path.join(EXT_DIR, "media", "cohors-dark.svg")),
   };
   panel.webview.html = html(panel.webview);
-  panel.onDidDispose(() => { panel = null; clearInterval(timer); });
+  panel.onDidDispose(() => { panel = null; clearInterval(timer); viewsChanged(); });
   panel.onDidChangeViewState((e) => {
-    if (e.webviewPanel.active && Date.now() - lastRefresh > 30000) refresh();
+    viewsChanged();
+    if (!streamLive && e.webviewPanel.active && Date.now() - lastRefresh > 30000) refresh();
   });
   panel.webview.onDidReceiveMessage((m) => onMessage(m).catch(fail));
   armTimer();
+  startStream();
 }
 
 async function onMessage(m) {
@@ -549,6 +682,8 @@ async function onMessage(m) {
       return refresh(true);
     case "redetect":
       cli.reset(); agentInfo = null; versionCache = null;
+      stopStream(); noWatch.clear();
+      startStream();
       return refresh(true);
 
     /* repositories */
@@ -613,6 +748,8 @@ async function onMessage(m) {
     }
     case "start":
       return startIn(m.id, m.runner);
+    case "suggestion":
+      return actOnSuggestion(m);
 
     /* standup */
     case "standup": {
@@ -677,6 +814,7 @@ async function onMessage(m) {
 const PANES = {
   "cohors.fleet": "fleet",
   "cohors.next": "next",
+  "cohors.suggested": "suggested",
   "cohors.risk": "risk",
   "cohors.tasks": "tasks",
   "cohors.commits": "commits",
@@ -693,13 +831,15 @@ function paneProvider(part) {
         localResourceRoots: [vscode.Uri.file(path.join(EXT_DIR, "media"))],
       };
       view.webview.html = html(view.webview, "side.js", "side", part);
-      view.onDidDispose(() => { sides.delete(part); });
+      view.onDidDispose(() => { sides.delete(part); viewsChanged(); });
       view.onDidChangeVisibility(() => {
-        if (view.visible && Date.now() - lastRefresh > 30000) refresh();
+        viewsChanged();
+        if (!streamLive && view.visible && Date.now() - lastRefresh > 30000) refresh();
       });
       view.webview.onDidReceiveMessage((m) => onSideMessage(m, part).catch(fail));
       labelPanes();
       armTimer();
+      viewsChanged();
     },
   };
 }
@@ -710,6 +850,7 @@ function paneProvider(part) {
 function labelPanes() {
   const counts = lastData && lastData.status === "ok" ? {
     next: lastData.overview.actions.length,
+    suggested: (lastData.suggestions || []).length,
     risk: lastData.overview.repos.filter((r) => r.at_risk).length,
     tasks: (lastData.overview.figures && lastData.overview.figures.open_tasks) || 0,
     commits: (lastData.overview.figures && lastData.overview.figures.commits_week) || 0,
@@ -743,7 +884,7 @@ async function onSideMessage(m, part) {
       return show({ page: m.page || "overview", repo: m.repo || undefined });
     // The housekeeping the dashboard offers too, handled the same way.
     case "refresh": case "redetect": case "settings": case "installHelp":
-    case "useWorkspaceRoots": case "openFolder": case "copy":
+    case "useWorkspaceRoots": case "openFolder": case "copy": case "suggestion":
       return onMessage(m);
   }
 }
@@ -828,8 +969,11 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (!e.affectsConfiguration("cohors")) return;
       cli.reset(); agentInfo = null; versionCache = null;
+      // Another binary, other roots: a new stream.
+      stopStream(); noWatch.clear(); lastSuggestions = null; lineState = null; lineAt = 0;
       armTimer();
       refresh(true);
+      startStream();
     }),
     vscode.workspace.onDidGrantWorkspaceTrust(() => refresh(true)),
   );
@@ -871,6 +1015,6 @@ function activate(context) {
   if (mode === "always" || (mode === "emptyWindow" && !workspaceFolders().length)) show();
 }
 
-function deactivate() { clearInterval(timer); clearTimeout(nudgeTimer); }
+function deactivate() { clearInterval(timer); clearTimeout(nudgeTimer); stopStream(); }
 
 module.exports = { activate, deactivate };

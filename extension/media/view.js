@@ -799,6 +799,8 @@
    *
    *   fleet    the mark, the headline, the six figures, the roots
    *   next     what to do next
+   *   suggested  what to pick up: agent conversations to resume, steps and
+   *            focus items, each with its command (from `cohors watch`)
    *   risk     work at risk
    *   tasks    open tasks, the focus board first
    *   commits  the week's commits by repository
@@ -806,9 +808,28 @@
    *
    * The count for a pane is on its header (the host sets it from
    * `sideCounts`). Rows are ways in: choosing one opens the dashboard at that
-   * place. Nothing here changes a repository.
+   * place. Nothing here changes a repository: a suggestion's Run types its
+   * command into a terminal, and Enter is the user's.
    */
-  const SIDE_PARTS = ["fleet", "next", "risk", "tasks", "commits", "repos"];
+  const SIDE_PARTS = ["fleet", "next", "suggested", "risk", "tasks", "commits", "repos"];
+
+  const KIND_WORD = { resume: "RESUME", act: "STEP", focus: "FOCUS", start: "START" };
+  const RUNNER_NAME = { "claude-code": "Claude Code", codex: "Codex", "gemini-cli": "Gemini CLI" };
+
+  // One suggestion: what, who and when (for a resume), why, and its command.
+  // Titles come from agent conversations and repositories: escaped, always.
+  // The buttons name the suggestion by its place and its command; the host
+  // acts on its own copy of the list.
+  function suggestion(s, index, now) {
+    const ref = { do: "suggestion", index, command: s.command };
+    const who = s.session ? `${esc(RUNNER_NAME[s.session.runner] || s.session.runner)} · ${esc(ago(s.session.last_active, now))} · ` : "";
+    const go = s.kind === "resume" && s.session
+      ? btn("Resume", { ...ref, act: "resume" }, { title: "Reopen this conversation in a terminal" })
+      : btn("Run", { ...ref, act: "run" }, { title: "Type the command into a terminal (Enter runs it)" });
+    return `<div class="sug"><span class="l1"><span class="kind">${esc(KIND_WORD[s.kind] || s.kind)}</span><span class="t say">${esc(s.title)}</span></span>`
+      + `<span class="l2">${who}${esc(s.why)}</span>`
+      + `<span class="cmdrow"><code title="${esc(s.command)}">${esc(s.command)}</code>${go}${btn("Copy", { ...ref, act: "copy" })}</span></div>`;
+  }
 
   // One row of a pane: a button that opens the dashboard somewhere.
   const srow = (go, first, second, right) =>
@@ -821,6 +842,7 @@
     const m = model(state);
     return {
       next: (m.o.actions || []).length,
+      suggested: (state.suggestions || []).length,
       risk: m.repos.filter((r) => r.at_risk).length,
       tasks: m.fig.open_tasks || 0,
       commits: m.fig.commits_week || 0,
@@ -855,6 +877,12 @@
       return body(actions.length
         ? actions.map((a) => srow({ page: "overview" }, `${sevBlock(a.severity)}<span class="t say">${esc(a.title)}</span>`, esc(a.why))).join("")
         : none("Nothing needs doing."));
+    }
+
+    if (part === "suggested") {
+      const list = state.suggestions;
+      if (!Array.isArray(list)) return body(none("Suggestions need a newer cohors, one with `cohors watch`."));
+      return body(list.length ? list.map((s, i) => suggestion(s, i, m.now)).join("") : none("Nothing to suggest right now."));
     }
 
     if (part === "risk") {

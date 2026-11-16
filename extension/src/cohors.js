@@ -240,10 +240,10 @@ function create(getConfig, opts = {}) {
     if (!ok) throw new CohorsError("parse", `cohors ${what} printed JSON in a shape this extension does not understand. Update cohors or the extension.`);
   }
 
-  // `cohors overview --json`: the shared Overview model plus `roots`.
-  async function overview() {
-    const o = await json(["overview", "--json"]);
-    expect(isObj(o) && Array.isArray(o.repos) && Array.isArray(o.actions) && isObj(o.figures), "overview");
+  // The shared Overview model plus `roots`, as `cohors overview --json` and
+  // each `cohors watch --json` line carry it.
+  function checkOverview(o, what) {
+    expect(isObj(o) && Array.isArray(o.repos) && Array.isArray(o.actions) && isObj(o.figures), what);
     o.roots = Array.isArray(o.roots) ? o.roots : [];
     o.work = Array.isArray(o.work) ? o.work : [];
     o.commits = Array.isArray(o.commits) ? o.commits : [];
@@ -252,16 +252,92 @@ function create(getConfig, opts = {}) {
     return o;
   }
 
-  // `cohors launchpad --json`: flows, agents and tasks per repository, the
-  // focus board and recent agent activity.
-  async function launchpad() {
-    const l = await json(["launchpad", "--json"]);
-    expect(isObj(l) && Array.isArray(l.repos), "launchpad");
+  // Flows, agents and tasks per repository, the focus board and recent agent
+  // activity, as `cohors launchpad --json` and each watch line carry them.
+  function checkLaunchpad(l, what) {
+    expect(isObj(l) && Array.isArray(l.repos), what);
     l.board = isObj(l.board) ? l.board : {};
     l.board.focus = Array.isArray(l.board.focus) ? l.board.focus : [];
     l.recent_activity = Array.isArray(l.recent_activity) ? l.recent_activity : [];
     l.summary = isObj(l.summary) ? l.summary : {};
     return l;
+  }
+
+  // What to pick up next. Each has a kind, a title, why and the command
+  // that carries it out; a resume also names its session. Anything else is
+  // dropped, so the view never meets a shape it does not know.
+  function checkSuggestions(list) {
+    const str = (v) => typeof v === "string";
+    return (Array.isArray(list) ? list : []).filter((s) => isObj(s) && str(s.kind) && str(s.title) && str(s.why) && str(s.command)
+      && (s.kind !== "resume" || (isObj(s.session) && str(s.session.id) && str(s.session.repo) && str(s.session.runner))));
+  }
+
+  const overview = async () => checkOverview(await json(["overview", "--json"]), "overview");
+  const launchpad = async () => checkLaunchpad(await json(["launchpad", "--json"]), "launchpad");
+
+  /**
+   * Follow the fleet: `cohors watch --json`, one long-lived process that
+   * prints the fleet once, then one line per change. Returns at once.
+   *   onLine({ seq, reason, changed, overview, launchpad, suggestions })
+   *   onExit({ code, signal, stderr, unsupported })  unsupported: this cohors
+   *     has no `watch` (older than 0.8), so the caller should poll instead.
+   * The child's input stays open; `stop()` closes it, which ends the child,
+   * and so does this process going away (the pipe closes with it).
+   */
+  async function watch({ onLine, onExit }) {
+    const bin = await locate();
+    if (!bin.path) throw new CohorsError("missing", bin.reason, { configured: bin.configured });
+    const full = [...globalArgs(), "watch", "--json"];
+    const child = cp.spawn(bin.path, full, { cwd: workingDir(), stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    log(`cohors ${full.join(" ")}: started (pid ${child.pid})`);
+    let pending = "", stderr = "", ended = false;
+    const end = (info) => {
+      if (ended) return;
+      ended = true;
+      const text = stderr.trim();
+      const unsupported = /unrecognized subcommand|unexpected argument/.test(text);
+      log(`cohors watch ended (${info.signal || `code ${info.code}`})${text ? `: ${text.split("\n")[0]}` : ""}`);
+      try { onExit({ ...info, stderr: text, unsupported, path: bin.path }); } catch { /* the caller's problem */ }
+    };
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      pending += chunk;
+      let at;
+      while ((at = pending.indexOf("\n")) >= 0) {
+        const text = pending.slice(0, at);
+        pending = pending.slice(at + 1);
+        if (!text.trim()) continue;
+        let line;
+        try {
+          const v = JSON.parse(text);
+          if (!isObj(v) || v.type !== "fleet") continue;   // a kind of line this extension does not know
+          line = {
+            seq: v.seq, reason: String(v.reason || ""), changed: Array.isArray(v.changed) ? v.changed : [],
+            overview: checkOverview(v.overview, "watch"), launchpad: checkLaunchpad(v.launchpad, "watch"),
+            suggestions: checkSuggestions(v.suggestions),
+          };
+        } catch (e) {
+          log(`cohors watch printed a line this extension cannot read: ${e.message}`);
+          continue;
+        }
+        try { onLine(line); } catch { /* the caller's problem */ }
+      }
+    });
+    // Keep the end of stderr only: it says why the process stopped.
+    child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-4000); });
+    child.stdin.on("error", () => { /* it may already be gone */ });
+    child.on("error", (e) => end({ code: null, signal: null, error: e.message }));
+    child.on("close", (code, signal) => end({ code, signal }));
+    return {
+      pid: child.pid,
+      stop() {
+        try { child.stdin.end(); } catch { /* already closed */ }
+        // Closing its input ends it; if it does not, end it.
+        setTimeout(() => { if (!ended) child.kill(); }, 2000).unref();
+      },
+      kill() { if (!ended) child.kill(); },
+    };
   }
 
   // `cohors standup --json [--today]`: the configured author's commits.
@@ -302,7 +378,7 @@ function create(getConfig, opts = {}) {
     return args;
   }
 
-  return { locate, reset, globalArgs, run, json, overview, launchpad, standup, standupMarkdown, contract, version, actionArgs };
+  return { locate, reset, globalArgs, run, json, overview, launchpad, watch, standup, standupMarkdown, contract, version, actionArgs };
 }
 
 module.exports = { create, CohorsError, VERBS, expandHome };

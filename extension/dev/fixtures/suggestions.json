@@ -1,0 +1,35 @@
+[
+  {
+    "kind": "resume",
+    "title": "Resume “Make charge retries idempotent”",
+    "why": "payments · claude-code · 2h · 3 uncommitted files",
+    "command": "cohors agent --resume 6f1c2b7e-3a54-4d1e-9c0f-2b8a7d5e4c31 -r payments",
+    "repo": "demo/payments",
+    "score": 140,
+    "session": {
+      "runner": "claude-code",
+      "id": "6f1c2b7e-3a54-4d1e-9c0f-2b8a7d5e4c31",
+      "repo": "demo/payments",
+      "cwd": "/home/dev/code/payments",
+      "branch": "feat/idempotency",
+      "title": "Make charge retries idempotent",
+      "last_active": 1794287699
+    }
+  },
+  {
+    "kind": "act",
+    "title": "Push 4 commits from 3 repositories",
+    "why": "Unpushed work exists only on this machine.",
+    "command": "cohors push --select ahead",
+    "repo": null,
+    "score": 95
+  },
+  {
+    "kind": "focus",
+    "title": "Ship idempotent charge retries",
+    "why": "On your focus board, doing.",
+    "command": "cohors agent idempotency-keys -r payments",
+    "repo": "demo/payments",
+    "score": 80
+  }
+]

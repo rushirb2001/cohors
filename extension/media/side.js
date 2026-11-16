@@ -15,7 +15,7 @@
   // so it may name several ("fleet,next,risk") and gets a plain heading
   // above each.
   const parts = String(document.body.dataset.part || "fleet").split(",").filter((p) => V.SIDE_PARTS.includes(p));
-  const TITLES = { fleet: "Overview", next: "Do next", risk: "Work at risk", tasks: "Open tasks", commits: "Commits, 7 days", repos: "Repositories" };
+  const TITLES = { fleet: "Overview", next: "Do next", suggested: "Suggested", risk: "Work at risk", tasks: "Open tasks", commits: "Commits, 7 days", repos: "Repositories" };
 
   const saved = vscode.getState() || {};
   const ui = { q: typeof saved.q === "string" ? saved.q : "" };
@@ -56,6 +56,8 @@
       case "workspace-roots": return send({ type: "useWorkspaceRoots" });
       case "open-folder": return send({ type: "openFolder" });
       case "copy": return send({ type: "copy", text: d.text });
+      // A suggestion: resume its conversation, type its command, or copy it.
+      case "suggestion": return send({ type: "suggestion", act: d.act, index: Number(d.index), command: d.command });
     }
   });
 

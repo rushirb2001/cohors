@@ -154,6 +154,23 @@ async function wiring() {
     const one = demo.overview.repos[0].name;
     assert((draw("repos", demo, { q: one }).match(/class="srow"/g) || []).length < counts.repos);
 
+    // The Suggested pane: titles escaped, a resume resumes, the rest run or copy.
+    const hostile = clone(fixture("suggestions"));
+    hostile[0].title = 'Resume "<img src=x onerror=alert(1)>"';
+    hostile[1].command = "cohors push --select '<b>'";
+    const suggested = Object.assign({}, demo, { suggestions: hostile });
+    const pane = draw("suggested", suggested);
+    wellFormed(pane, "suggested pane");
+    assert(!pane.includes("<img") && pane.includes("&lt;img"), "a suggestion title must be escaped");
+    assert(!pane.includes("<b>"), "a command must be escaped");
+    assert.strictEqual((pane.match(/data-act="resume"/g) || []).length, 1);
+    assert.strictEqual((pane.match(/data-act="run"/g) || []).length, 2);
+    assert.strictEqual((pane.match(/data-act="copy"/g) || []).length, 3);
+    assert(pane.includes("Claude Code"), "a resume says which agent");
+    assert.strictEqual(V.sideCounts(suggested).suggested, 3);
+    assert(draw("suggested", demo).includes("newer cohors"), "without a stream the pane says why it is empty");
+    assert(/case "suggestion":/.test(host), "the host acts on a suggestion");
+
     const sent = new Set([...sideJs.matchAll(/send\(\{ type: "([A-Za-z]+)"/g)].map((m) => m[1]));
     const hostCases = new Set([...host.matchAll(/case "([A-Za-z]+)":/g)].map((m) => m[1]));
     for (const t of sent) assert(hostCases.has(t), `the host has no case for ${t}`);
@@ -587,6 +604,37 @@ async function adapter() {
       // None installed at all.
       const none = await Cohors.create(() => ({ roots: [] }), { searchDirs: async () => [dir] }).locate();
       assert(none.path === null && /not found/.test(none.reason));
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  await check("cohors watch streams a line per change and ends when its input closes", async () => {
+    const lines = [];
+    let exited = null;
+    const done = new Promise((resolve) => {
+      cli.watch({ onLine: (l) => lines.push(l), onExit: (info) => { exited = info; resolve(); } }).then((h) => {
+        const wait = () => (lines.length >= 2 ? h.stop() : setTimeout(wait, 20));
+        wait();
+      });
+    });
+    await done;
+    assert.deepStrictEqual(lines.map((l) => [l.seq, l.reason]), [[1, "start"], [2, "git"]]);
+    for (const l of lines) assertShapes(l.overview, l.launchpad, fixture("standup-week"));
+    assert.strictEqual(lines[0].suggestions.length, 3);
+    assert(lines[0].suggestions[0].session.id, "a resume carries its session");
+    assert.strictEqual(exited.code, 0, `ended with ${JSON.stringify(exited)}`);
+    assert.strictEqual(exited.unsupported, false);
+  });
+
+  await check("a cohors without `watch` is reported as such, so the extension polls", async () => {
+    if (process.platform === "win32") return; // the stand-in is a shell script
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cohors-old-"));
+    try {
+      const old = path.join(dir, "cohors");
+      fs.writeFileSync(old, "#!/bin/sh\necho \"error: unrecognized subcommand '$1'\" >&2\nexit 2\n", { mode: 0o755 });
+      const oldCli = Cohors.create(() => ({ binaryPath: old, roots: [] }));
+      const info = await new Promise((resolve) => { oldCli.watch({ onLine: () => assert.fail("no lines"), onExit: resolve }); });
+      assert.strictEqual(info.unsupported, true);
+      assert.strictEqual(info.path, old);
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 

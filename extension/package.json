@@ -129,6 +129,12 @@
         },
         {
           "type": "webview",
+          "id": "cohors.suggested",
+          "name": "Suggested",
+          "initialSize": 3
+        },
+        {
+          "type": "webview",
           "id": "cohors.risk",
           "name": "Work at risk",
           "initialSize": 4
@@ -188,7 +194,7 @@
           "type": "number",
           "default": 30,
           "minimum": 0,
-          "description": "Seconds between background refreshes. It only ticks while the dashboard tab is focused, and file changes in the open workspace refresh it straight away. 0 turns polling off."
+          "description": "Seconds between background refreshes when cohors cannot stream changes (a cohors without `cohors watch`, or while the stream restarts). With the stream, every change shows within a second or two and this is not used. It only ticks while a cohors view is visible. 0 turns polling off."
         },
         "cohors.openOnStartup": {
           "type": "string",

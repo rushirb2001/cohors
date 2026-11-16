@@ -547,7 +547,7 @@ body.side .fig .v { margin-top: 0; font-size: 1.6em; }
 /* A pane keeps its section's colour as a thin line under the editor's
    header, the same colour its card has in the dashboard. */
 .part { --hue: var(--fg-2); padding: 4px 0 2px; border-top: 2px solid var(--hue); }
-.part.h-next { --hue: var(--h-next); }
+.part.h-next, .part.h-suggested { --hue: var(--h-next); }
 .part.h-risk { --hue: var(--h-risk); }
 .part.h-tasks { --hue: var(--h-tasks); }
 .part.h-commits { --hue: var(--h-commits); }
@@ -566,6 +566,15 @@ body.side .fig .v { margin-top: 0; font-size: 1.6em; }
 /* The second line starts where the first line's text does, past the block. */
 .srow:has(.blk) .l2 { padding-left: calc(3.4em * 0.8 + 8px); }
 #app .srow .l2 .codicon { font-size: 12px; margin-right: 3px; }
+/* A suggestion: kind and title, why, then its command with its buttons. */
+.sug { display: block; padding: 6px 12px; }
+.sug + .sug { border-top: 1px solid var(--line-soft); }
+.sug .l1 { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.sug .kind { flex: none; font: 600 0.78em/1.5 var(--mono); letter-spacing: 0.05em; color: var(--fg-2); }
+.sug .t { font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
+.sug .l2 { display: block; margin-top: 1px; font-size: 0.92em; color: var(--fg-2); overflow-wrap: anywhere; }
+.sug .cmdrow { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+.sug .cmdrow code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub3 { margin: 6px 12px 2px; font-size: 0.86em; font-weight: 600; color: var(--fg-2); }
 .snone, .snote { padding: 5px 12px; color: var(--fg-2); }
 .part .bar-row { grid-template-columns: minmax(0, 96px) minmax(0, 1fr) 30px; gap: 8px; min-height: 22px; padding: 3px 12px; border-top: 0; }

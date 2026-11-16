@@ -84,6 +84,21 @@ switch (command) {
     });
     break;
   }
+  case "watch": {
+    // Like the real one: the fleet once, then a line per change, until its
+    // input closes. Here the "change" is a second line a moment later.
+    if (!rest.includes("--json")) unknown("watch");
+    const o = fixture("overview");
+    if (roots.length) o.roots = roots;
+    const line = (seq, reason, changed) => process.stdout.write(JSON.stringify({
+      type: "fleet", seq, reason, changed, overview: o, launchpad: fixture("launchpad"), suggestions: fixture("suggestions"),
+    }) + "\n");
+    line(1, "start", o.repos.map((r) => r.id));
+    setTimeout(() => line(2, "git", [o.repos[0].id]), 50);
+    process.stdin.on("end", () => process.exit(0));
+    process.stdin.resume();
+    break;
+  }
   case "fetch": case "pull": case "push": case "commit": case "stash":
     print(`\n  cohors (fixtures)\n  ${command} ${rest.join(" ")}\n\n  This stand-in does not touch any repository.\n\n`);
     break;
