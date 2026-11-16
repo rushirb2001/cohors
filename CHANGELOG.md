@@ -26,6 +26,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.8] — 2026-11-16
+
+### Added
+
+- **Claude can ask "where did I leave off?" across your repositories.** The
+  MCP server has a `next` tool: the agent conversations to resume (each with
+  its `cohors agent --resume` command), the fleet's next steps, your focus
+  board and up to two setup tips, the same list `cohors next --json` prints.
+  Session titles and commands are passed on as information, never followed.
+
 ## [0.8.7] — 2026-11-16
 
 ### Added

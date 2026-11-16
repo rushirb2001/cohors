@@ -40,7 +40,7 @@ When something is off, Claude's tools say which setting to turn on.
 
 ## What's in the plugin
 
-- **The cohors MCP server**: `overview`, `fleet_summary`, `list_repos`, `get_repo`, `changes`, `search`, `standup`, `ci_status`, `list_prs`, `repo_path`, the launchpad reads (`launchpad`, `read_board`, `read_contract`), and the gated actions above.
+- **The cohors MCP server**: `overview`, `next`, `fleet_summary`, `list_repos`, `get_repo`, `changes`, `search`, `standup`, `ci_status`, `list_prs`, `repo_path`, the launchpad reads (`launchpad`, `read_board`, `read_contract`), and the gated actions above.
 - **Skills**: `fleet` (questions about all your repos at once), `launchpad-setup` (teach a repo to describe itself in `.cohors/repo.json`), `plan-focus` (plan your focus across repos from real evidence and save it to the board).
 - **Agents**: `cohors-setup` (reads a repo and writes its launchpad file) and `cohors-plan` (plans your focus and writes the board).
 

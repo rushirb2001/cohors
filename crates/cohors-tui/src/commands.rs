@@ -2823,7 +2823,7 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, roots: &[String], color: bool) -
     let rows: Vec<(String, String)> = vec![
         (
             "reads".to_string(),
-            "overview, list_repos, get_repo, fleet_summary, standup, search, changes, repo_path, list_prs, ci_status"
+            "overview, next, list_repos, get_repo, fleet_summary, standup, search, changes, repo_path, list_prs, ci_status"
                 .to_string(),
         ),
         (
@@ -2900,6 +2900,18 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
     let mode = crate::update::effective_mode(scanner.updates_mode());
     crate::update::watch(mode, false, |_| true);
     let update = move || crate::update::remembered(mode);
+    // `next` ends with the setup tips, as `cohors next --json` does. Like the
+    // JSON output, the server never counts a tip as shown: only a person
+    // reading the list does.
+    let tip_env = cohors_fleet::tips::TipEnv::from_env();
+    let tips = |now: i64| {
+        tip_env
+            .as_ref()
+            .map(|env| cohors_fleet::tips::current(env, now, cohors_core::suggest::TIPS_AT_ONCE))
+            .unwrap_or_default()
+    };
+    let user_home = cohors_config::paths::home_dir().ok();
+    let cwd = std::env::current_dir().ok();
     // Started by the Claude Code plugin, the server lives exactly as long as
     // the session, so it notes the session's start and end on the launchpad's
     // activity log itself (the plugin ships no hooks). Best-effort: a failure
@@ -2921,7 +2933,12 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
         &actions_config.run_allowlist,
         actions_config.max_action_targets,
         scanner.author_email().as_deref(),
-        &update,
+        cohors_mcp::Sources {
+            update: &update,
+            tips: &tips,
+            user_home: user_home.as_deref().map(|h| h.as_std_path()),
+            cwd: cwd.as_deref(),
+        },
     );
     note("end");
     served
