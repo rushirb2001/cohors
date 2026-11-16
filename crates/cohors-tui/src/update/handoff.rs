@@ -21,7 +21,9 @@ use std::process::Command;
 
 use anyhow::{Result, anyhow};
 use cohors_config::UpdatesMode;
-use cohors_core::update::{HandoffFacts, Switches, hand_off_to, is_newer, set_up_notice, sets_up};
+use cohors_core::update::{
+    Channel, HandoffFacts, Switches, hand_off_to, is_newer, set_up_notice, sets_up,
+};
 use serde::{Deserialize, Serialize};
 
 use super::managed::{self, Busy, EXE, Layout, Lock};
@@ -249,17 +251,26 @@ pub(crate) fn handed_from() -> Option<(String, String, String)> {
 
 /// Run `binary` in this process's place with the same arguments. On unix it
 /// replaces this process; elsewhere it runs as a child with this process's
-/// input and output, and its exit code becomes this one's. Only returns if
-/// starting it failed.
-pub(crate) fn exec(ctx: &Ctx, binary: &Path) -> std::io::Error {
+/// input and output, and its exit code becomes this one's. `also` is one more
+/// variable for the started process (how an update at start says it happened).
+/// Only returns if starting it failed.
+pub(crate) fn exec(ctx: &Ctx, binary: &Path, also: Option<(&str, &str)>) -> std::io::Error {
     let mut command = Command::new(binary);
-    command
-        .args(std::env::args_os().skip(1))
-        .env(HANDOFF_VAR, "1")
-        .env(FROM_VERSION_VAR, &ctx.current)
-        .env(FROM_CHANNEL_VAR, ctx.installed_as.label());
-    if let Some(running) = &ctx.running {
-        command.env(FROM_VAR, running);
+    command.args(std::env::args_os().skip(1));
+    // A hand-off says where it came from. cohors' own copy starting a newer
+    // one (after an update at start) is not a hand-off: it keeps whatever it
+    // was itself handed from.
+    if ctx.installed_as != Channel::Managed {
+        command
+            .env(HANDOFF_VAR, "1")
+            .env(FROM_VERSION_VAR, &ctx.current)
+            .env(FROM_CHANNEL_VAR, ctx.installed_as.label());
+        if let Some(running) = &ctx.running {
+            command.env(FROM_VAR, running);
+        }
+    }
+    if let Some((name, value)) = also {
+        command.env(name, value);
     }
     #[cfg(unix)]
     {
@@ -282,7 +293,7 @@ mod tests {
     use crate::update::lookup::Lookup;
     use crate::update::managed::Origin;
     use crate::update::managed::tests::installed;
-    use cohors_core::update::{Channel, Setting};
+    use cohors_core::update::Setting;
     use std::os::unix::fs::PermissionsExt;
 
     /// A Homebrew copy of cohors 0.7.7 in a temporary home.

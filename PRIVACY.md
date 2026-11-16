@@ -58,7 +58,8 @@ the Claude Code plugin, the browser dashboard and the VS Code extension.
     registry, `registry.npmjs.org/@cohors%2fcli` (npm, npx); or crates.io's
     index, `index.crates.io/co/ho/cohors` (`cargo install`).
 
-  The dashboard asks when it opens and every few minutes while it is open; a
+  The dashboard asks before it opens (it waits about a second for the
+  answer) and every few minutes while it is open; a
   command you run at a terminal asks in the background while it runs; the
   MCP server asks while it runs. Asks closer together than two minutes share
   one answer, and each is a conditional request, so while nothing has changed

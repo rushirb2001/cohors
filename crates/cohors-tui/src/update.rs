@@ -8,8 +8,11 @@
 //! as an error that stops cohors.
 //!
 //! When it looks:
-//! - the dashboard, on every launch (in the background, never delaying it)
-//!   and again every few minutes while it runs ([`watch`]);
+//! - the dashboard, before it opens ([`start`]): a copy that updates through
+//!   cohors' own install waits about a second to hear of a newer release,
+//!   installs it and starts it, so the dashboard that opens is the new one;
+//!   every other copy looks in the background, never delaying the dashboard;
+//! - the dashboard again, every few minutes while it runs ([`watch`]);
 //! - one-off commands, in the background; the notice is printed at exit
 //!   ([`check_in_background`], [`print_notice`]), and never waited for;
 //! - the MCP server, like the dashboard, but it only reports;
@@ -36,10 +39,10 @@ mod managed;
 mod uninstall;
 
 use std::collections::BTreeMap;
-use std::io::IsTerminal;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{OnceLock, mpsc};
+use std::sync::{Arc, OnceLock, mpsc};
 use std::time::Duration;
 
 use anyhow::{Context, Result, anyhow, bail};
@@ -63,6 +66,21 @@ const RECHECK_EVERY: Duration = Duration::from_secs(5 * 60);
 /// Looks closer together than this (seconds) share one answer, so a burst of
 /// one-off commands asks once.
 pub(crate) const CHECK_FLOOR: i64 = 2 * 60;
+/// How long the dashboard's start waits to hear whether a newer release is
+/// out. Asking is usually one bodiless `304`, and launches less than
+/// [`CHECK_FLOOR`] apart do not ask at all. A network slower than this is not
+/// waited for: the look carries on behind the dashboard.
+const ASK_WAIT: Duration = Duration::from_secs(1);
+/// How long the start then waits for that release to download and pass its
+/// check, before it opens the dashboard on this version instead.
+const INSTALL_WAIT: Duration = Duration::from_secs(20);
+/// While a release is being installed (by this cohors or another one), look
+/// again this soon, so the header offers the restart as soon as it lands.
+const RECHECK_WHILE_INSTALLING: Duration = Duration::from_secs(5);
+/// Set in a cohors that was started right after an update at start; such a
+/// run never updates at start again, so a release that somehow still reads as
+/// older than the newest can never restart in a loop.
+const UPDATED_AT_START_VAR: &str = "COHORS_UPDATED_AT_START";
 
 // ── What cohors remembers between runs ──────────────────────────────────────
 
@@ -233,25 +251,65 @@ pub struct Start {
     /// Never print the one-time notice (`cohors mcp`: stdout and stderr belong
     /// to the client).
     pub quiet: bool,
+    /// The dashboard: install a newer release before it opens, so the one
+    /// that opens is the new one. Never for a one-off command, a server or a
+    /// hook, which must not wait on the network or print a line of their own.
+    pub update_first: bool,
 }
 
 /// Before any command runs: on a copy installed by a package manager, set up
 /// cohors' own install on the first run, then hand control to it when it is
-/// newer. Returns only when this copy is the one to run (nothing newer, a
-/// hand-off is not allowed, or the managed copy failed its check, which is
-/// recorded for `cohors doctor`).
+/// newer. When this copy is the newest one installed and the command is the
+/// dashboard, a release newer still is installed first and started in its
+/// place ([`update_at_start`]). Returns only when this copy is the one to
+/// run (nothing newer, a hand-off is not allowed, or the newer copy failed
+/// its check or would not start, which is recorded for `cohors doctor`).
 pub fn start(how: Start) {
     // Worked out here rather than through `ctx()`, which the rest of the run
-    // works out after this, so it sees the copy the setup just made.
+    // works out after this, so it sees the copy the setup just made. In an
+    // `Arc` because the look at start runs on a thread of its own.
     let Some(ctx) = Ctx::from_env() else { return };
+    let ctx = Arc::new(ctx);
     let env = handoff::Env::from_process(how.configured);
     let now = now_secs();
     let target = handoff::prepare(&ctx, &env, how.set_up, now);
     if !how.quiet && std::io::stderr().is_terminal() {
         handoff::announce_once(&ctx.layout);
     }
-    let Some(binary) = target else { return };
-    let err = handoff::exec(&ctx, &binary);
+    if let Some(binary) = target {
+        // A newer copy is installed already. It runs, and it is the one that
+        // looks for a release newer still: this older copy must not, or it
+        // would install again what is already there.
+        hand_over(&ctx, &binary, None, now);
+        return;
+    }
+    // The line it prints and the dashboard both need a person at a terminal.
+    let at_terminal = std::io::stdin().is_terminal()
+        && std::io::stdout().is_terminal()
+        && std::io::stderr().is_terminal();
+    let again = std::env::var_os(UPDATED_AT_START_VAR).is_some_and(|v| !v.is_empty());
+    if !(how.update_first && at_terminal && !again && updates_at_start(&ctx.channel, &env)) {
+        return;
+    }
+    if update_at_start(&ctx) != AtStart::Installed {
+        return;
+    }
+    // A package manager's copy hands off to what was just installed, checked
+    // first as every hand-off is. cohors' own copy never hands off, so it
+    // starts the new version itself (the install has just checked it).
+    let newer = match ctx.installed_as {
+        Channel::Managed => newer_active(&ctx),
+        _ => handoff::prepare(&ctx, &env, false, now),
+    };
+    if let Some(binary) = newer {
+        hand_over(&ctx, &binary, Some((UPDATED_AT_START_VAR, "1")), now);
+    }
+}
+
+/// Start `binary` in this process's place. Only returns if that failed, with
+/// why recorded for `cohors doctor`; this copy then runs.
+fn hand_over(ctx: &Ctx, binary: &Path, also: Option<(&str, &str)>, now: i64) {
+    let err = handoff::exec(ctx, binary, also);
     let version = binary
         .parent()
         .and_then(|dir| dir.file_name())
@@ -260,9 +318,125 @@ pub fn start(how: Start) {
     handoff::fell_back(
         &ctx.layout,
         &version,
-        &format!("starting {} failed: {err}", ctx.layout.show(&binary)),
+        &format!("starting {} failed: {err}", ctx.layout.show(binary)),
         now,
     );
+}
+
+// ── Updating before the dashboard opens ─────────────────────────────────────
+
+/// Whether the dashboard's start brings this copy up to date first: only a
+/// copy that updates through cohors' own install (one download, not a package
+/// manager's upgrade, which can take minutes), with `updates = "auto"` and
+/// nothing in the environment against it. Never a dev build.
+fn updates_at_start(channel: &Channel, env: &handoff::Env) -> bool {
+    let s = &env.switches;
+    *channel == Channel::Managed
+        && s.setting == Setting::Auto
+        && !(s.disable_updates || s.no_update || s.ci)
+        && !env.dev_build
+}
+
+/// What the look at start tells the thread that waits for it.
+enum Heard {
+    /// A newer release was found and its install has begun.
+    Installing(String),
+    /// The look is over; this is where the update stands.
+    Done(Option<UpdateState>),
+}
+
+/// How bringing this copy up to date before the dashboard went.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum AtStart {
+    /// Nothing newer, or no answer in time: this version opens.
+    Nothing,
+    /// The newer version is installed, and is the one to start.
+    Installed,
+    /// The install failed: this version opens, and the header says so.
+    Failed,
+    /// The install is still going: this version opens, and the header offers
+    /// the restart when it lands.
+    StillInstalling,
+}
+
+/// Look for a newer release and install it, on a thread, and wait for it
+/// within bounds: [`ASK_WAIT`] to hear, then [`INSTALL_WAIT`] to install. One
+/// line on stderr says what is happening once an install begins, and how it
+/// ended. Whatever is not waited for carries on behind the dashboard, whose
+/// own looks ([`watch`]) pick the result up.
+fn update_at_start(ctx: &Arc<Ctx>) -> AtStart {
+    let (tx, heard) = mpsc::channel();
+    let looking = Arc::clone(ctx);
+    std::thread::spawn(move || {
+        let said = tx.clone();
+        let say = move |state: UpdateState| {
+            if let UpdateState::Installing { version } = state {
+                let _ = said.send(Heard::Installing(version));
+            }
+        };
+        let state = look(&looking, UpdatesMode::Auto, true, now_secs(), &say);
+        let _ = tx.send(Heard::Done(state));
+    });
+    let mut told = false;
+    let outcome = await_look(&heard, ASK_WAIT, INSTALL_WAIT, &mut |version| {
+        told = true;
+        eprint!("cohors: updating to {version} before the dashboard opens…");
+        let _ = std::io::stderr().flush();
+    });
+    if told {
+        let current = &ctx.current;
+        match outcome {
+            AtStart::Installed => eprintln!(" done."),
+            AtStart::Failed => {
+                eprintln!(" it failed. Opening {current}; `cohors doctor` says why.")
+            }
+            AtStart::StillInstalling => eprintln!(
+                " still downloading. Opening {current}; the dashboard offers the restart when it is ready."
+            ),
+            AtStart::Nothing => eprintln!(),
+        }
+    }
+    outcome
+}
+
+/// Wait for the look at start: `ask_wait` to hear of a newer release, then
+/// `install_wait` for its install. `tell` hears the version once, when an
+/// install begins. Kept apart from the thread and the terminal so its timing
+/// can be tested.
+fn await_look(
+    heard: &mpsc::Receiver<Heard>,
+    ask_wait: Duration,
+    install_wait: Duration,
+    tell: &mut dyn FnMut(&str),
+) -> AtStart {
+    match heard.recv_timeout(ask_wait) {
+        // Installed by an earlier run, and not the one running yet.
+        Ok(Heard::Done(Some(UpdateState::Ready { .. }))) => AtStart::Installed,
+        // Nothing newer, a release this copy only reports, or an install that
+        // failed earlier (the header says so; no line for it here).
+        Ok(Heard::Done(_)) => AtStart::Nothing,
+        // No answer in time: the dashboard opens, the look carries on.
+        Err(_) => AtStart::Nothing,
+        Ok(Heard::Installing(version)) => {
+            tell(&version);
+            match heard.recv_timeout(install_wait) {
+                Ok(Heard::Done(Some(UpdateState::Ready { .. }))) => AtStart::Installed,
+                Ok(Heard::Done(Some(UpdateState::Failed { .. }))) => AtStart::Failed,
+                // Another cohors holds the update lock, or it took too long.
+                _ => AtStart::StillInstalling,
+            }
+        }
+    }
+}
+
+/// The managed copy's active binary, when it is newer than the running one.
+fn newer_active(ctx: &Ctx) -> Option<PathBuf> {
+    let active = managed::active_version(&ctx.layout)?;
+    if !is_newer(&active, &ctx.current) {
+        return None;
+    }
+    let binary = ctx.layout.versions().join(&active).join(managed::EXE);
+    binary.is_file().then_some(binary)
 }
 
 /// This process's context, worked out once.
@@ -494,7 +668,13 @@ pub fn watch(
                 }
                 last = Some(state);
             }
-            std::thread::sleep(RECHECK_EVERY);
+            // An install under way (here, at start, or in another cohors)
+            // lands in seconds, not minutes.
+            let wait = match &last {
+                Some(UpdateState::Installing { .. }) => RECHECK_WHILE_INSTALLING,
+                _ => RECHECK_EVERY,
+            };
+            std::thread::sleep(wait);
         }
     });
 }
@@ -529,12 +709,17 @@ pub fn check_in_background(configured: UpdatesMode) -> Pending {
 /// known: this run's answer if it came in time, otherwise what the last look
 /// found. It never waits for the network.
 pub fn print_notice(pending: Pending) {
-    let Some(answer) = pending.answer else { return };
-    let state = answer
-        .try_recv()
-        .unwrap_or_else(|_| remembered(pending.mode));
-    if let Some(state) = state {
+    if let Some(state) = pending.state() {
         eprintln!("\n  {}", state.notice());
+    }
+}
+
+impl Pending {
+    /// Where the update stands: this run's answer if it came in time,
+    /// otherwise what the last look found. It never waits for the network.
+    pub fn state(self) -> Option<UpdateState> {
+        let answer = self.answer?;
+        answer.try_recv().unwrap_or_else(|_| remembered(self.mode))
     }
 }
 
@@ -1034,6 +1219,166 @@ mod tests {
         assert_eq!(memo.failed.unwrap().version, "0.7.6");
     }
 
+    fn at_start_env() -> handoff::Env {
+        handoff::Env {
+            handed_off: false,
+            dev_build: false,
+            switches: Switches {
+                setting: Setting::Auto,
+                disable_updates: false,
+                no_update: false,
+                ci: false,
+            },
+        }
+    }
+
+    #[test]
+    fn only_cohors_own_copy_in_auto_updates_before_the_dashboard() {
+        let env = at_start_env();
+        assert!(updates_at_start(&Channel::Managed, &env));
+        // A copy that was handed control is the managed copy, and still does.
+        let handed = handoff::Env {
+            handed_off: true,
+            ..env
+        };
+        assert!(updates_at_start(&Channel::Managed, &handed));
+        // A package manager's upgrade can take minutes, a source build is
+        // exactly what was built, and the rest only say what to run.
+        for channel in [
+            Channel::Homebrew,
+            Channel::Installer,
+            Channel::Source,
+            Channel::Npm,
+            Channel::Cargo,
+        ] {
+            assert!(!updates_at_start(&channel, &env), "{channel:?}");
+        }
+        let dev = handoff::Env {
+            dev_build: true,
+            ..env
+        };
+        assert!(!updates_at_start(&Channel::Managed, &dev));
+        let with = |switches: Switches| handoff::Env { switches, ..env };
+        for switches in [
+            Switches {
+                setting: Setting::Notify,
+                ..env.switches
+            },
+            Switches {
+                setting: Setting::Off,
+                ..env.switches
+            },
+            Switches {
+                no_update: true,
+                ..env.switches
+            },
+            Switches {
+                disable_updates: true,
+                ..env.switches
+            },
+            Switches {
+                ci: true,
+                ..env.switches
+            },
+        ] {
+            assert!(
+                !updates_at_start(&Channel::Managed, &with(switches)),
+                "{switches:?}"
+            );
+        }
+    }
+
+    /// What the start hears, and what it then does. The waits are generous
+    /// where an answer is already there, and tiny where none ever comes.
+    #[test]
+    fn the_start_waits_for_an_install_it_heard_begin_and_for_nothing_else() {
+        let long = Duration::from_secs(30);
+        let short = Duration::from_millis(20);
+        let ready = || {
+            Some(UpdateState::Ready {
+                version: "0.7.8".into(),
+            })
+        };
+        let failed = || {
+            Some(UpdateState::Failed {
+                version: "0.7.8".into(),
+                command: "cohors update".into(),
+                reason: "no network".into(),
+            })
+        };
+        let installing = || Heard::Installing("0.7.8".into());
+        // What was sent, the two waits, the outcome, and what was announced.
+        let run = |sent: Vec<Heard>, ask: Duration, install: Duration| {
+            let (tx, heard) = mpsc::channel();
+            for message in sent {
+                tx.send(message).unwrap();
+            }
+            let mut told = Vec::new();
+            let outcome = await_look(&heard, ask, install, &mut |version| {
+                told.push(version.to_string())
+            });
+            // `tx` is still alive here: a silent look is a slow one, not a
+            // finished one.
+            drop(tx);
+            (outcome, told)
+        };
+        let nothing_told = Vec::<String>::new();
+
+        // Nothing newer: straight on, nothing said.
+        assert_eq!(
+            run(vec![Heard::Done(None)], long, long),
+            (AtStart::Nothing, nothing_told.clone())
+        );
+        // A release this copy only reports is the header's to say.
+        let available = Some(UpdateState::Available {
+            version: "0.7.8".into(),
+            command: "cohors update".into(),
+        });
+        assert_eq!(
+            run(vec![Heard::Done(available)], long, long).0,
+            AtStart::Nothing
+        );
+        // No answer in time: the dashboard opens on this version.
+        assert_eq!(
+            run(vec![], short, long),
+            (AtStart::Nothing, nothing_told.clone())
+        );
+        // Found, installed: announced once, and the new version starts.
+        assert_eq!(
+            run(vec![installing(), Heard::Done(ready())], long, long),
+            (AtStart::Installed, vec!["0.7.8".to_string()])
+        );
+        // Found, and the install failed.
+        assert_eq!(
+            run(vec![installing(), Heard::Done(failed())], long, long),
+            (AtStart::Failed, vec!["0.7.8".to_string()])
+        );
+        // Found, but the download outlasts the wait: open this version.
+        assert_eq!(
+            run(vec![installing()], long, short),
+            (AtStart::StillInstalling, vec!["0.7.8".to_string()])
+        );
+        // Another cohors holds the update lock.
+        let busy = Some(UpdateState::Installing {
+            version: "0.7.8".into(),
+        });
+        assert_eq!(
+            run(vec![installing(), Heard::Done(busy)], long, long).0,
+            AtStart::StillInstalling
+        );
+        // Installed by an earlier run and not started yet: start it, with no
+        // line about an install that is not happening.
+        assert_eq!(
+            run(vec![Heard::Done(ready())], long, long),
+            (AtStart::Installed, nothing_told.clone())
+        );
+        // An install that failed earlier is not announced again at start.
+        assert_eq!(
+            run(vec![Heard::Done(failed())], long, long),
+            (AtStart::Nothing, nothing_told)
+        );
+    }
+
     #[cfg(unix)]
     mod flow {
         use super::super::*;
@@ -1187,6 +1532,54 @@ mod tests {
             let tmp = tempfile::tempdir().unwrap();
             let ctx = context(tmp.path(), Channel::Managed, "0.7.7\n");
             assert_eq!(look_now(&ctx, true, 1_000), (Vec::new(), None));
+        }
+
+        #[test]
+        fn a_newer_release_is_installed_before_the_dashboard_and_is_what_starts() {
+            let tmp = tempfile::tempdir().unwrap();
+            fake_release(&tmp.path().join("releases"), "0.7.8", "0.7.8");
+            let ctx = Arc::new(context(tmp.path(), Channel::Managed, "0.7.8\n"));
+            // Before: this version is the newest one installed.
+            assert_eq!(newer_active(&ctx), None);
+            assert_eq!(update_at_start(&ctx), AtStart::Installed);
+            // The binary to start is the new version's, and the launcher
+            // (what typing `cohors` runs) points at it too.
+            let newer = ctx.layout.versions().join("0.7.8").join(managed::EXE);
+            assert_eq!(newer_active(&ctx), Some(newer));
+            assert_eq!(
+                managed::linked_version(&ctx.layout).as_deref(),
+                Some("0.7.8")
+            );
+            // The copy that then starts is 0.7.8: it finds nothing to do.
+            let started = Ctx {
+                current: "0.7.8".into(),
+                ..context(tmp.path(), Channel::Managed, "0.7.8\n")
+            };
+            assert_eq!(update_at_start(&Arc::new(started)), AtStart::Nothing);
+            assert_eq!(managed::last_attempt(&ctx.layout).unwrap().to, "0.7.8");
+        }
+
+        #[test]
+        fn a_failed_update_at_start_opens_this_version() {
+            let tmp = tempfile::tempdir().unwrap();
+            // No release folder: the download fails.
+            let ctx = Arc::new(context(tmp.path(), Channel::Managed, "0.7.8\n"));
+            assert_eq!(update_at_start(&ctx), AtStart::Failed);
+            assert_eq!(newer_active(&ctx), None);
+            // The next start does not try again, and has nothing to announce:
+            // the header says it failed.
+            assert_eq!(update_at_start(&ctx), AtStart::Nothing);
+        }
+
+        #[test]
+        fn nothing_newer_at_start_opens_this_version_at_once() {
+            let tmp = tempfile::tempdir().unwrap();
+            let ctx = Arc::new(context(tmp.path(), Channel::Managed, "0.7.7\n"));
+            let began = std::time::Instant::now();
+            assert_eq!(update_at_start(&ctx), AtStart::Nothing);
+            // It answered; it did not sit out the wait.
+            assert!(began.elapsed() < ASK_WAIT, "{:?}", began.elapsed());
+            assert_eq!(newer_active(&ctx), None);
         }
     }
 }

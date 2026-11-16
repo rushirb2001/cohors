@@ -1741,6 +1741,77 @@ fn every_update_state_shows_in_the_header() {
     }
 }
 
+/// The list has no header, so its key bar carries the notice: at the right
+/// end, where an action's result goes, and only when the keys keep their room.
+#[test]
+fn the_list_says_a_newer_cohors_is_out_on_its_key_bar() {
+    use cohors_core::update::UpdateState;
+    let ready = UpdateState::Ready {
+        version: "0.9.0".into(),
+    };
+    let notice = ready.notice_in_dashboard();
+    let last_row = |text: &str| text.lines().last().unwrap().to_string();
+
+    let mut app = detail_app();
+    assert!(!last_row(&render_to_string(&app, 119, 40)).contains("0.9.0"));
+    app.update = Some(ready);
+    let keys = last_row(&render_to_string(&app, 119, 40));
+    assert!(keys.trim_end().ends_with(&notice), "{keys}");
+    // Every key is still there.
+    for label in [
+        "move",
+        "full detail",
+        "next card",
+        "command",
+        "help",
+        "quit",
+    ] {
+        assert!(keys.contains(label), "{label} left the key bar: {keys}");
+    }
+    // An action's result is the more urgent thing to say.
+    app.status = Some("pulled payments".into());
+    let keys = last_row(&render_to_string(&app, 119, 40));
+    assert!(
+        keys.contains("pulled payments") && !keys.contains("0.9.0"),
+        "{keys}"
+    );
+    app.status = None;
+    // Too narrow for the keys and the notice: the keys win.
+    let narrow = last_row(&render_to_string(&app, 80, 40));
+    assert!(
+        !narrow.contains("0.9.0") && narrow.contains("quit"),
+        "{narrow}"
+    );
+    // A notice longer than the room (a source build's command) is cut, and
+    // still says which version.
+    app.update = Some(UpdateState::Available {
+        version: "0.9.0".into(),
+        command: "cargo install --git https://github.com/rushirb2001/cohors cohors".into(),
+    });
+    let cut = last_row(&render_to_string(&app, 119, 40));
+    assert!(
+        cut.contains("Update available: 0.9.0") && cut.trim_end().ends_with('…'),
+        "{cut}"
+    );
+    assert!(cut.contains("quit") && cut.contains("full detail"), "{cut}");
+    app.update = Some(UpdateState::Ready {
+        version: "0.9.0".into(),
+    });
+    // The plain-text tier gets plain characters (its keys are spelled out,
+    // so it needs a wider screen to fit both).
+    let plain = last_row(&render_plain(&app, 140, 40));
+    assert!(
+        plain.contains("Updated to 0.9.0 - restart to use it (R)"),
+        "{plain}"
+    );
+    assert!(plain.is_ascii(), "{plain}");
+    // The overview says it in its header, and only there.
+    app.screen = Screen::Overview;
+    let overview = render_to_string(&app, 170, 40);
+    assert_eq!(overview.matches(&notice).count(), 1, "{overview}");
+    assert!(!last_row(&overview).contains("0.9.0"), "{overview}");
+}
+
 // ── The mouse ────────────────────────────────────────────────────────────────
 //
 // Each test draws a real frame, takes the position of what it clicks from

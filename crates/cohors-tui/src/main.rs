@@ -77,7 +77,8 @@ fn main() -> anyhow::Result<()> {
     // whenever it is newer (returning here only when this copy is the one to
     // run). Not for `install` and `uninstall`, which manage that install;
     // `doctor` may be handed off but never sets anything up; `mcp` and `hook`
-    // never print the one-time notice (a client reads their output).
+    // never print the one-time notice (a client reads their output). Only the
+    // dashboard installs a newer release before it opens.
     if !matches!(
         cli.command,
         Some(Command::Install { .. } | Command::Uninstall { .. })
@@ -91,6 +92,7 @@ fn main() -> anyhow::Result<()> {
                 cli.command,
                 Some(Command::Mcp { .. } | Command::Hook { .. })
             ),
+            update_first: cli.command.is_none(),
         });
     }
     // One-off commands end with a line about a newer cohors, when one is known.

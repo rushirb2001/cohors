@@ -432,7 +432,8 @@ fn braille_chart(activity: &[u32]) -> Option<[Vec<(char, bool)>; 2]> {
 }
 
 /// The notice about a newer cohors, in the dashboard's words (which name the
-/// `R` key once a restart is all that is left), and its style.
+/// `R` key once a restart is all that is left), and its style. The plain-text
+/// tier gets it in plain characters.
 fn update_notice(app: &App, theme: &Theme) -> Option<(String, Style)> {
     use cohors_core::update::UpdateState;
     let state = app.update.as_ref()?;
@@ -441,7 +442,29 @@ fn update_notice(app: &App, theme: &Theme) -> Option<(String, Style)> {
         UpdateState::Failed { .. } => theme.warn(),
         _ => theme.accent(),
     };
-    Some((state.notice_in_dashboard(), style))
+    Some((theme.glyphs.plain(&state.notice_in_dashboard()), style))
+}
+
+/// The fewest columns the key bar's notice is worth showing in: enough to say
+/// that there is an update and which version, when the rest is cut.
+const KEY_BAR_UPDATE_MIN: usize = 28;
+
+/// The same notice for the key bar of the list, which has no header to carry
+/// it: without this, someone who lives on that screen is never told. The
+/// overview says it in its header, so it is not said twice there. It is cut
+/// to `room` columns, and left off when that is too few to be worth it.
+fn key_bar_update(app: &App, room: usize, theme: &Theme) -> Option<Line<'static>> {
+    if app.screen == Screen::Overview || app.mode == Mode::Filter {
+        return None;
+    }
+    let (notice, style) = update_notice(app, theme)?;
+    // A column of margin on each side.
+    let room = room.saturating_sub(2);
+    if room < KEY_BAR_UPDATE_MIN.min(notice.chars().count()) {
+        return None;
+    }
+    let notice = text::clip(&notice, room, theme.glyphs.ellipsis());
+    Some(Line::from(Span::styled(format!(" {notice} "), style)))
 }
 
 /// The header on a short screen: everything that matters, on one line.
@@ -1418,12 +1441,20 @@ fn render_no_repositories(frame: &mut Frame, area: Rect, app: &App, theme: &Them
 // ── Key bar ──────────────────────────────────────────────────────────────────
 
 /// The keys that work everywhere on the current screen, on the bottom line.
-/// A status message (an action's result) takes the right end of the same line.
+/// A status message (an action's result) takes the right end of the same line;
+/// on the list, so does the notice about a newer cohors when nothing else is
+/// being said, and only where it leaves the keys their room.
 pub(crate) fn render_key_bar(frame: &mut Frame, area: Rect, app: &App, theme: &Theme) {
     if area.height == 0 {
         return;
     }
-    let toast = toast_line(app, theme);
+    let toast = toast_line(app, theme).or_else(|| {
+        // Never at the cost of a key: the notice gets the columns the keys
+        // leave free at their closest spacing.
+        let hints = key_bar_width(&key_bar_hints(app, theme), 2);
+        let room = (area.width as usize).saturating_sub(2 + hints + 2);
+        key_bar_update(app, room, theme)
+    });
     let toast_width = toast.as_ref().map_or(0, |t| t.width());
     // The hints get what the status message leaves free, less a left margin.
     let room = (area.width as usize).saturating_sub(2 + toast_width);

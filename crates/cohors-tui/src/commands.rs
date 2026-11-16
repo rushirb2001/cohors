@@ -2377,6 +2377,7 @@ fn launch_screen(
     roots: &[(String, String)],
     first_run: bool,
     tip: Option<&cohors_core::suggest::Suggestion>,
+    update: Option<&str>,
     color: bool,
 ) -> String {
     let groups = found_groups(overview, roots);
@@ -2471,8 +2472,15 @@ fn launch_screen(
     }
     out.push('\n');
 
-    // One quiet line about a part of cohors not used yet (ADR-065).
-    if let Some(tip) = tip {
+    // A newer cohors, when one is known, in the place of the tip: the screen
+    // keeps its height, and the notice is the more useful of the two.
+    // Otherwise one quiet line about a part of cohors not used yet (ADR-065).
+    if let Some(update) = update {
+        out.push_str(&format!(
+            "  {}\n\n",
+            bold(color, &clip(update, width.saturating_sub(2)))
+        ));
+    } else if let Some(tip) = tip {
         out.push_str(&tip_line(tip, width, color));
     }
     out.push_str(&key_bar(
@@ -2776,6 +2784,8 @@ fn launch(scanner: &crate::scan::Scanner, roots: &[String], first_run: bool) -> 
         eprint!("  {} {}…", dim(color, "scanning"), roots.join(", "));
         let _ = std::io::stderr().flush();
     }
+    // Look for a newer cohors while the scan runs; never waited for.
+    let update = interactive.then(|| crate::update::check_in_background(scanner.updates_mode()));
     let repos = scanner.scan();
     if announce {
         eprint!("\r\x1b[2K"); // carriage return, then erase the line
@@ -2801,12 +2811,23 @@ fn launch(scanner: &crate::scan::Scanner, roots: &[String], first_run: bool) -> 
     let tip = tip_env
         .as_ref()
         .and_then(|env| cohors_fleet::tips::current_with_first_run(env, now_secs(), 1).pop());
+    let update = update
+        .and_then(crate::update::Pending::state)
+        .map(|state| state.notice());
     print!(
         "{}",
-        launch_screen(&overview, &pairs, first_run, tip.as_ref(), color)
+        launch_screen(
+            &overview,
+            &pairs,
+            first_run,
+            tip.as_ref(),
+            update.as_deref(),
+            color
+        )
     );
     let _ = std::io::stdout().flush();
-    if let (Some(env), Some(tip)) = (&tip_env, &tip) {
+    // The tip counts as shown only when it was: the notice takes its place.
+    if let (Some(env), Some(tip), None) = (&tip_env, &tip, &update) {
         cohors_fleet::tips::note_shown(env, std::slice::from_ref(tip), now_secs());
     }
 
@@ -3284,7 +3305,9 @@ mod tests {
                     ascii,
                     width: 80,
                 };
-                let screen = look::with(current, || launch_screen(&o, &roots, false, None, false));
+                let screen = look::with(current, || {
+                    launch_screen(&o, &roots, false, None, None, false)
+                });
                 let glyphs = if ascii { "ascii" } else { "unicode" };
                 insta::assert_snapshot!(format!("launch_screen_{}_{glyphs}", style.name()), screen);
             }
@@ -3307,7 +3330,9 @@ mod tests {
             ascii: false,
             width: 80,
         };
-        let screen = look::with(current, || launch_screen(&o, &roots, true, None, false));
+        let screen = look::with(current, || {
+            launch_screen(&o, &roots, true, None, None, false)
+        });
         insta::assert_snapshot!("launch_screen_first_run", screen);
     }
 
@@ -3319,7 +3344,7 @@ mod tests {
         let o = cohors_core::overview(&fleet, &entries, &board, now);
         let roots = [("~/code".to_string(), "~/code".to_string())];
 
-        let w = launch_screen(&o, &roots, false, None, false);
+        let w = launch_screen(&o, &roots, false, None, None, false);
         assert!(w.contains(&o.headline)); // real counts, not just a folder name
         assert!(w.contains("in ~/code")); // where it looked
         // What was found there: the count, and the repos by name.
@@ -3341,7 +3366,7 @@ mod tests {
         assert!(w.contains("open the dashboard") && w.contains("quit"));
         assert!(!w.contains("Looking in")); // only the first run lists folders
         assert!(!w.contains('\x1b'));
-        assert!(launch_screen(&o, &roots, false, None, true).contains('\x1b'));
+        assert!(launch_screen(&o, &roots, false, None, None, true).contains('\x1b'));
     }
 
     /// A setup tip is one line above the keys, with how to hide it when that
@@ -3371,9 +3396,11 @@ mod tests {
             ascii: false,
             width: 96,
         };
-        let without = look::with(current, || launch_screen(&o, &roots, false, None, false));
+        let without = look::with(current, || {
+            launch_screen(&o, &roots, false, None, None, false)
+        });
         let with = look::with(current, || {
-            launch_screen(&o, &roots, false, Some(&tips[0]), false)
+            launch_screen(&o, &roots, false, Some(&tips[0]), None, false)
         });
         let line = with.lines().find(|l| l.contains("Tip:")).expect("{with}");
         assert_eq!(
@@ -3390,7 +3417,7 @@ mod tests {
 
         // Too long for the line: the command is left to `cohors next`.
         let claude = look::with(current, || {
-            launch_screen(&o, &roots, false, Some(&tips[1]), false)
+            launch_screen(&o, &roots, false, Some(&tips[1]), None, false)
         });
         let line = claude.lines().find(|l| l.contains("Tip:")).unwrap();
         assert!(
@@ -3404,13 +3431,59 @@ mod tests {
         // and nothing about hiding it (it retires after a day by itself).
         let learn = cohors_core::suggest::learn_tips();
         let keys = look::with(current, || {
-            launch_screen(&o, &roots, false, Some(&learn[2]), false)
+            launch_screen(&o, &roots, false, Some(&learn[2]), None, false)
         });
         let line = keys.lines().find(|l| l.contains("Tip:")).unwrap();
         assert_eq!(
             line,
             "  Tip: Filter the repositories by name as you type   press / in the dashboard"
         );
+    }
+
+    /// A newer cohors is one line above the keys, where the tip would be: it
+    /// takes the tip's place, so the screen is never a line taller for it.
+    #[test]
+    fn a_newer_cohors_takes_the_tips_place_on_the_start_screen() {
+        let now = 1_700_000_000;
+        let o = cohors_core::overview(
+            &cohors_core::demo::fleet(now),
+            &[],
+            &Default::default(),
+            now,
+        );
+        let roots = [("~/code".to_string(), "~/code".to_string())];
+        let tip = &cohors_core::suggest::learn_tips()[2];
+        let notice = "Update available: 0.9.0 — run cohors update";
+        let current = look::Look {
+            style: look::DEFAULT_STYLE,
+            ascii: false,
+            width: 96,
+        };
+        let (plain, tipped, updated) = look::with(current, || {
+            (
+                launch_screen(&o, &roots, false, None, None, false),
+                launch_screen(&o, &roots, false, Some(tip), None, false),
+                launch_screen(&o, &roots, false, Some(tip), Some(notice), false),
+            )
+        });
+        let line = updated.lines().find(|l| l.contains("0.9.0")).unwrap();
+        assert_eq!(line, format!("  {notice}"));
+        assert!(!updated.contains("Tip:"), "{updated}");
+        // Above the keys, and the same height as the screen with a tip.
+        let keys = updated
+            .lines()
+            .position(|l| l.contains("open the dashboard"))
+            .unwrap();
+        let at = updated.lines().position(|l| l.contains("0.9.0")).unwrap();
+        assert!(at < keys, "{updated}");
+        assert_eq!(updated.lines().count(), tipped.lines().count());
+        assert_eq!(updated.replace(&format!("{line}\n\n"), ""), plain);
+        // A long command is cut to the screen, never wrapped.
+        let long = format!("Update available: 0.9.0 — run {}", "x".repeat(200));
+        let cut = look::with(current, || {
+            launch_screen(&o, &roots, false, None, Some(&long), false)
+        });
+        assert!(cut.lines().all(|l| l.chars().count() <= 96), "{cut}");
     }
 
     /// A first run (no config) also says which folders were gathered and how
@@ -3428,7 +3501,7 @@ mod tests {
             ("~/projects".to_string(), "~/projects".to_string()),
             ("~/code".to_string(), "~/code".to_string()),
         ];
-        let w = launch_screen(&o, &roots, true, None, false);
+        let w = launch_screen(&o, &roots, true, None, None, false);
         // Only folders where something was found are listed, with counts.
         assert!(w.contains("Found"), "{w}");
         assert!(w.contains("~/code") && w.contains("repositories"), "{w}");
@@ -3452,7 +3525,7 @@ mod tests {
             ("~/code".to_string(), "~/code".to_string()),
             ("~/work".to_string(), "~/work".to_string()),
         ];
-        let w = launch_screen(&o, &roots, false, None, false);
+        let w = launch_screen(&o, &roots, false, None, None, false);
         assert!(w.contains("in 2 folders: ~/code, ~/work"), "{w}");
         assert!(
             w.contains("2 repositories") && w.contains("1 inside another repository"),
@@ -3543,6 +3616,7 @@ mod tests {
             &o,
             &[("~/code".to_string(), "~/code".to_string())],
             false,
+            None,
             None,
             false,
         );

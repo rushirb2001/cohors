@@ -31,6 +31,33 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.27] — 2026-11-16
+
+### Fixed
+
+- **The dashboard opened on the old version when a newer one was out.** cohors
+  looked for a release in the background, after the dashboard was already
+  open, so the run that found the release was still the old version and you
+  had to press <kbd>R</kbd>, or start it again, to get the new one. Now, when
+  you open the dashboard, cohors first asks whether a newer release is out,
+  installs it, and opens that version. One line says so while it downloads.
+  It waits about a second to hear and up to twenty seconds for the download;
+  on a slow or missing network the dashboard opens at once on the version you
+  have and the update carries on behind it, as before. Only cohors' own
+  self-updating copy does this (the one every Homebrew, pip, uv, npm, cargo
+  and shell-installer copy hands over to), only with `updates = "auto"`, and
+  never for a one-off command, the MCP server, a hook, CI or a build from
+  source.
+- **The notice about a newer cohors was missing from two screens.** The start
+  screen (`cohors --root <dir>`, and a first run) now says it on the line
+  where a tip would be, and the list of repositories says it at the right end
+  of its key bar, where the overview's header is out of sight. Neither screen
+  is a line taller for it.
+- **An update being installed took up to five minutes to offer the restart.**
+  While an install is under way the dashboard looks again every five seconds,
+  so **Updated to … — restart to use it (R)** appears as soon as it lands.
+- The notice in the header uses plain characters on a plain-text terminal.
+
 ## [0.8.26] — 2026-11-16
 
 ### Added
