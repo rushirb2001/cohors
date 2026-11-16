@@ -669,9 +669,9 @@ def launchpad_window(theme):
 
 # What Claude receives: the real overview JSON, trimmed, with its syntax coloured.
 CLAUDE_JSON = """{
-  "headline": "24 repositories. 6 have work at risk, 15 are clean.",
+  "headline": "24 repositories. 4 have work at risk, 3 need a look, 17 are clean.",
   "actions": [
-    { "severity": "risk", "title": "Push 3 commits from 3 repositories" },
+    { "severity": "warn", "title": "Push 1 commit from 1 repository" },
     { "severity": "warn", "title": "Reconcile 1 diverged branch" },
     { "severity": "warn", "title": "Publish 1 branch that has no upstream" },
     …

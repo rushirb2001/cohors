@@ -126,7 +126,7 @@ Ask *"what needs my attention across my repos?"* and Claude gets the whole fleet
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude-light.svg">
-  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude.svg" alt="Claude asks cohors what needs attention; overview returns: 24 repositories, 6 have work at risk, 15 are clean, then the actions: push 3 commits from 3 repositories (risk), reconcile 1 diverged branch, publish 1 branch with no upstream (warn)." width="100%">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude.svg" alt="Claude asks cohors what needs attention; overview returns: 24 repositories, 4 have work at risk, 3 need a look, 17 are clean, then the actions, each a warning: push 1 commit from 1 repository, reconcile 1 diverged branch, publish 1 branch that has no upstream." width="100%">
 </picture>
 
 <br>
@@ -182,7 +182,7 @@ Every view is a command. At a terminal it prints a report; piped, it prints JSON
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts-light.svg">
-  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts.svg" alt="cohors overview prints the fleet headline and Do next: RISK push 3 commits from 3 repositories, with the command cohors push --select ahead,!diverged; WARN reconcile 1 diverged branch. Then cohors push --select ahead --dry-run would push 4 repos, nothing will change: mobile-app, analytics-service, design-system, payment-service." width="100%">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts.svg" alt="cohors overview prints the fleet headline and Do next, each step with the command that starts it: WARN push 1 commit from 1 repository (cohors push --select ahead,!diverged); WARN reconcile 1 diverged branch (cohors scan --select diverged). Then cohors push --select ahead --dry-run would push 2 repos, nothing will change: mobile-app, payment-service." width="100%">
 </picture>
 
 <br>

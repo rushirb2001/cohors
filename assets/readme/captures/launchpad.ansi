@@ -1,16 +1,14 @@
 
-  [1;38;2;181;92;164m▜▒▟███▙▒▛[0m   [1;38;2;181;92;164mcohors[0m
-  [1;38;2;181;92;164m▟██▌█▐██▙[0m   [2mlaunchpad: flows, agents and tasks across your repos[0m
-  [1;38;2;181;92;164m▀▐▖▀█▀▗▌▀[0m   [2m24 repositories, 4 set up, 6 open tasks[0m
+[48;2;58;34;54m  [38;2;224;154;212m▜▒▟███▙▒▛[0m[48;2;58;34;54m   [1;38;2;243;230;239mcohors[0m[48;2;58;34;54m                                                                   [38;2;190;160;184mv0.8.20[0m[48;2;58;34;54m  [0m
+[48;2;58;34;54m  [38;2;224;154;212m▟██▌█▐██▙[0m[48;2;58;34;54m   [38;2;243;230;239mlaunchpad: flows, agents and tasks across your repos[0m[48;2;58;34;54m                              [0m
+[48;2;58;34;54m  [38;2;224;154;212m▀▐▖▀█▀▗▌▀[0m[48;2;58;34;54m   [38;2;190;160;184m24 repositories, 4 set up, 6 open tasks[0m[48;2;58;34;54m                                           [0m
 
-  [1;38;2;181;92;164mFocus[0m
-  [2myour cross-repo board, the short list you chose[0m
-    ◆ [1mBack off on processor rate limits       [0m  [2mpayment-service[0m
-    ○ [1mSlide the cart drawer in                [0m  [2mweb-storefront[0m
-    ○ [1mReprocess late events without a full ba…[0m  [2mevent-ingest[0m
+  [2m──[0m [1;38;2;181;92;164mFocus[0m [2m──────────────────────────────────[0m [2myour cross-repo board, the short list you chose[0m [2m──[0m
+    ◆ [1mBack off on processor rate limits            [0m  [2mpayment-service[0m
+    ○ [1mSlide the cart drawer in                     [0m  [2mweb-storefront[0m
+    ○ [1mReprocess late events without a full backfill[0m  [2mevent-ingest[0m
 
-  [1;38;2;181;92;164mOpen tasks[0m
-  [2m◆ doing, ✕ blocked, ○ to do; most urgent first[0m
+  [2m──[0m [1;38;2;181;92;164mOpen tasks[0m [2m──────────────────────────────[0m [2m◆ doing, ✕ blocked, ○ to do; most urgent first[0m [2m──[0m
     [2m▸[0m [1;38;2;181;92;164mapi-docs[0m  [2m1 open[0m
       ○ Search box in the top navigation  [1mhigh[0m
     [2m▸[0m [1;38;2;181;92;164mevent-ingest[0m  [2m1 open[0m
@@ -22,13 +20,11 @@
       ✕ Keyboard order in the checkout form  [2mblocked[0m
       ○ Slide the cart drawer in  [1mhigh[0m
 
-  [1;38;2;181;92;164mNot set up yet[0m
-  [2m20 repositories with no launchpad file[0m
-    [2madmin-dashboard, analytics-service, api-gateway, auth-service,[0m
-    [2mcart-service, catalog-service, deploy-cli, design-system,[0m
-    [2mfeature-flags, helm-charts, infra, inventory-service, mobile-app,[0m
-    [2mnotification-service, order-service, pricing-service,[0m
-    [2msearch-service, shared-protos, shipping-service, status-page[0m
-    [2m▸[0m [1mcohors agent run setup-repo[0m
+  [2m──[0m [1;38;2;181;92;164mNot set up yet[0m [2m──────────────────────────────────[0m [2m20 repositories with no launchpad file[0m [2m──[0m
+    [2madmin-dashboard, analytics-service, api-gateway, auth-service, cart-service, catalog-service,[0m
+    [2mdeploy-cli, design-system, feature-flags, helm-charts, infra, inventory-service, mobile-app,[0m
+    [2mnotification-service, order-service, pricing-service, search-service, shared-protos,[0m
+    [2mshipping-service, status-page[0m
+    [2m▸[0m [1mcohors agent setup-repo[0m
       [2mrun it inside one; your agent writes the file[0m
 

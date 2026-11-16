@@ -1,12 +1,9 @@
 
-  [1;38;2;181;92;164m▜▒▟███▙▒▛[0m   [1;38;2;181;92;164mcohors[0m
-  [1;38;2;181;92;164m▟██▌█▐██▙[0m   [2mpush: git push across the repos you pick[0m
-  [1;38;2;181;92;164m▀▐▖▀█▀▗▌▀[0m   [2mnever force-pushes, so remote history stays safe[0m
+[48;2;58;34;54m  [38;2;224;154;212m▜▒▟███▙▒▛[0m[48;2;58;34;54m   [1;38;2;243;230;239mcohors[0m[48;2;58;34;54m                                                                   [38;2;190;160;184mv0.8.20[0m[48;2;58;34;54m  [0m
+[48;2;58;34;54m  [38;2;224;154;212m▟██▌█▐██▙[0m[48;2;58;34;54m   [38;2;243;230;239mpush: git push across the repos you pick[0m[48;2;58;34;54m                                          [0m
+[48;2;58;34;54m  [38;2;224;154;212m▀▐▖▀█▀▗▌▀[0m[48;2;58;34;54m   [38;2;190;160;184mnever force-pushes, so remote history stays safe[0m[48;2;58;34;54m                                  [0m
 
-  [1;38;2;181;92;164mDry run[0m
-  [2mwould push 4 repos, nothing will change[0m
-    [2m▸[0m [1mmobile-app       [0m  [2m~/Developer/mobile-app[0m
-    [2m▸[0m [1manalytics-service[0m  [2m~/Developer/analytics-service[0m
-    [2m▸[0m [1mdesign-system    [0m  [2m~/Developer/design-system[0m
-    [2m▸[0m [1mpayment-service  [0m  [2m~/Developer/payment-service[0m
+  [2m──[0m [1;38;2;181;92;164mDry run[0m [2m────────────────────────────────────────[0m [2mwould push 2 repos, nothing will change[0m [2m──[0m
+    [1;38;2;181;92;164m›[0m [1mmobile-app     [0m  [2m~/Developer/mobile-app[0m
+    [1;38;2;181;92;164m›[0m [1mpayment-service[0m  [2m~/Developer/payment-service[0m
 
