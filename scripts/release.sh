@@ -26,6 +26,14 @@ cd "$(dirname "$0")/.."
 version=$(sed -n 's/^version = "\([0-9][^"]*\)"/\1/p' Cargo.toml | head -n 1)
 tag="v$version"
 
+# A date glued to a word means a find-and-replace of "DATE" went too far
+# (it once turned COHORS_NO_UPDATE into COHORS_NO_UP2026-11-16): refuse it.
+glued=$(grep -n -E '[A-Za-z_]20[0-9]{2}-[0-9]{2}-[0-9]{2}|20[0-9]{2}-[0-9]{2}-[0-9]{2}[A-Za-z_]' CHANGELOG.md || true)
+if [ -n "$glued" ]; then
+  echo "CHANGELOG.md has a date run into a word; fix it first:" >&2
+  echo "$glued" >&2
+  exit 1
+fi
 if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
   echo "$tag already exists: version the next change first (scripts/version.sh)" >&2
   exit 1

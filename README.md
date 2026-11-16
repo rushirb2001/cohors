@@ -169,7 +169,7 @@ Or let cohors brief Claude for you: `cohors agent plan-day`, or `cohors agent id
 
 The Docker image serves every repository in the folder mounted at `/repos`. It's built for linux/amd64 and linux/arm64.
 
-Or with cohors installed: `claude mcp add cohors -- "$(which cohors)" mcp`, adding `--allow-writes`, `--allow-run` or `--allow-launchpad`. Listed in the [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
+Or with cohors installed: `claude mcp add --scope user cohors -- "$HOME/.local/bin/cohors" mcp`, the self-updating copy cohors links on its first run (`cohors doctor` prints where it is), adding `--allow-writes`, `--allow-run` or `--allow-launchpad`. Listed in the [MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=io.github.rushirb2001/cohors) as `io.github.rushirb2001/cohors`.
 
 </details>
 

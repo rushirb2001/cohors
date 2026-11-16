@@ -37,16 +37,12 @@ cohors keeps itself up to date however you installed it. Its first run sets up c
 
 `cohors mcp` is a stdio MCP server: your agent gets every repo's state, a search across all of them, your recent commits and each repo's tasks.
 
-Agents start MCP servers with a stripped `PATH`. The `cohors` that npm puts on your `PATH` is a Node script, so it needs `node` on that `PATH` too. Point the client at the binary inside the package instead, which needs nothing:
-
-```sh
-echo "$(npm root -g)/@cohors/cli/node_modules/.bin_real/cohors"
-```
+Agents start MCP servers with a stripped `PATH`, so register cohors by its absolute path. The `cohors` that npm puts on your `PATH` is a Node script that needs `node` there too; use the copy cohors sets up for itself instead. Run `cohors` once: its first run links `~/.local/bin/cohors`, a native binary that needs no Node and keeps itself up to date (`cohors doctor` prints where it is).
 
 **Claude Code**
 
 ```sh
-claude mcp add cohors -- "$(npm root -g)/@cohors/cli/node_modules/.bin_real/cohors" mcp
+claude mcp add --scope user cohors -- "$HOME/.local/bin/cohors" mcp
 ```
 
 **Claude Desktop, Cursor and other clients** (`mcpServers`)
@@ -55,14 +51,14 @@ claude mcp add cohors -- "$(npm root -g)/@cohors/cli/node_modules/.bin_real/coho
 {
   "mcpServers": {
     "cohors": {
-      "command": "/opt/homebrew/lib/node_modules/@cohors/cli/node_modules/.bin_real/cohors",
+      "command": "/Users/you/.local/bin/cohors",
       "args": ["mcp", "--root", "/Users/you/code"]
     }
   }
 }
 ```
 
-`npm root -g` prints the first part of that path on your machine. Without a global install, `"command": "npx", "args": ["-y", "@cohors/cli@latest", "mcp"]` works for a client whose `PATH` has both `npx` and `node`.
+With updates turned off (`updates = "off"` or `"notify"`, or `COHORS_DISABLE_UPDATES`), no copy is set up: use the binary inside the npm package, `"$(npm root -g)/@cohors/cli/node_modules/.bin_real/cohors"`, which npm updates only when you reinstall. Without a global install, `"command": "npx", "args": ["-y", "@cohors/cli@latest", "mcp"]` works for a client whose `PATH` has both `npx` and `node`.
 
 **What the agent may change.** Reads are always on. Each of these is off until you add it after `mcp`:
 
@@ -72,11 +68,13 @@ claude mcp add cohors -- "$(npm root -g)/@cohors/cli/node_modules/.bin_real/coho
 
 CI and pull-request status come from GitHub, through the GitHub CLI's token when `gh` is signed in, or `GITHUB_TOKEN`.
 
-## New in 0.7.7
+## New in 0.8
 
-- Repos nested inside a repo are found, and `cohors discover` lists what a search finds without reading it. `--deep` searches every folder, and the dashboard and MCP server pick up what it finds.
-- `fetch`, `pull`, `push`, `commit` and `stash` run on every selected repo at once.
-- `commit` refuses a repo where a file that looks like a secret (`.env`, a private key) would go in, unless you pass `--allow-secrets`; `--staged` commits only what you staged.
-- Write commands exit 1 when a repo fails, and a rejected push says why.
+- **cohors keeps itself up to date, however you installed it.** Its first run sets up cohors' own copy in `~/.local/share/cohors`, with `~/.local/bin/cohors` linked to it; that copy looks for a release when it starts and every few minutes, checks its SHA-256 and switches to it. `cohors doctor` says how your copy is set up, and `cohors install` sets it up by hand.
+- **Commands named for what you want, in the same words as the MCP tools:** `cohors status`, `show`, `path`, `changes`, `search`, `prs`, `next` (what to do now, and which agent session to resume) and `watch --json` (one JSON line per change).
+- **A command that changes repositories asks first.** At a terminal, `fetch`, `pull`, `push`, `commit`, `stash` and `run` list the repositories they would change and ask `[y/N]`; `--yes` skips the question, and a script is never asked.
+- **Exit codes a script can branch on:** 0 done, 1 something failed or nothing matched, 2 a usage mistake, 130 interrupted.
+- **Shell completions** for bash, zsh, fish, elvish and PowerShell: `cohors completions zsh > ~/.zfunc/_cohors`.
+- **The dashboard** answers the mouse, fits a narrow terminal, and teaches one key a day.
 
-[All release notes](https://github.com/rushirb2001/cohors/releases) · [Documentation](https://github.com/rushirb2001/cohors#readme) · [Issues](https://github.com/rushirb2001/cohors/issues) · MIT licensed. No telemetry; the only connection cohors makes on its own is to GitHub's API.
+Every change: [the release notes](https://github.com/rushirb2001/cohors/releases).

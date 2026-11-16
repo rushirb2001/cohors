@@ -33,12 +33,12 @@ Turn it off with `updates = "notify"` (tell only, set nothing up) or `updates = 
 
 `cohors mcp` is a stdio MCP server: your agent gets every repo's state, a search across all of them, your commits for a standup, and each repo's tasks. Run `cohors mcp` once in a terminal and it prints the exact lines to register it, with this install's absolute path filled in.
 
-Use absolute paths. Agents start MCP servers with a stripped `PATH`, so a bare `cohors` or `uvx` often resolves to nothing and the agent silently gets no tools. `which cohors` or `which uvx` prints the path to use.
+Use absolute paths. Agents start MCP servers with a stripped `PATH`, so a bare `cohors` or `uvx` often resolves to nothing and the agent silently gets no tools. After a `pip`, `pipx` or `uv tool` install, run `cohors` once: its first run links `~/.local/bin/cohors`, the copy that keeps itself up to date (`cohors doctor` prints where it is). Register that one.
 
 **Claude Code**
 
 ```sh
-claude mcp add cohors -- "$(which cohors)" mcp
+claude mcp add --scope user cohors -- "$HOME/.local/bin/cohors" mcp
 ```
 
 or, with nothing installed:
@@ -60,7 +60,7 @@ claude mcp add cohors -- "$(which uvx)" cohors@latest mcp
 }
 ```
 
-With `pip install cohors`, use `"command": "/path/from/which/cohors"` and `"args": ["mcp"]`.
+With `pip install cohors`, use `"command": "/Users/you/.local/bin/cohors"` and `"args": ["mcp"]`; with updates turned off (no copy set up), the path `which cohors` prints.
 
 **What the agent may change.** Reads are always on. Everything else is off until you add the flag after `mcp`:
 
@@ -79,35 +79,27 @@ CI and pull-request status come from GitHub. cohors uses the GitHub CLI's token 
 - **`cohors fetch | pull | push | commit | stash | run --select dirty`**: act on many repos at once. Add `--dry-run` to see what would happen first.
 - **`cohors web`**: the dashboard in your browser. `cohors web --demo` shows it on sample data.
 
+## New in 0.8
+
+- **cohors keeps itself up to date, however you installed it.** Its first run sets up cohors' own copy in `~/.local/share/cohors`, with `~/.local/bin/cohors` linked to it; that copy looks for a release when it starts and every few minutes, checks its SHA-256 and switches to it. `cohors doctor` says how your copy is set up, and `cohors install` sets it up by hand.
+- **Commands named for what you want, in the same words as the MCP tools:** `cohors status`, `show`, `path`, `changes`, `search`, `prs`, `next` (what to do now, and which agent session to resume) and `watch --json` (one JSON line per change).
+- **A command that changes repositories asks first.** At a terminal, `fetch`, `pull`, `push`, `commit`, `stash` and `run` list the repositories they would change and ask `[y/N]`; `--yes` skips the question, and a script is never asked.
+- **Exit codes a script can branch on:** 0 done, 1 something failed or nothing matched, 2 a usage mistake, 130 interrupted.
+- **Shell completions** for bash, zsh, fish, elvish and PowerShell: `cohors completions zsh > ~/.zfunc/_cohors`.
+- **The dashboard** answers the mouse, fits a narrow terminal, and teaches one key a day.
+
+Every change: [the release notes](https://github.com/rushirb2001/cohors/releases).
+
 <!-- whats-new:start -->
-## What's new in 0.7.7
-
-### Added
-
-- **Repos nested inside a repo are found.**
-- **`cohors discover`** lists every repo a search finds without reading them.
-- **`--deep` on `cohors discover` and `cohors scan`** searches every folder at any depth, inside repos too.
-- **`commit` shows what it will commit and won't commit a secret.**
-- **A finished look for the start screen and every plain-terminal view**.
-- **A Docker image, `ghcr.io/rushirb2001/cohors`**, for linux/amd64 and linux/arm64.
-
-### Changed
-
-- **`fetch`, `pull`, `push`, `commit` and `stash` work on every selected repo at once** (the bounded pool the MCP server and the web already use), each line printed as its repo finishes.
+## What's new in 0.8.21
 
 ### Fixed
 
-- **Write commands report failure in their exit status.**
-- **A rejected push says why**.
-- **`run --timeout` stops the whole job**, including what the command started (`a; b`, `npm test`, a backgrounded process), and Ctrl-C stops every running job instead of leaving them behind.
-- **Config mistakes are no longer silent.**
-- **Selectors**: a typo lists the whole vocabulary, and `branch:` takes globs (`branch:feat/*`).
-- **`scan --select`** says how many repos were scanned and how many matched, and lists clean matches by name.
-- **`cohors agent command`** no longer edits the repo's tracked `.gitignore`.
-- `overview` figures read in the singular for one.
-- Discovery never lists a bare repository found inside another repo's working tree (a committed one is attacker-controlled), and `cohors discover` keeps control characters in folder names off the terminal.
+- **The package pages say what is new in 0.8**, not 0.7.7, on npm, PyPI, crates.io and the Claude Code plugin's page.
+- **Every page's MCP setup points at the copy that keeps itself up to date** (`~/.local/bin/cohors`, registered for every folder with `--scope user`), with each channel's own path for when updates are off.
+- **Two names in this changelog read right again**.
 
-Full notes: [cohors 0.7.7 on GitHub](https://github.com/rushirb2001/cohors/releases/tag/v0.7.7).
+Full notes: [cohors 0.8.21 on GitHub](https://github.com/rushirb2001/cohors/releases/tag/v0.8.21).
 <!-- whats-new:end -->
 
 ## Links

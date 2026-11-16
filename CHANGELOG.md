@@ -31,6 +31,24 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.21] — 2026-11-16
+
+### Fixed
+
+- **The package pages say what is new in 0.8**, not 0.7.7, on npm, PyPI,
+  crates.io and the Claude Code plugin's page: the self-updating install,
+  `cohors doctor` and `cohors install`, commands named like the MCP tools,
+  commands that ask before they change anything, exit codes and shell
+  completions.
+- **Every page's MCP setup points at the copy that keeps itself up to date**
+  (`~/.local/bin/cohors`, registered for every folder with `--scope user`),
+  with each channel's own path for when updates are off. The npm page no
+  longer sends you to a copy npm never updates.
+- **Two names in this changelog read right again**: `COHORS_NO_UPDATE` and
+  `COHORS_DISABLE_UPDATES` in 0.8.0 and 0.8.1 had a date pasted into them.
+  `scripts/version.sh` and `scripts/release.sh` now refuse a date run into a
+  word.
+
 ## [0.8.20] — 2026-11-16
 
 ### Fixed
@@ -259,7 +277,7 @@ source of truth.
   `~/.local/bin/cohors` linked to it, and says so once. From then on every
   run hands over to the newest version there, whichever `cohors` your PATH
   finds. Not in CI, for builds from source, or with `updates = "off"`,
-  `COHORS_NO_UP2026-11-16` or `COHORS_DISABLE_UP2026-11-16S`; `"notify"` sets nothing up.
+  `COHORS_NO_UPDATE` or `COHORS_DISABLE_UPDATES`; `"notify"` sets nothing up.
 - **`cohors uninstall`** (try `--dry-run` first) removes cohors' own copy and
   its update files, and names the command that removes any copy a package
   manager installed (`brew uninstall cohors`, `pip uninstall cohors`,
@@ -279,8 +297,8 @@ source of truth.
   every cohors on your PATH and where it came from, the versions kept,
   whether updates are on and why, the last update, and what to fix. It
   changes nothing.
-- **`COHORS_DISABLE_UP2026-11-16S=1`** blocks every update, `cohors update` and
-  `cohors install` included; `COHORS_NO_UP2026-11-16` still stops only the
+- **`COHORS_DISABLE_UPDATES=1`** blocks every update, `cohors update` and
+  `cohors install` included; `COHORS_NO_UPDATE` still stops only the
   background checks.
 
 ## [0.7.16] — 2026-11-16

@@ -54,10 +54,11 @@ claude plugin update cohors@cohors
 
 updates the plugin. The `cohors` command keeps itself up to date however you installed it: its first run sets up cohors' own copy, which updates itself.
 
-## New in 0.7.7
+## New in 0.8
 
-- Repos nested inside a repo are found, so Claude sees them too. Run `cohors scan --deep` once to reach repos buried deeper; the server picks them up without a restart.
-- With Git actions on, fetch, pull, push, commit and stash run on every selected repo at once, and a commit that would include a file that looks like a secret (`.env`, a private key) is refused.
-- A rejected push tells Claude why (`rejected (pull first)`) instead of naming the remote.
+- **Claude can ask "where did I leave off?"** A `next` tool lists the agent conversations worth resuming, each with its command, and the fleet's next steps.
+- **Claude finds what you mean.** A repository answers to a unique prefix (`paym` for payments), a typo gets "did you mean", a `discover` tool finds repositories buried inside others, and `overview` takes a selector to brief on part of the fleet.
+- **The plugin's agents may call the cohors tools**, and the plugin starts cohors' own self-updating copy (`~/.local/bin/cohors`) before any other.
+- **`cohors` keeps itself up to date**, however you installed it; `cohors doctor` says how it is set up.
 
-[Project](https://github.com/rushirb2001/cohors) · [Release notes](https://github.com/rushirb2001/cohors/releases) · [Privacy](https://github.com/rushirb2001/cohors/blob/main/PRIVACY.md) (no telemetry) · MIT licensed
+Every change: [the release notes](https://github.com/rushirb2001/cohors/releases).

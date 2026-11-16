@@ -22,6 +22,14 @@ dry=0
 case "$kind" in major|minor|patch) ;; *) echo "$usage" >&2; exit 1 ;; esac
 cd "$(dirname "$0")/.."
 
+# A date glued to a word means a find-and-replace of "DATE" went too far
+# (it once turned COHORS_NO_UPDATE into COHORS_NO_UP2026-11-16): refuse it.
+glued=$(grep -n -E '[A-Za-z_]20[0-9]{2}-[0-9]{2}-[0-9]{2}|20[0-9]{2}-[0-9]{2}-[0-9]{2}[A-Za-z_]' CHANGELOG.md || true)
+if [ -n "$glued" ]; then
+  echo "CHANGELOG.md has a date run into a word; fix it first:" >&2
+  echo "$glued" >&2
+  exit 1
+fi
 entries=$(awk '/^## \[Unreleased\]/ { on = 1; next } /^## \[/ { on = 0 } on' CHANGELOG.md | grep -v '^[[:space:]]*$' || true)
 if [ -z "$entries" ]; then
   echo "nothing to version: write what changed under ## [Unreleased] in CHANGELOG.md first" >&2

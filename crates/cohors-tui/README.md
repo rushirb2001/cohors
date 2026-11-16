@@ -41,30 +41,34 @@ Pull is fast-forward only, nothing force-pushes, and a write command exits 1 whe
 
 ## Use it with your coding agent (MCP)
 
-`cohors mcp` is a stdio MCP server. Register it with the absolute path: agents start servers with a stripped `PATH`, where `~/.cargo/bin` is usually missing. Run `cohors mcp` in a terminal and it prints these lines with your path filled in.
+`cohors mcp` is a stdio MCP server. Register it with an absolute path: agents start servers with a stripped `PATH`, where `~/.cargo/bin` is usually missing. Run `cohors` once and its first run links `~/.local/bin/cohors`, the copy that keeps itself up to date (`cohors doctor` prints where it is); register that one.
 
 ```sh
-claude mcp add cohors -- "$HOME/.cargo/bin/cohors" mcp
+claude mcp add --scope user cohors -- "$HOME/.local/bin/cohors" mcp
 ```
 
 ```json
 {
   "mcpServers": {
-    "cohors": { "command": "/Users/you/.cargo/bin/cohors", "args": ["mcp", "--root", "/Users/you/code"] }
+    "cohors": { "command": "/Users/you/.local/bin/cohors", "args": ["mcp", "--root", "/Users/you/code"] }
   }
 }
 ```
 
+With updates turned off (no copy set up), use `$HOME/.cargo/bin/cohors` instead.
+
 Reads are always on. `--allow-writes` (fetch, pull, push, commit, stash), `--allow-run` (one command across many repos) and `--allow-launchpad` (each repo's `.cohors/repo.json`, the focus board, the activity log) are each off until you add them after `mcp`.
 
-## New in 0.7.7
+## New in 0.8
 
-- Repos nested inside a repo are found. `cohors discover` lists what a search finds without reading it, and `--deep` on `discover` and `scan` searches every folder; a running dashboard, `cohors web` and the MCP server pick up what it finds.
-- `fetch`, `pull`, `push`, `commit` and `stash` run on every selected repo at once.
-- `commit --dry-run` lists each repo's files, and a repo where a file that looks like a secret would go in is refused unless you pass `--allow-secrets`. `--staged` commits only what you staged.
-- Write commands exit 1 when a repo fails, a rejected push says why, and config mistakes (an unknown key, a `--root` that names no folder) are reported instead of ignored.
+- **cohors keeps itself up to date, however you installed it.** Its first run sets up cohors' own copy in `~/.local/share/cohors`, with `~/.local/bin/cohors` linked to it; that copy looks for a release when it starts and every few minutes, checks its SHA-256 and switches to it. `cohors doctor` says how your copy is set up, and `cohors install` sets it up by hand.
+- **Commands named for what you want, in the same words as the MCP tools:** `cohors status`, `show`, `path`, `changes`, `search`, `prs`, `next` (what to do now, and which agent session to resume) and `watch --json` (one JSON line per change).
+- **A command that changes repositories asks first.** At a terminal, `fetch`, `pull`, `push`, `commit`, `stash` and `run` list the repositories they would change and ask `[y/N]`; `--yes` skips the question, and a script is never asked.
+- **Exit codes a script can branch on:** 0 done, 1 something failed or nothing matched, 2 a usage mistake, 130 interrupted.
+- **Shell completions** for bash, zsh, fish, elvish and PowerShell: `cohors completions zsh > ~/.zfunc/_cohors`.
+- **The dashboard** answers the mouse, fits a narrow terminal, and teaches one key a day.
 
-[Full release notes](https://github.com/rushirb2001/cohors/releases)
+Every change: [the release notes](https://github.com/rushirb2001/cohors/releases).
 
 ## The crates
 
