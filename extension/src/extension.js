@@ -278,6 +278,13 @@ const entryById = (id) => (lastData && lastData.launchpad && lastData.launchpad.
 // A repository the webview named, with a real directory behind it. The
 // webview only ever sends ids, so no message can point the host at an
 // arbitrary path.
+// A repository the board names (focus items carry a name), with a real
+// directory behind it.
+function repoNamed(name) {
+  const r = lastData && lastData.overview && lastData.overview.repos.find((x) => x.name === name);
+  return r ? repoWithPath(r.id) : null;
+}
+
 function repoWithPath(id) {
   const repo = repoById(id);
   if (!repo || !repo.path || !path.isAbsolute(repo.path)) return null;
@@ -441,6 +448,19 @@ async function actOnSuggestion(m) {
     return launch("resume", { repo: repo.path, session: s.session.id, runner: s.session.runner });
   }
   if (m.act !== "run") return;
+  // Anything that starts an agent goes through the gate (src/gate.js): a
+  // task's title and notes are the repository's text and become the agent's
+  // instructions, so they are shown, in a trusted window, before anything
+  // runs. A focus item on a task becomes exactly that gated task launch.
+  const args = Array.isArray(s.args) ? s.args : [];
+  if (args[0] === "agent") {
+    if (s.kind === "focus" && args.length >= 4 && args[2] === "-r") {
+      const repo = repoWithPath(s.repo) || repoNamed(args[3]);
+      if (!repo) return void fail(new Error("that task's repository is not in the fleet any more."));
+      return runTask(repo, args[1]);
+    }
+    return void fail(new Error("start agents from the Tasks view, or with the Resume button."));
+  }
   const bin = await cli.locate();
   if (!bin.path) return void fail(new Error(bin.reason));
   // The command names `cohors`: with a binary set in the settings, name that,
