@@ -2,7 +2,7 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&fleet_app(), 80, 24)"
 ---
- cohors  ~/code   12 repositories. 6 have work at risk, 2 are …  scanned 2m ago 
+ cohors  ~/code   12 repositories. 6 have work at risk, 4 need…  scanned 2m ago 
  4 not backed up  3 stashes  26 uncommitted  0 stale  5 tasks  44 commits 7d    
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────╮
 │▸ RISK      Check 1 repository that could not be r…  Nothing else is known a… │

@@ -2176,26 +2176,54 @@ const LAUNCH_STEPS: usize = 4;
 /// otherwise pure so it's unit-testable.
 fn launch_screen(
     overview: &cohors_core::Overview,
-    roots: &[String],
+    roots: &[(String, String)],
     first_run: bool,
     color: bool,
 ) -> String {
-    // On a first run the folders get their own section; the masthead only
-    // counts them, so one long list cannot push the headline off the line.
-    let where_at = if first_run && roots.len() > 1 {
-        format!("gathered from {}", plural(roots.len(), "folder", "folders"))
-    } else {
-        roots.join(", ")
+    let groups = found_groups(overview, roots);
+    let where_at = match groups.as_slice() {
+        [one] => format!("in {}", one.label),
+        many => format!(
+            "in {}: {}",
+            plural(many.len(), "folder", "folders"),
+            many.iter()
+                .map(|g| g.label.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
     };
     let mut out = masthead(&overview.headline, &where_at, color);
+    let width = look::get().width.max(40);
+    let name_of = |id: &str| {
+        overview
+            .repos
+            .iter()
+            .find(|r| r.id == id)
+            .map(|r| crate::ui::text::safe(&r.name))
+            .unwrap_or_else(|| id.rsplit('/').next().unwrap_or(id).to_string())
+    };
 
     if overview.actions.is_empty() {
         out.push_str(&section("do next", "nothing needs you right now", color));
     } else {
         out.push_str(&section("do next", "most urgent first", color));
         for action in overview.actions.iter().take(LAUNCH_STEPS) {
+            // Which repos it is about, so the step says where, not only what.
+            let names: Vec<String> = action.repos.iter().map(|id| name_of(id)).collect();
+            let room = width.saturating_sub(4 + BLOCK_W + 2 + action.title.chars().count() + 3);
+            let mut repos = String::new();
+            if !names.is_empty() && room >= 8 {
+                let shown = names.iter().take(3).cloned().collect::<Vec<_>>().join(", ");
+                let more = names.len().saturating_sub(3);
+                let text = if more > 0 {
+                    format!("{shown} +{more}")
+                } else {
+                    shown
+                };
+                repos = format!("  {}", dim(color, &clip(&text, room)));
+            }
             out.push_str(&format!(
-                "    {}  {}\n",
+                "    {}  {}{repos}\n",
                 severity_mark(action.severity, color),
                 bold(color, &action.title),
             ));
@@ -2211,28 +2239,175 @@ fn launch_screen(
     }
     out.push('\n');
 
-    if first_run {
-        out.push_str(&section(
-            "looking in",
-            "every folder where repositories were found",
-            color,
-        ));
-        for root in roots {
-            out.push_str(&guide_row(root, "", 0, color));
+    // What was found, and where: each folder with its counts and its repos
+    // by name, at-risk ones first and marked.
+    out.push_str(&section(
+        "found",
+        &format!(
+            "{} in {}",
+            plural(overview.repos.len(), "repository", "repositories"),
+            plural(groups.len(), "folder", "folders")
+        ),
+        color,
+    ));
+    let ascii = look::get().ascii;
+    for group in &groups {
+        let at_risk = group.repos.iter().filter(|r| r.at_risk).count();
+        let look_at = group
+            .repos
+            .iter()
+            .filter(|r| !r.at_risk && !r.reasons.is_empty())
+            .count();
+        let mut counts = vec![plural(group.repos.len(), "repository", "repositories")];
+        if at_risk > 0 {
+            counts.push(format!("{at_risk} at risk"));
         }
+        if look_at > 0 {
+            counts.push(format!("{look_at} to look at"));
+        }
+        if group.nested > 0 {
+            counts.push(format!("{} nested in another repo", group.nested));
+        }
+        out.push_str(&format!(
+            "    {}  {}\n",
+            bold(color, &group.label),
+            dim(color, &counts.join(" · "))
+        ));
+        out.push_str(&found_names(&group.repos, width, ascii, color));
+    }
+    if first_run {
         out.push_str(&guide_row(
             "cohors --root <dir>",
             "to look in one folder only",
             0,
             color,
         ));
-        out.push('\n');
     }
+    out.push('\n');
 
     out.push_str(&key_bar(
         &[("enter", "open the dashboard"), ("q", "quit")],
         color,
     ));
+    out
+}
+
+/// One folder on the start screen: its label and the repos found under it
+/// (most urgent first, the overview's order).
+struct FoundGroup<'a> {
+    label: String,
+    repos: Vec<&'a cohors_core::RepoLine>,
+    /// How many of them sit inside another repo found here.
+    nested: usize,
+}
+
+/// The overview's repos by the root that holds them: `roots` are `(label,
+/// path)`, and a repo belongs to the deepest root its path is under. Repos
+/// under none of them (remembered from elsewhere) form a group of their own.
+fn found_groups<'a>(
+    overview: &'a cohors_core::Overview,
+    roots: &[(String, String)],
+) -> Vec<FoundGroup<'a>> {
+    let under = |path: &str, root: &str| {
+        path == root || path.starts_with(&format!("{}/", root.trim_end_matches('/')))
+    };
+    let mut groups: Vec<FoundGroup> = roots
+        .iter()
+        .map(|(label, _)| FoundGroup {
+            label: crate::ui::text::safe(label),
+            repos: Vec::new(),
+            nested: 0,
+        })
+        .collect();
+    let mut elsewhere: Vec<&cohors_core::RepoLine> = Vec::new();
+    for repo in &overview.repos {
+        let path = repo.path.as_deref().unwrap_or(&repo.id);
+        let home = roots
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, root))| under(path, root))
+            .max_by_key(|(_, (_, root))| root.len())
+            .map(|(i, _)| i);
+        match home {
+            Some(i) => groups[i].repos.push(repo),
+            None => elsewhere.push(repo),
+        }
+    }
+    if !elsewhere.is_empty() {
+        groups.push(FoundGroup {
+            label: "elsewhere".to_string(),
+            repos: elsewhere,
+            nested: 0,
+        });
+    }
+    for group in &mut groups {
+        let paths: Vec<&str> = group
+            .repos
+            .iter()
+            .map(|r| r.path.as_deref().unwrap_or(&r.id))
+            .collect();
+        group.nested = paths
+            .iter()
+            .filter(|p| paths.iter().any(|q| q != *p && under(p, q)))
+            .count();
+    }
+    groups.retain(|g| !g.repos.is_empty());
+    groups
+}
+
+/// A folder's repos by name, wrapped to the width, at most three lines: at
+/// risk first and marked, then those to look at, then the clean ones dimmed.
+fn found_names(repos: &[&cohors_core::RepoLine], width: usize, ascii: bool, color: bool) -> String {
+    const INDENT: usize = 6;
+    const MAX_LINES: usize = 3;
+    let room = width.saturating_sub(INDENT).max(20);
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    let mut used = 0usize;
+    let mut shown = 0usize;
+    for repo in repos {
+        let name = crate::ui::text::safe(&repo.name);
+        let (text, styled) = if repo.at_risk {
+            let mark = if ascii { "!" } else { "▲" };
+            let t = format!("{name} {mark}");
+            (t.clone(), sgr(color, "1;38;2;214;96;84", &t))
+        } else if !repo.reasons.is_empty() {
+            (name.clone(), name.clone())
+        } else {
+            (name.clone(), dim(color, &name))
+        };
+        let w = text.chars().count();
+        let gap = if used == 0 { 0 } else { 3 };
+        if used > 0 && used + gap + w > room {
+            lines.push(std::mem::take(&mut line));
+            used = 0;
+            if lines.len() == MAX_LINES {
+                break;
+            }
+        }
+        if used > 0 {
+            line.push_str("   ");
+            used += 3;
+        }
+        line.push_str(&styled);
+        used += w;
+        shown += 1;
+    }
+    if !line.is_empty() && lines.len() < MAX_LINES {
+        lines.push(line);
+    }
+    let mut out = String::new();
+    for l in &lines {
+        out.push_str(&format!("{}{l}\n", " ".repeat(INDENT)));
+    }
+    let left = repos.len().saturating_sub(shown);
+    if left > 0 {
+        out.push_str(&format!(
+            "{}{}\n",
+            " ".repeat(INDENT),
+            dim(color, &format!("and {left} more in the dashboard"))
+        ));
+    }
     out
 }
 
@@ -2295,7 +2470,13 @@ fn launch(scanner: &crate::scan::Scanner, roots: &[String], first_run: bool) -> 
 
     let home = cohors_fleet::launchpad::launchpad_home();
     let overview = cohors_fleet::overview(&repos, home.as_deref(), now_secs());
-    print!("{}", launch_screen(&overview, roots, first_run, color));
+    // Each root as shown (`~/…`) and as the path its repos sit under.
+    let pairs: Vec<(String, String)> = scanner
+        .root_dirs()
+        .iter()
+        .map(|dir| (crate::ui::abbrev_home(dir.as_str()), dir.to_string()))
+        .collect();
+    print!("{}", launch_screen(&overview, &pairs, first_run, color));
     let _ = std::io::stdout().flush();
 
     // A real terminal is needed both to read the key and to run the dashboard
@@ -2745,7 +2926,7 @@ mod tests {
         let fleet = cohors_core::demo::fleet(now);
         let (entries, board) = cohors_core::launchpad::demo();
         let o = cohors_core::overview(&fleet, &entries, &board, now);
-        let roots = ["~/Developer".to_string()];
+        let roots = [("~/code".to_string(), "~/code".to_string())];
         for style in look::Style::ALL {
             for ascii in [false, true] {
                 let current = look::Look {
@@ -2767,7 +2948,10 @@ mod tests {
         let now = 1_700_000_000;
         let fleet = cohors_core::demo::fleet(now);
         let o = cohors_core::overview(&fleet, &[], &Default::default(), now);
-        let roots = ["~/code".to_string(), "~/work".to_string()];
+        let roots = [
+            ("~/code".to_string(), "~/code".to_string()),
+            ("~/work".to_string(), "~/work".to_string()),
+        ];
         let current = look::Look {
             style: look::DEFAULT_STYLE,
             ascii: false,
@@ -2783,11 +2967,17 @@ mod tests {
         let fleet = cohors_core::demo::fleet(now);
         let (entries, board) = cohors_core::launchpad::demo();
         let o = cohors_core::overview(&fleet, &entries, &board, now);
-        let roots = ["~/Main/code".to_string()];
+        let roots = [("~/code".to_string(), "~/code".to_string())];
 
         let w = launch_screen(&o, &roots, false, false);
         assert!(w.contains(&o.headline)); // real counts, not just a folder name
-        assert!(w.contains("~/Main/code")); // where it looked
+        assert!(w.contains("in ~/code")); // where it looked
+        // What was found there: the count, and the repos by name.
+        assert!(
+            w.contains("Found") && w.contains(&format!("{} repositories", o.repos.len())),
+            "{w}"
+        );
+        assert!(o.repos.iter().take(3).all(|r| w.contains(&r.name)), "{w}");
         assert!(w.contains("Do next"));
         // The first steps are listed, most urgent first, with a shape mark…
         for action in o.actions.iter().take(LAUNCH_STEPS) {
@@ -2815,20 +3005,61 @@ mod tests {
             &Default::default(),
             now,
         );
-        let roots = ["~/projects".to_string(), "~/code".to_string()];
+        let roots = [
+            ("~/projects".to_string(), "~/projects".to_string()),
+            ("~/code".to_string(), "~/code".to_string()),
+        ];
         let w = launch_screen(&o, &roots, true, false);
-        assert!(w.contains("gathered from 2 folders"));
-        assert!(w.contains("Looking in"));
-        assert!(w.contains("~/projects") && w.contains("~/code")); // each folder listed
+        // Only folders where something was found are listed, with counts.
+        assert!(w.contains("Found"), "{w}");
+        assert!(w.contains("~/code") && w.contains("repositories"), "{w}");
         assert!(w.contains("cohors --root <dir>")); // the scoped alternative
         assert!(w.contains("enter") && w.contains("open the dashboard"));
+    }
+
+    /// Repos are grouped under the folder that holds them, nested ones are
+    /// counted, at-risk ones come first and are marked, and each step names
+    /// the repos it is about.
+    #[test]
+    fn the_start_screen_says_what_was_found_where() {
+        let now = 1_700_000_000;
+        let fleet = cohors_core::demo::fleet(now);
+        let mut o = cohors_core::overview(&fleet, &[], &Default::default(), now);
+        // Move two repos to a second folder, one of them nested in the other.
+        let (a, b) = (o.repos[0].name.clone(), o.repos[1].name.clone());
+        o.repos[0].path = Some("~/work/outer".to_string());
+        o.repos[1].path = Some("~/work/outer/inner".to_string());
+        let roots = [
+            ("~/code".to_string(), "~/code".to_string()),
+            ("~/work".to_string(), "~/work".to_string()),
+        ];
+        let w = launch_screen(&o, &roots, false, false);
+        assert!(w.contains("in 2 folders: ~/code, ~/work"), "{w}");
+        assert!(
+            w.contains("2 repositories") && w.contains("1 nested in another repo"),
+            "{w}"
+        );
+        assert!(w.contains(&a) && w.contains(&b), "{w}");
+        // At-risk repos are marked (▲ in Unicode).
+        let risky = o.repos.iter().find(|r| r.at_risk).expect("demo has risk");
+        assert!(w.contains(&format!("{} ▲", risky.name)), "{w}");
+        // A step names its repos.
+        let step = &o.actions[0];
+        let first = o.repos.iter().find(|r| r.id == step.repos[0]).unwrap();
+        let row = w.lines().find(|l| l.contains(&step.title)).unwrap();
+        assert!(row.contains(&first.name), "{row}");
     }
 
     /// A fleet with nothing to do still gets a launch screen that says so.
     #[test]
     fn launch_screen_with_nothing_to_do_says_so() {
         let o = cohors_core::overview(&[], &[], &Default::default(), 0);
-        let w = launch_screen(&o, &["~/code".to_string()], false, false);
+        let w = launch_screen(
+            &o,
+            &[("~/code".to_string(), "~/code".to_string())],
+            false,
+            false,
+        );
         assert!(w.contains("nothing needs you right now"));
         assert!(w.contains("enter") && w.contains("open the dashboard"));
     }

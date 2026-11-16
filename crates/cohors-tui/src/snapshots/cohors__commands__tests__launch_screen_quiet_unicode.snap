@@ -4,16 +4,22 @@ expression: screen
 ---
 
   cohors                                                                  vX.Y.Z
-  12 repositories. 6 have work at risk, 2 are clean.
-  ~/Developer
+  12 repositories. 6 have work at risk, 4 need a look, 2 are clean.
+  in ~/code
   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
 
   D O   N E X T  ·  most urgent first
-    ▲ RISK  Check 1 repository that could not be read
-    ▲ RISK  Push 4 commits from 3 repositories
-    ◆ WARN  Reconcile 1 diverged branch
-    ● NOTE  Pull 2 repositories that are behind
+    ▲ RISK  Check 1 repository that could not be read  legacy-billing
+    ▲ RISK  Push 4 commits from 3 repositories  payments, design-system, analy…
+    ◆ WARN  Reconcile 1 diverged branch  mobile-app
+    ● NOTE  Pull 2 repositories that are behind  web-app, data-pipeline
             and 1 more in the dashboard
+
+  F O U N D  ·  12 repositories in 1 folder
+    ~/code  12 repositories · 6 at risk · 4 to look at
+      analytics ▲   legacy-billing ▲   design-system ▲   mobile-app ▲
+      payments ▲   web-app ▲   cli-tools   data-pipeline   experiments   infra
+      auth-service   marketing-site
 
   ┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
   ↵ enter  open the dashboard      q  quit

@@ -26,6 +26,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The start screen says what it found and where.** Each folder is listed
+  with how many repositories it holds, how many are at risk, need a look or
+  sit inside another repo, and the repositories by name (at risk first and
+  marked); each "do next" step names the repositories it is about; and the
+  headline counts every repository (`29 repositories. 2 have work at risk,
+  6 need a look, 21 are clean.`), on every surface.
+
 ## [0.7.7] — 2026-11-16
 
 ### Added

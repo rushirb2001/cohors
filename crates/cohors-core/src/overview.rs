@@ -750,15 +750,26 @@ pub fn overview(
     }
     actions.sort_by_key(|a| std::cmp::Reverse(a.severity));
 
+    // Every repo lands in exactly one of three groups, and the headline names
+    // all three, so the numbers add up to the total.
+    let look = figures
+        .repos
+        .saturating_sub(figures.at_risk)
+        .saturating_sub(figures.clean);
+    let middle = if look > 0 {
+        format!(", {} a look", count(look, "needs", "need"))
+    } else {
+        String::new()
+    };
     let headline = match (figures.repos, figures.at_risk) {
         (0, _) => "No repositories found.".to_string(),
         (n, 0) => format!(
-            "{}. No work is at risk, {} clean.",
+            "{}. No work is at risk{middle}, {} clean.",
             count(n, "repository", "repositories"),
             count(figures.clean, "is", "are")
         ),
         (n, risky) => format!(
-            "{}. {} work at risk, {} clean.",
+            "{}. {} work at risk{middle}, {} clean.",
             count(n, "repository", "repositories"),
             count(risky, "has", "have"),
             count(figures.clean, "is", "are")
@@ -901,7 +912,7 @@ mod tests {
         assert_eq!(o.figures.stale_fetch_repos, 1);
         assert_eq!(
             o.headline,
-            "5 repositories. 2 have work at risk, 0 are clean."
+            "5 repositories. 2 have work at risk, 3 need a look, 0 are clean."
         );
     }
 

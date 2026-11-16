@@ -2,7 +2,7 @@
 source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 100, 24)"
 ---
- cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 is clean.     scanned 2m ago 
+ cohors  ~/projects (+1 more)   5 repositories. 3 have work at risk, 1 needs a loo…  scanned 2m ago 
  1 not b╔══════════════════════════════════════════════════════════════════════════════════╗        
 ╭─  1  ▶║ Standup · this week   ·   29 commits · 2 repos                                   ║───────╮
 │▸ RISK ╟──────────────────────────────────────────────────────────────────────────────────╢-bill… │
