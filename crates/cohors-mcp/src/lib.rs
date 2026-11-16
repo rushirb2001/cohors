@@ -1347,6 +1347,29 @@ mod tests {
 
     const NOW: i64 = 1_000_000;
 
+    /// `tools.json` at the repository's root is the tool catalog exactly as
+    /// `tools/list` returns it. Directories that list MCP servers without
+    /// running them (mcprush's scanner reads a root `tools.json`) learn the
+    /// tools from it, since they cannot read them out of Rust source. This
+    /// fails when the catalog changes and the file was not regenerated:
+    /// `scripts/tools-json.sh` (or `COHORS_UPDATE_TOOLS_JSON=1` on this test)
+    /// writes it.
+    #[test]
+    fn the_committed_tools_json_is_the_tool_catalog() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tools.json");
+        let want =
+            serde_json::to_string_pretty(&json!({ "tools": tool_catalog() })).unwrap() + "\n";
+        if std::env::var_os("COHORS_UPDATE_TOOLS_JSON").is_some() {
+            std::fs::write(&path, &want).unwrap();
+            return;
+        }
+        let have = std::fs::read_to_string(&path).unwrap_or_default();
+        assert!(
+            have == want,
+            "tools.json is out of date with the tool catalog: run scripts/tools-json.sh"
+        );
+    }
+
     fn scan() -> Vec<RepoSnapshot> {
         cohors_core::demo::fleet(NOW)
     }

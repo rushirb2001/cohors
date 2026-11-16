@@ -26,6 +26,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.7] — 2026-11-16
+
+### Added
+
+- **`tools.json` lists cohors' MCP tools for directories that do not run
+  servers.** The repository's root now carries the tool catalog exactly as
+  `cohors mcp` answers `tools/list`: 22 tools, each with its description,
+  input schema and read or write hints, so a directory whose scanner cannot
+  read tools out of Rust source (mcprush's, for one) can list them. A test
+  fails whenever the catalog changes and the file was not regenerated
+  (`scripts/tools-json.sh`).
+
 ## [0.8.6] — 2026-11-16
 
 ### Added

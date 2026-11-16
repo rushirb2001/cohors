@@ -1,0 +1,852 @@
+{
+  "tools": [
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "List repositories"
+      },
+      "description": "The primary \"what's going on across my repos\" call: returns every repo's git status — branch, ahead/behind, dirty worktree, stashes, last commit, and an attention assessment — plus a fleet summary, in one request. Use this (or fleet_summary) whenever the user asks about their repos, projects, or fleet, or what is dirty/unpushed/behind/needs attention; do NOT enumerate repos yourself with find or per-repo git. Omit selector for the whole fleet, or narrow it (e.g. {\"dirty\": true}). Use fields to shrink each repo to just the keys you need.",
+      "inputSchema": {
+        "properties": {
+          "fields": {
+            "description": "Project each repo to just these top-level keys (id and name are always kept) to keep the response small. Valid keys: branch, upstream, worktree, last_commit, activity, groups, stash_count, stash_latest, remote, remote_url, operation, default_branch, last_fetch, latest_tag, assessment, path, error. Note: ahead/behind live inside `upstream`, and staged/modified/untracked inside `worktree` — request those parent keys, not the leaf names.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "description": "Return at most this many repos (after sorting).",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          },
+          "sort": {
+            "description": "Order of the returned repos (default dirty-first).",
+            "enum": [
+              "dirty-first",
+              "recent",
+              "name",
+              "ahead-behind"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "list_repos",
+      "title": "List repositories"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "Repository status"
+      },
+      "description": "Full status of ONE repository, found by id, name, or path — branch, upstream ahead/behind, worktree counts, stashes, recent activity, last commit, plus a local drill-in `detail` (recent commits, per-branch sync, changed files, stash list). Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
+      "inputSchema": {
+        "properties": {
+          "repo": {
+            "description": "Repo id, name/alias, or path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo"
+        ],
+        "type": "object"
+      },
+      "name": "get_repo",
+      "title": "Repository status"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Fleet summary"
+      },
+      "description": "The cheapest \"is anything on fire?\" call: fleet-wide counts only — total, needs-attention, risk (the \"drop everything\" bucket), unpushed, behind, dirty, conflicted, stashed, errors. Use it first to gauge overall state, then drill in with list_repos. Takes no arguments.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "fleet_summary",
+      "title": "Fleet summary"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "What to do next"
+      },
+      "description": "The briefing: what to DO NEXT across the fleet and why, in one call. Returns `actions` (most urgent first — each with a title, the reason, the registry verb that carries it out when there is one, and the ids of the repos it applies to), `figures` (the key numbers: work not backed up, stashes, uncommitted files, stale fetches, open tasks, commits this week), `repos` (one line per repo, most urgent first, with every reason in plain words and `at_risk` marking where local work could be lost), `work` (open tasks per repo) and `commits` (last 7 days per repo). This is the exact model the terminal UI, the web dashboard and the editor extension render, so what you report matches what the user sees. Use it for \"what should I do\", \"brief me\", \"what's at risk\", or before planning a day; use list_repos when you need raw per-repo fields or a selector. To act on an action, pass its repos as {\"ids\": [...]} to the named verb. Takes no arguments.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "overview",
+      "title": "What to do next"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Standup"
+      },
+      "description": "What the user committed across every repo, for a standup or a status update: their commits (matched by git user.email) in the window, grouped by repo with the most active first, plus a ready-to-paste markdown digest. Use for \"what did I do today / this week\", \"write my standup\", or a weekly summary; do NOT run git log in each repo. window is \"today\" or \"week\" (default week).",
+      "inputSchema": {
+        "properties": {
+          "window": {
+            "description": "Which window to report (default week).",
+            "enum": [
+              "today",
+              "week"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "standup",
+      "title": "Standup"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Search across repositories"
+      },
+      "description": "Find code or repos ACROSS the whole fleet without cd-ing into each one. kind=content greps file contents (ripgrep/git grep/fallback, fixed-string — the default); kind=path|name|branch matches repo metadata (case-insensitive substring). Sensitive paths (.env, keys, credential stores) never appear in content results. An optional selector limits which repos are searched. This is the entry point for cross-repo audits and refactors — use it instead of running grep/rg in each repo yourself.",
+      "inputSchema": {
+        "properties": {
+          "kind": {
+            "description": "What to match (default content).",
+            "enum": [
+              "content",
+              "path",
+              "name",
+              "branch"
+            ],
+            "type": "string"
+          },
+          "max_results": {
+            "description": "Cap on total hits (default 200).",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "query": {
+            "description": "What to look for (fixed string for content; substring/glob for path/name/branch).",
+            "type": "string"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "type": "object"
+      },
+      "name": "search",
+      "title": "Search across repositories"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Uncommitted changes"
+      },
+      "description": "What is actually uncommitted in each selected repo: the changed-file list (each path with its git porcelain status) and, with include_patch:true, a size-capped unified diff of the working tree (diffs of sensitive files like .env or key material are withheld; the file list still names them). Use this to summarize or review uncommitted work — e.g. \"what's the work sitting in payments?\" — instead of cd-ing in and running git status / git diff. Clean repos are omitted. Omit the selector to cover every dirty repo, or scope it (e.g. {\"name\": \"payments\"}) to one.",
+      "inputSchema": {
+        "properties": {
+          "include_patch": {
+            "description": "Also return a unified diff of the working tree per repo (default false; can be large).",
+            "type": "boolean"
+          },
+          "max_bytes": {
+            "description": "Cap each repo's patch in bytes (default 20000); the patch is flagged `truncated` when cut.",
+            "minimum": 1,
+            "type": "integer"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "name": "changes",
+      "title": "Uncommitted changes"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Repository path"
+      },
+      "description": "Resolve a repo (by id, name, or path) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
+      "inputSchema": {
+        "properties": {
+          "repo": {
+            "description": "Repo id, name/alias, or path.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo"
+        ],
+        "type": "object"
+      },
+      "name": "repo_path",
+      "title": "Repository path"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "Open pull requests"
+      },
+      "description": "Open pull requests per repo (GitHub-enriched). Use for \"any open PRs across my repos / waiting on me?\". Needs a token (gh auth or GITHUB_TOKEN) — meta says so when absent — and repos without a GitHub remote are omitted. An optional selector scopes the set.",
+      "inputSchema": {
+        "properties": {
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          },
+          "state": {
+            "description": "Which PRs to count (default open).",
+            "enum": [
+              "open",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "name": "list_prs",
+      "title": "Open pull requests"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": true,
+        "title": "CI status"
+      },
+      "description": "CI / checks status per repo (GitHub-enriched: passing | failing | pending). Use for \"which repos have red/failing CI?\"; to then act on them, pass {\"ci\": \"failing\"} as a selector to another tool. Needs a token; repos without a GitHub remote are omitted. An optional selector scopes the set.",
+      "inputSchema": {
+        "properties": {
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "name": "ci_status",
+      "title": "CI status"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Launchpad"
+      },
+      "description": "What each repo OFFERS and what work is WAITING in it: its committed .cohors/ contribution (summary, group, declared flows, repo-shipped agents, tasks) plus flows auto-detected from npm/cargo/uv/Makefile/gradle manifests. Use for \"what should I work on\", \"what's on my plate across repos\", \"how do I run/test X\", or to see which repos are not set up yet (configured: false). Omit selector for the whole fleet. Open tasks come back most-urgent first.",
+      "inputSchema": {
+        "properties": {
+          "include_done": {
+            "description": "Also return finished tasks (default false).",
+            "type": "boolean"
+          },
+          "only_configured": {
+            "description": "Skip repos without a .cohors/ contribution (default false).",
+            "type": "boolean"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "name": "launchpad",
+      "title": "Launchpad"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Launchpad file rules"
+      },
+      "description": "The exact rules a .cohors/repo.json must satisfy, plus the judgement calls that make a contribution good rather than merely valid. Call this before write_repo_contribution so you do not guess the schema. Takes no arguments.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "read_contract",
+      "title": "Launchpad file rules"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Write a repo's launchpad file"
+      },
+      "description": "Validate and write one repo's .cohors/repo.json (its flows, agents, tasks). REPLACES the whole document: read the current one with `launchpad` first and pass back everything you mean to keep, especially tasks the user is part-way through. Writes nothing when invalid and returns every error at once. Declare a flow only when it adds what detection cannot infer (a label, port, primary, composite command, cwd) — an empty flows array is a correct answer. Never set a task done without evidence. Nothing machine-specific: this file is committed. Also gitignores .cohors/local.json. Requires --allow-launchpad; dry_run validates without it.",
+      "inputSchema": {
+        "properties": {
+          "agents": {
+            "items": {
+              "properties": {
+                "file": {
+                  "description": "Prompt file under .cohors/ that already exists.",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "supports": {
+                  "items": {
+                    "enum": [
+                      "claude-code",
+                      "codex",
+                      "gemini-cli",
+                      "agy"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "file"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "description": "Validate and report without writing (works without --allow-launchpad).",
+            "type": "boolean"
+          },
+          "flows": {
+            "items": {
+              "properties": {
+                "background": {
+                  "type": "boolean"
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "server",
+                    "task",
+                    "test",
+                    "build",
+                    "tool"
+                  ],
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "port": {
+                  "type": "integer"
+                },
+                "primary": {
+                  "type": "boolean"
+                },
+                "run": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "label",
+                "run"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "generatedFrom": {
+            "description": "Short SHA of the commit you read, so staleness can be shown.",
+            "type": "string"
+          },
+          "group": {
+            "description": "Free text; groups repos on the launchpad.",
+            "type": "string"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "label",
+                "url"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Display name.",
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo id, name/alias, or path (must be inside the fleet).",
+            "type": "string"
+          },
+          "summary": {
+            "description": "One line: what this repo IS.",
+            "maxLength": 80,
+            "type": "string"
+          },
+          "tasks": {
+            "items": {
+              "properties": {
+                "agent": {
+                  "description": "id of one of this repo's agents[].",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "notes": {
+                  "maxLength": 400,
+                  "type": "string"
+                },
+                "priority": {
+                  "enum": [
+                    "high",
+                    "normal",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "todo",
+                    "doing",
+                    "blocked",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "repo",
+          "name"
+        ],
+        "type": "object"
+      },
+      "name": "write_repo_contribution",
+      "title": "Write a repo's launchpad file"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
+        "title": "Focus board"
+      },
+      "description": "The user's cross-repo focus board: the short list of things they are working on across every repo, plus recent agent activity. Use with `launchpad` when planning a day or picking up where they left off. Takes no arguments.",
+      "inputSchema": {
+        "properties": {},
+        "type": "object"
+      },
+      "name": "read_board",
+      "title": "Focus board"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Write the focus board"
+      },
+      "description": "Validate and REPLACE the cross-repo focus board. Match `repo` by name (as `launchpad` reports it), never by path, so the board stays valid across machines. Never set status done without evidence. Requires --allow-launchpad; dry_run validates without it.",
+      "inputSchema": {
+        "properties": {
+          "dry_run": {
+            "description": "Validate and report without writing (works without --allow-launchpad).",
+            "type": "boolean"
+          },
+          "focus": {
+            "items": {
+              "properties": {
+                "agent": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "ref": {
+                  "description": "A task id inside that repo.",
+                  "type": "string"
+                },
+                "repo": {
+                  "type": "string"
+                },
+                "status": {
+                  "enum": [
+                    "todo",
+                    "doing",
+                    "blocked",
+                    "done"
+                  ],
+                  "type": "string"
+                },
+                "thread": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "focus"
+        ],
+        "type": "object"
+      },
+      "name": "write_board",
+      "title": "Write the focus board"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Record agent activity"
+      },
+      "description": "Append one event to the agent activity log so the launchpad's timeline shows this session. Requires --allow-launchpad.",
+      "inputSchema": {
+        "properties": {
+          "agent": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "start",
+              "end",
+              "launch",
+              "note"
+            ],
+            "type": "string"
+          },
+          "repo": {
+            "description": "Repo id, name, or path.",
+            "type": "string"
+          },
+          "runner": {
+            "enum": [
+              "claude-code",
+              "codex",
+              "gemini-cli",
+              "agy"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "runner",
+          "phase"
+        ],
+        "type": "object"
+      },
+      "name": "record_activity",
+      "title": "Record agent activity"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Fetch"
+      },
+      "description": "git fetch across the selected repos — non-destructive (updates remote-tracking refs only). Use to refresh remote state before checking what is behind. Requires a selector. Executing needs the server launched with --allow-writes; without it (or with dry_run:true) the call just previews the resolved target set.",
+      "inputSchema": {
+        "properties": {
+          "dry_run": {
+            "description": "Preview the resolved target set without acting.",
+            "type": "boolean"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "fetch",
+      "title": "Fetch"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Pull (fast-forward only)"
+      },
+      "description": "git pull --ff-only across the selected repos — fast-forward only, so it never merges, rebases, or loses work. Typical flow: find what is behind with {\"behind\": true}, then pull those. Requires a selector. Executing needs --allow-writes; dry_run:true (or a read-only server) previews the targets.",
+      "inputSchema": {
+        "properties": {
+          "dry_run": {
+            "description": "Preview the resolved target set without acting.",
+            "type": "boolean"
+          },
+          "mode": {
+            "description": "Only fast-forward is supported (the default).",
+            "enum": [
+              "ff-only"
+            ],
+            "type": "string"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "pull",
+      "title": "Pull (fast-forward only)"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Push"
+      },
+      "description": "git push the current branch to its upstream across the selected repos; a branch that was never pushed is published (git push -u origin HEAD) so it starts tracking. Never force-pushes (git rejects non-fast-forward pushes), so it can't overwrite remote history. Pair after commit to land a cross-repo change. Requires a selector. Executing needs --allow-writes; dry_run:true previews the targets.",
+      "inputSchema": {
+        "properties": {
+          "dry_run": {
+            "description": "Preview the resolved target set without acting.",
+            "type": "boolean"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "push",
+      "title": "Push"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Commit"
+      },
+      "description": "git add -A + git commit -m <message> across the selected repos (stages tracked AND untracked; \"nothing to commit\" is a no-op). Never amends or rewrites history. Pair with push to finish a cross-repo change. Requires selector and message. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
+      "inputSchema": {
+        "properties": {
+          "confirm": {
+            "description": "Must be true to actually act; preview first with dry_run.",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "description": "Preview the resolved target set without acting.",
+            "type": "boolean"
+          },
+          "message": {
+            "description": "Commit message, applied to every selected repo (required).",
+            "type": "string"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector",
+          "message"
+        ],
+        "type": "object"
+      },
+      "name": "commit",
+      "title": "Commit"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false,
+        "title": "Stash"
+      },
+      "description": "git stash push (tracked changes) across the selected repos — a safe way to park work, e.g. before a bulk pull or run on dirty repos. Requires a selector. Executing needs --allow-writes AND confirm:true; dry_run:true previews the target set with neither.",
+      "inputSchema": {
+        "properties": {
+          "confirm": {
+            "description": "Must be true to actually act; preview first with dry_run.",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "description": "Preview the resolved target set without acting.",
+            "type": "boolean"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "stash",
+      "title": "Stash"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false,
+        "title": "Run a command in each repository"
+      },
+      "description": "Run one shell command in each selected repo and collect per-repo {exit_code, stdout, stderr, truncated, timed_out} — the fleet codemod/audit/test primitive (e.g. \"cargo fmt --check\", \"rg TODO\", \"npm test\"). The command runs in each repo's own directory. Requires command and selector. Executing needs --allow-run AND confirm:true; dry_run:true previews the target set with neither. Each repo is bounded by timeout_secs (default 120).",
+      "inputSchema": {
+        "properties": {
+          "command": {
+            "description": "Shell command run in each selected repo's directory.",
+            "type": "string"
+          },
+          "confirm": {
+            "description": "Must be true to actually act; preview first with dry_run.",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "description": "Preview the resolved target set without acting.",
+            "type": "boolean"
+          },
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          },
+          "timeout_secs": {
+            "description": "Per-repo timeout in seconds (default 120).",
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command",
+          "selector"
+        ],
+        "type": "object"
+      },
+      "name": "run",
+      "title": "Run a command in each repository"
+    }
+  ]
+}
