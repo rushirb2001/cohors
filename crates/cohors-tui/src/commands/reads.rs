@@ -1726,6 +1726,7 @@ mod tests {
                     timestamp: NOW - 3 * 86_400,
                     summary: "wip".into(),
                 }),
+                touched: None,
                 locked: false,
                 missing: false,
             };

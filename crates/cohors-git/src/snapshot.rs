@@ -543,6 +543,7 @@ fn linked_worktree(
         status: WorktreeStatus::default(),
         unpushed: 0,
         last_commit: None,
+        touched: None,
         locked: matches!(
             worktree.is_locked(),
             Ok(git2::WorktreeLockStatus::Locked(_))
@@ -557,6 +558,9 @@ fn linked_worktree(
         return Some(found);
     };
     found.status = worktree_status(&checkout);
+    if found.status.is_dirty() {
+        found.touched = newest_change(&checkout);
+    }
     if let Ok(head) = checkout.head() {
         let commit = head.peel_to_commit().ok();
         found.last_commit = commit.as_ref().map(crate::detail::commit_meta_of);
@@ -575,6 +579,67 @@ fn linked_worktree(
         }
     }
     Some(found)
+}
+
+/// When the checkout's uncommitted files were last changed: the newest
+/// modification time among them (Unix seconds). It is what tells files an
+/// agent is writing right now from files left weeks ago, which the commit
+/// the worktree was made from cannot. Looks at the first [`CHANGES_TIMED`]
+/// and skips what cannot be read (a deleted file has no time).
+#[cfg(feature = "git2-fallback")]
+fn newest_change(checkout: &git2::Repository) -> Option<i64> {
+    const CHANGES_TIMED: usize = 200;
+    let root = checkout.workdir()?;
+    let mut opts = git2::StatusOptions::new();
+    opts.include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .include_ignored(false);
+    let statuses = checkout.statuses(Some(&mut opts)).ok()?;
+    statuses
+        .iter()
+        .take(CHANGES_TIMED)
+        .filter_map(|entry| entry.path().ok().map(|path| root.join(path)))
+        .filter_map(|file| std::fs::metadata(file).ok()?.modified().ok())
+        .filter_map(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|since| since.as_secs() as i64)
+        .max()
+}
+
+/// The repository that owns whatever checkout `path` is in, and the name of
+/// the linked worktree when `path` is inside one.
+///
+/// A coding agent's session starts in a folder, often a linked worktree. What
+/// matters to it is the whole repository: the main checkout and every other
+/// worktree. This finds that repository from any folder inside any of them.
+/// The first value is the main checkout (or the git folder itself, for a bare
+/// repository). `None` when `path` is not inside a git repository.
+#[cfg(feature = "git2-fallback")]
+pub fn owning_repo(path: &Utf8Path) -> Option<(camino::Utf8PathBuf, Option<String>)> {
+    let repo = git2::Repository::discover(path.as_std_path()).ok()?;
+    let canonical =
+        |dir: &std::path::Path| camino::Utf8PathBuf::from_path_buf(dir.canonicalize().ok()?).ok();
+    if !repo.is_worktree() {
+        return Some((
+            canonical(repo.workdir().unwrap_or_else(|| repo.path()))?,
+            None,
+        ));
+    }
+    // A linked worktree's own git folder is `<common>/worktrees/<name>`, and
+    // the common folder is the main checkout's `.git` (or a bare repository).
+    let name = repo.path().file_name()?.to_str()?.to_string();
+    let common = repo.commondir();
+    let main = if common.file_name().is_some_and(|dir| dir == ".git") {
+        common.parent()?
+    } else {
+        common
+    };
+    Some((canonical(main)?, Some(name)))
+}
+
+/// Without libgit2 there is no way to resolve a linked worktree to its owner.
+#[cfg(not(feature = "git2-fallback"))]
+pub fn owning_repo(_path: &Utf8Path) -> Option<(camino::Utf8PathBuf, Option<String>)> {
+    None
 }
 
 /// How many commits reachable from `tip` are on no remote-tracking branch

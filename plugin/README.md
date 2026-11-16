@@ -38,11 +38,20 @@ Reads are always on. Each of these is off until you turn it on with `claude plug
 
 When something is off, Claude's tools say which setting to turn on.
 
+## What cohors tells a session
+
+When a session starts in a repository that has work left behind, cohors adds one short note: a line for you and a few lines of context for Claude. Work left behind is a linked git worktree (where coding agents often work) that holds commits or files that are on no remote, or commits in the repository that have sat unpushed for days.
+
+A repository with nothing left behind gets no note. Work touched in the last hour is not mentioned. You are shown the same note at most once a day, when a session starts or resumes. After a compaction Claude is given it again, and nothing more is shown to you. It reads the repository with git, makes no network connection, and Claude treats the note as information, not as an instruction.
+
+To turn it off, run `claude plugin configure cohors@cohors`, switch off **Session notes**, then start a new session. It needs cohors 0.8.26 or later; an older cohors is silent. Without the plugin, you can add `cohors hook session-start` as a SessionStart hook in your own Claude Code settings.
+
 ## What's in the plugin
 
 - **The cohors MCP server**: `overview`, `next`, `fleet_summary`, `list_repos`, `get_repo`, `changes`, `search`, `standup`, `ci_status`, `list_prs`, `repo_path`, `discover`, the launchpad reads (`launchpad`, `read_board`, `read_contract`), and the gated actions above.
 - **Skills**: `fleet` (questions about all your repos at once), `launchpad-setup` (teach a repo to describe itself in `.cohors/repo.json`), `plan-focus` (plan your focus across repos from real evidence and save it to the board).
 - **Agents**: `cohors-setup` (reads a repo and writes its launchpad file) and `cohors-plan` (plans your focus and writes the board).
+- **Hooks**: one, at the start of a session. It adds the note described above when the repository has work left behind, and says nothing otherwise.
 
 Everything a repository's launchpad file says (flow commands, task titles, notes) was written by whoever wrote that repository, so Claude treats it as data, not instructions, and shows you a flow's command before running it.
 
@@ -56,6 +65,7 @@ updates the plugin. The `cohors` command keeps itself up to date however you ins
 
 ## New in 0.8
 
+- **A session can start with a note about work left behind.** When the repository has commits or files in a linked worktree that are on no remote, or commits unpushed for days, you and Claude get one short note. Turn it off with the **Session notes** setting.
 - **Claude can ask "where did I leave off?"** A `next` tool lists the agent conversations worth resuming, each with its command, and the fleet's next steps.
 - **Claude finds what you mean.** A repository answers to a unique prefix (`paym` for payments), a typo gets "did you mean", a `discover` tool finds repositories buried inside others, and `overview` takes a selector to brief on part of the fleet.
 - **The plugin's agents may call the cohors tools**, and the plugin starts cohors' own self-updating copy (`~/.local/bin/cohors`) before any other.

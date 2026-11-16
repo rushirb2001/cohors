@@ -2678,6 +2678,7 @@ mod tests {
             },
             unpushed,
             last_commit: None,
+            touched: None,
             locked: false,
             missing: false,
         };

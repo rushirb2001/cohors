@@ -2,7 +2,7 @@
   "name": "cohors",
   "displayName": "cohors",
   "description": "Every git repo you own as one fleet Claude can see, search, plan across, and (opt-in) act on: fleet status, cross-repo search, your standup, per-repo tasks and flows, and a focus board. Read-only until you turn on git actions, commands or launchpad writes. Needs the cohors command (brew, pip or cargo).",
-  "version": "0.8.25",
+  "version": "0.8.26",
   "author": {
     "name": "Rushir Bhavsar"
   },
@@ -43,6 +43,12 @@
       "title": "Launchpad writes",
       "description": "Let Claude write a repo's .cohors/repo.json, your focus board and the activity log. Launchpad files only, never git. Start a new session after changing it.",
       "default": false
+    },
+    "session_notes": {
+      "type": "boolean",
+      "title": "Session notes",
+      "description": "Add a short note for you and for Claude when a session starts in a repository that has work left behind: a linked worktree holding commits or files that are on no remote, or commits unpushed for days. Start a new session after changing it.",
+      "default": true
     }
   }
 }

@@ -7,10 +7,11 @@
 
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, UNIX_EPOCH};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use cohors_core::{Branch, RepoId, RepoRef};
-use cohors_git::{DiscoveryOptions, discover, snapshot_repo};
+use cohors_git::{DiscoveryOptions, discover, owning_repo, snapshot_repo};
 use tempfile::TempDir;
 
 /// All fixture commits use this instant (`@<unix-ts> <tz>` is git's unambiguous
@@ -427,6 +428,157 @@ fn a_deleted_worktree_is_reported_missing_and_a_local_only_repo_has_nothing_unpu
     assert!(!kept.missing);
     assert_eq!(kept.unpushed, 0, "no remote, so nothing is unpushed");
     assert!(!kept.holds_work());
+}
+
+/// `path` as UTF-8, spelled the way `owning_repo` returns it: canonical (on
+/// macOS the temp dir sits behind a symlink).
+fn canonical(path: &Path) -> Utf8PathBuf {
+    Utf8PathBuf::from_path_buf(path.canonicalize().unwrap()).unwrap()
+}
+
+fn utf8(path: &Path) -> &Utf8Path {
+    Utf8Path::from_path(path).unwrap()
+}
+
+#[test]
+fn owning_repo_finds_the_repository_from_any_folder_in_any_checkout() {
+    let tmp = TempDir::new().unwrap();
+    let work = repo_with_remote(tmp.path());
+    let main = canonical(&work);
+
+    // The main checkout, and a folder inside it: the repository, no worktree.
+    let deep = work.join("src/deep");
+    std::fs::create_dir_all(&deep).unwrap();
+    assert_eq!(owning_repo(utf8(&work)), Some((main.clone(), None)));
+    assert_eq!(owning_repo(utf8(&deep)), Some((main.clone(), None)));
+
+    // A linked worktree inside the repository, its root and a folder in it:
+    // the same repository, and the worktree's name.
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            ".claude/worktrees/agent-a",
+            "-b",
+            "worktree-agent-a",
+        ],
+    );
+    let agent = work.join(".claude/worktrees/agent-a");
+    let agent_deep = agent.join("nested/deeper");
+    std::fs::create_dir_all(&agent_deep).unwrap();
+    let in_agent = Some((main.clone(), Some("agent-a".to_string())));
+    assert_eq!(owning_repo(utf8(&agent)), in_agent);
+    assert_eq!(owning_repo(utf8(&agent_deep)), in_agent);
+
+    // One that sits beside the repository rather than inside it.
+    let beside = tmp.path().join("beside");
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "--detach",
+            beside.to_str().unwrap(),
+        ],
+    );
+    assert_eq!(
+        owning_repo(utf8(&beside)),
+        Some((main, Some("beside".to_string())))
+    );
+
+    // Not a repository, or not a folder at all: nothing.
+    let plain = tmp.path().join("plain");
+    std::fs::create_dir_all(&plain).unwrap();
+    assert_eq!(owning_repo(utf8(&plain)), None);
+    assert_eq!(owning_repo(utf8(&tmp.path().join("gone"))), None);
+}
+
+#[test]
+fn a_bare_repository_is_its_own_owner_and_so_are_its_worktrees() {
+    let tmp = TempDir::new().unwrap();
+    repo_with_remote(tmp.path());
+    let bare = tmp.path().join("origin.git");
+    // Some environments set `safe.bareRepository=explicit`, under which git
+    // refuses to work in a bare repository it was merely pointed at with
+    // `-C`. This test means to: say so for this one command.
+    git(
+        &bare,
+        &[
+            "-c",
+            "safe.bareRepository=all",
+            "worktree",
+            "add",
+            "-q",
+            "../from-bare",
+            "main",
+        ],
+    );
+
+    // There is no main checkout to name: the git folder itself is the owner.
+    assert_eq!(owning_repo(utf8(&bare)), Some((canonical(&bare), None)));
+    assert_eq!(
+        owning_repo(utf8(&tmp.path().join("from-bare"))),
+        Some((canonical(&bare), Some("from-bare".to_string())))
+    );
+}
+
+/// Set a file's modification time to `unix_secs`, so a test knows what
+/// `touched` should say.
+fn set_mtime(path: &Path, unix_secs: u64) {
+    let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+    file.set_modified(UNIX_EPOCH + Duration::from_secs(unix_secs))
+        .unwrap();
+}
+
+#[test]
+fn a_dirty_worktree_says_when_its_files_were_last_changed_and_a_clean_one_does_not() {
+    let tmp = TempDir::new().unwrap();
+    let work = repo_with_remote(tmp.path());
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            ".claude/worktrees/agent-a",
+            "-b",
+            "worktree-agent-a",
+        ],
+    );
+    let agent = work.join(".claude/worktrees/agent-a");
+    let touched = || {
+        let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+        assert_eq!(snap.worktrees.len(), 1, "{:?}", snap.worktrees);
+        snap.worktrees[0].touched
+    };
+
+    // Clean: no files, so nothing to date (the commit it was made from says
+    // nothing about when anyone last worked in it).
+    assert_eq!(touched(), None);
+
+    // Two files left behind: the newest one is the answer.
+    write(&agent, "old.txt", "1");
+    write(&agent, "new.txt", "2");
+    set_mtime(&agent.join("old.txt"), 1_650_000_000);
+    set_mtime(&agent.join("new.txt"), 1_650_000_500);
+    assert_eq!(touched(), Some(1_650_000_500));
+
+    // A changed file that is already committed counts the same way.
+    write(&agent, "a.txt", "changed");
+    set_mtime(&agent.join("a.txt"), 1_650_001_000);
+    assert_eq!(touched(), Some(1_650_001_000));
+
+    // A deleted file has no time; the rest still do.
+    std::fs::remove_file(agent.join("a.txt")).unwrap();
+    assert_eq!(touched(), Some(1_650_000_500));
+
+    // Committed, it is clean again.
+    git(&agent, &["add", "-A"]);
+    git(&agent, &["commit", "-q", "-m", "tidy"]);
+    assert_eq!(touched(), None);
 }
 
 #[test]

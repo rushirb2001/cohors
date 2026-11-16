@@ -27,6 +27,7 @@ pub mod attention;
 pub mod demo;
 pub mod detail;
 pub mod fuzzy;
+pub mod hooks;
 pub mod launchpad;
 pub mod lookup;
 pub mod model;

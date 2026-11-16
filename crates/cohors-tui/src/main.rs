@@ -76,22 +76,28 @@ fn main() -> anyhow::Result<()> {
     // sets cohors' own install up on its first run, then hands control to it
     // whenever it is newer (returning here only when this copy is the one to
     // run). Not for `install` and `uninstall`, which manage that install;
-    // `doctor` may be handed off but never sets anything up; `mcp` never
-    // prints the one-time notice.
+    // `doctor` may be handed off but never sets anything up; `mcp` and `hook`
+    // never print the one-time notice (a client reads their output).
     if !matches!(
         cli.command,
         Some(Command::Install { .. } | Command::Uninstall { .. })
     ) {
         update::start(update::Start {
             configured: updates(),
-            set_up: !matches!(cli.command, Some(Command::Doctor)),
-            quiet: matches!(cli.command, Some(Command::Mcp { .. })),
+            // A hook, like `doctor`, never sets anything up: a session
+            // starting must not be what installs a copy of cohors.
+            set_up: !matches!(cli.command, Some(Command::Doctor | Command::Hook { .. })),
+            quiet: matches!(
+                cli.command,
+                Some(Command::Mcp { .. } | Command::Hook { .. })
+            ),
         });
     }
     // One-off commands end with a line about a newer cohors, when one is known.
-    // Not the dashboard (it shows it in the header), the servers (their output
-    // belongs to a client) or the update commands (they say everything). The
-    // look runs while the command does and is never waited for.
+    // Not the dashboard (it shows it in the header), the servers and `hook`
+    // (their output belongs to a client, and a hook's is JSON a line more
+    // would corrupt) or the update commands (they say everything). The look
+    // runs while the command does and is never waited for.
     let one_off = matches!(
         cli.command,
         Some(
@@ -264,6 +270,7 @@ fn main() -> anyhow::Result<()> {
                 },
             )
         }
+        Some(Command::Hook { event }) => commands::hook::run(event),
         Some(Command::Path { repo }) => commands::reads::path(&cli, repo),
         Some(Command::Show { repo, json }) => commands::reads::show(&cli, repo, *json),
         Some(Command::Changes {

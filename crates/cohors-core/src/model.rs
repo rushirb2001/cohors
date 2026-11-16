@@ -145,6 +145,12 @@ pub struct LinkedWorktree {
     /// The commit it has checked out.
     #[serde(default)]
     pub last_commit: Option<CommitMeta>,
+    /// When its uncommitted files were last changed (Unix seconds): the newest
+    /// modification time among them. `None` when it has none, or when the
+    /// times could not be read. Together with `last_commit` it tells work
+    /// someone is in the middle of from work that was left behind.
+    #[serde(default)]
+    pub touched: Option<i64>,
     /// Locked with `git worktree lock`, so git will not prune or remove it.
     #[serde(default)]
     pub locked: bool,

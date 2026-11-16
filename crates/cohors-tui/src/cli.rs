@@ -468,6 +468,26 @@ pub enum Command {
         #[arg(long)]
         allow_launchpad: bool,
     },
+    /// What Claude Code runs when a session starts (not meant to be typed).
+    ///
+    /// Claude Code runs it as a hook: it sends the event as JSON on standard
+    /// input, and cohors prints one line of JSON back when the repository the
+    /// session opened in has work left behind (a linked worktree holding
+    /// commits or files that are on no remote, or old unpushed commits), and
+    /// nothing at all otherwise. Quiet by design: any other event, unreadable
+    /// input or a folder that is not a repository prints nothing and exits 0,
+    /// so a hook can never break a session. The cohors plugin wires this up
+    /// itself; this is for wiring it by hand.
+    #[command(
+        hide = true,
+        after_help = "Wire it into Claude Code by hand, in ~/.claude/settings.json (use the full path from `command -v cohors` if Claude Code cannot find cohors):\n  {\"hooks\": {\"SessionStart\": [{\"hooks\": [{\"type\": \"command\", \"command\": \"cohors hook session-start\"}]}]}}\n\nTry it:\n  echo '{\"cwd\":\"'\"$PWD\"'\",\"source\":\"startup\"}' | cohors hook session-start"
+    )]
+    Hook {
+        /// The event. Only `session-start` does anything; any other is
+        /// ignored, so a newer plugin never breaks an older cohors.
+        #[arg(value_name = "EVENT")]
+        event: String,
+    },
     /// Print one repo's absolute path, and nothing else (no TUI).
     ///
     /// Made for the shell: `cd "$(cohors path payments)"`. A repo is named by

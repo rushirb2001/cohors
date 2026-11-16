@@ -1185,6 +1185,7 @@ mod tests {
                 timestamp: NOW - commit_age,
                 summary: "wip".to_string(),
             }),
+            touched: None,
             locked: false,
             missing: false,
         }

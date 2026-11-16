@@ -145,6 +145,8 @@ More to ask:
 
 **Agent worktrees are covered.** When a coding agent works in a git worktree (Claude Code keeps them under `.claude/worktrees/`), cohors reads it as part of its repo: commits that were never pushed and files that were never committed show up as work at risk, with the folder to go to. `cohors scan --select worktree-work` lists the repos that have any.
 
+**A session starts with a note about it.** When you open Claude Code in a repository that has work left behind, such as a worktree holding commits or files that are on no remote, or commits unpushed for days, cohors adds one short note for you and for Claude. A repository with nothing left behind gets none, work touched in the last hour is left out, and you see the same note at most once a day; the plugin's **Session notes** setting turns it off. Without the plugin, add `cohors hook session-start` as a SessionStart hook in your own Claude Code settings.
+
 It starts **read-only**. Turn on what Claude may do with `claude plugin configure cohors@cohors`, then start a new session:
 
 <br>

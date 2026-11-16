@@ -16,6 +16,11 @@ the Claude Code plugin, the browser dashboard and the VS Code extension.
   agents often work), wherever git says they are, including outside the
   folders you pointed it at: their branch, status and commits, the same things
   it reads for the repository itself.
+- **For the Claude Code session-start note** (the plugin's "Session notes"
+  setting, or `cohors hook session-start`), when a session starts: the
+  repository that session's folder belongs to, the same things cohors reads
+  for any repository, plus the modification times of the uncommitted files in
+  its linked worktrees.
 - **Each repository's `.cohors/` launchpad file**, if it has one.
 - **Its own config**, at `~/.config/cohors/config.toml` (or your platform's
   equivalent).
@@ -77,6 +82,9 @@ be told without anything being installed or set up), or set
 `COHORS_NO_UPDATE=1`; `COHORS_DISABLE_UPDATES=1` also blocks `cohors update`
 and `cohors install`. They never run in CI.
 
+The Claude Code session-start hook (`cohors hook session-start`) makes no
+network connection.
+
 Nothing else. With no GitHub token and updates off, cohors makes no network
 connections at all, apart from the git actions you start.
 
@@ -100,6 +108,9 @@ connections at all, apart from the git actions you start.
 - Which setup tips you hid and the days each was shown (`tips.json`), and a
   note that the browser dashboard has been opened (`web-opened`), in its
   cache folder.
+- Which session-start note you were last shown for each repository, and when
+  (`hook-notes.json`), in the same cache folder, so you see the same note at
+  most once a day.
 - An audit log of every action it carries out (fetch, pull, push, commit,
   stash, run), with the repositories it touched.
 - The launchpad's focus board and agent activity log.
@@ -113,8 +124,10 @@ Delete cohors' config, cache and data folders and nothing of it is left.
 `cohors mcp` answers your coding agent (Claude Code or another MCP client) over
 standard input and output on your machine. What your agent then does with those
 answers, including sending them to its model provider, is governed by that
-agent's own privacy policy, not this one. The server starts read-only. Git
-actions, commands and launchpad writes each need a setting you turn on.
+agent's own privacy policy, not this one. The same goes for the note that
+`cohors hook session-start` hands to Claude Code when a session starts. The
+server starts read-only. Git actions, commands and launchpad writes each need
+a setting you turn on.
 
 ## The browser dashboard
 

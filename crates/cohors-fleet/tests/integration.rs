@@ -9,7 +9,7 @@
 use std::process::Command;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use cohors_fleet::{Scanner, detail_bundle};
+use cohors_fleet::{Scanner, checkout_at, detail_bundle};
 
 /// Create a git repo with one commit at `dir` (created if needed).
 fn make_repo(dir: &Utf8Path) {
@@ -306,4 +306,70 @@ fn a_deep_search_is_remembered_for_normal_scans() {
     // Deleting the repo drops it again, with no deep search needed.
     std::fs::remove_dir_all(root.join("code/archive/tools/linter").as_std_path()).unwrap();
     assert_eq!(names(scanner.scan()), ["api-dashboard", "archive", "code"]);
+}
+
+/// Checkout edge: a session that opened in a linked worktree is handed the
+/// whole repository (the main checkout, listing that worktree), and is told
+/// which worktree it is in. No config, no roots: only the folder.
+#[test]
+fn checkout_at_reads_the_whole_repo_from_inside_a_linked_worktree() {
+    let (_t, root) = tmp();
+    let main = root.join("api");
+    make_repo(&main);
+    let git = |dir: &Utf8Path, args: &[&str]| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(dir.as_str())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}: {out:?}");
+    };
+    git(
+        &main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            ".claude/worktrees/agent-a",
+            "-b",
+            "worktree-agent-a",
+        ],
+    );
+    let agent = main.join(".claude/worktrees/agent-a");
+    std::fs::write(agent.join("left.txt").as_std_path(), "never committed").unwrap();
+    // On macOS the temp folder sits behind a symlink; the repo's path is the
+    // real one.
+    let real_main = Utf8PathBuf::from_path_buf(main.as_std_path().canonicalize().unwrap()).unwrap();
+
+    // From inside the worktree: the main checkout's snapshot, which lists
+    // the worktree (with its own uncommitted file), and the worktree's name.
+    let inside = checkout_at(&agent, 1_700_000_000).expect("a worktree is a checkout");
+    assert_eq!(inside.worktree.as_deref(), Some("agent-a"));
+    assert_eq!(inside.repo.path.as_deref(), Some(real_main.as_path()));
+    assert_eq!(inside.repo.name, "api");
+    assert_eq!(
+        inside.repo.worktrees.len(),
+        1,
+        "{:?}",
+        inside.repo.worktrees
+    );
+    assert_eq!(inside.repo.worktrees[0].name, "agent-a");
+    assert_eq!(inside.repo.worktrees[0].status.untracked, 1);
+
+    // From the main checkout, or a folder inside it: the same repository, in
+    // no worktree.
+    std::fs::create_dir_all(main.join("src").as_std_path()).unwrap();
+    for folder in [main.clone(), main.join("src")] {
+        let at = checkout_at(&folder, 1_700_000_000).expect("the main checkout");
+        assert_eq!(at.worktree, None, "{folder}");
+        assert_eq!(at.repo.path.as_deref(), Some(real_main.as_path()));
+        assert_eq!(at.repo.worktrees.len(), 1);
+    }
+
+    // A folder that is not in a repository, or is not there: nothing.
+    let plain = root.join("plain");
+    std::fs::create_dir_all(plain.as_std_path()).unwrap();
+    assert!(checkout_at(&plain, 1_700_000_000).is_none());
+    assert!(checkout_at(&root.join("gone"), 1_700_000_000).is_none());
 }

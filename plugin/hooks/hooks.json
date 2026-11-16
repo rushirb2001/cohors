@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/scripts/cohors-launch.sh\" hook session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

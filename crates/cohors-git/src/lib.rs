@@ -25,5 +25,5 @@ pub use discover::{DiscoveryOptions, GENERATED_DIRS, admit_known_repos, discover
 pub use error::GitError;
 pub use provider::{LocalGitProvider, snapshot_all};
 pub use search::{ContentHit, search_content};
-pub use snapshot::{snapshot_repo, worktree_state};
+pub use snapshot::{owning_repo, snapshot_repo, worktree_state};
 pub use standup::collect_commits;

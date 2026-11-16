@@ -3,7 +3,7 @@
 //! These exercise the built `cohors` binary via `assert_cmd`. `XDG_CACHE_HOME`
 //! is pointed at a temp dir so the log file never touches the real home.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command as StdCommand;
 
 use assert_cmd::Command;
@@ -528,4 +528,423 @@ fn report_prints_the_plain_report_to_a_pipe_and_json_still_wins() {
         .success(),
     );
     assert!(both.trim_start().starts_with('{'), "{both}");
+}
+
+// ----- `cohors hook` (ADR-073) -----------------------------------------------
+//
+// Claude Code runs a hook as a program: the event arrives as JSON on standard
+// input, the answer leaves as one line of JSON on standard output. These tests
+// are that caller. Every run also checks the two promises that matter most to
+// a session waiting on it: it exits 0, and it writes nothing to stderr.
+
+/// A repo called `api`, pushed to a bare remote so that "not pushed" means
+/// something.
+fn repo_with_remote(base: &Path) -> PathBuf {
+    let remote = base.join("origin.git");
+    std::fs::create_dir_all(&remote).unwrap();
+    git(
+        &remote,
+        &["-c", "init.defaultBranch=main", "init", "-q", "--bare"],
+    );
+    let repo = base.join("api");
+    init_repo_with_commit(&repo);
+    git(
+        &repo,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    git(&repo, &["push", "-q", "-u", "origin", "main"]);
+    repo
+}
+
+/// A linked worktree at `.claude/worktrees/<name>` (where Claude Code puts an
+/// agent's checkout), on a branch of its own.
+fn add_worktree(repo: &Path, name: &str) -> PathBuf {
+    let folder = format!(".claude/worktrees/{name}");
+    let branch = format!("worktree-{name}");
+    git(repo, &["worktree", "add", "-q", &folder, "-b", &branch]);
+    repo.join(folder)
+}
+
+/// One commit in `worktree` that nothing has pushed.
+fn commit_in(worktree: &Path, file: &str) {
+    std::fs::write(worktree.join(file), "finished").unwrap();
+    git(worktree, &["add", "."]);
+    git(worktree, &["commit", "-q", "-m", "agent work"]);
+}
+
+/// The repo with an agent's worktree that holds one commit nobody pushed.
+/// The `git` helper pins commit dates to 2021, so that work has sat for
+/// years: well past the hour after which cohors takes work to be left behind.
+fn repo_with_left_behind_worktree(base: &Path) -> (PathBuf, PathBuf) {
+    let repo = repo_with_remote(base);
+    let agent = add_worktree(&repo, "agent-a");
+    commit_in(&agent, "done.txt");
+    (repo, agent)
+}
+
+/// The event Claude Code sends when a session starts in `cwd`.
+fn start_event(cwd: &Path, source: &str) -> String {
+    serde_json::json!({
+        "session_id": "s1",
+        "hook_event_name": "SessionStart",
+        "cwd": cwd,
+        "source": source,
+    })
+    .to_string()
+}
+
+/// `cohors hook <event>` run in `dir` with `stdin`, its memory of what it
+/// showed kept in `cache`. Asserts it exits 0 and writes nothing to stderr;
+/// returns what it printed.
+fn run_hook(cache: &Path, dir: &Path, event: &str, stdin: &str) -> String {
+    let assert = cohors(cache)
+        .current_dir(dir)
+        .args(["hook", event])
+        .write_stdin(stdin)
+        .assert()
+        .success();
+    let stderr = stderr_of(&assert);
+    assert!(
+        stderr.is_empty(),
+        "a hook never writes to stderr: {stderr:?}"
+    );
+    stdout_of(&assert)
+}
+
+/// What a hook printed, which must be exactly one line of JSON.
+fn the_reply(printed: &str) -> serde_json::Value {
+    assert!(
+        printed.ends_with('\n') && printed.trim_end().lines().count() == 1,
+        "one line of JSON, got {printed:?}"
+    );
+    serde_json::from_str(printed).expect("the reply is JSON")
+}
+
+/// The text a reply gives the model.
+fn context_of(reply: &serde_json::Value) -> &str {
+    assert_eq!(reply["hookSpecificOutput"]["hookEventName"], "SessionStart");
+    reply["hookSpecificOutput"]["additionalContext"]
+        .as_str()
+        .expect("additionalContext is text")
+}
+
+#[test]
+fn a_session_in_a_repo_with_work_left_behind_is_given_the_note_and_told_once() {
+    let base = TempDir::new().unwrap();
+    let (repo, _agent) = repo_with_left_behind_worktree(base.path());
+    let cache = TempDir::new().unwrap();
+    let memory = cache.path().join("cohors/hook-notes.json");
+
+    // The first time: the model gets the note and the person gets a line.
+    let first = the_reply(&run_hook(
+        cache.path(),
+        base.path(),
+        "session-start",
+        &start_event(&repo, "startup"),
+    ));
+    let context = context_of(&first);
+    assert!(context.contains("worktree agent-a"), "{context}");
+    assert!(context.contains("1 commit not pushed"), "{context}");
+    let told = first["systemMessage"].as_str().expect("the person is told");
+    assert!(
+        told.contains("api") && told.contains("1 commit in 1 worktree"),
+        "{told}"
+    );
+    let mut keys: Vec<&str> = first
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect();
+    keys.sort_unstable();
+    assert_eq!(keys, ["hookSpecificOutput", "systemMessage"]);
+
+    // What was shown is remembered, by the repository's path.
+    let remembered: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&memory).unwrap()).unwrap();
+    let real_repo = std::fs::canonicalize(&repo).unwrap();
+    let entry = &remembered[real_repo.to_str().unwrap()];
+    assert!(
+        entry["fingerprint"].as_str().is_some_and(|f| !f.is_empty()),
+        "{remembered}"
+    );
+    assert!(
+        entry["at"].as_i64().is_some_and(|at| at > 0),
+        "{remembered}"
+    );
+    assert_eq!(remembered.as_object().unwrap().len(), 1);
+
+    // Again, with the same memory: the model still gets it, the person does not.
+    let again = the_reply(&run_hook(
+        cache.path(),
+        base.path(),
+        "session-start",
+        &start_event(&repo, "startup"),
+    ));
+    assert!(context_of(&again).contains("worktree agent-a"));
+    assert!(again.get("systemMessage").is_none(), "{again}");
+
+    // From a folder inside the repository it is the same repository, so the
+    // same note and the same memory.
+    let src = repo.join("src");
+    std::fs::create_dir_all(&src).unwrap();
+    let from_src = the_reply(&run_hook(
+        cache.path(),
+        base.path(),
+        "session-start",
+        &start_event(&src, "startup"),
+    ));
+    assert!(context_of(&from_src).contains("worktree agent-a"));
+    assert!(from_src.get("systemMessage").is_none(), "{from_src}");
+
+    // A conversation that is only carrying on (`/clear`, a compaction, a
+    // fork) gives the model the note and never the person, and leaves the
+    // memory alone.
+    for source in ["compact", "clear", "fork"] {
+        let fresh = TempDir::new().unwrap();
+        let reply = the_reply(&run_hook(
+            fresh.path(),
+            base.path(),
+            "session-start",
+            &start_event(&repo, source),
+        ));
+        assert!(context_of(&reply).contains("worktree agent-a"), "{source}");
+        assert!(reply.get("systemMessage").is_none(), "{source}: {reply}");
+        assert!(
+            !fresh.path().join("cohors/hook-notes.json").exists(),
+            "{source}"
+        );
+    }
+
+    // Picking an old conversation up again is a person sitting down.
+    let fresh = TempDir::new().unwrap();
+    let resumed = the_reply(&run_hook(
+        fresh.path(),
+        base.path(),
+        "session-start",
+        &start_event(&repo, "resume"),
+    ));
+    assert!(resumed["systemMessage"].is_string(), "{resumed}");
+}
+
+#[test]
+fn a_session_inside_the_worktree_is_told_only_of_its_own_old_commits() {
+    let base = TempDir::new().unwrap();
+    let (_repo, agent) = repo_with_left_behind_worktree(base.path());
+    let cache = TempDir::new().unwrap();
+
+    // The worktree is this session's own: it is not "left behind", so it is
+    // not listed. But its one commit has sat unpushed for years, and the core
+    // rules say that is worth a line.
+    let reply = the_reply(&run_hook(
+        cache.path(),
+        base.path(),
+        "session-start",
+        &start_event(&agent, "startup"),
+    ));
+    let context = context_of(&reply);
+    assert!(
+        context.contains("- this worktree: 1 commit not pushed, the newest"),
+        "{context}"
+    );
+    assert!(!context.contains("worktree agent-a"), "{context}");
+    let told = reply["systemMessage"].as_str().expect("the person is told");
+    assert!(told.contains("1 commit on this worktree"), "{told}");
+    assert!(!told.contains("agent-a"), "{told}");
+}
+
+#[test]
+fn a_worktree_someone_is_working_in_right_now_is_not_mentioned() {
+    let base = TempDir::new().unwrap();
+    let repo = repo_with_remote(base.path());
+    let cache = TempDir::new().unwrap();
+    let start = start_event(&repo, "startup");
+
+    // A file written this moment in a worktree: another session is in there.
+    // Its checked-out commit is from 2021, but the files say when it was used.
+    let busy = add_worktree(&repo, "busy");
+    std::fs::write(busy.join("wip.txt"), "in progress").unwrap();
+    assert_eq!(
+        run_hook(cache.path(), base.path(), "session-start", &start),
+        ""
+    );
+
+    // Beside it, a worktree with a commit nobody has touched: only that one
+    // is named.
+    let agent = add_worktree(&repo, "agent-a");
+    commit_in(&agent, "done.txt");
+    let reply = the_reply(&run_hook(
+        cache.path(),
+        base.path(),
+        "session-start",
+        &start,
+    ));
+    let context = context_of(&reply);
+    assert!(context.contains("worktree agent-a"), "{context}");
+    assert!(!context.contains("busy"), "{context}");
+}
+
+#[test]
+fn nothing_to_say_prints_nothing_and_never_fails() {
+    let base = TempDir::new().unwrap();
+    let cache = TempDir::new().unwrap();
+    let plain = base.path().join("plain");
+    std::fs::create_dir_all(&plain).unwrap();
+
+    // A clean repository: no worktrees, nothing unpushed.
+    let clean = base.path().join("clean");
+    init_repo_with_commit(&clean);
+    assert_eq!(
+        run_hook(
+            cache.path(),
+            base.path(),
+            "session-start",
+            &start_event(&clean, "startup")
+        ),
+        ""
+    );
+    // Clean with a remote and a worktree that holds nothing is nothing too.
+    let tidy = repo_with_remote(&base.path().join("tidy"));
+    add_worktree(&tidy, "empty");
+    assert_eq!(
+        run_hook(
+            cache.path(),
+            base.path(),
+            "session-start",
+            &start_event(&tidy, "startup")
+        ),
+        ""
+    );
+
+    // A folder that is not a repository, one that does not exist.
+    for cwd in [plain.clone(), base.path().join("gone")] {
+        assert_eq!(
+            run_hook(
+                cache.path(),
+                base.path(),
+                "session-start",
+                &start_event(&cwd, "startup")
+            ),
+            "",
+            "{cwd:?}"
+        );
+    }
+
+    // Input that is not what Claude Code sends, in a folder that is not a
+    // repository either: still nothing, still exit 0, still no stderr.
+    for stdin in [
+        "",
+        "   \n",
+        "not json at all",
+        "{",
+        "[1,2]",
+        "null",
+        "{\"cwd\":42}",
+    ] {
+        assert_eq!(
+            run_hook(cache.path(), &plain, "session-start", stdin),
+            "",
+            "{stdin:?}"
+        );
+    }
+
+    // Nothing was said, so nothing was remembered.
+    assert!(!cache.path().join("cohors/hook-notes.json").exists());
+}
+
+#[test]
+fn without_a_folder_in_the_event_it_looks_where_it_was_run() {
+    let base = TempDir::new().unwrap();
+    let (repo, _agent) = repo_with_left_behind_worktree(base.path());
+
+    // Empty, garbage, or an event with no `cwd`: the process's own folder,
+    // and a fresh start.
+    for stdin in ["", "garbage", r#"{"source":"startup"}"#, r#"{"cwd":""}"#] {
+        let cache = TempDir::new().unwrap();
+        let reply = the_reply(&run_hook(cache.path(), &repo, "session-start", stdin));
+        assert!(context_of(&reply).contains("worktree agent-a"), "{stdin:?}");
+        assert!(reply["systemMessage"].is_string(), "{stdin:?}: {reply}");
+    }
+}
+
+#[test]
+fn an_event_it_does_not_know_is_ignored() {
+    let base = TempDir::new().unwrap();
+    let (repo, _agent) = repo_with_left_behind_worktree(base.path());
+    let cache = TempDir::new().unwrap();
+
+    // A newer plugin may send events this cohors has never heard of. Even in
+    // a repository that has a note, only `session-start` says anything.
+    for event in ["unknown-event", "pre-tool-use", "SessionStart", ""] {
+        assert_eq!(
+            run_hook(
+                cache.path(),
+                base.path(),
+                event,
+                &start_event(&repo, "startup")
+            ),
+            "",
+            "{event:?}"
+        );
+    }
+}
+
+#[test]
+fn a_memory_that_cannot_be_read_or_written_still_prints_the_note() {
+    let base = TempDir::new().unwrap();
+    let (repo, _agent) = repo_with_left_behind_worktree(base.path());
+    let start = start_event(&repo, "startup");
+
+    // A memory file that is not JSON: treated as nothing shown yet, and
+    // replaced by a good one.
+    let cache = TempDir::new().unwrap();
+    let memory = cache.path().join("cohors/hook-notes.json");
+    std::fs::create_dir_all(memory.parent().unwrap()).unwrap();
+    std::fs::write(&memory, "this is not json").unwrap();
+    let reply = the_reply(&run_hook(
+        cache.path(),
+        base.path(),
+        "session-start",
+        &start,
+    ));
+    assert!(reply["systemMessage"].is_string(), "{reply}");
+    let rewritten = std::fs::read_to_string(&memory).unwrap();
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&rewritten).is_ok(),
+        "{rewritten}"
+    );
+
+    // A cache folder that cannot exist (its parent is a file): nothing can be
+    // remembered, so the person is told every time, and nothing goes wrong.
+    let blocker = base.path().join("blocker");
+    std::fs::write(&blocker, "a file, not a folder").unwrap();
+    for _ in 0..2 {
+        let reply = the_reply(&run_hook(&blocker, base.path(), "session-start", &start));
+        assert!(context_of(&reply).contains("worktree agent-a"));
+        assert!(reply["systemMessage"].is_string(), "{reply}");
+    }
+}
+
+#[test]
+fn hook_is_hidden_from_help_but_has_its_own() {
+    let cache = TempDir::new().unwrap();
+    let help = stdout_of(&cohors(cache.path()).arg("--help").assert().success());
+    assert!(
+        !help
+            .lines()
+            .any(|line| line.trim_start().starts_with("hook")),
+        "`hook` is not for typing and is not listed: {help}"
+    );
+
+    let own = stdout_of(
+        &cohors(cache.path())
+            .args(["hook", "--help"])
+            .assert()
+            .success(),
+    );
+    assert!(own.contains("session-start"), "{own}");
+    assert!(
+        own.contains("SessionStart"),
+        "it shows how to wire it up: {own}"
+    );
 }

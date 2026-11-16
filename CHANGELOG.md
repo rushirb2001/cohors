@@ -31,6 +31,30 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.26] — 2026-11-16
+
+### Added
+
+- **A note when a session starts where work was left behind.** With the
+  Claude Code plugin, opening a session in a repository that has work sitting
+  in a linked worktree (commits that are on no remote, or files that were
+  never committed), or commits of its own unpushed for more than two days,
+  gets one line: `cohors: payments has work that exists only on this machine:
+  5 commits and 1 uncommitted file in 1 worktree, untouched for 9 days. Ask
+  Claude for the details.` Claude is given where each piece is, as
+  information, with the instruction not to commit, push, move or delete it
+  unless you ask. A repository with nothing left behind gets nothing. A
+  worktree touched in the last hour is left out, since someone is working in
+  it. You are shown the same note at most once a day, sooner when what it
+  says changes. It reads only the repository the session is in, takes about
+  a tenth of a second, and connects to nothing.
+- **"Session notes"** in the plugin's settings turns it off
+  (`claude plugin configure cohors@cohors`). Without the plugin, add
+  `cohors hook session-start` as a `SessionStart` hook in your own Claude
+  Code settings; `cohors hook --help` shows how.
+- **`touched`** on each linked worktree in the scan JSON: when its
+  uncommitted files were last changed.
+
 ## [0.8.25] — 2026-11-16
 
 ### Fixed

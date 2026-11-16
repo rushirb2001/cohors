@@ -1,6 +1,7 @@
 //! Implementations of the CLI subcommands.
 
 pub mod agent;
+pub mod hook;
 pub mod launchpad;
 pub mod look;
 pub mod next;

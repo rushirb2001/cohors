@@ -603,6 +603,7 @@ mod tests {
             status: cohors_core::WorktreeStatus::default(),
             unpushed: 0,
             last_commit: None,
+            touched: None,
             locked: false,
             missing: false,
         };
