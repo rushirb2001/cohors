@@ -82,7 +82,7 @@ mod shell_quote_tests {
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
 #[cfg(not(target_arch = "wasm32"))]
-pub use server::{Assets, Caps, ScanFn, ServeOptions, Source, serve};
+pub use server::{Assets, Caps, ScanFn, ServeOptions, Source, UpdateFn, UpdateSource, serve};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod standalone {
@@ -154,6 +154,9 @@ pub mod standalone {
             demo: false,
             author_email: scanner.author_email(),
             tips: true,
+            // Looking for releases belongs to the `cohors` binary; this
+            // standalone server has no install of its own to report on.
+            update: None,
         };
         // Live: the fleet watch keeps the scan current and the page hears
         // about each change over `/api/events`.

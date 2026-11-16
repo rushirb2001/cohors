@@ -26,6 +26,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.15] — 2026-11-16
+
+### Added
+
+- **The web dashboard says when a newer cohors is out,** at the top of every
+  page, in the same words as the terminal dashboard, with its command to
+  copy.
+
 ## [0.8.14] — 2026-11-16
 
 ### Added

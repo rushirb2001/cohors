@@ -14,8 +14,10 @@
 //! Endpoints:
 //! - `GET  /api/repos[?enrich=1]` — the local scan (optionally GitHub-enriched).
 //! - `GET  /api/detail?path=…&url=…` — one repo's drill-in (local + remote).
-//! - `GET  /api/meta` — the roots being scanned, the enabled tiers, and whether
-//!   the fleet is live (has an event stream).
+//! - `GET  /api/meta` — the roots being scanned, the enabled tiers, whether
+//!   the fleet is live (has an event stream), and a newer cohors when one is
+//!   known (`update`: `{version, notice, detail}`, the shape the MCP server's
+//!   `meta.update` and each `cohors watch` line carry).
 //! - `GET  /api/overview[?fresh=1]` — the shared overview model
 //!   (`cohors_core::Overview`): "Do next", key figures, one line per repo, tasks
 //!   and commits. The same struct the terminal UI, the editor extension and the
@@ -49,6 +51,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use anyhow::{Result, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use cohors_core::RepoSnapshot;
+use cohors_core::update::UpdateState;
 use cohors_fleet::{FleetState, FleetWatch, LaunchpadBundle, Scanner, Subscription, WatchOptions};
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -61,6 +64,41 @@ pub type ScanFn = dyn Fn() -> Vec<RepoSnapshot> + Send + Sync;
 /// Which mutating tiers the server permits, chosen at launch (ADR-025) — the
 /// shared `cohors-actions` type; enforcement lives in its `dispatch`.
 pub use cohors_actions::Caps;
+
+/// Whether a newer cohors is known, asked on every `/api/meta` so a server
+/// that runs for days notices a release found while it runs.
+pub type UpdateFn = dyn Fn() -> Option<UpdateState> + Send + Sync;
+
+/// The binary's answer to "is a newer cohors known?" ([`UpdateFn`]), wrapped
+/// so [`ServeOptions`] can still derive `Debug` and `Clone`: a closure has no
+/// `Debug` of its own, and `Arc` makes the clone a cheap shared handle.
+#[derive(Clone)]
+pub struct UpdateSource(pub Arc<UpdateFn>);
+
+impl std::fmt::Debug for UpdateSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("UpdateSource(..)")
+    }
+}
+
+/// A newer cohors as `/api/meta` reports it, in the words every surface uses
+/// ([`UpdateState::notice`]); `detail` is the state itself.
+#[derive(Serialize)]
+struct UpdateNotice {
+    version: String,
+    notice: String,
+    detail: UpdateState,
+}
+
+impl From<UpdateState> for UpdateNotice {
+    fn from(state: UpdateState) -> Self {
+        Self {
+            version: state.version().to_string(),
+            notice: state.notice(),
+            detail: state,
+        }
+    }
+}
 
 /// Where the server's fleet comes from.
 pub enum Source {
@@ -238,6 +276,9 @@ struct MetaResponse {
     /// button before the user clicks it rather than after.
     allow_writes: bool,
     allow_run: bool,
+    /// A newer cohors, when one is known (`null` otherwise), so the page can
+    /// say so in its header the way the terminal dashboard does.
+    update: Option<UpdateNotice>,
 }
 
 /// A root as the page shows it: `~/code` rather than the full path of the
@@ -304,6 +345,10 @@ pub struct ServeOptions {
     /// (ADR-065). The real `cohors web` sets it; the demo and tests do not,
     /// so they never touch the cache folder.
     pub tips: bool,
+    /// Whether a newer cohors is known, for `/api/meta`. The real `cohors
+    /// web` passes what its background look remembered; the demo and the
+    /// tests pass `None`, so the page never mentions updates.
+    pub update: Option<UpdateSource>,
 }
 
 /// What the read endpoints need to know about this session.
@@ -312,6 +357,7 @@ struct Site {
     token: Option<String>,
     watch: bool,
     author_email: Option<String>,
+    update: Option<UpdateSource>,
 }
 
 /// Serve the page from `assets` on `127.0.0.1:port`, exposing the fleet from
@@ -340,6 +386,7 @@ fn serve_on(server: Server, assets: Assets, source: Source, options: ServeOption
         token: options.token,
         watch: options.watch,
         author_email: options.author_email,
+        update: options.update,
     });
 
     // Enough workers that a slow enrich/detail fetch (which hits GitHub) doesn't
@@ -400,6 +447,11 @@ fn handle(req: tiny_http::Request, dist: &Assets, fleet: &Fleet, site: &Site, ac
                 demo: fleet.demo,
                 allow_writes: action.caps.allow_writes,
                 allow_run: action.caps.allow_run,
+                update: site
+                    .update
+                    .as_ref()
+                    .and_then(|source| (source.0)())
+                    .map(UpdateNotice::from),
             },
         ),
         (Method::Get, "/api/overview") => {
@@ -1210,6 +1262,37 @@ mod live_tests {
         assert_eq!(status, 204, "EventSource stops on 204 and the page polls");
         let (_, meta) = get(port, "/api/meta", "");
         assert_eq!(serde_json::from_str::<Value>(&meta).unwrap()["live"], false);
+    }
+
+    #[test]
+    fn meta_says_when_a_newer_cohors_is_out_in_cohors_words() {
+        let scan: Arc<ScanFn> = Arc::new(|| cohors_core::demo::fleet(1_700_000_000));
+        let state = UpdateState::Available {
+            version: "9.9.9".to_string(),
+            command: "cohors update".to_string(),
+        };
+        let said = state.clone();
+        let options = ServeOptions {
+            update: Some(UpdateSource(Arc::new(move || Some(said.clone())))),
+            ..ServeOptions::default()
+        };
+        let server = Server::http("127.0.0.1:0").unwrap();
+        let port = server.server_addr().to_ip().unwrap().port();
+        let source = Source::from(scan.clone());
+        thread::spawn(move || serve_on(server, Assets::Embedded(&[]), source, options));
+
+        let (status, meta) = get(port, "/api/meta", "");
+        assert_eq!(status, 200);
+        let meta: Value = serde_json::from_str(&meta).unwrap();
+        assert_eq!(meta["update"]["version"], "9.9.9");
+        // The words the terminal and the MCP server use, worked out here.
+        assert_eq!(meta["update"]["notice"], state.notice());
+        assert_eq!(meta["update"]["detail"]["command"], "cohors update");
+
+        // With nothing to report (the demo, the tests): `null`.
+        let port = start(Source::from(scan));
+        let (_, meta) = get(port, "/api/meta", "");
+        assert!(serde_json::from_str::<Value>(&meta).unwrap()["update"].is_null());
     }
 }
 

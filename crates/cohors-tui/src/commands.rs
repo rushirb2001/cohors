@@ -2017,6 +2017,17 @@ pub fn run_web(
     // server lives in `cohors-web` now (the write seam is no longer trapped in
     // this binary); we hand it a scan closure + the shared safety config.
     let actions_config = scanner.actions_config();
+    // A newer cohors, for the page's header. Like the MCP server, the web
+    // server looks in the background, now and every few minutes, and only
+    // reports: installing is left to the dashboard or `cohors update`. The
+    // demo shows sample data and says nothing about this machine's install.
+    let update = (!demo).then(|| {
+        let mode = crate::update::effective_mode(scanner.updates_mode());
+        crate::update::watch(mode, false, |_| true);
+        let remembered: std::sync::Arc<cohors_web::UpdateFn> =
+            std::sync::Arc::new(move || crate::update::remembered(mode));
+        cohors_web::UpdateSource(remembered)
+    });
     let options = cohors_web::ServeOptions {
         port,
         roots: scanner.roots(),
@@ -2032,6 +2043,7 @@ pub fn run_web(
         author_email: scanner.author_email(),
         // The page offers a setup tip and notes that it was opened (ADR-065).
         tips: !demo,
+        update,
     };
     // A real fleet is live: the fleet watch keeps the scan current and the
     // page hears about each change over `/api/events`.

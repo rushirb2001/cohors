@@ -20,7 +20,7 @@ members = [
 # Shared package metadata. Each crate inherits these with `field.workspace = true`
 # so version/edition/license stay consistent across the workspace.
 [workspace.package]
-version = "0.8.14"
+version = "0.8.15"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -87,15 +87,15 @@ insta = "1"
 
 # Internal crates referenced by path. Front-ends depend on these, never on the
 # concrete data source directly (everything funnels through cohors-core).
-cohors-core = { path = "crates/cohors-core", version = "0.8.14" }
-cohors-config = { path = "crates/cohors-config", version = "0.8.14" }
-cohors-git = { path = "crates/cohors-git", version = "0.8.14" }
-cohors-github = { path = "crates/cohors-github", version = "0.8.14" }
-cohors-actions = { path = "crates/cohors-actions", version = "0.8.14" }
-cohors-launchpad = { path = "crates/cohors-launchpad", version = "0.8.14" }
-cohors-fleet = { path = "crates/cohors-fleet", version = "0.8.14" }
-cohors-mcp = { path = "crates/cohors-mcp", version = "0.8.14" }
-cohors-web = { path = "crates/cohors-web", version = "0.8.14" }
+cohors-core = { path = "crates/cohors-core", version = "0.8.15" }
+cohors-config = { path = "crates/cohors-config", version = "0.8.15" }
+cohors-git = { path = "crates/cohors-git", version = "0.8.15" }
+cohors-github = { path = "crates/cohors-github", version = "0.8.15" }
+cohors-actions = { path = "crates/cohors-actions", version = "0.8.15" }
+cohors-launchpad = { path = "crates/cohors-launchpad", version = "0.8.15" }
+cohors-fleet = { path = "crates/cohors-fleet", version = "0.8.15" }
+cohors-mcp = { path = "crates/cohors-mcp", version = "0.8.15" }
+cohors-web = { path = "crates/cohors-web", version = "0.8.15" }
 
 # Release config for cargo-dist (the `dist` tool). After changing anything here,
 # run `cargo dist generate` to regenerate `.github/workflows/release.yml`; its

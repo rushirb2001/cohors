@@ -26,6 +26,27 @@ pub struct Meta {
     pub allow_run: bool,
     /// Whether `/api/events` announces each change (the fleet is live).
     pub live: bool,
+    /// A newer cohors, when the server knows of one.
+    pub update: Option<UpdateNote>,
+}
+
+/// A newer cohors, as `/api/meta` reports it.
+#[derive(Deserialize, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct UpdateNote {
+    pub version: String,
+    /// What the terminal dashboard and the MCP server say, word for word
+    /// (`UpdateState::notice`, worked out by the server).
+    pub notice: String,
+    pub detail: UpdateDetail,
+}
+
+/// The part of the update state the page uses.
+#[derive(Deserialize, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct UpdateDetail {
+    /// The command that installs it, when cohors will not install it itself.
+    pub command: Option<String>,
 }
 
 /// One suggestion from `/api/next`. A resume names the conversation it

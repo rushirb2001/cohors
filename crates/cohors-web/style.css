@@ -263,6 +263,9 @@ main > section, main > .lead { margin-top: var(--s6); }
   padding: var(--s2) var(--s4); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface);
 }
 .notice > span { flex: 1; min-width: 0; }
+/* A newer cohors: the brand colour marks it as news, not a problem. */
+.notice.update { margin-top: 0; margin-bottom: var(--s4); }
+.notice.update > .ic { color: var(--tyrian); }
 
 /* ── 7. State marks: shape carries severity, colour reinforces it ───────── */
 /* Severity blocks: the word in a small filled rectangle. Filled only where

@@ -552,6 +552,7 @@ fn ready(cx: Ctx) -> impl IntoView {
     // every time a scan replaces the overview.
     let empty = Memo::new(move |_| cx.overview.with(|o| o.figures.repos == 0));
     view! {
+        {move || update_notice(cx)}
         {move || {
             cx.refresh_error
                 .get()
@@ -583,6 +584,32 @@ fn ready(cx: Ctx) -> impl IntoView {
             }
         }}
     }
+}
+
+/// A newer cohors, at the head of every page, in the words the terminal
+/// dashboard's header and the MCP server use (the server words it with
+/// `UpdateState::notice`). Its command can be copied when there is one.
+/// Nothing at all when there is no news.
+fn update_notice(cx: Ctx) -> Option<impl IntoView> {
+    let update = cx.meta.with(|m| m.update.clone())?;
+    let copy = update.detail.command.map(|command| {
+        view! {
+            <button
+                class="btn small"
+                on:click=move |_| ui::copy_text(cx, command.clone(), "command")
+            >
+                {ui::icon(ui::Icon::Copy)}
+                <span>"Copy"</span>
+            </button>
+        }
+    });
+    Some(view! {
+        <div class="notice update" role="status">
+            {ui::icon(ui::Icon::Upload)}
+            <span>{update.notice}</span>
+            {copy}
+        </div>
+    })
 }
 
 /// The scan worked but found no repositories.
