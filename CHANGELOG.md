@@ -31,6 +31,29 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.22] — 2026-11-16
+
+### Changed
+
+- **What `cohors mcp` tells an agent is several times smaller.** Measured on
+  a fleet of 27 repositories: `list_repos` went from 102,000 characters to
+  about 15,000, `overview` from 40,000 to 11,000, `standup` from 66,000 to
+  20,000 and `next` from 12,700 to 5,300. Every answer is compact JSON now
+  (indentation was a fifth to two fifths of each one), and these four reads
+  are brief unless asked otherwise: `list_repos` leaves out per-branch
+  status, the weekly activity series and anything empty, keeps a repo's
+  GitHub data to its checks and open pull requests, and returns the first 50
+  repos (`omitted` counts the rest, `limit` raises it); `overview` lists the
+  20 most urgent repos that have a reason, in words, and counts the clean
+  ones; `standup` is the markdown digest without the same commits a second
+  time as records; `next` lists 8 more sessions rather than 20. `changes`
+  lists at most 100 files a repo (`max_files`), and says how many it left
+  out.
+- **`detail: "full"` on `list_repos`, `overview`, `standup` and `next`
+  returns everything**, field for field what `cohors scan --json` and
+  `cohors overview --json` print, and `fields` on `list_repos` now takes
+  `branches`. A test keeps the brief answers inside a size budget.
+
 ## [0.8.21] — 2026-11-16
 
 ### Fixed

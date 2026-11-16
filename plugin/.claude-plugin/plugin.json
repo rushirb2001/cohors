@@ -2,7 +2,7 @@
   "name": "cohors",
   "displayName": "cohors",
   "description": "Every git repo you own as one fleet Claude can see, search, plan across, and (opt-in) act on: fleet status, cross-repo search, your standup, per-repo tasks and flows, and a focus board. Read-only until you turn on git actions, commands or launchpad writes. Needs the cohors command (brew, pip or cargo).",
-  "version": "0.8.21",
+  "version": "0.8.22",
   "author": {
     "name": "Rushir Bhavsar"
   },
