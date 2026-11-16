@@ -26,6 +26,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.10] — 2026-11-16
+
+### Added
+
+- **Claude can brief you on part of your fleet.** The MCP `overview` tool
+  takes a selector (`{"group": "payments"}`, `{"name": "api*"}`), as
+  `cohors overview --select` does: next steps, figures and repositories then
+  cover only those.
+
 ## [0.8.9] — 2026-11-16
 
 ### Added

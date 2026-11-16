@@ -92,9 +92,15 @@
         "readOnlyHint": true,
         "title": "What to do next"
       },
-      "description": "The briefing: what to DO NEXT across the fleet and why, in one call. Returns `actions` (most urgent first — each with a title, the reason, the registry verb that carries it out when there is one, and the ids of the repos it applies to), `figures` (the key numbers: work not backed up, stashes, uncommitted files, stale fetches, open tasks, commits this week), `repos` (one line per repo, most urgent first, with every reason in plain words and `at_risk` marking where local work could be lost), `work` (open tasks per repo) and `commits` (last 7 days per repo). This is the exact model the terminal UI, the web dashboard and the editor extension render, so what you report matches what the user sees. Use it for \"what should I do\", \"brief me\", \"what's at risk\", or before planning a day; use list_repos when you need raw per-repo fields or a selector. To act on an action, pass its repos as {\"ids\": [...]} to the named verb. Takes no arguments.",
+      "description": "The briefing: what to DO NEXT across the fleet and why, in one call. Returns `actions` (most urgent first — each with a title, the reason, the registry verb that carries it out when there is one, and the ids of the repos it applies to), `figures` (the key numbers: work not backed up, stashes, uncommitted files, stale fetches, open tasks, commits this week), `repos` (one line per repo, most urgent first, with every reason in plain words and `at_risk` marking where local work could be lost), `work` (open tasks per repo) and `commits` (last 7 days per repo). This is the exact model the terminal UI, the web dashboard and the editor extension render, so what you report matches what the user sees. Use it for \"what should I do\", \"brief me\", \"what's at risk\", or before planning a day; use list_repos when you need raw per-repo fields. To act on an action, pass its repos as {\"ids\": [...]} to the named verb. An optional selector briefs on just the repos it picks (e.g. {\"group\": \"payments\"} or {\"name\": \"api*\"}), as `cohors overview --select` does: actions, figures and lines then cover only those. Omit it for the whole fleet.",
       "inputSchema": {
-        "properties": {},
+        "properties": {
+          "selector": {
+            "additionalProperties": true,
+            "description": "Predicate that selects repos across the fleet; set fields to AND them, omit a field for no constraint (ADR-024). Scope: all (bool — the whole fleet), ids[str], name (glob, e.g. \"pay*\"), path_glob (* stays within one path segment, ** crosses /), root, group (a config-defined cluster name, e.g. \"payments\"). Local state: dirty, ahead (alias unpushed), behind, diverged, no_upstream, unpublished (a branch never pushed although the repo has a remote), stale_fetch (remote not fetched for over 14 days), has_stash, detached, conflicted, in_operation (merge/rebase/… mid-flight), error, branch (glob like name, e.g. \"feat/*\"; an exact name matches itself), attention (\"any\"|\"notice\"|\"warn\"|\"risk\"). Remote (needs a GitHub token): ci (\"passing\"|\"failing\"|\"pending\"|\"none\"), min_prs (int). Combine: any_of[selector] (OR), not (selector). The empty selector {} matches NOTHING by design — pass {\"all\": true} for the whole fleet.",
+            "type": "object"
+          }
+        },
         "type": "object"
       },
       "name": "overview",

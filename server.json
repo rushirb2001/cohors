@@ -3,7 +3,7 @@
   "name": "io.github.rushirb2001/cohors",
   "title": "cohors",
   "description": "Every git repo on your machine for your agent: status, cross-repo search, tasks, opt-in git actions",
-  "version": "0.8.9",
+  "version": "0.8.10",
   "repository": {
     "url": "https://github.com/rushirb2001/cohors",
     "source": "github"
@@ -20,7 +20,7 @@
     {
       "registryType": "pypi",
       "identifier": "cohors",
-      "version": "0.8.9",
+      "version": "0.8.10",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

@@ -363,8 +363,11 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "overview",
-            "description": "The briefing: what to DO NEXT across the fleet and why, in one call. Returns `actions` (most urgent first — each with a title, the reason, the registry verb that carries it out when there is one, and the ids of the repos it applies to), `figures` (the key numbers: work not backed up, stashes, uncommitted files, stale fetches, open tasks, commits this week), `repos` (one line per repo, most urgent first, with every reason in plain words and `at_risk` marking where local work could be lost), `work` (open tasks per repo) and `commits` (last 7 days per repo). This is the exact model the terminal UI, the web dashboard and the editor extension render, so what you report matches what the user sees. Use it for \"what should I do\", \"brief me\", \"what's at risk\", or before planning a day; use list_repos when you need raw per-repo fields or a selector. To act on an action, pass its repos as {\"ids\": [...]} to the named verb. Takes no arguments.",
-            "inputSchema": { "type": "object", "properties": {} }
+            "description": "The briefing: what to DO NEXT across the fleet and why, in one call. Returns `actions` (most urgent first — each with a title, the reason, the registry verb that carries it out when there is one, and the ids of the repos it applies to), `figures` (the key numbers: work not backed up, stashes, uncommitted files, stale fetches, open tasks, commits this week), `repos` (one line per repo, most urgent first, with every reason in plain words and `at_risk` marking where local work could be lost), `work` (open tasks per repo) and `commits` (last 7 days per repo). This is the exact model the terminal UI, the web dashboard and the editor extension render, so what you report matches what the user sees. Use it for \"what should I do\", \"brief me\", \"what's at risk\", or before planning a day; use list_repos when you need raw per-repo fields. To act on an action, pass its repos as {\"ids\": [...]} to the named verb. An optional selector briefs on just the repos it picks (e.g. {\"group\": \"payments\"} or {\"name\": \"api*\"}), as `cohors overview --select` does: actions, figures and lines then cover only those. Omit it for the whole fleet.",
+            "inputSchema": {
+                "type": "object",
+                "properties": { "selector": selector_schema.clone() }
+            }
         },
         {
             "name": "next",
@@ -578,16 +581,7 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
             }
             Ok(value)
         }
-        "overview" => {
-            let snaps = (ctx.scan)();
-            let overview = cohors_fleet::overview(&snaps, ctx.home, now);
-            let mut value =
-                serde_json::to_value(overview).map_err(|e| format!("serializing overview: {e}"))?;
-            if let Value::Object(map) = &mut value {
-                map.insert("meta".to_string(), meta(ctx, &snaps));
-            }
-            Ok(value)
-        }
+        "overview" => overview(args, ctx, now),
         "next" => next(args, ctx, now),
         "standup" => standup(args, ctx, now),
         "repo_path" => repo_path(args, ctx),
@@ -1105,6 +1099,41 @@ fn standup(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
         "markdown": cohors_core::to_markdown(&commits, window),
         "meta": meta(ctx, &snaps),
     }))
+}
+
+/// `overview` — the shared briefing model, over the repos an optional
+/// selector picks (the whole fleet without one), as `cohors overview
+/// --select` builds it: the figures, actions and lines then count only those.
+fn overview(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
+    let narrowed = match args.get("selector") {
+        // A selector that does not parse must not quietly brief on everything.
+        Some(raw) => {
+            serde_json::from_value::<Selector>(raw.clone())
+                .map_err(|e| format!("invalid selector: {e}"))?;
+            true
+        }
+        None => false,
+    };
+    let snaps = (ctx.scan)();
+    // `resolve_read` hands back references into `snaps`; the overview wants
+    // owned snapshots, so the picked ones are cloned (cheap next to a scan).
+    let picked: Vec<RepoSnapshot> = resolve_read(args, &snaps, now)
+        .into_iter()
+        .cloned()
+        .collect();
+    let overview = cohors_fleet::overview(&picked, ctx.home, now);
+    let mut value =
+        serde_json::to_value(overview).map_err(|e| format!("serializing overview: {e}"))?;
+    // `meta` describes the whole fleet (where cohors looked); `selected` says
+    // how much of it this briefing covers.
+    let mut m = meta(ctx, &snaps);
+    if narrowed {
+        m["selected"] = json!(picked.len());
+    }
+    if let Value::Object(map) = &mut value {
+        map.insert("meta".to_string(), m);
+    }
+    Ok(value)
 }
 
 /// How many suggestions `next` lists before the tips: `cohors next`'s default.
@@ -1834,6 +1863,49 @@ mod tests {
         assert!(err_text(&resp).contains("user.email"));
         let resp = call(act("standup", json!({ "window": "decade" })));
         assert!(err_text(&resp).contains("unknown window"));
+    }
+
+    #[test]
+    fn overview_briefs_on_just_the_repos_a_selector_picks() {
+        // What the shared selector itself picks, to compare against.
+        let selector: Selector = serde_json::from_value(json!({ "dirty": true })).unwrap();
+        let dirty: Vec<String> = resolve(&scan(), &selector, SortMode::Name, NOW)
+            .into_iter()
+            .map(|id| id.0)
+            .collect();
+        assert!(
+            !dirty.is_empty() && dirty.len() < scan().len(),
+            "a mixed fixture"
+        );
+
+        let body = payload(&call(act(
+            "overview",
+            json!({ "selector": { "dirty": true } }),
+        )));
+        assert_eq!(body["figures"]["repos"], dirty.len());
+        let ids: Vec<&str> = body["repos"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|r| r["id"].as_str().unwrap())
+            .collect();
+        assert!(
+            ids.iter().all(|id| dirty.iter().any(|d| d == id)),
+            "{ids:?}"
+        );
+        // `meta` still describes the whole fleet, and says how much was picked.
+        assert_eq!(body["meta"]["total"], scan().len());
+        assert_eq!(body["meta"]["selected"], dirty.len());
+
+        // Nothing matched: an empty briefing, not the whole fleet.
+        let body = payload(&call(act(
+            "overview",
+            json!({ "selector": { "name": "zzz*" } }),
+        )));
+        assert_eq!(body["figures"]["repos"], 0);
+        // A selector that does not parse is an error, never a silent "all".
+        let resp = call(act("overview", json!({ "selector": { "dirty": "yes" } })));
+        assert!(is_error(&resp) && err_text(&resp).contains("invalid selector"));
     }
 
     #[test]
