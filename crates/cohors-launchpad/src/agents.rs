@@ -25,7 +25,7 @@ use cohors_core::time::iso8601_utc;
 use serde_json::{Value, json};
 
 use super::{
-    ContributionState, LaunchpadError, ensure_gitignored, io_err, read_board, read_contribution,
+    ContributionState, LaunchpadError, ensure_ignored, io_err, read_board, read_contribution,
     record_activity, refuse_symlink, write_json_atomic,
 };
 
@@ -122,7 +122,7 @@ pub fn detect_runners() -> Vec<RunnerStatus> {
 // ── Task ↔ conversation links ────────────────────────────────────────────────
 
 /// The conversations this machine has linked to a repo's tasks, from the
-/// gitignored `.cohors/local.json` (`{"threads": {"<task id>": "<session id>"}}`).
+/// git-ignored `.cohors/local.json` (`{"threads": {"<task id>": "<session id>"}}`).
 /// A session id is machine-specific, which is why it is never committed.
 pub fn read_threads(root: &Path) -> BTreeMap<String, String> {
     let Ok(body) = fs::read_to_string(root.join(LOCAL_FILE)) else {
@@ -136,7 +136,10 @@ pub fn read_threads(root: &Path) -> BTreeMap<String, String> {
 }
 
 /// Remember that `task_id` is being worked on in conversation `session`.
-/// Other keys already in `local.json` are kept.
+/// Other keys already in `local.json` are kept. The file is ignored through the
+/// clone's `info/exclude`, never the tracked `.gitignore`, so recording a link
+/// (which `cohors agent command` does while only printing a command) leaves
+/// the repo clean.
 pub fn write_thread(
     root: &Path,
     task_id: &str,
@@ -158,10 +161,12 @@ pub fn write_thread(
 
     let dir = root.join(CONTRIB_DIR);
     refuse_symlink(&dir)?;
-    fs::create_dir_all(&dir).map_err(io_err("creating", &dir))?;
     refuse_symlink(&path)?;
-    write_json_atomic(&path, &doc)?;
-    ensure_gitignored(root)
+    // Ignore first: a fresh `local.json` must never be seen as untracked, and a
+    // refusal here (a symlinked `info/exclude`) leaves the repo untouched.
+    ensure_ignored(root)?;
+    fs::create_dir_all(&dir).map_err(io_err("creating", &dir))?;
+    write_json_atomic(&path, &doc)
 }
 
 // ── Prompt files ─────────────────────────────────────────────────────────────
@@ -1059,7 +1064,8 @@ mod tests {
         };
 
         // First launch: a new conversation under an id we chose, and the link
-        // is written to the gitignored local.json.
+        // is written to the git-ignored local.json. (Not a git work tree here,
+        // so no ignore file is touched; see the real-git test below.)
         let first = plan_launch(home.path(), &task(), &all_installed(), NOW).unwrap();
         let session = first.session.clone().expect("a chosen session id");
         assert!(first.linked && is_session_id(&session));
@@ -1069,8 +1075,7 @@ mod tests {
                 .starts_with(&format!("claude --session-id '{session}' "))
         );
         assert_eq!(read_threads(repo.path()).get("ship"), Some(&session));
-        let ignore = fs::read_to_string(repo.path().join(".gitignore")).unwrap();
-        assert!(ignore.contains(".cohors/local.json"));
+        assert!(!repo.path().join(".gitignore").exists());
         let body = fs::read_to_string(first.prompt_file.unwrap()).unwrap();
         assert!(body.contains("Task: Ship it") && body.contains("Behind the flag."));
 
@@ -1104,6 +1109,75 @@ mod tests {
             Some(target(repo.path())),
         );
         assert!(plan_launch(home.path(), &missing, &all_installed(), NOW).is_err());
+    }
+
+    /// Run git in `dir`, asserting success; returns trimmed stdout.
+    fn git(dir: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .env("GIT_CONFIG_GLOBAL", "/dev/null")
+            .env("GIT_CONFIG_NOSYSTEM", "1")
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}: {out:?}");
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    /// The review case: starting a task (what `cohors agent command task`
+    /// does while only printing a command) records the conversation link, and
+    /// the repo must stay clean: the tracked `.gitignore` is untouched and the
+    /// ignore line goes to the clone's own `info/exclude`, once, however often
+    /// it runs. Also in a linked worktree, whose exclude file is the main
+    /// clone's (the common git dir).
+    #[test]
+    fn linking_a_task_leaves_a_real_repo_clean() {
+        let home = tempfile::tempdir().unwrap();
+        let base = tempfile::tempdir().unwrap();
+        let repo = base.path().join("payment-service");
+        fs::create_dir_all(&repo).unwrap();
+        git(&repo, &["init", "-q", "-b", "main"]);
+        git(&repo, &["config", "user.email", "t@example.com"]);
+        git(&repo, &["config", "user.name", "Tester"]);
+        write(&repo, ".gitignore", "target/\n");
+        write(&repo, ".cohors/repo.json", CONTRIBUTION);
+        git(&repo, &["add", "-A"]);
+        git(&repo, &["commit", "-q", "-m", "init"]);
+
+        let task = request(LaunchKind::Task("ship".to_string()), Some(target(&repo)));
+        for _ in 0..2 {
+            plan_launch(home.path(), &task, &all_installed(), NOW).unwrap();
+            // Write the link again outright: a second run must not add a line.
+            write_thread(&repo, "ship", "abcdef12", NOW).unwrap();
+        }
+        assert!(repo.join(LOCAL_FILE).is_file());
+        assert_eq!(git(&repo, &["status", "--porcelain"]), "", "repo is dirty");
+        assert_eq!(
+            fs::read_to_string(repo.join(".gitignore")).unwrap(),
+            "target/\n"
+        );
+        let common = std::path::PathBuf::from(git(&repo, &["rev-parse", "--git-common-dir"]));
+        let exclude = fs::read_to_string(repo.join(common).join("info/exclude")).unwrap();
+        assert_eq!(exclude.matches(LOCAL_FILE).count(), 1, "{exclude}");
+
+        // A linked worktree: `.git` is a file; the line lands in the common dir.
+        let wt = base.path().join("payment-service-wt");
+        git(
+            &repo,
+            &["worktree", "add", "-q", "-b", "wt", wt.to_str().unwrap()],
+        );
+        assert!(wt.join(".git").is_file());
+        write_thread(&wt, "ship", "abcdef12", NOW).unwrap();
+        assert!(wt.join(LOCAL_FILE).is_file());
+        assert_eq!(
+            git(&wt, &["status", "--porcelain"]),
+            "",
+            "worktree is dirty"
+        );
+        let exclude = fs::read_to_string(repo.join(".git/info/exclude")).unwrap();
+        assert_eq!(exclude.matches(LOCAL_FILE).count(), 1, "{exclude}");
+        assert!(!repo.join(".git/worktrees/payment-service-wt/info").exists());
     }
 
     #[test]

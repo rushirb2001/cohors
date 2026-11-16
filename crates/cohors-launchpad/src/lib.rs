@@ -253,7 +253,8 @@ pub fn entry(id: &str, name: &str, root: &Path) -> LaunchpadEntry {
 ///
 /// `doc` is the document as supplied (an agent's tool arguments); `specVersion`
 /// and `updated` are stamped here. With `dry_run`, validation runs and nothing
-/// is written. Also makes sure `.cohors/local.json` is gitignored.
+/// is written. Also makes sure git ignores `.cohors/local.json` in this clone
+/// (see [`ensure_ignored`]; the tracked `.gitignore` is never edited).
 pub fn write_contribution(
     root: &Path,
     doc: &Value,
@@ -286,10 +287,14 @@ pub fn write_contribution(
     // write into a write to an arbitrary file. Refuse rather than follow.
     refuse_symlink(&dir)?;
     refuse_symlink(&path)?;
-    refuse_symlink(&root.join(".gitignore"))?;
+    // Resolve (and vet) the ignore file before writing anything, so a refusal
+    // there leaves the repo untouched.
+    let exclude = exclude_file(root)?;
     fs::create_dir_all(&dir).map_err(io_err("creating", &dir))?;
     write_json_atomic(&path, &stamped)?;
-    ensure_gitignored(root)?;
+    if let Some(exclude) = exclude {
+        add_ignore_line(&exclude)?;
+    }
     Ok(WriteOutcome {
         written: true,
         validation,
@@ -297,24 +302,100 @@ pub fn write_contribution(
     })
 }
 
-/// Append `.cohors/local.json` to the repo's `.gitignore` if it is not
-/// already listed. Machine-local values must never be committed.
-fn ensure_gitignored(root: &Path) -> Result<(), LaunchpadError> {
-    let path = root.join(".gitignore");
-    let body = match fs::read_to_string(&path) {
+/// Make sure git ignores `.cohors/local.json` in the clone at `root`, without
+/// touching any tracked file. Machine-local values must never be committed,
+/// and merely recording one must not make the repo look dirty.
+///
+/// The line goes to the clone's own `info/exclude` (per clone, untracked), not
+/// the tracked `.gitignore`: editing `.gitignore` is itself a change, so
+/// `cohors agent command`, which only prints a command, used to show the repo
+/// as dirty everywhere. Idempotent: an existing line is never duplicated. A
+/// directory that is not a resolvable git work tree is left alone.
+pub(crate) fn ensure_ignored(root: &Path) -> Result<(), LaunchpadError> {
+    match exclude_file(root)? {
+        Some(exclude) => add_ignore_line(&exclude),
+        None => Ok(()),
+    }
+}
+
+/// The clone's untracked ignore file, `<common git dir>/info/exclude`, or
+/// `None` when `root` has no git dir we can resolve (see [`git_common_dir`]):
+/// then there is nothing to ignore in and nothing is written.
+///
+/// Refuses (ADR-055) when `info` or `info/exclude` is a symbolic link: a
+/// planted link must not turn "ignore one file" into a write elsewhere.
+fn exclude_file(root: &Path) -> Result<Option<PathBuf>, LaunchpadError> {
+    let Some(common) = git_common_dir(root) else {
+        return Ok(None);
+    };
+    let info = common.join("info");
+    let exclude = info.join("exclude");
+    refuse_symlink(&info)?;
+    refuse_symlink(&exclude)?;
+    Ok(Some(exclude))
+}
+
+/// The *common* git dir of the work tree at `root`, where `info/exclude` lives,
+/// resolved the way git does it (what `git rev-parse --git-common-dir` prints),
+/// without spawning git:
+///
+/// - `.git` is a directory: that is the git dir.
+/// - `.git` is a file (a linked worktree or a submodule): it holds
+///   `gitdir: <path>`, relative to `root` unless absolute.
+/// - A linked worktree's git dir names the shared one in its `commondir` file
+///   (relative to the git dir, usually `../..`); a submodule's has none.
+///
+/// `None` when there is no `.git`, when `.git` is a symbolic link (never
+/// followed), or when the result has no `HEAD` (not a git dir at all), so a
+/// stray pointer can never aim a write at an arbitrary directory.
+fn git_common_dir(root: &Path) -> Option<PathBuf> {
+    let dot_git = root.join(".git");
+    let meta = fs::symlink_metadata(&dot_git).ok()?;
+    let git_dir = if meta.is_dir() {
+        dot_git
+    } else if meta.is_file() {
+        let body = fs::read_to_string(&dot_git).ok()?;
+        let target = body
+            .lines()
+            .find_map(|line| line.strip_prefix("gitdir:"))?
+            .trim();
+        if target.is_empty() {
+            return None;
+        }
+        root.join(target)
+    } else {
+        return None;
+    };
+    let common = match fs::read_to_string(git_dir.join("commondir")) {
+        Ok(rel) if !rel.trim().is_empty() => git_dir.join(rel.trim()),
+        _ => git_dir,
+    };
+    common.join("HEAD").is_file().then_some(common)
+}
+
+/// Append the `.cohors/local.json` line to an ignore file unless it is
+/// already there, creating the file (and its `info/` directory) if needed.
+fn add_ignore_line(exclude: &Path) -> Result<(), LaunchpadError> {
+    let body = match fs::read_to_string(exclude) {
         Ok(body) => body,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(io_err("reading", &path)(e)),
+        Err(e) => return Err(io_err("reading", exclude)(e)),
     };
     if body.lines().any(|line| line.trim() == LOCAL_FILE) {
         return Ok(());
+    }
+    if let Some(info) = exclude.parent() {
+        fs::create_dir_all(info).map_err(io_err("creating", info))?;
     }
     let separator = if body.is_empty() || body.ends_with('\n') {
         ""
     } else {
         "\n"
     };
-    fs::write(&path, format!("{body}{separator}{LOCAL_FILE}\n")).map_err(io_err("writing", &path))
+    write_atomic(
+        exclude,
+        format!("{body}{separator}{LOCAL_FILE}\n").as_bytes(),
+    )
 }
 
 /// Error if `path` exists and is a symbolic link. `symlink_metadata` inspects
@@ -335,7 +416,15 @@ fn write_json_atomic(path: &Path, value: &Value) -> Result<(), LaunchpadError> {
     let mut body = serde_json::to_vec_pretty(value)
         .map_err(|e| LaunchpadError::Invalid(format!("serializing JSON: {e}")))?;
     body.push(b'\n');
-    let tmp = path.with_extension("json.tmp");
+    write_atomic(path, &body)
+}
+
+/// Write `body` to a temp sibling (`<file name>.tmp`), then rename it over
+/// `path`, so a crash never leaves half a file.
+fn write_atomic(path: &Path, body: &[u8]) -> Result<(), LaunchpadError> {
+    let mut tmp_name = path.file_name().unwrap_or_default().to_os_string();
+    tmp_name.push(".tmp");
+    let tmp = path.with_file_name(tmp_name);
     // Clear a leftover from a crashed run (never following a link), then
     // create the temp file exclusively: `create_new` fails if anything, a
     // symlink included, appears at that path in between.
@@ -349,7 +438,7 @@ fn write_json_atomic(path: &Path, value: &Value) -> Result<(), LaunchpadError> {
         .write(true)
         .create_new(true)
         .open(&tmp)
-        .and_then(|mut file| file.write_all(&body))
+        .and_then(|mut file| file.write_all(body))
         .map_err(io_err("writing", &tmp))?;
     fs::rename(&tmp, path).map_err(io_err("replacing", path))
 }
@@ -530,10 +619,17 @@ mod tests {
         );
     }
 
+    /// A minimal git dir (just `HEAD`), enough for [`git_common_dir`].
+    fn fake_git_dir(dir: &Path) {
+        write(dir, "HEAD", "ref: refs/heads/main\n");
+    }
+
     #[test]
-    fn write_stamps_validates_and_gitignores() {
+    fn write_stamps_validates_and_ignores_local_json_untracked() {
         let dir = repo();
+        fake_git_dir(&dir.path().join(".git"));
         write(dir.path(), ".gitignore", "target/");
+        write(dir.path(), ".git/info/exclude", "# git ls-files --others");
         let doc = json!({ "name": "svc", "summary": "A service", "flows": [] });
 
         let out = write_contribution(dir.path(), &doc, NOW, false).unwrap();
@@ -544,20 +640,93 @@ mod tests {
                 .unwrap();
         assert_eq!(on_disk["specVersion"], 1);
         assert_eq!(on_disk["updated"], "2023-11-14T22:13:20Z");
+        // The tracked `.gitignore` is never edited; the clone's exclude file is.
         assert_eq!(
             fs::read_to_string(dir.path().join(".gitignore")).unwrap(),
-            "target/\n.cohors/local.json\n"
+            "target/"
+        );
+        let exclude = dir.path().join(".git/info/exclude");
+        assert_eq!(
+            fs::read_to_string(&exclude).unwrap(),
+            "# git ls-files --others\n.cohors/local.json\n"
         );
         // A second write must not duplicate the ignore line or leave a temp file.
         write_contribution(dir.path(), &doc, NOW, false).unwrap();
         assert_eq!(
-            fs::read_to_string(dir.path().join(".gitignore"))
+            fs::read_to_string(&exclude)
                 .unwrap()
                 .matches(LOCAL_FILE)
                 .count(),
             1
         );
         assert!(!dir.path().join(".cohors/repo.json.tmp").exists());
+        assert!(!dir.path().join(".git/info/exclude.tmp").exists());
+    }
+
+    /// Not a git work tree (no `.git`): the contribution is written and no
+    /// ignore file is invented anywhere.
+    #[test]
+    fn outside_a_git_work_tree_nothing_is_ignored() {
+        let dir = repo();
+        let out = write_contribution(dir.path(), &json!({ "name": "svc" }), NOW, false).unwrap();
+        assert!(out.written);
+        assert!(!dir.path().join(".gitignore").exists());
+        assert!(!dir.path().join(".git").exists());
+        assert!(!dir.path().join("info").exists());
+    }
+
+    /// `info/exclude` lives in the *common* git dir, which a linked worktree
+    /// and a submodule reach through a `.git` file (`gitdir: …`), the worktree
+    /// then through `commondir`. Anything that is not a git dir resolves to
+    /// nothing, and a symlinked `.git` is never followed.
+    #[test]
+    fn git_common_dir_follows_worktree_and_submodule_pointers() {
+        let base = repo();
+        let base = base.path();
+
+        // An ordinary clone.
+        let plain = base.join("plain");
+        fake_git_dir(&plain.join(".git"));
+        assert_eq!(git_common_dir(&plain), Some(plain.join(".git")));
+
+        // A submodule: `.git` is a file with a relative `gitdir:` pointer.
+        let sub = base.join("super/sub");
+        fake_git_dir(&base.join("super/.git/modules/sub"));
+        write(&sub, ".git", "gitdir: ../.git/modules/sub\n");
+        assert_eq!(git_common_dir(&sub), Some(sub.join("../.git/modules/sub")));
+
+        // A linked worktree: an absolute pointer to `worktrees/<name>`, whose
+        // `commondir` leads back to the main git dir.
+        let main_git = base.join("main/.git");
+        fake_git_dir(&main_git);
+        let private = main_git.join("worktrees/wt");
+        fake_git_dir(&private);
+        write(&private, "commondir", "../..\n");
+        let wt = base.join("wt");
+        write(&wt, ".git", &format!("gitdir: {}\n", private.display()));
+        let common = git_common_dir(&wt).expect("worktree resolves");
+        assert_eq!(
+            common.canonicalize().unwrap(),
+            main_git.canonicalize().unwrap()
+        );
+
+        // Nothing git-like: no `.git`, an empty or dangling pointer.
+        assert_eq!(git_common_dir(&base.join("nowhere")), None);
+        let empty = base.join("empty");
+        write(&empty, ".git", "gitdir:   \n");
+        assert_eq!(git_common_dir(&empty), None);
+        let dangling = base.join("dangling");
+        write(&dangling, ".git", "gitdir: ../no-such-dir\n");
+        assert_eq!(git_common_dir(&dangling), None);
+
+        // A symlinked `.git` is not followed.
+        #[cfg(unix)]
+        {
+            let linked = base.join("linked");
+            fs::create_dir_all(&linked).unwrap();
+            std::os::unix::fs::symlink(plain.join(".git"), linked.join(".git")).unwrap();
+            assert_eq!(git_common_dir(&linked), None);
+        }
     }
 
     #[test]
@@ -599,12 +768,23 @@ mod tests {
         assert!(write_contribution(dir.path(), &doc, NOW, false).is_err());
         assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
 
-        // `.gitignore` is a link: nothing at all is written.
+        // The clone's `info/exclude` is a link: nothing at all is written.
         let dir = repo();
-        symlink(&target, dir.path().join(".gitignore")).unwrap();
-        assert!(write_contribution(dir.path(), &doc, NOW, false).is_err());
+        fake_git_dir(&dir.path().join(".git"));
+        fs::create_dir_all(dir.path().join(".git/info")).unwrap();
+        symlink(&target, dir.path().join(".git/info/exclude")).unwrap();
+        let err = write_contribution(dir.path(), &doc, NOW, false).unwrap_err();
+        assert!(err.to_string().contains("symbolic link"), "{err}");
         assert!(!dir.path().join(CONTRIB_FILE).exists());
         assert_eq!(fs::read_to_string(&target).unwrap(), "untouched");
+
+        // So is a linked `info` directory.
+        let dir = repo();
+        fake_git_dir(&dir.path().join(".git"));
+        symlink(outside.path(), dir.path().join(".git/info")).unwrap();
+        assert!(write_contribution(dir.path(), &doc, NOW, false).is_err());
+        assert!(!dir.path().join(CONTRIB_FILE).exists());
+        assert!(!outside.path().join("exclude").exists());
 
         // A planted temp-file link is refused too.
         let dir = repo();
