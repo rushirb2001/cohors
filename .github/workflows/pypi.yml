@@ -77,6 +77,8 @@ jobs:
             plat: manylinux_2_35_aarch64
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the previous release tag, for the notes (ADR-059)
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -106,8 +108,11 @@ jobs:
         run: |
           v="${TAG#v}"
           sed -i "s/^version = .*/version = \"$v\"/" packaging/pypi/pyproject.toml
-          # The README's "What's new" block, from this version's CHANGELOG section.
-          python scripts/release-notes.py stamp packaging/pypi/README.md "$v"
+          # The README's "What's new" block: every version since the previous
+          # public release (ADR-059), from the CHANGELOG.
+          git fetch --quiet --tags origin || true
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$TAG^" 2>/dev/null || true)
+          python scripts/release-notes.py ${previous:+--since "$previous"} stamp packaging/pypi/README.md "$v"
 
       - name: Build the platform wheel
         working-directory: packaging/pypi

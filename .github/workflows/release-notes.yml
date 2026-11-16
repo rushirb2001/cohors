@@ -39,6 +39,8 @@ jobs:
       # The newest footer on the default branch, so a fix to it also reaches a
       # release that is already out (rerun by hand with the tag).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # the previous release tag, for the notes (ADR-059)
       - name: Append the footer
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -57,6 +59,13 @@ jobs:
           if grep -q 'cohors:install-footer' notes.md; then
             echo "The notes of $tag already list every install route."
             exit 0
+          fi
+          # A public release covers every version cut since the previous one
+          # (ADR-059): cargo-dist wrote this version's section; add the rest.
+          git fetch --quiet --tags origin
+          previous=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "$tag^" 2>/dev/null || true)
+          if [ -n "$previous" ]; then
+            python3 scripts/release-notes.py --since "$previous" earlier "$tag" >> notes.md
           fi
           { echo; python3 scripts/release-notes.py footer "$tag"; } >> notes.md
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file notes.md
