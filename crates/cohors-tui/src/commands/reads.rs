@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::io::IsTerminal;
 
 use anyhow::Result;
+use cohors_core::lookup::{Resolved, close_names, resolve_repo};
 use cohors_core::{
     Branch, ChangeState, ChangedFile, CiStatus, RemoteDetail, RemoteInfo, RepoChanges, RepoDetail,
     RepoSnapshot, Selector, SortMode,
@@ -86,164 +87,6 @@ fn resolve_in_order<'a>(
         .collect()
 }
 
-/// What a repo named on the command line turned out to be.
-#[derive(Debug)]
-enum Resolved<'a> {
-    One(&'a RepoSnapshot),
-    Many(Vec<&'a RepoSnapshot>),
-    Missing,
-}
-
-/// The repo's directory name: what it is called on disk, whatever alias the
-/// config gives it.
-fn dir_name(snap: &RepoSnapshot) -> Option<&str> {
-    snap.path.as_ref().and_then(|p| p.file_name())
-}
-
-/// The names a repo answers to: the name it is shown under (its alias, when
-/// one is set) and its directory name.
-fn names(snap: &RepoSnapshot) -> impl Iterator<Item = &str> {
-    std::iter::once(snap.name.as_str()).chain(dir_name(snap))
-}
-
-/// Resolve `key` to repos, in three steps, stopping at the first that finds
-/// anything:
-///
-/// 1. exactly what was typed: an id, a name or alias, a directory name, or a
-///    path (`canonical` is `key` resolved on disk, so `.` and relative paths
-///    work, and a folder inside a repo names that repo);
-/// 2. a prefix of a name, in any case (`Pay` finds `payments`); when several
-///    share the prefix, one whose whole name matches in another case wins;
-/// 3. a glob over the names (`'pay*'`).
-///
-/// Pure (the disk lookup is the caller's), so it is unit-tested.
-fn resolve_repo<'a>(snaps: &'a [RepoSnapshot], key: &str, canonical: Option<&str>) -> Resolved<'a> {
-    let key = key.trim();
-    if key.is_empty() {
-        return Resolved::Missing;
-    }
-    let pick = |found: Vec<&'a RepoSnapshot>| match found.len() {
-        0 => None,
-        1 => Some(Resolved::One(found[0])),
-        _ => Some(Resolved::Many(found)),
-    };
-
-    let exact: Vec<&RepoSnapshot> = snaps
-        .iter()
-        .filter(|s| {
-            s.id.0 == key
-                || names(s).any(|n| n == key)
-                || s.path
-                    .as_ref()
-                    .is_some_and(|p| p.as_str() == key || Some(p.as_str()) == canonical)
-        })
-        .collect();
-    if let Some(found) = pick(exact) {
-        return found;
-    }
-
-    // A folder inside a repo names the repo it is in (the innermost one, for
-    // a repo nested in another).
-    if let Some(canonical) = canonical {
-        let within = snaps
-            .iter()
-            .filter_map(|s| {
-                let path = s.path.as_ref()?.as_str();
-                let rest = canonical.strip_prefix(path)?;
-                rest.starts_with('/').then_some((path.len(), s))
-            })
-            .max_by_key(|(len, _)| *len);
-        if let Some((_, snap)) = within {
-            return Resolved::One(snap);
-        }
-    }
-
-    let lower = key.to_lowercase();
-    let prefixed: Vec<&RepoSnapshot> = snaps
-        .iter()
-        .filter(|s| names(s).any(|n| n.to_lowercase().starts_with(&lower)))
-        .collect();
-    if prefixed.len() > 1 {
-        let whole: Vec<&RepoSnapshot> = prefixed
-            .iter()
-            .copied()
-            .filter(|s| names(s).any(|n| n.to_lowercase() == lower))
-            .collect();
-        if whole.len() == 1 {
-            return Resolved::One(whole[0]);
-        }
-    }
-    if let Some(found) = pick(prefixed) {
-        return found;
-    }
-
-    if key.contains(['*', '?']) {
-        let globbed: Vec<&RepoSnapshot> = snaps
-            .iter()
-            .filter(|s| names(s).any(|n| cohors_core::glob_name(key, n)))
-            .collect();
-        if let Some(found) = pick(globbed) {
-            return found;
-        }
-    }
-    Resolved::Missing
-}
-
-/// Names close to `key`, for a "did you mean": names that contain it (or that
-/// it contains), then names a few typos away from the whole name or from one
-/// of its words (`servce` is close to `auth-service`), nearest first. At most
-/// five.
-fn close_names(snaps: &[RepoSnapshot], key: &str) -> Vec<String> {
-    let key = key.trim().to_lowercase();
-    if key.is_empty() {
-        return Vec::new();
-    }
-    // A third of the word may be wrong, but always allow a couple of slips.
-    let budget = (key.chars().count() / 3).max(2);
-    let mut scored: Vec<(usize, &str)> = snaps
-        .iter()
-        .filter_map(|s| {
-            let distance = names(s)
-                .map(|n| {
-                    let n = n.to_lowercase();
-                    if n.contains(&key) || (n.chars().count() >= 3 && key.contains(&n)) {
-                        return 0;
-                    }
-                    // The whole name, and each word of three letters or more.
-                    std::iter::once(n.as_str())
-                        .chain(
-                            n.split(['-', '_', '.'])
-                                .filter(|word| word.chars().count() >= 3),
-                        )
-                        .map(|candidate| edit_distance(&key, candidate))
-                        .min()
-                        .unwrap_or(usize::MAX)
-                })
-                .min()?;
-            (distance <= budget).then_some((distance, s.name.as_str()))
-        })
-        .collect();
-    scored.sort();
-    scored.dedup_by(|a, b| a.1 == b.1);
-    scored.into_iter().take(5).map(|(_, n)| safe(n)).collect()
-}
-
-/// How many single-character edits turn `a` into `b` (Levenshtein), counted
-/// in characters so a non-ASCII name can never split a byte sequence.
-fn edit_distance(a: &str, b: &str) -> usize {
-    let b: Vec<char> = b.chars().collect();
-    let mut prev: Vec<usize> = (0..=b.len()).collect();
-    for (i, ca) in a.chars().enumerate() {
-        let mut cur = vec![i + 1; b.len() + 1];
-        for (j, cb) in b.iter().enumerate() {
-            let swap = prev[j] + usize::from(ca != *cb);
-            cur[j + 1] = swap.min(prev[j + 1] + 1).min(cur[j] + 1);
-        }
-        prev = cur;
-    }
-    prev[b.len()]
-}
-
 /// What `path` and `show` print on stderr when nothing matches.
 fn missing_message(key: &str, close: &[String], roots: &[String], fleet_empty: bool) -> String {
     if fleet_empty {
@@ -293,9 +136,10 @@ fn path_like(key: &str) -> bool {
     key == "." || key == ".." || key.contains('/')
 }
 
-/// Resolve `key` to one repo, or say on stderr why not and fail with the
-/// status a script can act on: 1 when nothing matches (with close names), 2
-/// when several do (listing them).
+/// Resolve `key` to one repo (by the rules in [`cohors_core::lookup`], which
+/// the MCP server shares), or say on stderr why not and fail with the status
+/// a script can act on: 1 when nothing matches (with close names), 2 when
+/// several do (listing them).
 pub(super) fn resolve_or_explain<'a>(
     snaps: &'a [RepoSnapshot],
     key: &str,
@@ -312,7 +156,8 @@ pub(super) fn resolve_or_explain<'a>(
             Err(ExitCode(2).into())
         }
         Resolved::Missing => {
-            let close = close_names(snaps, key);
+            // A repo's name is text from the disk: no escape sequences.
+            let close: Vec<String> = close_names(snaps, key).iter().map(|n| safe(n)).collect();
             eprint!("{}", missing_message(key, &close, roots, snaps.is_empty()));
             Err(ExitCode(1).into())
         }
@@ -1589,14 +1434,6 @@ mod tests {
         ]
     }
 
-    fn name_of(r: Resolved<'_>) -> String {
-        match r {
-            Resolved::One(s) => s.name.clone(),
-            Resolved::Many(v) => format!("many:{}", v.len()),
-            Resolved::Missing => "missing".to_string(),
-        }
-    }
-
     /// Every line fits in `width` columns (the reports are built colourless
     /// here, so characters are columns).
     fn fits(report: &str, width: usize) -> bool {
@@ -1608,49 +1445,6 @@ mod tests {
             status: status.to_string(),
             path: path.to_string(),
         }
-    }
-
-    #[test]
-    fn a_repo_resolves_by_exact_name_alias_directory_id_and_path() {
-        let repos = fleet();
-        let r = |key: &str| name_of(resolve_repo(&repos, key, None));
-        assert_eq!(r("payments"), "payments");
-        assert_eq!(r("api"), "api", "the alias");
-        assert_eq!(r("legacy-api"), "api", "the directory behind the alias");
-        assert_eq!(r("/code/web"), "web", "the id or path");
-        // `.` (or a folder inside a repo), once the caller resolved it on disk.
-        assert_eq!(
-            name_of(resolve_repo(&repos, ".", Some("/code/payroll"))),
-            "payroll"
-        );
-        assert_eq!(
-            name_of(resolve_repo(&repos, "src", Some("/code/payroll/src/lib"))),
-            "payroll"
-        );
-    }
-
-    #[test]
-    fn a_unique_prefix_in_any_case_resolves_and_a_shared_one_does_not() {
-        let repos = fleet();
-        let r = |key: &str| name_of(resolve_repo(&repos, key, None));
-        assert_eq!(r("PAYM"), "payments");
-        assert_eq!(r("we"), "web");
-        assert_eq!(r("pay"), "many:2", "payments and payroll share it");
-        // A whole name in another case settles a shared prefix.
-        let mut repos = fleet();
-        repos.push(snap("pay", "/code/pay"));
-        assert_eq!(name_of(resolve_repo(&repos, "PAY", None)), "pay");
-    }
-
-    #[test]
-    fn a_glob_resolves_when_nothing_else_does() {
-        let repos = fleet();
-        let r = |key: &str| name_of(resolve_repo(&repos, key, None));
-        assert_eq!(r("*eb"), "web");
-        assert_eq!(r("pay*"), "many:2", "a prefix glob shared by two");
-        assert_eq!(r("*roll"), "payroll");
-        assert_eq!(r("nothing"), "missing");
-        assert_eq!(r("  "), "missing");
     }
 
     #[test]
@@ -1670,23 +1464,10 @@ mod tests {
     }
 
     #[test]
-    fn a_miss_suggests_close_names_and_nothing_unrelated() {
+    fn a_miss_says_so_and_offers_the_close_names() {
         let repos = fleet();
-        assert_eq!(close_names(&repos, "paymnets"), ["payments"]);
-        assert_eq!(
-            close_names(&repos, "ments"),
-            ["payments"],
-            "a part of a name"
-        );
-        assert_eq!(
-            close_names(&repos, "legacy-apu"),
-            ["api"],
-            "the directory name"
-        );
-        assert_eq!(close_names(&repos, "legcy"), ["api"], "one word of a name");
-        assert!(close_names(&repos, "zzzzzzzz").is_empty());
-
-        let msg = missing_message("paymnets", &["payments".into()], &[], false);
+        let close = close_names(&repos, "paymnets");
+        let msg = missing_message("paymnets", &close, &[], false);
         assert!(msg.contains("no repository matches `paymnets`"), "{msg}");
         assert!(msg.contains("did you mean: payments"), "{msg}");
         let msg = missing_message("x", &[], &[], false);
@@ -1696,15 +1477,6 @@ mod tests {
             msg.contains("no repositories found under /nowhere"),
             "{msg}"
         );
-    }
-
-    #[test]
-    fn edit_distance_counts_characters() {
-        assert_eq!(edit_distance("", ""), 0);
-        assert_eq!(edit_distance("web", "web"), 0);
-        assert_eq!(edit_distance("wbe", "web"), 2);
-        assert_eq!(edit_distance("kitten", "sitting"), 3);
-        assert_eq!(edit_distance("café", "cafe"), 1, "never splits a char");
     }
 
     #[test]

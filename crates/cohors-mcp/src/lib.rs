@@ -25,6 +25,7 @@
 use std::io::{BufRead, Write};
 
 use anyhow::Result;
+use cohors_core::lookup;
 use cohors_core::suggest::Suggestion;
 use cohors_core::{
     RepoSnapshot, SearchKind, Selector, SortMode, assess, fleet_summary, resolve, search_metadata,
@@ -287,10 +288,7 @@ fn get_prompt(params: &Value, ctx: &Ctx) -> Result<Value, String> {
         .and_then(Value::as_str)
         .filter(|r| !r.is_empty());
     let repo = match wanted {
-        Some(key) => Some(
-            find_repo(&snaps, key)
-                .ok_or_else(|| format!("no repo matching `{key}` in the fleet"))?,
-        ),
+        Some(key) => Some(find_repo(&snaps, key)?),
         None => None,
     };
     let root = repo
@@ -351,10 +349,10 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "get_repo",
-            "description": "Full status of ONE repository, found by id, name, or path — branch, upstream ahead/behind, worktree counts, stashes, recent activity, last commit, plus a local drill-in `detail` (recent commits, per-branch sync, changed files, stash list). Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
+            "description": "Full status of ONE repository, found by id, name, path or a unique prefix of its name — branch, upstream ahead/behind, worktree counts, stashes, recent activity, last commit, plus a local drill-in `detail` (recent commits, per-branch sync, changed files, stash list). Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "repo": { "type": "string", "description": "Repo id, name/alias, or path." } },
+                "properties": { "repo": { "type": "string", "description": "Repo id, name/alias, path, or a unique prefix of a name (an exact match wins; a name several repos share is an error listing their paths)." } },
                 "required": ["repo"]
             }
         },
@@ -417,10 +415,10 @@ fn tool_catalog() -> Value {
         },
         {
             "name": "repo_path",
-            "description": "Resolve a repo (by id, name, or path) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
+            "description": "Resolve a repo (by id, name, path or a unique prefix of its name) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
             "inputSchema": {
                 "type": "object",
-                "properties": { "repo": { "type": "string", "description": "Repo id, name/alias, or path." } },
+                "properties": { "repo": { "type": "string", "description": "Repo id, name/alias, path, or a unique prefix of a name (an exact match wins; a name several repos share is an error listing their paths)." } },
                 "required": ["repo"]
             }
         },
@@ -661,7 +659,7 @@ fn launchpad_catalog(selector_schema: &Value) -> Vec<Value> {
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "repo": { "type": "string", "description": "Repo id, name/alias, or path (must be inside the fleet)." },
+                    "repo": { "type": "string", "description": "Repo id, name/alias, or path, named exactly (no prefixes: this write replaces the file), and inside the fleet." },
                     "name": { "type": "string", "description": "Display name." },
                     "summary": { "type": "string", "maxLength": 80, "description": "One line: what this repo IS." },
                     "group": { "type": "string", "description": "Free text; groups repos on the launchpad." },
@@ -833,9 +831,10 @@ fn write_repo_contribution(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, S
     let key = repo_arg(args)?;
     let snaps = (ctx.scan)();
     // Resolving through the fleet is the scope lock: only a repo under the
-    // configured roots can be written, never an arbitrary path.
-    let snap =
-        find_repo(&snaps, &key).ok_or_else(|| format!("no repo matching `{key}` in the fleet"))?;
+    // configured roots can be written, never an arbitrary path. The write
+    // replaces the whole file, so the repo must be named exactly: a prefix
+    // that happens to match another repo would overwrite the wrong one.
+    let snap = find_repo_exact(&snaps, &key)?;
     let path = snap
         .path
         .as_ref()
@@ -899,8 +898,8 @@ fn record_activity(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
             .unwrap_or("")
             .to_string()
     };
-    // Store the repo as its fleet name when it resolves, so the log does not
-    // depend on where a checkout lives.
+    // Store the repo as its fleet name when it resolves to one repo, so the
+    // log does not depend on where a checkout lives; otherwise as given.
     let repo = field("repo");
     let repo = if repo.is_empty() {
         repo
@@ -1047,7 +1046,7 @@ fn list_repos(args: &Value, ctx: &Ctx, now: i64) -> Value {
 fn get_repo(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
     let key = repo_arg(args)?;
     let snaps = (ctx.scan)();
-    let snap = find_repo(&snaps, &key).ok_or_else(|| format!("no repository matching `{key}`"))?;
+    let snap = find_repo(&snaps, &key)?;
     let mut value = repo_json(snap, now);
     // The same local drill-in the TUI shows on Enter (recent commits, per-branch
     // sync, stashes, changed files) — "full status of one repo" should not need
@@ -1178,26 +1177,26 @@ fn next(args: &Value, ctx: &Ctx, now: i64) -> Result<Value, String> {
 /// The repo `next`'s `here` names: a repo (by id, name or path), or a folder
 /// inside one.
 fn here_repo(snaps: &[RepoSnapshot], key: &str) -> Result<String, String> {
-    if let Some(snap) = find_repo(snaps, key) {
-        return Ok(snap.id.0.clone());
-    }
+    let not_found = match find_repo(snaps, key) {
+        Ok(snap) => return Ok(snap.id.0.clone()),
+        Err(why) => why,
+    };
+    // A folder that does not exist (yet) cannot be resolved on disk, but it
+    // can still lie inside a repo. Only an absolute path is tried: a relative
+    // one would be relative to wherever the server happens to run.
     let dir = std::path::Path::new(key);
-    // Only an absolute path is looked up on disk: a relative one would be
-    // relative to wherever the server happens to run.
     if dir.is_absolute()
         && let Some(id) = cohors_fleet::repo_containing(snaps, dir)
     {
         return Ok(id);
     }
-    Err(format!(
-        "no repository matching `{key}` (pass a repo name, or a folder inside one)"
-    ))
+    Err(not_found)
 }
 
 fn repo_path(args: &Value, ctx: &Ctx) -> Result<Value, String> {
     let key = repo_arg(args)?;
     let snaps = (ctx.scan)();
-    let snap = find_repo(&snaps, &key).ok_or_else(|| format!("no repository matching `{key}`"))?;
+    let snap = find_repo(&snaps, &key)?;
     match &snap.path {
         Some(path) => Ok(json!({ "path": path })),
         None => Err(format!("repository `{key}` has no local path")),
@@ -1392,11 +1391,90 @@ fn repo_arg(args: &Value) -> Result<String, String> {
         .ok_or_else(|| "missing required argument `repo`".to_string())
 }
 
-/// Find a repo by id, name, or canonical path.
-fn find_repo<'a>(snaps: &'a [RepoSnapshot], key: &str) -> Option<&'a RepoSnapshot> {
-    snaps.iter().find(|s| {
-        s.id.0 == key || s.name == key || s.path.as_ref().is_some_and(|p| p.as_str() == key)
-    })
+/// Find the one repo `key` names, by the rules `cohors path` and `cohors show`
+/// use ([`lookup::resolve_repo`]): an exact id, name, alias, directory name or
+/// path first (an exact match always wins), then a folder inside a repo, then
+/// a unique prefix of a name in any case, then a glob. A name several repos
+/// share is an error that lists them with their paths; a miss is an error
+/// that suggests the names that come close.
+fn find_repo<'a>(snaps: &'a [RepoSnapshot], key: &str) -> Result<&'a RepoSnapshot, String> {
+    let canonical = canonical_path(key);
+    resolved(
+        lookup::resolve_repo(snaps, key, canonical.as_deref()),
+        snaps,
+        key,
+    )
+}
+
+/// [`find_repo`], but only an exact id, name, alias, directory name or path:
+/// for a tool that replaces a file, where guessing from a prefix could
+/// overwrite the wrong repository.
+fn find_repo_exact<'a>(snaps: &'a [RepoSnapshot], key: &str) -> Result<&'a RepoSnapshot, String> {
+    let canonical = canonical_path(key);
+    resolved(lookup::exact(snaps, key, canonical.as_deref()), snaps, key)
+}
+
+/// `key` resolved on disk (symlinks, `..`), when it is an absolute path that
+/// exists. A relative path is not tried: it would be relative to wherever the
+/// server happens to run, not to the agent.
+fn canonical_path(key: &str) -> Option<String> {
+    let path = std::path::Path::new(key.trim());
+    if !path.is_absolute() {
+        return None;
+    }
+    std::fs::canonicalize(path)
+        .ok()
+        .and_then(|p| p.to_str().map(str::to_string))
+}
+
+/// Turn a lookup into the repo, or the error an agent can act on.
+fn resolved<'a>(
+    found: lookup::Resolved<'a>,
+    snaps: &[RepoSnapshot],
+    key: &str,
+) -> Result<&'a RepoSnapshot, String> {
+    match found {
+        lookup::Resolved::One(snap) => Ok(snap),
+        lookup::Resolved::Many(found) => Err(ambiguous_repo(key, &found)),
+        lookup::Resolved::Missing => Err(missing_repo(key, snaps)),
+    }
+}
+
+/// The error for a name several repos answer to: each of them with its path,
+/// so the agent can ask again with the one it means.
+fn ambiguous_repo(key: &str, found: &[&RepoSnapshot]) -> String {
+    let mut found = found.to_vec();
+    found.sort_by(|a, b| a.name.cmp(&b.name).then_with(|| a.id.0.cmp(&b.id.0)));
+    let list: Vec<String> = found
+        .iter()
+        .map(|s| {
+            let at = s.path.as_ref().map_or(s.id.0.as_str(), |p| p.as_str());
+            format!("  - {} at {at}", s.name)
+        })
+        .collect();
+    format!(
+        "`{key}` matches {} repositories; pass the path of the one you mean:\n{}",
+        found.len(),
+        list.join("\n")
+    )
+}
+
+/// The error for a name no repo answers to, with the names that come close.
+fn missing_repo(key: &str, snaps: &[RepoSnapshot]) -> String {
+    if snaps.is_empty() {
+        return format!(
+            "no repository matching `{key}`: the fleet is empty (list_repos says where cohors looked)"
+        );
+    }
+    let close = lookup::close_names(snaps, key);
+    if close.is_empty() {
+        format!("no repository matching `{key}`; list_repos lists every repository")
+    } else {
+        format!(
+            "no repository matching `{key}`; did you mean: {}?",
+            close.join(", ")
+        )
+    }
 }
 
 /// Serialize a snapshot to the `cohors scan` JSON, adding a per-repo `assessment`
@@ -1926,6 +2004,95 @@ mod tests {
             "params": { "name": "get_repo", "arguments": { "repo": "does-not-exist" } }
         }));
         assert_eq!(resp["result"]["isError"], true);
+    }
+
+    /// A fleet with two repos called `web`, a shared prefix and a name that
+    /// prefixes another, driven through `tools/call`.
+    fn call_named(tool: &str, arguments: Value) -> Value {
+        let scan_fn = || {
+            let snap = |name: &str, path: &str| {
+                let mut s = RepoSnapshot::errored(
+                    cohors_core::RepoId(path.into()),
+                    name,
+                    Some(path.into()),
+                    "",
+                );
+                s.error = None;
+                s
+            };
+            vec![
+                snap("payments", "/code/payments"),
+                snap("payroll", "/code/payroll"),
+                snap("web", "/code/web"),
+                snap("web", "/other/web"),
+                snap("api", "/code/api"),
+                snap("api-gateway", "/code/api-gateway"),
+            ]
+        };
+        let roots = vec!["/code".to_string()];
+        let ctx = Ctx {
+            scan: &scan_fn,
+            token: None,
+            roots: &roots,
+            config_path: "(test)",
+            caps: Caps::default(),
+            allowlist: &[],
+            max_targets: 0,
+            home: None,
+            author: None,
+            update: &|| None,
+            tips: &|_| Vec::new(),
+            user_home: None,
+            cwd: None,
+        };
+        handle(&act(tool, arguments), &ctx, NOW).unwrap()
+    }
+
+    #[test]
+    fn a_repo_is_found_by_a_unique_prefix_and_an_exact_name_wins() {
+        let path =
+            |key: &str| payload(&call_named("repo_path", json!({ "repo": key })))["path"].clone();
+        assert_eq!(path("PAYM"), "/code/payments", "a unique prefix, any case");
+        assert_eq!(path("api"), "/code/api", "the exact name, not api-gateway");
+        assert_eq!(path("api-g"), "/code/api-gateway");
+        assert_eq!(path("/other/web"), "/other/web", "a path names one of two");
+    }
+
+    #[test]
+    fn an_ambiguous_name_lists_every_candidate_with_its_path() {
+        let resp = call_named("repo_path", json!({ "repo": "web" }));
+        assert!(is_error(&resp));
+        let text = err_text(&resp);
+        assert!(text.contains("`web` matches 2 repositories"), "{text}");
+        assert!(
+            text.contains("web at /code/web") && text.contains("web at /other/web"),
+            "{text}"
+        );
+        // A shared prefix is ambiguous too, never silently the first one.
+        let text = err_text(&call_named("get_repo", json!({ "repo": "pay" })));
+        assert!(
+            text.contains("payments at /code/payments") && text.contains("payroll at"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_near_miss_says_did_you_mean() {
+        let text = err_text(&call_named("get_repo", json!({ "repo": "paymnets" })));
+        assert!(
+            text.contains("no repository matching `paymnets`; did you mean: payments?"),
+            "{text}"
+        );
+        let text = err_text(&call_named("repo_path", json!({ "repo": "zzzzzzzz" })));
+        assert!(text.contains("list_repos lists every repository"), "{text}");
+    }
+
+    #[test]
+    fn a_launchpad_write_needs_the_exact_name() {
+        // A prefix that reads fine would pick the file to replace: refused.
+        let args = json!({ "repo": "paym", "name": "x", "dry_run": true });
+        let text = err_text(&call_named("write_repo_contribution", args));
+        assert!(text.contains("did you mean: payments"), "{text}");
     }
 
     #[test]
@@ -2525,7 +2692,7 @@ mod tests {
             repo.path(),
             home.path(),
         );
-        assert!(err_text(&resp).contains("no repo matching"));
+        assert!(err_text(&resp).contains("no repository matching"));
         assert!(!outside.path().join(".cohors").exists());
     }
 

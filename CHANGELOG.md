@@ -26,6 +26,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.9] — 2026-11-16
+
+### Added
+
+- **Claude finds a repository the way you name it.** The MCP tools accept a
+  unique prefix (`paym` for payments), as `cohors path` does. A name two
+  repositories share is no longer quietly the first one: the answer lists
+  each with its path. A typo gets "did you mean: payments?". Writing a
+  repository's launchpad file still needs its exact name.
+
 ## [0.8.8] — 2026-11-16
 
 ### Added

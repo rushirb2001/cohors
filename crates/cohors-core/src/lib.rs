@@ -10,6 +10,7 @@
 //! - [`launchpad`] — what each repo says about itself: flows, agents, tasks.
 //! - [`overview`] — the one model every front-end draws: what to do next and why.
 //! - [`agents`] — the agent runners cohors can start and the prompts it hands them.
+//! - [`lookup`] — finding the one repo a typed name means, and close names on a miss.
 //!
 //! ## WASM safety (non-negotiable)
 //!
@@ -27,6 +28,7 @@ pub mod demo;
 pub mod detail;
 pub mod fuzzy;
 pub mod launchpad;
+pub mod lookup;
 pub mod model;
 pub mod overview;
 pub mod provider;

@@ -52,11 +52,11 @@
         "readOnlyHint": true,
         "title": "Repository status"
       },
-      "description": "Full status of ONE repository, found by id, name, or path — branch, upstream ahead/behind, worktree counts, stashes, recent activity, last commit, plus a local drill-in `detail` (recent commits, per-branch sync, changed files, stash list). Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
+      "description": "Full status of ONE repository, found by id, name, path or a unique prefix of its name — branch, upstream ahead/behind, worktree counts, stashes, recent activity, last commit, plus a local drill-in `detail` (recent commits, per-branch sync, changed files, stash list). Adds remote_detail (open PRs, contributors, open issues, latest release) when the repo has a GitHub remote and a token. Use when the user names a single repo; for several repos call list_repos with a selector instead.",
       "inputSchema": {
         "properties": {
           "repo": {
-            "description": "Repo id, name/alias, or path.",
+            "description": "Repo id, name/alias, path, or a unique prefix of a name (an exact match wins; a name several repos share is an error listing their paths).",
             "type": "string"
           }
         },
@@ -234,11 +234,11 @@
         "readOnlyHint": true,
         "title": "Repository path"
       },
-      "description": "Resolve a repo (by id, name, or path) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
+      "description": "Resolve a repo (by id, name, path or a unique prefix of its name) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
       "inputSchema": {
         "properties": {
           "repo": {
-            "description": "Repo id, name/alias, or path.",
+            "description": "Repo id, name/alias, path, or a unique prefix of a name (an exact match wins; a name several repos share is an error listing their paths).",
             "type": "string"
           }
         },
@@ -476,7 +476,7 @@
             "type": "string"
           },
           "repo": {
-            "description": "Repo id, name/alias, or path (must be inside the fleet).",
+            "description": "Repo id, name/alias, or path, named exactly (no prefixes: this write replaces the file), and inside the fleet.",
             "type": "string"
           },
           "summary": {
