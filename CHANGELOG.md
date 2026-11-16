@@ -7,11 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Versioning policy
 
-cohors is pre-1.0, so it follows the `0.MINOR.PATCH` convention:
+Each number says what a release holds (ADR-059):
 
-- **MINOR** (`0.x.0`) — new features _and_ any breaking change (the public surface
-  is still unstable before 1.0).
-- **PATCH** (`0.x.y`) — backwards-compatible bug fixes and polish only.
+- **MAJOR** (`X.0.0`) — a headline change in what cohors is, or a break in its
+  public contract (command and flag names, the `scan` JSON, the config file).
+  While cohors is `0.x`, a contract break bumps MINOR instead and is listed
+  under **Breaking**; `1.0.0` is the deliberate freeze.
+- **MINOR** (`0.x.0`) — anything you can newly do: a command, a flag, a setting,
+  a view, an install channel.
+- **PATCH** (`0.x.y`) — fixes and refinements, with nothing new to learn.
+
+`scripts/bump-version.sh major|minor|patch` applies this: it refuses a patch
+release while **[Unreleased]** lists anything under **Added**.
 
 Every release gets an entry below and an annotated git tag (`vX.Y.Z`) on the
 release commit. The version in `Cargo.toml` (`[workspace.package]`) is the single
@@ -21,13 +28,6 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ### Added
 
-- **A Docker image, `ghcr.io/rushirb2001/cohors`**, for linux/amd64 and
-  linux/arm64. It runs the MCP server over the repositories mounted at `/repos`
-  (`docker run -i --rm -v "$HOME/code:/repos" ghcr.io/rushirb2001/cohors`), and
-  any other cohors command works too. It installs the release's own Linux
-  binary after checking its checksum, and is published with every release.
-
-## [0.7.6] — 2026-11-12
 - **Repos nested inside a repo are found.** When a folder you point cohors at
   is itself a git repo (say `~/code`, tracked for your own notes), it is now
   searched too, so `~/code/projects/api-dashboard` and the rest show up beside
@@ -40,6 +40,13 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 - **`--deep` on `cohors discover` and `cohors scan`** searches every folder at
   any depth, inside repos too. What only it finds is remembered, and a running
   dashboard, the web page and the MCP server pick it up without a restart.
+- **A Docker image, `ghcr.io/rushirb2001/cohors`**, for linux/amd64 and
+  linux/arm64. It runs the MCP server over the repositories mounted at `/repos`
+  (`docker run -i --rm -v "$HOME/code:/repos" ghcr.io/rushirb2001/cohors`), and
+  any other cohors command works too. It installs the release's own Linux
+  binary after checking its checksum, and is published with every release.
+
+## [0.7.6] — 2026-11-12
 
 A distribution and documentation release: cohors now installs from every
 common place, including your editor's extension store. The `cohors` binary
