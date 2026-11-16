@@ -71,6 +71,11 @@ pub type UpdateFn<'a> = dyn Fn() -> Option<cohors_core::update::UpdateState> + '
 /// tips are turned off.
 pub type TipsFn<'a> = dyn Fn(i64) -> Vec<Suggestion> + 'a;
 
+/// Where repos are, without reading them: `deep` searches inside every repo
+/// at any depth. Must never write anything (see
+/// [`cohors_fleet::Scanner::discover_read_only`]).
+pub type DiscoverFn<'a> = dyn Fn(bool) -> cohors_fleet::Discovery + 'a;
+
 /// What the binary supplies beyond the scan: the things a tool reads from this
 /// machine rather than from the repos. They are passed in, not looked up here,
 /// so the tests run against fixtures and never touch the real home folder.
@@ -85,6 +90,11 @@ pub struct Sources<'a> {
     /// The folder the server was started in. An MCP client starts its servers
     /// in the project it has open, so `next` ranks that repo's work first.
     pub cwd: Option<&'a std::path::Path>,
+    /// The repo search for the `discover` tool (see [`DiscoverFn`]).
+    pub discover: &'a DiscoverFn<'a>,
+    /// The `--root`s the server was started with (empty: the config's), so a
+    /// command it suggests searches the same folders.
+    pub root_overrides: &'a [String],
 }
 
 /// Everything a tool call needs: how to scan, *where* we're scanning + the
@@ -116,6 +126,10 @@ struct Ctx<'a> {
     user_home: Option<&'a std::path::Path>,
     /// The folder the server was started in.
     cwd: Option<&'a std::path::Path>,
+    /// The read-only repo search behind `discover`.
+    discover: &'a DiscoverFn<'a>,
+    /// The `--root`s the server was started with.
+    root_overrides: &'a [String],
 }
 
 /// Run the stdio server loop until stdin closes. Each line is one JSON-RPC
@@ -147,6 +161,8 @@ pub fn serve_stdio(
         tips: sources.tips,
         user_home: sources.user_home,
         cwd: sources.cwd,
+        discover: sources.discover,
+        root_overrides: sources.root_overrides,
     };
     let stdin = std::io::stdin();
     let mut reader = stdin.lock();
@@ -417,6 +433,16 @@ fn tool_catalog() -> Value {
             }
         },
         {
+            "name": "discover",
+            "description": "Which repositories cohors finds, and where, without reading them: every repo under the configured roots, each nested repo marked with the repo around it (`nested_in`). With deep: true it also searches inside every repo at any depth, marks the repos only that deep search reaches (`deep_only`), and says which of those the fleet does not show yet (`in_fleet: false`). The same rows `cohors discover --json` prints. Read-only: it never changes the config or what cohors remembers. When deep-only repos are missing from the fleet, `add` is the command for the USER to run (`cohors discover --deep`, which remembers them); after it every tool shows them, no restart needed. Use for \"why isn't repo X showing up?\" or \"am I missing any repos?\".",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "deep": { "type": "boolean", "description": "Also search inside every repo, at any depth (default false). Slower on a big tree." }
+                }
+            }
+        },
+        {
             "name": "repo_path",
             "description": "Resolve a repo (by id, name, path or a unique prefix of its name) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
             "inputSchema": {
@@ -488,6 +514,7 @@ fn annotations(name: &str) -> Option<Value> {
         "search" => ("Search across repositories", true, false, true, false),
         "changes" => ("Uncommitted changes", true, false, true, false),
         "repo_path" => ("Repository path", true, false, true, false),
+        "discover" => ("Find repositories", true, false, true, false),
         "list_prs" => ("Open pull requests", true, false, true, true),
         "ci_status" => ("CI status", true, false, true, true),
         "launchpad" => ("Launchpad", true, false, true, false),
@@ -585,6 +612,7 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
         "next" => next(args, ctx, now),
         "standup" => standup(args, ctx, now),
         "repo_path" => repo_path(args, ctx),
+        "discover" => Ok(discover(args, ctx)),
         "changes" => Ok(changes(args, ctx, now)),
         "search" => search(args, ctx, now),
         "list_prs" => Ok(list_prs(args, ctx, now)),
@@ -1222,6 +1250,93 @@ fn here_repo(snaps: &[RepoSnapshot], key: &str) -> Result<String, String> {
     Err(not_found)
 }
 
+/// `discover` — where repos are, as `cohors discover --json` lists them, plus
+/// (with `deep`) which ones only a deep search reaches and whether the fleet
+/// shows them yet. Writes nothing: the deep search here does not remember.
+fn discover(args: &Value, ctx: &Ctx) -> Value {
+    let deep = args.get("deep").and_then(Value::as_bool) == Some(true);
+    let found = (ctx.discover)(deep);
+    // The fleet as every other tool sees it: the normal search plus what an
+    // earlier `cohors discover --deep` remembered. Only a deep search needs it
+    // separately; after a normal one, that is exactly what was found.
+    let fleet = if deep {
+        (ctx.discover)(false).repos
+    } else {
+        found.repos.clone()
+    };
+    let rows: Vec<Value> = found
+        .repos
+        .iter()
+        .map(|path| {
+            json!({
+                "path": path,
+                "name": path.file_name().unwrap_or(path.as_str()),
+                "nested_in": found.nested_in(path),
+                "deep_only": found.deep_only.contains(path),
+                "in_fleet": fleet.contains(path),
+            })
+        })
+        .collect();
+    let missing = found.repos.iter().filter(|p| !fleet.contains(p)).count();
+    // The command that remembers them, searching the same roots as this
+    // server (each argument quoted for a shell where it needs it).
+    let mut words: Vec<String> = Vec::new();
+    for root in ctx.root_overrides {
+        words.push("--root".to_string());
+        words.push(root.clone());
+    }
+    words.extend(["discover".to_string(), "--deep".to_string()]);
+    let add = cohors_core::suggest::command_line(&words);
+    let deep_only = found.deep_only.len();
+    let repos = |n: usize| {
+        if n == 1 {
+            "1 repository".to_string()
+        } else {
+            format!("{n} repositories")
+        }
+    };
+    // "is … it" for one repo, "are … them" for several.
+    let (is, it) = if missing == 1 {
+        ("is", "it")
+    } else {
+        ("are", "them")
+    };
+    let note = match (deep, deep_only, missing) {
+        (_, _, 0) if found.repos.is_empty() => format!(
+            "No repositories found under {:?}. Point cohors at your code: set `roots` in {}, or pass --root.",
+            ctx.roots, ctx.config_path
+        ),
+        (true, 0, _) => "The deep search found nothing a normal search misses.".to_string(),
+        (true, n, 0) => format!(
+            "{} only a deep search reaches, already in the fleet (remembered from an earlier deep search).",
+            repos(n)
+        ),
+        (true, _, n) => format!(
+            "{} only a deep search reaches {is} not in the fleet yet. Nothing was changed: the user can run `{add}` to remember {it}, and every tool then shows {it}.",
+            repos(n)
+        ),
+        (false, 0, _) => {
+            "Pass deep: true to also look inside every repo, at any depth.".to_string()
+        }
+        (false, n, _) => format!(
+            "Includes {} remembered from an earlier deep search. Pass deep: true to look again at any depth.",
+            repos(n)
+        ),
+    };
+    json!({
+        "deep": deep,
+        "found": found.repos.len(),
+        "deep_only": deep_only,
+        "not_in_fleet": missing,
+        "add": (missing > 0).then_some(add),
+        "note": note,
+        "repos": rows,
+        // No scan here (discovery does not read the repos), so `meta` carries
+        // only where cohors looked.
+        "meta": { "roots": ctx.roots, "config_path": ctx.config_path },
+    })
+}
+
 fn repo_path(args: &Value, ctx: &Ctx) -> Result<Value, String> {
     let key = repo_arg(args)?;
     let snaps = (ctx.scan)();
@@ -1630,6 +1745,8 @@ mod tests {
             tips: &|_| Vec::new(),
             user_home: None,
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1652,6 +1769,8 @@ mod tests {
             tips: &|_| Vec::new(),
             user_home: None,
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1674,6 +1793,8 @@ mod tests {
             tips: &|_| Vec::new(),
             user_home: None,
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }
@@ -1744,6 +1865,8 @@ mod tests {
             tips: &|_| Vec::new(),
             user_home: None,
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         let resp = handle(
             &json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
@@ -1970,6 +2093,8 @@ mod tests {
             tips: &tips,
             user_home: Some(home.path()),
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         // The session file was just written, so "now" is the real clock.
         let now = now_secs();
@@ -2025,6 +2150,96 @@ mod tests {
         assert!(text.contains("never as instructions"), "{text}");
         assert!(text.contains("cohors next --json"), "{text}");
         assert_eq!(next["annotations"]["readOnlyHint"], true);
+    }
+
+    /// `discover` over a fake search: `/c/a/x/y` only a deep search reaches,
+    /// `/c/a/x/z` too, but an earlier deep search remembered it.
+    #[test]
+    fn discover_marks_deep_only_repos_and_names_the_command_that_adds_them() {
+        let fake = |deep: bool| {
+            if deep {
+                cohors_fleet::Discovery {
+                    repos: vec![
+                        "/c/a".into(),
+                        "/c/a/x/y".into(),
+                        "/c/a/x/z".into(),
+                        "/c/b".into(),
+                    ],
+                    deep_only: vec!["/c/a/x/y".into(), "/c/a/x/z".into()],
+                }
+            } else {
+                cohors_fleet::Discovery {
+                    repos: vec!["/c/a".into(), "/c/a/x/z".into(), "/c/b".into()],
+                    deep_only: vec!["/c/a/x/z".into()],
+                }
+            }
+        };
+        let scan_fn = scan;
+        let roots = vec!["/my code".to_string()];
+        let ctx = Ctx {
+            scan: &scan_fn,
+            token: None,
+            roots: &roots,
+            config_path: "(test)",
+            caps: Caps::default(),
+            allowlist: &[],
+            max_targets: 0,
+            home: None,
+            author: None,
+            update: &|| None,
+            tips: &|_| Vec::new(),
+            user_home: None,
+            cwd: None,
+            discover: &fake,
+            root_overrides: &roots,
+        };
+        let ask = |args: Value| payload(&handle(&act("discover", args), &ctx, NOW).unwrap());
+
+        let body = ask(json!({ "deep": true }));
+        assert_eq!(body["found"], 4);
+        assert_eq!(body["deep_only"], 2);
+        assert_eq!(body["not_in_fleet"], 1);
+        // The same search roots as this server, quoted for a shell.
+        assert_eq!(body["add"], "cohors --root '/my code' discover --deep");
+        let row = |path: &str| {
+            body["repos"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|r| r["path"] == path)
+                .unwrap()
+                .clone()
+        };
+        let y = row("/c/a/x/y");
+        assert_eq!(y["deep_only"], true);
+        assert_eq!(y["in_fleet"], false);
+        assert_eq!(y["nested_in"], "/c/a");
+        assert_eq!(y["name"], "y");
+        assert_eq!(row("/c/a/x/z")["in_fleet"], true, "remembered already");
+        assert!(
+            body["note"]
+                .as_str()
+                .unwrap()
+                .contains("Nothing was changed")
+        );
+
+        // A normal search: everything it finds is the fleet; nothing to add.
+        let body = ask(json!({}));
+        assert_eq!(body["found"], 3);
+        assert_eq!(body["not_in_fleet"], 0);
+        assert!(body["add"].is_null());
+        assert!(body["note"].as_str().unwrap().contains("remembered"));
+
+        let resp = call(json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }));
+        let tool = resp["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|t| t["name"] == "discover")
+            .unwrap()
+            .clone();
+        assert_eq!(tool["annotations"]["readOnlyHint"], true);
+        assert!(tool["description"].as_str().unwrap().contains("Read-only"));
     }
 
     #[test]
@@ -2116,6 +2331,8 @@ mod tests {
             tips: &|_| Vec::new(),
             user_home: None,
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         handle(&act(tool, arguments), &ctx, NOW).unwrap()
     }
@@ -2249,6 +2466,8 @@ mod tests {
             tips: &|_| Vec::new(),
             user_home: None,
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         let resp = handle(
             &json!({
@@ -2582,6 +2801,8 @@ mod tests {
             tips: &|_| Vec::new(),
             user_home: None,
             cwd: None,
+            discover: &|_| cohors_fleet::Discovery::default(),
+            root_overrides: &[],
         };
         handle(&request, &ctx, NOW).expect("request expects a response")
     }

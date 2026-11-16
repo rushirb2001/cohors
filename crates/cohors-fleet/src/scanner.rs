@@ -53,6 +53,17 @@ pub struct Discovery {
     pub deep_only: Vec<Utf8PathBuf>,
 }
 
+impl Discovery {
+    /// The found repo that encloses `path` most closely, if any (a repo
+    /// nested inside another).
+    pub fn nested_in(&self, path: &Utf8Path) -> Option<&Utf8PathBuf> {
+        self.repos
+            .iter()
+            .filter(|other| other.as_path() != path && path.starts_with(other))
+            .max_by_key(|other| other.as_str().len())
+    }
+}
+
 impl Scanner {
     /// Build a scanner: load config (honouring an explicit `config_path`
     /// override), resolve discovery options (applying `root_overrides` and `~`
@@ -271,7 +282,18 @@ impl Scanner {
     /// a normal search's reach are then remembered. Best-effort like
     /// [`scan`](Self::scan): a discovery error is logged and yields nothing.
     pub fn discover(&self, deep: bool) -> Discovery {
-        match self.try_discover(deep) {
+        self.discover_remembering(deep, true)
+    }
+
+    /// [`discover`](Self::discover) that writes nothing: a deep search reports
+    /// what only it reaches but does not remember it, so later scans are
+    /// unchanged. For a surface that may only look (the MCP `discover` tool).
+    pub fn discover_read_only(&self, deep: bool) -> Discovery {
+        self.discover_remembering(deep, false)
+    }
+
+    fn discover_remembering(&self, deep: bool, remember: bool) -> Discovery {
+        match self.try_discover(deep, remember) {
             Ok(found) => found,
             Err(err) => {
                 tracing::error!(error = %err, "discovery failed");
@@ -280,7 +302,7 @@ impl Scanner {
         }
     }
 
-    fn try_discover(&self, deep: bool) -> Result<Discovery, cohors_git::GitError> {
+    fn try_discover(&self, deep: bool, remember: bool) -> Result<Discovery, cohors_git::GitError> {
         let paths = |refs: Vec<RepoRef>| -> BTreeSet<Utf8PathBuf> {
             refs.into_iter().filter_map(|r| r.path).collect()
         };
@@ -294,7 +316,7 @@ impl Scanner {
             deep_opts.deep = true;
             let all = paths(cohors_git::discover(&deep_opts)?);
             let extra: Vec<Utf8PathBuf> = all.difference(&walked).cloned().collect();
-            if let Some(file) = &self.known_file {
+            if remember && let Some(file) = &self.known_file {
                 let covered = cohors_git::root_dirs(&deep_opts);
                 if let Err(err) = crate::known::remember(file, &covered, &extra) {
                     tracing::warn!(error = %err, %file, "could not remember deep-search repos");
@@ -513,5 +535,26 @@ fn apply_aliases(config: &Config, home: Option<&Utf8Path>, snapshots: &mut [Repo
                 snap.name = alias;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nested_in_names_the_closest_enclosing_repo() {
+        let p = |s: &str| Utf8PathBuf::from(s);
+        let found = Discovery {
+            repos: vec![p("/c"), p("/c/a"), p("/c/a/b"), p("/c/ab")],
+            deep_only: Vec::new(),
+        };
+        assert_eq!(found.nested_in(&p("/c/a/b")), Some(&p("/c/a")));
+        assert_eq!(
+            found.nested_in(&p("/c/ab")),
+            Some(&p("/c")),
+            "a/ab is not nesting"
+        );
+        assert_eq!(found.nested_in(&p("/c")), None);
     }
 }

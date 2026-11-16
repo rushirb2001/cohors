@@ -27,6 +27,7 @@ ask the user where their repos are.
 | Code or repos matching something | `search` |
 | Open PRs / red CI | `list_prs`, `ci_status` |
 | Where a repo is on disk | `repo_path` |
+| "Why isn't repo X showing?", "am I missing repos?" | `discover` (`deep: true` also looks inside every repo; it changes nothing, and `add` is the command for the user to run) |
 | What to work on, how to run things | `launchpad`, `read_board` |
 | "What did I do today / this week?", a standup | `standup` |
 

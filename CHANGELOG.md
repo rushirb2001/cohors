@@ -26,6 +26,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.11] — 2026-11-16
+
+### Added
+
+- **Claude can find repositories buried inside others.** The MCP server has
+  a `discover` tool: every repository under your roots, with `deep: true`
+  also those only a deep search reaches and which of them the dashboard
+  does not show yet. It changes nothing; it names the command for you to
+  run (`cohors discover --deep`) to add them.
+
 ## [0.8.10] — 2026-11-16
 
 ### Added

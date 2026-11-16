@@ -271,6 +271,20 @@ fn a_deep_search_is_remembered_for_normal_scans() {
     assert_eq!(names(scanner.scan()), ["api-dashboard", "archive", "code"]);
     assert!(scanner.known_stamp().is_none());
 
+    // A read-only deep search finds it too, but remembers nothing.
+    let looked = scanner.discover_read_only(true);
+    assert_eq!(looked.repos.len(), 4);
+    assert!(looked.deep_only[0].as_str().ends_with("tools/linter"));
+    assert_eq!(
+        looked
+            .nested_in(&looked.deep_only[0])
+            .map(|p| p.as_str().ends_with("code/archive")),
+        Some(true),
+        "the closest repo around it"
+    );
+    assert!(scanner.known_stamp().is_none(), "nothing was written");
+    assert_eq!(names(scanner.scan()), ["api-dashboard", "archive", "code"]);
+
     // The deep search finds it, says it was deep-only, and remembers it.
     let deep = scanner.discover(true);
     assert_eq!(deep.repos.len(), 4);

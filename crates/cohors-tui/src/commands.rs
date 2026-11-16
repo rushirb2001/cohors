@@ -251,7 +251,7 @@ pub fn discover(cli: &Cli, deep: bool, json: bool) -> Result<()> {
                 serde_json::json!({
                     "path": path,
                     "name": path.file_name().unwrap_or(path.as_str()),
-                    "nested_in": nested_in(path, &found.repos),
+                    "nested_in": found.nested_in(path),
                     "deep_only": found.deep_only.contains(path),
                 })
             })
@@ -281,14 +281,6 @@ pub fn discover(cli: &Cli, deep: bool, json: bool) -> Result<()> {
     }
     print!("{}", discover_report(&found, &roots, took, deep, color));
     Ok(())
-}
-
-/// The repo that encloses `path` most closely among `repos`, if any.
-fn nested_in<'a>(path: &Utf8Path, repos: &'a [Utf8PathBuf]) -> Option<&'a Utf8PathBuf> {
-    repos
-        .iter()
-        .filter(|other| other.as_path() != path && path.starts_with(other))
-        .max_by_key(|other| other.as_str().len())
 }
 
 /// The human `cohors discover` list: each root as a section, its repos by
@@ -405,7 +397,7 @@ fn discover_row(
     if shown == "." {
         notes.push("this folder is a repo".to_string());
     }
-    if let Some(outer) = nested_in(path, &found.repos) {
+    if let Some(outer) = found.nested_in(path) {
         let name = outer.file_name().unwrap_or(outer.as_str());
         notes.push(format!("inside {}", crate::ui::text::safe(name)));
     }
@@ -2823,7 +2815,7 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, roots: &[String], color: bool) -
     let rows: Vec<(String, String)> = vec![
         (
             "reads".to_string(),
-            "overview, next, list_repos, get_repo, fleet_summary, standup, search, changes, repo_path, list_prs, ci_status"
+            "overview, next, list_repos, get_repo, fleet_summary, standup, search, changes, repo_path, discover, list_prs, ci_status"
                 .to_string(),
         ),
         (
@@ -2912,6 +2904,9 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
     };
     let user_home = cohors_config::paths::home_dir().ok();
     let cwd = std::env::current_dir().ok();
+    // The `discover` tool may only look: its deep search never remembers
+    // anything (only the user's own `cohors discover --deep` does).
+    let discover = |deep: bool| scanner.discover_read_only(deep);
     // Started by the Claude Code plugin, the server lives exactly as long as
     // the session, so it notes the session's start and end on the launchpad's
     // activity log itself (the plugin ships no hooks). Best-effort: a failure
@@ -2938,6 +2933,8 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
             tips: &tips,
             user_home: user_home.as_deref().map(|h| h.as_std_path()),
             cwd: cwd.as_deref(),
+            discover: &discover,
+            root_overrides: &cli.root,
         },
     );
     note("end");
@@ -3534,18 +3531,5 @@ mod tests {
         assert_eq!(parse_since("2023-11-14", now).unwrap(), midnight);
         assert_eq!(parse_since("1970-01-02", now).unwrap(), 86_400);
         assert!(parse_since("last tuesday", now).is_err());
-    }
-
-    #[test]
-    fn nested_in_names_the_closest_enclosing_repo() {
-        let p = |s: &str| Utf8PathBuf::from(s);
-        let repos = [p("/c"), p("/c/a"), p("/c/a/b"), p("/c/ab")];
-        assert_eq!(nested_in(&p("/c/a/b"), &repos), Some(&p("/c/a")));
-        assert_eq!(
-            nested_in(&p("/c/ab"), &repos),
-            Some(&p("/c")),
-            "a/ab is not nesting"
-        );
-        assert_eq!(nested_in(&p("/c"), &repos), None);
     }
 }

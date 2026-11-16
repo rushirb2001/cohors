@@ -238,6 +238,27 @@
         "idempotentHint": true,
         "openWorldHint": false,
         "readOnlyHint": true,
+        "title": "Find repositories"
+      },
+      "description": "Which repositories cohors finds, and where, without reading them: every repo under the configured roots, each nested repo marked with the repo around it (`nested_in`). With deep: true it also searches inside every repo at any depth, marks the repos only that deep search reaches (`deep_only`), and says which of those the fleet does not show yet (`in_fleet: false`). The same rows `cohors discover --json` prints. Read-only: it never changes the config or what cohors remembers. When deep-only repos are missing from the fleet, `add` is the command for the USER to run (`cohors discover --deep`, which remembers them); after it every tool shows them, no restart needed. Use for \"why isn't repo X showing up?\" or \"am I missing any repos?\".",
+      "inputSchema": {
+        "properties": {
+          "deep": {
+            "description": "Also search inside every repo, at any depth (default false). Slower on a big tree.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "name": "discover",
+      "title": "Find repositories"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true,
         "title": "Repository path"
       },
       "description": "Resolve a repo (by id, name, path or a unique prefix of its name) to its absolute path so you can operate in it directly. Prefer this over searching the filesystem for where a repo lives.",
