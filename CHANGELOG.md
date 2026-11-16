@@ -26,6 +26,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.3] — 2026-11-16
+
+### Fixed
+
+- **`cohors doctor` never runs a `cohors` from the current folder.** It asks
+  each copy on your PATH for its version; an empty or relative PATH entry
+  (`.`), or a copy in a folder other users can write to, is now skipped
+  instead of run, so a repository with its own `cohors` file cannot run code
+  when you ask doctor what is installed.
+
 ## [0.8.2] — 2026-11-16
 
 ### Added

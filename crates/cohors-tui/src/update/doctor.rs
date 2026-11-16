@@ -220,10 +220,41 @@ fn standing(layout: &Layout) -> Option<Standing> {
     }
 }
 
+/// The PATH's folders, absolute ones only. An empty entry or a relative one
+/// (`.`, `bin`) means "the current folder", which is often a repository
+/// someone else wrote: a `cohors` there must never be counted, let alone run
+/// (doctor runs each copy it finds with `--version`).
 fn path_dirs() -> Vec<PathBuf> {
     std::env::var_os("PATH")
-        .map(|path| std::env::split_paths(&path).collect())
+        .map(|path| absolute_dirs(&path))
         .unwrap_or_default()
+}
+
+fn absolute_dirs(path: &std::ffi::OsStr) -> Vec<PathBuf> {
+    std::env::split_paths(path)
+        .filter(|dir| dir.is_absolute())
+        .collect()
+}
+
+/// May doctor run this file to ask its version? Not when the file, or the
+/// folder it really lives in, can be changed by other users (group- or
+/// world-writable, as in `/tmp`): anyone could have put it there.
+#[cfg(unix)]
+fn safe_to_run(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let Ok(real) = std::fs::canonicalize(path) else {
+        return false;
+    };
+    let writable_by_others =
+        |p: &Path| std::fs::metadata(p).map_or(true, |m| m.permissions().mode() & 0o022 != 0);
+    real.is_absolute()
+        && !writable_by_others(&real)
+        && real.parent().is_some_and(|dir| !writable_by_others(dir))
+}
+
+#[cfg(not(unix))]
+fn safe_to_run(path: &Path) -> bool {
+    path.is_absolute()
 }
 
 /// Every `cohors` on the PATH, in PATH order, each file once.
@@ -295,8 +326,11 @@ fn python_launcher(path: &Path) -> bool {
 }
 
 /// `<path> --version`, with updates and the hand-off off, given at most five
-/// seconds.
+/// seconds. `None` (version unknown) for a file it is not safe to run.
 fn version_of(path: &Path) -> Option<String> {
+    if !safe_to_run(path) {
+        return None;
+    }
     let mut child = Command::new(path)
         .arg("--version")
         .env("COHORS_DISABLE_UPDATES", "1")
@@ -630,5 +664,48 @@ mod tests {
         assert!(text.contains("No problems found."), "{text}");
         assert!(!text.contains("Notes"), "{text}");
         assert!(text.contains("not asked yet (GitHub releases)"), "{text}");
+    }
+}
+
+#[cfg(test)]
+mod path_safety {
+    use super::*;
+
+    #[test]
+    fn only_absolute_path_folders_are_searched() {
+        // An empty entry and `.` both mean the current folder.
+        let dirs = absolute_dirs(std::ffi::OsStr::new("/usr/bin::.:bin:/opt/homebrew/bin"));
+        assert_eq!(
+            dirs,
+            [
+                PathBuf::from("/usr/bin"),
+                PathBuf::from("/opt/homebrew/bin")
+            ]
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_copy_others_can_change_is_never_run() {
+        use std::os::unix::fs::PermissionsExt;
+        let set =
+            |p: &Path, mode| std::fs::set_permissions(p, std::fs::Permissions::from_mode(mode));
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(EXE);
+        std::fs::write(&file, "#!/bin/sh\necho cohors 9.9.9\n").unwrap();
+        set(dir.path(), 0o755).unwrap();
+        set(&file, 0o755).unwrap();
+        assert!(safe_to_run(&file));
+        assert_eq!(version_of(&file).as_deref(), Some("9.9.9"));
+        // A folder anyone can write to, as /tmp is.
+        set(dir.path(), 0o777).unwrap();
+        assert!(!safe_to_run(&file));
+        assert_eq!(version_of(&file), None);
+        set(dir.path(), 0o755).unwrap();
+        // A file others can rewrite.
+        set(&file, 0o777).unwrap();
+        assert!(!safe_to_run(&file));
+        // A relative path is never run.
+        assert!(!safe_to_run(Path::new("cohors")));
     }
 }
