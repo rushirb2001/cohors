@@ -38,13 +38,15 @@ pub struct NextItem {
     pub session: Option<AgentSession>,
 }
 
-/// What to pick up next, from `/api/next`: the ranked list, and every agent
-/// conversation found in the fleet's repositories.
+/// What to pick up next, from `/api/next`: the ranked list, every agent
+/// conversation found in the fleet's repositories, and at most one setup tip
+/// (a part of cohors not used yet, such as the editor extension).
 #[derive(Deserialize, Clone, Default, PartialEq)]
 #[serde(default)]
 pub struct Next {
     pub list: Vec<NextItem>,
     pub sessions: Vec<AgentSession>,
+    pub tips: Vec<Suggestion>,
 }
 
 /// The launchpad from `/api/launchpad`: what each repository declares about

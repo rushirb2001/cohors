@@ -1,0 +1,28 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 80, 24)"
+---
+ cohors  ~/code   12 repositories. 6 have work at risk, 4 need…  scanned 2m ago 
+  Tip  VS Code: code --install-extension rushirb2001.cohors    i copy   x hide  
+ 4 not backed up  3 stashes  26 uncommitted  0 stale  5 tasks  44 commits 7d    
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────╮
+│▸ RISK      Check 1 repository that could not be r…  Nothing else is known a… │
+│  RISK   P  Push 4 commits from 3 repositories       They exist only on this… │
+│   ↓ 3 more                                                                   │
+╰─  ⏎  do the highlighted step   P  push 3   p  pull 2  ───────────────────────╯
+╭─  2  ▲ Work at risk  6 ──────────────────────────────────────────────────────╮
+│  RISK  analytics         1 commit not pushed, older than 2…    4d  Push      │
+│  RISK  legacy-billing    Could not be read                                   │
+│   ↓ 4 more                                                                   │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭─  3  ✓ Open tasks  5 ──────────────╮ ╭─  4  ● Commits, last 7 days  44 ──────╮
+│ repository    open  high  focus    │ │ auth-service      ███████████      8  │
+│ payments         2     1      1    │ │   ↓ 10 more                           │
+│   ↓ 2 more                         │ │ 1 repository had no commits this wee… │
+╰────────────────────────────────────╯ ╰───────────────────────────────────────╯
+╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────╮
+│        repository         branch    upstream      stg  mod  new  stash   age │
+│  RISK  analytics          main      ↑1              ·    ·    ·      2    4d │
+│   ↓ 11 more                                                                  │
+╰──────────────────────────────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  ?  help  q  quit

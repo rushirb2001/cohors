@@ -401,21 +401,27 @@ pub enum Command {
     /// Bare, it lists the suggestions, numbered; `cohors next 2` runs the
     /// second one. The list ranks the agent conversations held in each repo
     /// (Claude Code, Codex) with what needs doing, from the repo you are in.
+    /// Last come up to two tips about parts of cohors you have not used yet;
+    /// each goes once done, once dismissed, or after five days of showing.
     #[command(
         visible_alias = "suggest",
-        after_help = "Examples:\n  cohors next              what to do now, numbered\n  cohors next 1            do the first one\n  cohors next --json       the same list for scripts and agents"
+        after_help = "Examples:\n  cohors next              what to do now, numbered\n  cohors next 1            do the first one\n  cohors next --json       the same list for scripts and agents\n  cohors next --dismiss web   stop suggesting the web dashboard"
     )]
     #[command(display_order = 2)]
     Next {
-        /// Run this suggestion (its number in the list).
+        /// Run this suggestion (its number in the list). Only cohors itself
+        /// is run; a tip for another program is printed for you to run.
         #[arg(value_name = "N")]
         pick: Option<usize>,
-        /// How many suggestions to list.
+        /// How many suggestions to list (tips come after them).
         #[arg(short = 'l', long, default_value_t = 6)]
         limit: usize,
         /// Print JSON instead of the human list.
         #[arg(long)]
         json: bool,
+        /// Hide a tip for good: web, extension or claude.
+        #[arg(long, value_name = "ID", conflicts_with = "pick")]
+        dismiss: Option<String>,
     },
     /// Follow the fleet as it changes, one line per change (no TUI).
     ///

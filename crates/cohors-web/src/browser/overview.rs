@@ -137,11 +137,14 @@ const PICK_UP: usize = 5;
 /// to take and focus items, each with why and the command that carries it
 /// out, to copy into a terminal. Nothing runs from here. Titles come from
 /// repositories and agent conversations: Leptos writes them as text, so they
-/// can never become markup. Hidden when there is nothing to suggest.
+/// can never become markup. Last, at most one setup tip ("Get the VS Code
+/// extension") with its command to copy. Hidden when there is nothing to
+/// suggest.
 fn pick_up(cx: Ctx) -> impl IntoView {
     move || {
         let list = cx.next.with(|next| next.list.clone());
-        if list.is_empty() {
+        let tips = cx.next.with(|next| next.tips.clone());
+        if list.is_empty() && tips.is_empty() {
             return ().into_any();
         }
         let now = cx.overview.with(|o| o.now);
@@ -172,13 +175,34 @@ fn pick_up(cx: Ctx) -> impl IntoView {
                 }
             })
             .collect::<Vec<_>>();
+        // A tip comes after everything that needs doing, and says how to be
+        // rid of it.
+        let tips = tips
+            .into_iter()
+            .take(1)
+            .map(|tip| {
+                let (class, word) = kind_block(tip.kind);
+                let hide = tip
+                    .tip
+                    .map(|id| format!(" \u{b7} cohors next --dismiss {id} hides this"))
+                    .unwrap_or_default();
+                view! {
+                    <div class="todo pick">
+                        <span class=format!("blk kind {class}")>{word}</span>
+                        <span class="t">{tip.title}</span>
+                        <span class="d">{tip.why}{hide}</span>
+                        <div class="c">{ui::command(cx, tip.command)}</div>
+                    </div>
+                }
+            })
+            .collect::<Vec<_>>();
         view! {
             <section>
                 <div class="sechead">
                     <h2>{ui::icon(Icon::Clock)} "Pick up where you left off"</h2>
                     <span>"Copy a command into a terminal to carry it out"</span>
                 </div>
-                <div class="block">{rows}</div>
+                <div class="block">{rows}{tips}</div>
             </section>
         }
         .into_any()
@@ -192,6 +216,7 @@ fn kind_block(kind: SuggestionKind) -> (&'static str, &'static str) {
         SuggestionKind::Act => ("note", "STEP"),
         SuggestionKind::Focus => ("note", "FOCUS"),
         SuggestionKind::Start => ("info", "START"),
+        SuggestionKind::Setup => ("info", "TIP"),
     }
 }
 

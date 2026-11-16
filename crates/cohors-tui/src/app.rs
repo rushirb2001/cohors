@@ -277,6 +277,10 @@ pub enum Cmd {
     },
     /// Collect the standup and copy it as markdown without opening the view.
     CopyStandupMarkdown,
+    /// Copy the setup tip's command (`i`). The dashboard never runs it.
+    CopyTip,
+    /// Hide the setup tip for good (`x`).
+    HideTip,
 }
 
 /// How a registry action verb is reached from the TUI. This is the TUI half of
@@ -590,6 +594,10 @@ pub struct App {
     /// A newer cohors: found, installing, or installed and waiting for a
     /// restart. Shown in the header; `R` restarts once it is ready.
     pub update: Option<cohors_core::update::UpdateState>,
+    /// Setup tips (parts of cohors not used yet), at most two. The first is
+    /// on the line under the header: `i` copies its command, `x` hides it for
+    /// good and brings the next one up (ADR-065).
+    pub tips: Vec<cohors_core::suggest::Suggestion>,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -721,6 +729,7 @@ impl App {
             dark: false,
             ground: None,
             update: None,
+            tips: Vec::new(),
         }
     }
 
@@ -1142,6 +1151,10 @@ impl App {
             KeyCode::Char('u') if self.empty_picker_active() => {
                 return Some(Cmd::UseSuggestedRoots);
             }
+            // The setup tip under the header, only while it is on screen: at
+            // any other time these keys do nothing.
+            KeyCode::Char('i') if self.tip_on_screen() => return Some(Cmd::CopyTip),
+            KeyCode::Char('x') if self.tip_on_screen() => return Some(Cmd::HideTip),
             // A number key focuses that card, from either screen.
             KeyCode::Char(c) if Card::from_key(c).is_some() => {
                 self.focus = Card::from_key(c).unwrap_or(self.focus);
@@ -1150,6 +1163,17 @@ impl App {
             _ => return None,
         }
         Some(Cmd::None)
+    }
+
+    /// The setup tip the overview shows under its header: the first one,
+    /// once there are repositories (an empty fleet has its own message).
+    pub fn shown_tip(&self) -> Option<&cohors_core::suggest::Suggestion> {
+        self.tips.first().filter(|_| !self.repos.is_empty())
+    }
+
+    /// Is a setup tip on the screen (the overview, with a tip to show)?
+    fn tip_on_screen(&self) -> bool {
+        self.screen == Screen::Overview && self.shown_tip().is_some()
     }
 
     /// Is an installed update waiting for a restart?
@@ -3022,5 +3046,28 @@ mod tests {
         assert_eq!(app.mode, Mode::Help);
         app.on_key(key('?'));
         assert_eq!(app.mode, Mode::Normal);
+    }
+
+    #[test]
+    fn the_tip_keys_work_only_while_a_tip_is_on_the_overview() {
+        let mut app = demo_app();
+        // No tip: `i` and `x` mean nothing.
+        assert_eq!(app.on_key(key('i')), Cmd::None);
+        assert_eq!(app.on_key(key('x')), Cmd::None);
+        let facts = cohors_core::suggest::SetupFacts::default();
+        app.tips = cohors_core::suggest::setup_tips(&facts);
+        // From any card of the overview.
+        for card in Card::ALL {
+            app.focus = card;
+            assert_eq!(app.on_key(key('i')), Cmd::CopyTip);
+            assert_eq!(app.on_key(key('x')), Cmd::HideTip);
+        }
+        // Not on the other screen, nor while typing a filter.
+        app.screen = Screen::Repos;
+        assert_eq!(app.on_key(key('x')), Cmd::None);
+        app.screen = Screen::Overview;
+        app.on_key(key('/'));
+        assert_eq!(app.on_key(key('x')), Cmd::None);
+        assert_eq!(app.filter, "x");
     }
 }

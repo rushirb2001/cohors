@@ -153,6 +153,7 @@ pub mod standalone {
             max_targets: scanner.actions_config().max_action_targets,
             demo: false,
             author_email: scanner.author_email(),
+            tips: true,
         };
         // Live: the fleet watch keeps the scan current and the page hears
         // about each change over `/api/events`.

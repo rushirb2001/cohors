@@ -1,6 +1,7 @@
 //! The overview: the screen cohors opens on.
 //!
-//! Top to bottom: the header card, the six key figures, then five numbered
+//! Top to bottom: the header card, a setup tip's line when there is one, the
+//! six key figures, then five numbered
 //! cards — 1 Do next, 2 Work at risk, 3 Open tasks beside 4 Commits, and
 //! 5 Repositories — and a one-line key bar.
 //!
@@ -15,7 +16,7 @@ use super::cards::{
     BLOCK_WIDTH, CardFrame, Hint, Item, draw_card, draw_card_filled, draw_lines, draw_list,
     draw_message, hint, hints_when, severity_block,
 };
-use super::layout::{Figures, OverviewPlan, Wants, list_window, plan_overview};
+use super::layout::{Figures, MIN_HEIGHT, OverviewPlan, Wants, list_window, plan_overview};
 use super::repos_table::render_repos_card;
 use super::*;
 use crate::app::{Card, Screen, action_key};
@@ -27,11 +28,21 @@ const HEADER_SIDE_WIDTH: usize = 28;
 
 /// Draw the overview into `area`.
 pub(crate) fn render_overview(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
-    let plan = plan_overview(area.width, area.height, &wants(app), app.focus);
+    // A setup tip takes the line right under the header band (ADR-065); the
+    // cards are planned in what is left, never less than the smallest screen.
+    let tip = app.shown_tip().filter(|_| area.height > MIN_HEIGHT);
+    let tip_rows = u16::from(tip.is_some());
+    let plan = plan_overview(
+        area.width,
+        area.height.saturating_sub(tip_rows),
+        &wants(app),
+        app.focus,
+    );
     // `plan.gap` is a blank row between one band and the next, when the
     // screen has room for it (zero otherwise, which takes no space).
-    let [header, _, figures, _, body, keys] = Layout::vertical([
+    let [header, tip_row, _, figures, _, body, keys] = Layout::vertical([
         Constraint::Length(plan.header),
+        Constraint::Length(tip_rows),
         Constraint::Length(plan.gap),
         Constraint::Length(plan.figures.height()),
         Constraint::Length(plan.gap),
@@ -41,6 +52,12 @@ pub(crate) fn render_overview(frame: &mut Frame, area: Rect, app: &App, now: i64
     .areas(area);
 
     render_header(frame, header, app, now, theme);
+    if let Some(tip) = tip {
+        frame.render_widget(
+            Paragraph::new(tip_line(tip, tip_row.width as usize, theme)),
+            tip_row,
+        );
+    }
     render_key_bar(frame, keys, app, theme);
 
     // No repositories at all: one card that says why and what to do about it.
@@ -733,6 +750,71 @@ fn do_next_line(
             text::clip(&text::safe(&action.why), why_width, ell),
             theme.dim(),
         ));
+    }
+    Line::from(spans)
+}
+
+// ── The setup tip ────────────────────────────────────────────────────────────
+
+/// The setup tip, on the line under the header (ADR-065): `Tip  Open your
+/// fleet in the browser: cohors web`, and on the right the keys, `i copy`
+/// and `x hide`. One line whatever the width: the title gives way to the
+/// tip's short name, then to nothing, before the command is clipped; on a
+/// very narrow screen the keys go too.
+fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, theme: &Theme) -> Line<'static> {
+    /// `  Tip  ` before the text, two columns after the keys.
+    const LEAD: usize = 2 + 3 + 2;
+    const KEYS_WIDTH: usize = "i copy   x hide".len();
+    let ell = theme.glyphs.ellipsis();
+    let title = text::safe(&tip.title);
+    let command = text::safe(&tip.command);
+    let (title_len, command_len) = (title.chars().count(), command.chars().count());
+
+    // With the keys, the text keeps a gap of three before them.
+    let keys = width >= LEAD + 24 + 3 + KEYS_WIDTH + 2;
+    let room = if keys {
+        width - LEAD - 3 - KEYS_WIDTH - 2
+    } else {
+        width.saturating_sub(LEAD + 2)
+    };
+    // The command matters most: it is what to run. When the title does not
+    // fit beside it, the tip's short name does (`VS Code`); when neither
+    // does, the command stands alone, clipped if it has to be.
+    let label = tip.label.as_deref().map(text::safe).unwrap_or_default();
+    let (title, command) = if title_len + 2 + command_len <= room {
+        (title, command)
+    } else if !label.is_empty() && label.chars().count() + 2 + command_len <= room {
+        (label, command)
+    } else {
+        (String::new(), text::clip(&command, room, ell))
+    };
+    let used = LEAD
+        + command.chars().count()
+        + if title.is_empty() {
+            0
+        } else {
+            title.chars().count() + 2
+        };
+
+    let mut spans = vec![
+        Span::raw("  "),
+        Span::styled("Tip", theme.accent().add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+    ];
+    if !title.is_empty() {
+        spans.push(Span::raw(title));
+        spans.push(Span::styled(": ", theme.dim()));
+    }
+    spans.push(Span::styled(command, theme.accent()));
+    if keys {
+        let bold = Style::new().add_modifier(Modifier::BOLD);
+        spans.push(Span::raw(
+            " ".repeat(width.saturating_sub(used + KEYS_WIDTH + 2)),
+        ));
+        spans.push(Span::styled("i", bold));
+        spans.push(Span::styled(" copy   ", theme.dim()));
+        spans.push(Span::styled("x", bold));
+        spans.push(Span::styled(" hide", theme.dim()));
     }
     Line::from(spans)
 }

@@ -26,6 +26,21 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.2] — 2026-11-16
+
+### Added
+
+- **Setup tips point at the parts of cohors you have not used yet.** When the
+  web dashboard was never opened, VS Code, Cursor or Windsurf is installed
+  without the cohors extension, or Claude Code is installed without cohors
+  in it, cohors says so below the real work: one `Tip` line under the
+  dashboard's header (`i` copies the command, `x` hides it), one line on the
+  start screen, the end of `cohors next` (and its `--json`), and the web
+  page's "Pick up where you left off". A tip goes once it is done, once you
+  hide it (`cohors next --dismiss web|extension|claude`), or after it has
+  shown on five separate days; `COHORS_NO_TIPS=1` turns them off. Finding
+  out only reads files on your machine; nothing is sent anywhere.
+
 ## [0.8.1] — 2026-11-16
 
 ### Added

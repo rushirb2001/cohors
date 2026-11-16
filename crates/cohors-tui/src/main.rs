@@ -210,9 +210,12 @@ fn main() -> anyhow::Result<()> {
             clap_complete::generate(*shell, &mut cmd, "cohors", &mut std::io::stdout());
             Ok(())
         }
-        Some(Command::Next { pick, limit, json }) => {
-            commands::next::run(&cli, *pick, *limit, *json)
-        }
+        Some(Command::Next {
+            pick,
+            limit,
+            json,
+            dismiss,
+        }) => commands::next::run(&cli, *pick, *limit, *json, dismiss.as_deref()),
         Some(Command::Mcp {
             allow_writes,
             allow_run,

@@ -15,6 +15,15 @@ the Claude Code plugin, the browser dashboard and the VS Code extension.
 - **Each repository's `.cohors/` launchpad file**, if it has one.
 - **Its own config**, at `~/.config/cohors/config.toml` (or your platform's
   equivalent).
+- **Your coding agents' recent sessions**, to suggest which one to resume:
+  Claude Code's `~/.claude/projects` and Codex's `~/.codex/sessions`, only
+  for sessions in the repositories cohors shows (their folder, branch, title
+  and when they were last active).
+- **Whether the rest of cohors is set up**, for setup tips: whether VS Code,
+  Cursor or Windsurf is installed and has the cohors extension (their
+  programs and `~/.vscode/extensions`-style folders), and whether Claude Code
+  has cohors (its plugin list and `~/.claude.json`). Only to decide on a tip;
+  no editor is started and nothing is changed.
 
 ## What it connects to
 
@@ -84,6 +93,9 @@ connections at all, apart from the git actions you start.
   `~/.local/state/cohors/`. `cohors uninstall` removes all of it. Not with
   `updates = "off"` or `"notify"`, `COHORS_NO_UPDATE`,
   `COHORS_DISABLE_UPDATES`, in CI, or from a build from source.
+- Which setup tips you hid and the days each was shown (`tips.json`), and a
+  note that the browser dashboard has been opened (`web-opened`), in its
+  cache folder.
 - An audit log of every action it carries out (fetch, pull, push, commit,
   stash, run), with the repositories it touched.
 - The launchpad's focus board and agent activity log.

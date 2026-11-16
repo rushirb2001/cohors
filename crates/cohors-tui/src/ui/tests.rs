@@ -317,6 +317,85 @@ fn snapshot_overview_before_it_is_computed() {
     insta::assert_snapshot!(render_to_string(&app, 120, 40));
 }
 
+/// A machine with VS Code and Claude Code where nothing of cohors is set up:
+/// the tips in the order they are offered.
+fn setup_tips() -> Vec<cohors_core::suggest::Suggestion> {
+    use cohors_core::suggest::{ClaudeFacts, EditorFacts, SetupFacts};
+    cohors_core::suggest::setup_tips(&SetupFacts {
+        web_opened: false,
+        editors: vec![EditorFacts {
+            name: "VS Code".into(),
+            cli: "code".into(),
+            has_extension: false,
+        }],
+        claude: Some(ClaudeFacts {
+            cli: "claude".into(),
+            has_cohors: Some(false),
+        }),
+        cohors_path: Some("/opt/homebrew/bin/cohors".into()),
+    })
+}
+
+/// A setup tip: one line right under the header band, with the command to
+/// run and its keys.
+#[test]
+fn snapshot_overview_with_a_tip() {
+    let mut app = fleet_app();
+    app.tips = setup_tips();
+    insta::assert_snapshot!(render_to_string(&app, 120, 45));
+}
+
+/// The same on a classic 80 by 24 terminal: under the one-line header.
+#[test]
+fn snapshot_overview_with_a_tip_80x24() {
+    let mut app = fleet_app();
+    app.tips = setup_tips();
+    app.tips.remove(0);
+    insta::assert_snapshot!(render_to_string(&app, 80, 24));
+}
+
+/// At any width the tip is one line under the header: the title gives way
+/// first, the command stays whole while it can, the keys show while there is
+/// room, and nothing below it is pushed off or wrapped.
+#[test]
+fn the_tip_is_one_line_under_the_header_at_any_width() {
+    let mut app = fleet_app();
+    for first in 0..3 {
+        app.tips = setup_tips().split_off(first);
+        let tip = app.tips[0].clone();
+        for (width, height) in [(200, 50), (120, 45), (80, 24), (60, 40), (48, 13)] {
+            let screen = render_to_string(&app, width, height);
+            let lines: Vec<&str> = screen.lines().collect();
+            let at = lines
+                .iter()
+                .position(|l| l.trim_start().starts_with("Tip  "))
+                .unwrap_or_else(|| panic!("no tip at {width}x{height}:\n{screen}"));
+            // Directly under the header: the card (its text on row 2) or,
+            // on a short screen, the one-line header.
+            let header = if at == 1 { lines[0] } else { lines[1] };
+            assert!(at == 1 || at == 5, "tip on row {at}:\n{screen}");
+            assert!(header.contains("cohors"), "{screen}");
+            let line = lines[at];
+            // The command always shows: whole on a wide screen, else clipped.
+            assert!(line.contains(&tip.command[..10]), "{width}: {line}");
+            if width >= 120 {
+                assert!(line.contains(&tip.command), "{width}: {line}");
+            }
+            if width >= 60 {
+                assert!(line.contains("i copy") && line.contains("x hide"), "{line}");
+            }
+            assert!(screen.contains("Do next"), "{width}x{height}:\n{screen}");
+        }
+        // The plain tier draws it in ASCII.
+        let plain = render_plain(&app, 120, 45);
+        let line = plain.lines().find(|l| l.contains("Tip  ")).unwrap();
+        assert!(line.is_ascii(), "{line}");
+    }
+    // No tip, no line: the screen is as it always was.
+    app.tips.clear();
+    assert!(!render_to_string(&app, 120, 45).contains("Tip  "));
+}
+
 /// Each card focused once. The cursor mark in the gutter shows which card has
 /// the focus (the accent border is colour, so it is asserted separately).
 #[test]

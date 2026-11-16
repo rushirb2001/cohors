@@ -2,7 +2,7 @@
   "name": "cohors",
   "displayName": "cohors",
   "description": "Every git repository you own in the sidebar: what is unpushed, behind or at risk, and what to do next. Push, pull and start an agent on a task without leaving the editor. Uses the cohors command-line tool.",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "publisher": "rushirb2001",
   "license": "MIT",
   "repository": {

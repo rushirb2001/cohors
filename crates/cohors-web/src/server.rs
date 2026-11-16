@@ -21,9 +21,9 @@
 //!   and commits. The same struct the terminal UI, the editor extension and the
 //!   MCP server render. `fresh=1` rescans first (a refresh the user asked for).
 //! - `GET  /api/launchpad` — every repo's launchpad entry + the focus board.
-//! - `GET  /api/next` — the suggestions (`{ list, sessions }`): agent
+//! - `GET  /api/next` — the suggestions (`{ list, sessions, tips }`): agent
 //!   conversations to resume, "do next" steps and focus items, each with the
-//!   command that carries it out.
+//!   command that carries it out, and at most one setup tip (ADR-065).
 //! - `GET  /api/standup?window=today|week` — the author's commits across the fleet.
 //! - `GET  /api/events` — server-sent events: one `fleet` event (with its `seq`)
 //!   per change of the fleet, and a comment every few seconds to keep the
@@ -118,6 +118,9 @@ struct Fleet {
     user_home: Option<PathBuf>,
     /// Event streams open now.
     streams: Arc<AtomicUsize>,
+    /// The setup tips, and the note that the page was opened. `None` unless
+    /// [`ServeOptions::tips`] asked for them.
+    tips: Option<cohors_fleet::tips::TipSource>,
 }
 
 /// The fleet as one request reads it.
@@ -146,7 +149,7 @@ impl Reading {
 }
 
 impl Fleet {
-    fn new(source: Source, demo: bool) -> Self {
+    fn new(source: Source, demo: bool, tips: bool) -> Self {
         let user_home = std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))
             .filter(|h| !h.is_empty())
@@ -157,6 +160,10 @@ impl Fleet {
             launchpad_home: cohors_fleet::launchpad::launchpad_home(),
             user_home: if demo { None } else { user_home },
             streams: Arc::new(AtomicUsize::new(0)),
+            tips: (tips && !demo)
+                .then(cohors_fleet::tips::TipEnv::from_env)
+                .flatten()
+                .map(cohors_fleet::tips::TipSource::new),
         }
     }
 
@@ -293,6 +300,10 @@ pub struct ServeOptions {
     pub demo: bool,
     /// Whose commits the standup lists (`git config user.email`).
     pub author_email: Option<String>,
+    /// Offer a setup tip in `/api/next` and note that the page was opened
+    /// (ADR-065). The real `cohors web` sets it; the demo and tests do not,
+    /// so they never touch the cache folder.
+    pub tips: bool,
 }
 
 /// What the read endpoints need to know about this session.
@@ -317,7 +328,7 @@ pub fn serve(assets: Assets, source: impl Into<Source>, options: ServeOptions) -
 fn serve_on(server: Server, assets: Assets, source: Source, options: ServeOptions) {
     let server = Arc::new(server);
     let dist = Arc::new(assets);
-    let fleet = Arc::new(Fleet::new(source, options.demo));
+    let fleet = Arc::new(Fleet::new(source, options.demo, options.tips));
     let action = ActionCtx {
         fleet: fleet.clone(),
         caps: options.caps,
@@ -410,7 +421,13 @@ fn handle(req: tiny_http::Request, dist: &Assets, fleet: &Fleet, site: &Site, ac
         }
         (Method::Get, "/api/events") => api_events(req, fleet),
         (Method::Post, "/api/action") => api_action(req, action),
-        _ => serve_static(req, dist, &url),
+        _ => {
+            // Someone opened the page: the tip to open it is done.
+            if let Some(tips) = &fleet.tips {
+                tips.page_opened();
+            }
+            serve_static(req, dist, &url)
+        }
     }
 }
 
@@ -501,7 +518,12 @@ fn next_payload(fleet: &Fleet, reading: &Reading) -> Value {
         fleet.user_home.as_deref(),
         now_secs(),
     );
-    json!({ "list": view.suggestions, "sessions": view.sessions })
+    let tips = fleet
+        .tips
+        .as_ref()
+        .map(|t| t.for_web(now_secs()))
+        .unwrap_or_default();
+    json!({ "list": view.suggestions, "sessions": view.sessions, "tips": tips })
 }
 
 /// `GET /api/standup?window=today|week` — the configured author's commits
@@ -801,7 +823,7 @@ mod tests {
     fn ctx(caps: Caps) -> ActionCtx {
         let scan: Arc<ScanFn> = Arc::new(demo_fleet);
         ActionCtx {
-            fleet: Arc::new(Fleet::new(Source::from(scan), true)),
+            fleet: Arc::new(Fleet::new(Source::from(scan), true, false)),
             caps,
             allowlist: Arc::new(Vec::new()),
             max_targets: 0,
@@ -862,14 +884,39 @@ mod tests {
     #[test]
     fn overview_is_the_shared_model() {
         let scan: Arc<ScanFn> = Arc::new(demo_fleet);
-        let o = overview_of(&Fleet::new(Source::from(scan), true).read(false), NOW);
+        let o = overview_of(
+            &Fleet::new(Source::from(scan), true, false).read(false),
+            NOW,
+        );
         assert_eq!(o.figures.repos, demo_fleet().len());
         assert_eq!(o.repos.len(), demo_fleet().len());
         assert!(!o.actions.is_empty(), "the demo fleet has work to do");
         // An empty fleet is a valid, empty overview.
         let none: Arc<ScanFn> = Arc::new(Vec::new);
-        let empty = overview_of(&Fleet::new(Source::from(none), false).read(false), NOW);
+        let empty = overview_of(
+            &Fleet::new(Source::from(none), false, false).read(false),
+            NOW,
+        );
         assert!(empty.actions.is_empty() && empty.repos.is_empty());
+    }
+
+    #[test]
+    fn tips_are_off_unless_asked_for_and_never_with_sample_data() {
+        let scan: Arc<ScanFn> = Arc::new(demo_fleet);
+        assert!(
+            Fleet::new(Source::from(scan.clone()), false, false)
+                .tips
+                .is_none()
+        );
+        // Sample data never reads or writes this machine's tips.
+        assert!(
+            Fleet::new(Source::from(scan.clone()), true, true)
+                .tips
+                .is_none()
+        );
+        let fleet = Fleet::new(Source::from(scan), true, false);
+        let next = next_payload(&fleet, &fleet.read(false));
+        assert_eq!(next["tips"], json!([]));
     }
 
     #[test]

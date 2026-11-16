@@ -116,6 +116,9 @@ enum BgMsg {
     },
     /// A newer cohors was found, is installing, or is ready after a restart.
     Update(cohors_core::update::UpdateState),
+    /// The setup tips to show under the header, found once at start
+    /// (ADR-065).
+    Tips(Vec<cohors_core::suggest::Suggestion>),
 }
 
 /// What is known about the terminal's background.
@@ -347,8 +350,9 @@ fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
                         app.status =
                             Some("demo mode — install cohors to act on real repos".to_string());
                     }
-                    // The demo fleet is never empty, so the rescue can't trigger.
-                    Cmd::UseSuggestedRoots | Cmd::None => {}
+                    // The demo fleet is never empty, so the rescue can't trigger,
+                    // and the demo shows no setup tips.
+                    Cmd::UseSuggestedRoots | Cmd::CopyTip | Cmd::HideTip | Cmd::None => {}
                 },
                 Event::Mouse(m) => match m.kind {
                     MouseEventKind::ScrollUp => app.on_mouse_scroll(true),
@@ -472,6 +476,7 @@ fn run_loop(
     let mut held: Option<Arc<FleetState>> = None;
     let mut watched = scanner.clone();
     spawn_update_check(&scanner, tx.clone());
+    spawn_tip(tx.clone());
 
     // An in-flight bulk batch (fetch-all / bulk stash), for aggregate progress.
     let mut batch: Option<Batch> = None;
@@ -535,6 +540,8 @@ fn run_loop(
                     Cmd::OpenLaunchpad => spawn_launchpad(&app, &tx),
                     Cmd::RunCommand => start_command_run(&mut app, &tx, &mut run_seq),
                     Cmd::CopyRunOutput => copy_run_output(&mut app),
+                    Cmd::CopyTip => copy_tip(&mut app),
+                    Cmd::HideTip => hide_tip(&mut app),
                     Cmd::UseSuggestedRoots => use_suggested_roots(&mut app, &mut scanner, cli, &tx),
                     Cmd::ConfirmAccept => {
                         if let Some(pending) = app.confirm.take() {
@@ -691,6 +698,7 @@ fn drain_background(
     while let Ok(msg) = rx.try_recv() {
         match msg {
             BgMsg::Update(state) => app.update = Some(state),
+            BgMsg::Tips(tips) => app.tips = tips,
             BgMsg::Scanned(mut repos) => {
                 // Carry over already-fetched remote info so the Remote column
                 // stays put across a refresh instead of blanking to "—" until
@@ -1381,6 +1389,58 @@ fn spawn_scan(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
         crate::cache::save(&repos);
         let _ = tx.send(BgMsg::Scanned(repos));
     });
+}
+
+/// Find the setup tips to show under the header off the UI thread (it reads
+/// a few small files), and count the first, the one on screen, as shown
+/// (ADR-065).
+fn spawn_tip(tx: Sender<BgMsg>) {
+    std::thread::spawn(move || {
+        let Some(env) = cohors_fleet::tips::TipEnv::from_env() else {
+            return;
+        };
+        let now = now_secs();
+        let tips = cohors_fleet::tips::current(&env, now, cohors_core::suggest::TIPS_AT_ONCE);
+        if !tips.is_empty() {
+            cohors_fleet::tips::note_shown(&env, &tips[..1], now);
+            let _ = tx.send(BgMsg::Tips(tips));
+        }
+    });
+}
+
+/// `i`: copy the setup tip's command. The dashboard never runs it: the tip
+/// may be another program's (`code --install-extension …`), and `cohors web`
+/// would hold the terminal the dashboard is in.
+fn copy_tip(app: &mut App) {
+    let Some(tip) = app.tips.first() else {
+        return;
+    };
+    app.status = Some(match action::copy_to_clipboard(&tip.command) {
+        Ok(()) => format!("copied `{}`: paste it into a terminal", tip.command),
+        Err(e) => format!("copy failed: {e}"),
+    });
+}
+
+/// `x`: hide the setup tip for good; the next one, if any, takes its line.
+fn hide_tip(app: &mut App) {
+    if app.tips.is_empty() {
+        return;
+    }
+    let hidden = app.tips.remove(0);
+    let env = cohors_fleet::tips::TipEnv::from_env();
+    let saved = match (&env, &hidden.tip) {
+        (Some(env), Some(id)) => cohors_fleet::tips::dismiss(env, id).map_err(|e| e.to_string()),
+        _ => Err("tips are turned off".to_string()),
+    };
+    app.status = Some(match saved {
+        Ok(_) => "tip hidden for good".to_string(),
+        // Gone for this run all the same.
+        Err(e) => format!("tip hidden for now (could not save that: {e})"),
+    });
+    // The next tip is on screen now: it counts as shown from today.
+    if let (Some(env), Some(next)) = (&env, app.tips.first()) {
+        cohors_fleet::tips::note_shown(env, std::slice::from_ref(next), now_secs());
+    }
 }
 
 /// Enrich snapshots with GitHub PR/CI on a worker thread, then deliver them for

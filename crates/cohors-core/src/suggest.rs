@@ -8,6 +8,14 @@
 //!
 //! Pure: the sessions are found on disk by the launchpad adapter and passed
 //! in; this module only judges and orders them.
+//!
+//! Below the real work sit the **setup tips** (ADR-065): the parts of cohors a
+//! person has not used yet (the web dashboard, the editor extension, Claude
+//! Code's MCP server), offered one or two at a time and never above anything
+//! that needs doing. What is installed is found by `cohors_fleet::tips`; this
+//! module only words the tips and decides which are still worth showing.
+
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +57,15 @@ pub enum SuggestionKind {
     Focus,
     /// Nothing pressing: start something.
     Start,
+    /// A part of cohors you have not used yet (a setup tip).
+    Setup,
+}
+
+/// The program every suggestion except some setup tips runs.
+pub const COHORS: &str = "cohors";
+
+fn cohors_program() -> String {
+    COHORS.to_string()
 }
 
 /// One suggestion: what, why, and the command that does it.
@@ -62,13 +79,33 @@ pub struct Suggestion {
     /// The command that carries it out, for reading and copying (each
     /// argument quoted for a POSIX shell where it needs it).
     pub command: String,
-    /// The same command as arguments to `cohors` (without the program name),
-    /// for running it without a shell.
+    /// The same command as arguments to `program` (without the program
+    /// name), for running it without a shell.
     pub args: Vec<String>,
     /// The repository it concerns, when it concerns one.
     pub repo: Option<String>,
     /// Higher comes first. Comparable across kinds.
     pub score: u32,
+    /// The program `args` are for: `cohors`, except for a setup tip that is
+    /// another tool's command (`code`, `claude`). `cohors next N` runs only
+    /// cohors itself and prints any other command for you to run.
+    #[serde(default = "cohors_program")]
+    pub program: String,
+    /// A setup tip's id (`web`, `extension`, `claude`), which `cohors next
+    /// --dismiss <id>` takes. `None` for everything else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tip: Option<String>,
+    /// A setup tip's name in a word or two (`Web dashboard`, `VS Code`), for
+    /// a line too narrow for the title. `None` for everything else.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+}
+
+impl Suggestion {
+    /// Whether carrying it out means running cohors itself.
+    pub fn runs_cohors(&self) -> bool {
+        self.program == COHORS
+    }
 }
 
 /// Sessions older than this are not suggested: a month-old conversation is
@@ -101,7 +138,13 @@ pub fn action_args(kind: ActionKind) -> &'static [&'static str] {
 /// `cohors` and `args` as one line to read or paste, each argument quoted for
 /// a POSIX shell where it needs it.
 pub fn command_line(args: &[String]) -> String {
-    std::iter::once("cohors".to_string())
+    program_command_line(COHORS, args)
+}
+
+/// `program` and `args` as one line to read or paste, every word quoted for a
+/// POSIX shell where it needs it (a program path with spaces included).
+pub fn program_command_line(program: &str, args: &[String]) -> String {
+    std::iter::once(shell_word(program))
         .chain(args.iter().map(|a| shell_word(a)))
         .collect::<Vec<_>>()
         .join(" ")
@@ -257,6 +300,9 @@ pub fn suggest(
             args: resume_args(session, &name),
             repo: Some(session.repo.clone()),
             score,
+            program: cohors_program(),
+            tip: None,
+            label: None,
         });
     }
 
@@ -285,6 +331,9 @@ pub fn suggest(
                 .collect(),
             repo: (action.repos.len() == 1).then(|| action.repos[0].clone()),
             score: weight + bonus,
+            program: cohors_program(),
+            tip: None,
+            label: None,
         });
     }
 
@@ -310,6 +359,9 @@ pub fn suggest(
             args,
             repo: Some(repo.clone()),
             score: 55,
+            program: cohors_program(),
+            tip: None,
+            label: None,
         });
     }
 
@@ -322,6 +374,9 @@ pub fn suggest(
             args: vec!["agent".into()],
             repo: here.map(str::to_string),
             score: 1,
+            program: cohors_program(),
+            tip: None,
+            label: None,
         });
     }
 
@@ -339,6 +394,229 @@ fn is_kebab_id(s: &str) -> bool {
         && !s.contains("--")
         && s.chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+// ── Setup tips ───────────────────────────────────────────────────────────────
+
+/// The cohors editor extension's id on the VS Code Marketplace and Open VSX.
+pub const EXTENSION_ID: &str = "rushirb2001.cohors";
+
+/// Tip: open the web dashboard (`cohors web`).
+pub const TIP_WEB: &str = "web";
+/// Tip: install the editor extension.
+pub const TIP_EXTENSION: &str = "extension";
+/// Tip: register cohors as one of Claude Code's MCP servers.
+pub const TIP_CLAUDE: &str = "claude";
+/// Every setup tip, in the order they are offered.
+pub const TIP_IDS: [&str; 3] = [TIP_WEB, TIP_EXTENSION, TIP_CLAUDE];
+
+/// A tip shown on this many separate days with nothing done about it is not
+/// shown again. Five: a working week of seeing it is enough to decide, and
+/// after that it would only be in the way. Days, not showings, because the
+/// dashboard, the start screen, `cohors next` and the web page all show it,
+/// and one busy afternoon should not use it up.
+pub const TIP_SHOWN_DAYS: u32 = 5;
+
+/// The most tips any surface shows at once: one or two quiet lines, never a
+/// list of chores.
+pub const TIPS_AT_ONCE: usize = 2;
+
+/// What the setup tips need to know about this machine. Found by an adapter
+/// (`cohors_fleet::tips`); nothing here touches the disk.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetupFacts {
+    /// `cohors web` has served its page here at least once.
+    pub web_opened: bool,
+    /// The editors that take the cohors extension and are installed, the
+    /// one to suggest first.
+    pub editors: Vec<EditorFacts>,
+    /// Claude Code, when it is installed.
+    pub claude: Option<ClaudeFacts>,
+    /// The cohors to register with Claude Code: an absolute path, the one on
+    /// PATH when it is this same program (it survives an upgrade).
+    pub cohors_path: Option<String>,
+}
+
+/// An installed editor that can take the cohors extension.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EditorFacts {
+    /// As people say it: `VS Code`, `Cursor`, `Windsurf`.
+    pub name: String,
+    /// Its command line program (`code`), or the full path to the one inside
+    /// the app when it is not on PATH.
+    pub cli: String,
+    /// The cohors extension is installed in it.
+    pub has_extension: bool,
+}
+
+/// Claude Code, as installed here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClaudeFacts {
+    /// Its command line program (`claude`, or the full path when it is not
+    /// on PATH).
+    pub cli: String,
+    /// Whether cohors is already one of its MCP servers, or its plugin is
+    /// installed. `None` when that could not be told reliably, and then no
+    /// tip is offered: a tip that might be wrong is worse than none.
+    pub has_cohors: Option<bool>,
+}
+
+/// What a tip is about, by id, for a message about a tip that is not on
+/// screen (`cohors next --dismiss`). `None` for an unknown id.
+pub fn tip_label(id: &str) -> Option<&'static str> {
+    Some(match id {
+        TIP_WEB => "open your fleet in the browser",
+        TIP_EXTENSION => "install the cohors extension for your editor",
+        TIP_CLAUDE => "let Claude Code see your fleet",
+        _ => return None,
+    })
+}
+
+fn setup_tip(
+    id: &str,
+    label: &str,
+    title: String,
+    why: String,
+    program: &str,
+    args: Vec<String>,
+) -> Suggestion {
+    Suggestion {
+        kind: SuggestionKind::Setup,
+        title,
+        why,
+        command: program_command_line(program, &args),
+        args,
+        repo: None,
+        // Below every other suggestion, whatever it is (the lowest of them,
+        // "start an agent session", is 1): a tip never outranks real work.
+        score: 0,
+        program: program.to_string(),
+        tip: Some(id.to_string()),
+        label: Some(label.to_string()),
+    }
+}
+
+/// Every setup tip that applies to this machine, in the order they are worth
+/// doing: open the web dashboard, install the editor extension, let Claude
+/// Code see the fleet. One that is done is not there.
+pub fn setup_tips(facts: &SetupFacts) -> Vec<Suggestion> {
+    let mut tips = Vec::new();
+    if !facts.web_opened {
+        tips.push(setup_tip(
+            TIP_WEB,
+            "Web dashboard",
+            "Open your fleet in the browser".to_string(),
+            "the same dashboard as a web page, kept live, with pull requests and CI".to_string(),
+            COHORS,
+            vec!["web".to_string()],
+        ));
+    }
+    // One editor is enough: someone with the extension in any of them knows
+    // it exists, and that is all a tip is for.
+    if !facts.editors.iter().any(|e| e.has_extension)
+        && let Some(editor) = facts.editors.first()
+    {
+        tips.push(setup_tip(
+            TIP_EXTENSION,
+            &editor.name,
+            format!("Install the cohors extension for {}", editor.name),
+            format!(
+                "{} is installed: the extension shows your fleet in its sidebar",
+                editor.name
+            ),
+            &editor.cli,
+            vec!["--install-extension".to_string(), EXTENSION_ID.to_string()],
+        ));
+    }
+    if let Some(claude) = &facts.claude
+        && claude.has_cohors == Some(false)
+        && let Some(cohors) = &facts.cohors_path
+    {
+        // User scope: the fleet is the same from every folder, and the
+        // default scope would register it for the current folder only.
+        let args = [
+            "mcp", "add", "--scope", "user", "cohors", "--", cohors, "mcp",
+        ];
+        tips.push(setup_tip(
+            TIP_CLAUDE,
+            "Claude Code",
+            "Let Claude Code see your fleet".to_string(),
+            "Claude Code is installed, and cohors is not one of its MCP servers yet".to_string(),
+            &claude.cli,
+            args.iter().map(|a| a.to_string()).collect(),
+        ));
+    }
+    tips
+}
+
+/// Which day `now` (Unix seconds) falls on, counted from 1970 in UTC.
+fn day_of(now: i64) -> i64 {
+    now.div_euclid(24 * 3600)
+}
+
+/// What became of each tip: dismissed, or on how many days it was shown.
+/// Kept by the adapter in cohors' cache folder (`tips.json`).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TipLedger {
+    pub tips: BTreeMap<String, TipRecord>,
+}
+
+/// One tip's history.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TipRecord {
+    /// Hidden for good (`cohors next --dismiss`, or `x` in the dashboard).
+    pub dismissed: bool,
+    /// On how many separate days it was shown.
+    pub days: u32,
+    /// The last of those days (days since 1970, UTC).
+    pub last_day: i64,
+}
+
+impl TipLedger {
+    /// Whether tip `id` is no longer shown: dismissed, or shown on
+    /// [`TIP_SHOWN_DAYS`] days already. On the last of those days it is still
+    /// shown, so it does not vanish halfway through a day.
+    pub fn hides(&self, id: &str, now: i64) -> bool {
+        self.tips.get(id).is_some_and(|record| {
+            record.dismissed || (record.days >= TIP_SHOWN_DAYS && record.last_day != day_of(now))
+        })
+    }
+
+    /// Count `id` as shown today. Returns whether anything changed (the
+    /// first showing of the day), so the file is written once a day at most.
+    pub fn note_shown(&mut self, id: &str, now: i64) -> bool {
+        let today = day_of(now);
+        let record = self.tips.entry(id.to_string()).or_default();
+        if record.days > 0 && record.last_day == today {
+            return false;
+        }
+        record.days = record.days.saturating_add(1);
+        record.last_day = today;
+        true
+    }
+
+    /// Hide `id` for good. Returns whether it was showing until now.
+    pub fn dismiss(&mut self, id: &str) -> bool {
+        let record = self.tips.entry(id.to_string()).or_default();
+        !std::mem::replace(&mut record.dismissed, true)
+    }
+}
+
+/// The tips from `tips` that `ledger` still lets through, at most `max`, in
+/// their order.
+pub fn tips_to_show(
+    tips: Vec<Suggestion>,
+    ledger: &TipLedger,
+    now: i64,
+    max: usize,
+) -> Vec<Suggestion> {
+    tips.into_iter()
+        .filter(|t| t.tip.as_deref().is_some_and(|id| !ledger.hides(id, now)))
+        .take(max)
+        .collect()
 }
 
 #[cfg(test)]
@@ -458,5 +736,166 @@ mod tests {
             action_command(ActionKind::Push),
             "cohors push --select 'ahead,!diverged'"
         );
+    }
+
+    /// A machine with VS Code and Claude Code, where nothing is set up yet.
+    fn fresh_machine() -> SetupFacts {
+        SetupFacts {
+            web_opened: false,
+            editors: vec![
+                EditorFacts {
+                    name: "VS Code".into(),
+                    cli: "code".into(),
+                    has_extension: false,
+                },
+                EditorFacts {
+                    name: "Cursor".into(),
+                    cli: "/Applications/Cursor.app/Contents/Resources/app/bin/cursor".into(),
+                    has_extension: false,
+                },
+            ],
+            claude: Some(ClaudeFacts {
+                cli: "claude".into(),
+                has_cohors: Some(false),
+            }),
+            cohors_path: Some("/opt/homebrew/bin/cohors".into()),
+        }
+    }
+
+    #[test]
+    fn every_tip_applies_to_a_fresh_machine_in_order_with_its_own_program() {
+        let tips = setup_tips(&fresh_machine());
+        let ids: Vec<&str> = tips.iter().filter_map(|t| t.tip.as_deref()).collect();
+        assert_eq!(ids, TIP_IDS);
+        assert!(tips.iter().all(|t| t.kind == SuggestionKind::Setup));
+        // The display line and the argument list say the same thing.
+        assert!(
+            tips.iter()
+                .all(|t| program_command_line(&t.program, &t.args) == t.command)
+        );
+        assert_eq!(tips[0].command, "cohors web");
+        assert!(tips[0].runs_cohors());
+        assert_eq!(
+            tips[1].command,
+            "code --install-extension rushirb2001.cohors"
+        );
+        assert!(!tips[1].runs_cohors(), "the extension tip runs `code`");
+        assert!(
+            tips[1].title.contains("VS Code"),
+            "the first editor is named"
+        );
+        let labels: Vec<Option<&str>> = tips.iter().map(|t| t.label.as_deref()).collect();
+        assert_eq!(
+            labels,
+            [Some("Web dashboard"), Some("VS Code"), Some("Claude Code")]
+        );
+        assert_eq!(
+            tips[2].command,
+            "claude mcp add --scope user cohors -- /opt/homebrew/bin/cohors mcp"
+        );
+        assert!(!tips[2].runs_cohors());
+    }
+
+    #[test]
+    fn a_tip_that_is_done_or_unsure_is_not_offered() {
+        let mut facts = fresh_machine();
+        facts.web_opened = true;
+        // The extension in any one editor is enough.
+        facts.editors[1].has_extension = true;
+        // Claude Code's registration could not be read: no tip, not a guess.
+        facts.claude = Some(ClaudeFacts {
+            cli: "claude".into(),
+            has_cohors: None,
+        });
+        assert!(setup_tips(&facts).is_empty());
+
+        let mut facts = fresh_machine();
+        facts.editors.clear();
+        facts.claude = None;
+        let ids: Vec<Option<String>> = setup_tips(&facts).into_iter().map(|t| t.tip).collect();
+        assert_eq!(ids, [Some(TIP_WEB.to_string())]);
+    }
+
+    #[test]
+    fn a_path_with_spaces_is_quoted_in_the_command() {
+        let mut facts = fresh_machine();
+        facts.editors[0].cli =
+            "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code".into();
+        let tip = setup_tips(&facts).remove(1);
+        assert_eq!(
+            tip.command,
+            "'/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code' \
+             --install-extension rushirb2001.cohors"
+        );
+        assert_eq!(tip.args, ["--install-extension", EXTENSION_ID]);
+    }
+
+    #[test]
+    fn tips_rank_below_everything_else() {
+        let o = crate::overview::overview(&[], &[], &Default::default(), NOW);
+        let start = suggest(&o, &[], None, NOW, 5);
+        let lowest = start.iter().map(|s| s.score).min().unwrap();
+        assert!(
+            setup_tips(&fresh_machine())
+                .iter()
+                .all(|t| t.score < lowest)
+        );
+    }
+
+    #[test]
+    fn a_dismissed_tip_is_gone_and_a_tip_retires_after_its_days() {
+        const DAY: i64 = 24 * HOUR;
+        let tips = setup_tips(&fresh_machine());
+        let mut ledger = TipLedger::default();
+        assert_eq!(tips_to_show(tips.clone(), &ledger, NOW, 2).len(), 2);
+
+        assert!(ledger.dismiss(TIP_WEB));
+        assert!(!ledger.dismiss(TIP_WEB), "dismissing twice changes nothing");
+        let shown = tips_to_show(tips.clone(), &ledger, NOW, 2);
+        let ids: Vec<&str> = shown.iter().filter_map(|t| t.tip.as_deref()).collect();
+        assert_eq!(ids, [TIP_EXTENSION, TIP_CLAUDE]);
+
+        // Shown many times on one day counts once.
+        assert!(ledger.note_shown(TIP_EXTENSION, NOW));
+        assert!(!ledger.note_shown(TIP_EXTENSION, NOW + HOUR));
+        assert_eq!(ledger.tips[TIP_EXTENSION].days, 1);
+        // On its last day it stays up all day, then it is gone.
+        for day in 1..i64::from(TIP_SHOWN_DAYS) {
+            assert!(!ledger.hides(TIP_EXTENSION, NOW + day * DAY));
+            ledger.note_shown(TIP_EXTENSION, NOW + day * DAY);
+        }
+        let last = NOW + (i64::from(TIP_SHOWN_DAYS) - 1) * DAY;
+        assert!(!ledger.hides(TIP_EXTENSION, last + HOUR / 2));
+        assert!(ledger.hides(TIP_EXTENSION, last + DAY));
+        assert!(
+            !ledger.hides(TIP_CLAUDE, last + DAY),
+            "each tip counts alone"
+        );
+    }
+
+    #[test]
+    fn the_ledger_reads_back_what_it_wrote_and_tolerates_less() {
+        let mut ledger = TipLedger::default();
+        ledger.dismiss(TIP_CLAUDE);
+        ledger.note_shown(TIP_WEB, NOW);
+        let json = serde_json::to_string(&ledger).unwrap();
+        assert_eq!(serde_json::from_str::<TipLedger>(&json).unwrap(), ledger);
+        // A file from another version: missing fields default, unknown ones are ignored.
+        let older: TipLedger =
+            serde_json::from_str(r#"{"tips":{"web":{"days":2}},"later":1}"#).unwrap();
+        assert_eq!(older.tips["web"].days, 2);
+        assert!(!older.tips["web"].dismissed);
+    }
+
+    #[test]
+    fn a_suggestion_from_an_older_cohors_runs_cohors() {
+        let json = r#"{"kind":"act","title":"t","why":"w","command":"cohors scan","args":["scan"],"repo":null,"score":3}"#;
+        let s: Suggestion = serde_json::from_str(json).unwrap();
+        assert!(s.runs_cohors() && s.tip.is_none());
+        // A suggestion that is not a tip says nothing about tips in JSON.
+        let out = serde_json::to_value(&s).unwrap();
+        assert!(out.get("tip").is_none() && out["program"] == "cohors");
+        assert_eq!(tip_label(TIP_WEB), Some("open your fleet in the browser"));
+        assert_eq!(tip_label("nope"), None);
     }
 }

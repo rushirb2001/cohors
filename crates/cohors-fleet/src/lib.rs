@@ -17,6 +17,8 @@ mod live;
 mod overview;
 mod scanner;
 mod suggest;
+/// Setup tips: which parts of cohors this machine is not using yet (ADR-065).
+pub mod tips;
 pub mod watch;
 
 pub use detail::{DetailBundle, detail_bundle};
