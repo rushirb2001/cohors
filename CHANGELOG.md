@@ -46,6 +46,34 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   any other cohors command works too. It installs the release's own Linux
   binary after checking its checksum, and is published with every release.
 
+### Fixed
+
+- **Write commands report failure in their exit status.** `fetch`, `pull`,
+  `push`, `commit`, `stash` and `run` exit 1 when a repo fails, so a script or
+  CI step no longer reads a failed push as success. A selector with no `-m`
+  (commit) or no command (run) exits 2 and says which is missing.
+- **A rejected push says why**: `rejected (pull first)` instead of the
+  remote's URL. Fetch, pull, commit and stash also report git's reason line.
+- **`run --timeout` stops the whole job**, including what the command started
+  (`a; b`, `npm test`, a backgrounded process), and Ctrl-C stops every running
+  job instead of leaving them behind. A failed command shows its exit code.
+- **Config mistakes are no longer silent.** A `--config` that names no file, or
+  a `--root` that names no folder, is an error saying so; a broken config file
+  shows the line and column; an unknown key is reported with a suggestion
+  (`max_dept`: did you mean `max_depth`?).
+- **Selectors**: a typo lists the whole vocabulary, and `branch:` takes globs
+  (`branch:feat/*`).
+- **`scan --select`** says how many repos were scanned and how many matched,
+  and lists clean matches by name.
+- **`cohors agent command`** no longer edits the repo's tracked `.gitignore`;
+  cohors' ignore lines go to `.git/info/exclude`.
+- `overview` figures read in the singular for one; `cohors mcp`'s registration
+  lines carry the flags it was run with; `-s` is short for `--select` and `-n`
+  for `--dry-run`; `--help` lists the global flags under their own heading.
+- Discovery never lists a bare repository found inside another repo's working
+  tree (a committed one is attacker-controlled), and `cohors discover` keeps
+  control characters in folder names off the terminal.
+
 ## [0.7.6] — 2026-11-12
 
 A distribution and documentation release: cohors now installs from every
