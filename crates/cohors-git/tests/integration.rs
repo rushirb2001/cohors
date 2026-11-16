@@ -464,6 +464,32 @@ fn submodules_and_inner_worktrees_are_not_counted_twice() {
     assert_eq!(found_under(&root, &opts), [".", "projects/app"], "deep too");
 }
 
+/// A bare repo committed inside a project is attacker-controlled (its config
+/// can run commands), so it is never listed — not by the normal walk, not by
+/// the deep one, and not from memory. A bare mirror outside any repo still is.
+#[test]
+fn bare_repos_inside_a_worktree_are_never_listed() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().join("code");
+    init_repo_with_commit(&root, "f", "1", "c");
+    let embedded = root.join("vendor-fixture/evil.git");
+    std::fs::create_dir_all(&embedded).unwrap();
+    git(&embedded, &["init", "-q", "--bare"]);
+    let mirror = tmp.path().join("mirrors/shop.git");
+    std::fs::create_dir_all(&mirror).unwrap();
+    git(&mirror, &["init", "-q", "--bare"]);
+
+    let mut opts = opts_for(&root);
+    assert_eq!(found_under(&root, &opts), ["."]);
+    opts.deep = true;
+    assert_eq!(found_under(&root, &opts), ["."], "deep too");
+    opts.known = vec![embedded.to_str().unwrap().to_string()];
+    assert_eq!(found_under(&root, &opts), ["."], "nor from memory");
+
+    let mirrors = tmp.path().join("mirrors");
+    assert_eq!(found_under(&mirrors, &opts_for(&mirrors)), ["shop.git"]);
+}
+
 /// A worktree kept beside its repo (not inside it) is a checkout of its own
 /// and stays listed, as before nested discovery existed.
 #[test]

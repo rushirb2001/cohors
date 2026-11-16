@@ -239,6 +239,15 @@ fn walk(
                 return WalkState::Continue;
             }
 
+            // A bare repo inside another repo's worktree is never listed: git
+            // lets a bare repo be committed (a `.git` dir it refuses), so in a
+            // cloned project it is attacker-controlled, and acting on it would
+            // run git under its config (hooks, fsmonitor, sshCommand). Real
+            // mirrors live outside worktrees.
+            if !has_dot_git && depth > 0 && inside_repo(entry.path(), depth, &repo_dirs) {
+                return WalkState::Skip;
+            }
+
             // A `.git` *file* inside another repo is that repo's submodule or
             // linked worktree: part of the repo that owns it, not a second
             // repo. (A worktree kept beside its repo is still listed, as it
@@ -380,6 +389,16 @@ fn admit_known(
                 }
             }
             if path.join(".git").is_file() && owned_by_enclosing_repo(&path) {
+                return None;
+            }
+            // A bare repo inside a worktree is never admitted (see the walk).
+            if !path.join(".git").exists()
+                && path
+                    .ancestors()
+                    .skip(1)
+                    .take_while(|a| a.starts_with(root))
+                    .any(|a| a.join(".git").exists())
+            {
                 return None;
             }
             Some(path)
