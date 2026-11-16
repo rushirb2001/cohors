@@ -40,11 +40,66 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 - **`--deep` on `cohors discover` and `cohors scan`** searches every folder at
   any depth, inside repos too. What only it finds is remembered, and a running
   dashboard, the web page and the MCP server pick it up without a restart.
+- **Every dashboard follows changes live.** The terminal dashboard (now by
+  default), the web page and the VS Code extension show a commit, push, pull,
+  fetch, new repo or a repo found by `--deep` within about half a second, and
+  an edited file within 3 seconds, all from one change source; the web page
+  gets them pushed over server-sent events. `cohors watch --json` streams the
+  same changes as one JSON line each, for scripts and editors. The web page
+  and the VS Code sidebar also show where to pick up: the agent sessions to
+  resume and the next steps.
+- **`cohors next`: what to do now, each with its command.** It ranks the
+  conversations you had with coding agents in each repo (Claude Code and
+  Codex, found on this machine, read-only) with the fleet's next steps and
+  your focus board; `cohors next 2` runs the second. `cohors agent --resume`
+  with no id lists the recent sessions in the repo you are in to pick from,
+  and a bare `cohors agent` at a terminal offers them before starting a new one.
+- **`cohors agent [WHAT]`**: name a shipped prompt, a task or one of the
+  repo's agents and cohors works out which (`cohors agent setup-repo`,
+  `cohors agent rate-limit-backoff -r payments`), with `-w/--with` for the
+  runner, `--print` for the launch as JSON and `cohors agent ls` for what you
+  can start. The 0.7 forms (`agent run`, `agent command`, `agent runners`,
+  `agent prompts`) still work.
+- **Read commands named like the MCP tools**: `cohors show <repo>`,
+  `cohors path <repo>` (`cd "$(cohors path pay)"`), `cohors changes`,
+  `cohors search <text>`, `cohors prs`, and `cohors status` for `overview`.
+- **Writes take repo names** (`cohors pull payments web`), `run` takes the
+  command after `--` (`cohors run -s dirty -- cargo test`), and `fetch`,
+  `pull`, `push`, `commit`, `stash` and `run` print their results as JSON
+  with `--json`.
+- **`cohors completions <shell>`** for bash, zsh, fish, elvish and PowerShell;
+  every command's `--help` ends with examples, and `cohors --help` lists the
+  exit codes (0 done, 1 failed or not found, 2 usage, 130 interrupted).
+- **Each install channel has its own listing**: PyPI, npm, crates.io,
+  Docker, the VS Code Marketplace, the Claude Code plugin and the release
+  notes each say how to install, update and set cohors up on that channel.
+- **`commit` shows what it will commit and won't commit a secret.**
+  `commit --dry-run` lists each repo's files; a repo where a file that looks
+  like a secret (`.env`, a private key) would go in is refused, on every
+  surface (CLI, dashboard, MCP, web), unless you pass `--allow-secrets`.
+  `--staged` commits only what you already staged.
+- **A finished look for the start screen and every plain-terminal view**: a
+  header band like the dashboard's, headings as full-width rules, filled
+  severity chips and keycaps, with ASCII forms for `NO_COLOR`, `icons =
+  "ascii"` and non-UTF-8 terminals.
 - **A Docker image, `ghcr.io/rushirb2001/cohors`**, for linux/amd64 and
   linux/arm64. It runs the MCP server over the repositories mounted at `/repos`
   (`docker run -i --rm -v "$HOME/code:/repos" ghcr.io/rushirb2001/cohors`), and
   any other cohors command works too. It installs the release's own Linux
   binary after checking its checksum, and is published with every release.
+
+### Changed
+
+- **The dashboard refreshes on real changes without `--watch`**, and idles
+  at a third of the CPU `--watch` used to (`--watch` still skips the launch
+  screen).
+- **`cohors init` run again says where your config is** and what it holds
+  instead of failing; `--force` keeps the old file as `config.toml.bak`, and
+  `--root` seeds the roots you name.
+- **`fetch`, `pull`, `push`, `commit` and `stash` work on every selected repo
+  at once** (the bounded pool the MCP server and the web already use), each
+  line printed as its repo finishes: `fetch --select all` on 24 repos went
+  from 1.4 s to 0.45 s.
 
 ### Fixed
 
