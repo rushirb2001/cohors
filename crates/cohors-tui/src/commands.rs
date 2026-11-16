@@ -14,6 +14,20 @@ use cohors_core::{Selector, SortMode};
 
 use crate::cli::Cli;
 
+/// A command that already said what went wrong and only needs the process to
+/// end with this status: `1` when some repos failed, `2` for a usage problem.
+/// `main` exits with it quietly, without anyhow's `Error:` line.
+#[derive(Debug)]
+pub struct ExitCode(pub i32);
+
+impl std::fmt::Display for ExitCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "exit status {}", self.0)
+    }
+}
+
+impl std::error::Error for ExitCode {}
+
 /// `cohors init` — write a starter config and print its path. Auto-detects where
 /// the user keeps repos and seeds `roots` with them, so the first `cohors` run
 /// shows a populated fleet instead of an empty one.
@@ -89,6 +103,7 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool, deep: bool) -> Result<(
         );
     }
 
+    let scanned = snapshots.len();
     if let Some(query) = select {
         let selector = parse_selector(query)?;
         let order = cohors_core::resolve(&snapshots, &selector, SortMode::DirtyFirst, now_secs());
@@ -112,9 +127,18 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool, deep: bool) -> Result<(
         println!("{out}");
         return Ok(());
     }
+    let matched = select.map(|q| (q, scanned));
     print!(
         "{}",
-        scan_report(&snapshots, &roots, took, now_secs(), term_width(), color)
+        scan_report(
+            &snapshots,
+            &roots,
+            took,
+            now_secs(),
+            term_width(),
+            color,
+            matched
+        )
     );
     print!("{}", deep_note(deep, found.deep_only.len(), "scan", color));
     Ok(())
@@ -630,6 +654,10 @@ fn scan_row(line: &cohors_core::RepoLine, w: RowWidths, now: i64, color: bool) -
 /// drawn from the same [`cohors_core::Overview`] the dashboard uses, so a repo
 /// is "at risk" here exactly when it is there. `color` gates the ANSI;
 /// otherwise pure so it's unit-testable.
+///
+/// `selected` is `Some((query, scanned))` under `--select`: the masthead then
+/// counts what was scanned and what matched, and clean matches are listed by
+/// name (they are what was asked for) instead of collapsing into a count.
 fn scan_report(
     snaps: &[cohors_core::RepoSnapshot],
     roots: &[String],
@@ -637,23 +665,38 @@ fn scan_report(
     now: i64,
     width: usize,
     color: bool,
+    selected: Option<(&str, usize)>,
 ) -> String {
     let where_at = roots
         .iter()
         .map(|r| crate::ui::abbrev_home(r))
         .collect::<Vec<_>>()
         .join(", ");
-    let mut out = masthead(
-        &format!(
+    let headline = match selected {
+        Some((query, scanned)) => format!(
+            "scanned {} in {}, {} --select {query}",
+            plural(scanned, "repository", "repositories"),
+            took_label(took),
+            if snaps.len() == 1 {
+                "1 matches".to_string()
+            } else {
+                format!("{} match", snaps.len())
+            }
+        ),
+        None => format!(
             "scanned {} in {}",
             plural(snaps.len(), "repository", "repositories"),
             took_label(took)
         ),
-        &where_at,
-        color,
-    );
+    };
+    let mut out = masthead(&headline, &where_at, color);
     if snaps.is_empty() {
-        out.push_str(&format!("  {}\n\n", dim(color, "nothing to report")));
+        let empty = if selected.is_some() {
+            "nothing matched"
+        } else {
+            "nothing to report"
+        };
+        out.push_str(&format!("  {}\n\n", dim(color, empty)));
         return out;
     }
 
@@ -665,10 +708,23 @@ fn scan_report(
         .iter()
         .filter(|r| !r.at_risk && !r.reasons.is_empty())
         .collect();
+    // Under --select the clean matches are part of the answer: list them.
+    let calm: Vec<&cohors_core::RepoLine> = if selected.is_some() {
+        overview
+            .repos
+            .iter()
+            .filter(|r| !r.at_risk && r.reasons.is_empty())
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     // Size the columns to the rows actually printed and to the terminal, so a
     // short fleet stays tight and no row is ever wider than the screen.
-    let widths = RowWidths::fit(risky.iter().chain(look.iter()).copied(), width);
+    let widths = RowWidths::fit(
+        risky.iter().chain(look.iter()).chain(calm.iter()).copied(),
+        width,
+    );
 
     if !risky.is_empty() {
         out.push_str(&section(
@@ -694,7 +750,17 @@ fn scan_report(
     }
     // The clean ones collapse to a count: listing a dozen "up to date" rows is the
     // noise this report exists to remove.
-    if overview.figures.clean > 0 {
+    if !calm.is_empty() {
+        out.push_str(&section(
+            "clean",
+            &format!("{} up to date, nothing to do", calm.len()),
+            color,
+        ));
+        for line in &calm {
+            out.push_str(&scan_row(line, widths, now, color));
+        }
+        out.push('\n');
+    } else if overview.figures.clean > 0 {
         out.push_str(&section(
             "clean",
             &format!("{} up to date, nothing to do", overview.figures.clean),
@@ -891,20 +957,29 @@ fn overview_report(
         ),
         (
             f.stashes.to_string(),
-            "stashes",
+            if f.stashes == 1 { "stash" } else { "stashes" },
             format!(
-                "in {} repos, {} older than a week",
-                f.stash_repos, f.stale_stash_repos
+                "in {}, {} older than a week",
+                plural(f.stash_repos, "repo", "repos"),
+                f.stale_stash_repos
             ),
         ),
         (
             f.uncommitted_files.to_string(),
-            "uncommitted files",
-            format!("across {} repos", f.dirty_repos),
+            if f.uncommitted_files == 1 {
+                "uncommitted file"
+            } else {
+                "uncommitted files"
+            },
+            format!("across {}", plural(f.dirty_repos, "repo", "repos")),
         ),
         (
             f.stale_fetch_repos.to_string(),
-            "stale fetches",
+            if f.stale_fetch_repos == 1 {
+                "stale fetch"
+            } else {
+                "stale fetches"
+            },
             if f.stale_fetch_repos == 0 {
                 "every remote fetched recently".to_string()
             } else {
@@ -913,7 +988,11 @@ fn overview_report(
         ),
         (
             f.open_tasks.to_string(),
-            "open tasks",
+            if f.open_tasks == 1 {
+                "open task"
+            } else {
+                "open tasks"
+            },
             format!(
                 "{} high priority, {} in progress",
                 f.high_tasks, f.doing_tasks
@@ -921,7 +1000,11 @@ fn overview_report(
         ),
         (
             f.commits_week.to_string(),
-            "commits, 7 days",
+            if f.commits_week == 1 {
+                "commit, 7 days"
+            } else {
+                "commits, 7 days"
+            },
             format!("{} the week before", f.commits_prev_week),
         ),
     ];
@@ -1208,6 +1291,15 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
     // A missing selector (or a commit with no message) is a question, not an
     // error: say what this verb does and how to choose repos, rather than failing
     // with a bare "required argument" message.
+    // A selector but no usable message is a mistake, not a question: name it.
+    if let (Some(select), CliAction::Commit(message)) = (select, &action)
+        && message.as_deref().is_none_or(|m| m.trim().is_empty())
+    {
+        eprintln!(
+            "cohors: commit needs a message: cohors commit -m \"your message\" --select {select}"
+        );
+        return Err(ExitCode(2).into());
+    }
     let select = match select {
         Some(s) if !action.missing_arg() => s,
         _ => {
@@ -1297,6 +1389,11 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
         tail.push_str(&format!(", {skipped} skipped"));
     }
     println!("\n  {}\n", bold(color, &tail));
+    // Scripts and CI read the status: a repo that failed fails the command.
+    // Skipped repos (conflicted, mid-operation) were left alone on purpose.
+    if ok + skipped < n {
+        return Err(ExitCode(1).into());
+    }
     Ok(())
 }
 
@@ -1352,6 +1449,10 @@ pub fn run_command_action(
 
     // `run` needs both a command and a selector. Missing either explains the verb
     // instead of failing with a clap error.
+    if let (None, Some(select)) = (command, select) {
+        eprintln!("cohors: run needs a command: cohors run \"your command\" --select {select}");
+        return Err(ExitCode(2).into());
+    }
     let (Some(command), Some(select)) = (command, select) else {
         print!(
             "{}",
@@ -1399,20 +1500,38 @@ pub fn run_command_action(
     // The shared bounded-pool runner (ADR-020) executes the targets concurrently
     // and returns results in target order, so we zip them back to print by name.
     let owned: Vec<cohors_core::RepoSnapshot> = targets.iter().map(|s| (*s).clone()).collect();
+    // The jobs run in their own process groups (so a timeout can stop all
+    // they start), which also keeps the terminal's Ctrl-C from reaching them:
+    // forward it, so Ctrl-C stops every job instead of orphaning them.
+    let interrupt = cohors_actions::interrupt_flag();
+    #[cfg(unix)]
+    let sigint =
+        signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&interrupt)).ok();
     let results = cohors_actions::run_each(&owned, command, timeout);
+    #[cfg(unix)]
+    if let Some(id) = sigint {
+        signal_hook::low_level::unregister(id);
+    }
+    if interrupt.load(std::sync::atomic::Ordering::Relaxed) {
+        eprintln!("\ncohors: interrupted; every running command was stopped.");
+        return Err(ExitCode(130).into());
+    }
     let mut ok = 0usize;
     for (s, r) in targets.iter().zip(&results) {
         if r.ok {
             ok += 1;
         }
         let (mark, tag) = if r.timed_out {
-            (sgr(color, "33", "!"), "timed out")
+            (sgr(color, "33", "!"), "timed out".to_string())
         } else if r.ok {
-            (sgr(color, "32", "✓"), "ok")
+            (sgr(color, "32", "✓"), "ok".to_string())
         } else {
-            (sgr(color, "31", "✗"), "failed")
+            (
+                sgr(color, "31", "✗"),
+                format!("failed (exit {})", r.exit_code),
+            )
         };
-        println!("\n  {mark} {}  {}", bold(color, &s.name), dim(color, tag));
+        println!("\n  {mark} {}  {}", bold(color, &s.name), dim(color, &tag));
         if !r.stdout.trim().is_empty() {
             print!("{}", r.stdout);
         }
@@ -1421,6 +1540,9 @@ pub fn run_command_action(
         }
     }
     println!("\n  {}\n", bold(color, &format!("{ok} of {n} ok")));
+    if ok < n {
+        return Err(ExitCode(1).into());
+    }
     Ok(())
 }
 
@@ -2089,7 +2211,7 @@ pub fn run_demo() -> Result<()> {
 /// it. The absolute path matters — agents spawn with a stripped `PATH`, so a bare
 /// `cohors mcp` often fails to resolve and the agent silently ends up with no
 /// tools at all.
-fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, color: bool) -> String {
+fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, roots: &[String], color: bool) -> String {
     let (writes, run, open, launchpad) = (
         caps.allow_writes,
         caps.allow_run,
@@ -2117,13 +2239,48 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, color: bool) -> String {
     // Claude Code has a registration CLI; every other stdio client (Claude
     // Desktop, Cursor, Zed, Windsurf, …) takes the same command and args as a
     // JSON block instead, so offer both rather than assuming one client.
+    // The registration carries the flags this was run with, so pasting it
+    // gives the client the server that was just described.
+    let mut args: Vec<String> = vec!["mcp".to_string()];
+    for (on, flag) in [
+        (caps.allow_writes, "--allow-writes"),
+        (caps.allow_run, "--allow-run"),
+        (caps.allow_open, "--allow-open"),
+        (caps.allow_launchpad, "--allow-launchpad"),
+    ] {
+        if on {
+            args.push(flag.to_string());
+        }
+    }
+    for root in roots {
+        args.push("--root".to_string());
+        args.push(root.clone());
+    }
+    let shell_args = args
+        .iter()
+        .map(|a| {
+            if a.chars()
+                .any(|c| c.is_whitespace() || "'\"$`\\".contains(c))
+            {
+                format!("'{}'", a.replace('\'', "'\\''"))
+            } else {
+                a.clone()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    let json_args = args
+        .iter()
+        .map(|a| serde_json::to_string(a).unwrap_or_default())
+        .collect::<Vec<_>>()
+        .join(", ");
     let ways = [
         (
-            format!("claude mcp add cohors -- {exe} mcp"),
+            format!("claude mcp add cohors -- {exe} {shell_args}"),
             "Claude Code, in your shell",
         ),
         (
-            format!("\"cohors\": {{ \"command\": \"{exe}\", \"args\": [\"mcp\"] }}"),
+            format!("\"cohors\": {{ \"command\": \"{exe}\", \"args\": [{json_args}] }}"),
             "any other client, in mcpServers",
         ),
     ];
@@ -2201,7 +2358,7 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
             .ok()
             .and_then(|p| p.to_str().map(str::to_string))
             .unwrap_or_else(|| "cohors".to_string());
-        print!("{}", mcp_guide(&exe, caps, color));
+        print!("{}", mcp_guide(&exe, caps, &cli.root, color));
         return Ok(());
     }
 
@@ -2360,7 +2517,7 @@ mod tests {
         let took = std::time::Duration::from_millis(840);
         let snaps = cohors_core::demo::fleet(now);
         let roots = ["/home/me/projects".to_string()];
-        let r = scan_report(&snaps, &roots, took, now, 140, false);
+        let r = scan_report(&snaps, &roots, took, now, 140, false, None);
 
         assert!(r.contains("cohors")); // branded masthead
         // The report says what it actually did, not just what it found.
@@ -2436,7 +2593,7 @@ mod tests {
         // No line is ever wider than the terminal, at any width: a wrapped
         // table cannot be read. Narrow terminals drop the branch column.
         for width in [60, 80, 100, 110, 140, 200] {
-            let report = scan_report(&snaps, &roots, took, now, width, false);
+            let report = scan_report(&snaps, &roots, took, now, width, false, None);
             for line in report.lines() {
                 assert!(
                     line.chars().count() <= width,
@@ -2451,10 +2608,10 @@ mod tests {
             .find(|l| l.branch.contains('/'))
             .unwrap()
             .branch;
-        assert!(scan_report(&snaps, &roots, took, now, 200, false).contains(branch.as_str()));
-        assert!(!scan_report(&snaps, &roots, took, now, 80, false).contains(branch.as_str()));
+        assert!(scan_report(&snaps, &roots, took, now, 200, false, None).contains(branch.as_str()));
+        assert!(!scan_report(&snaps, &roots, took, now, 80, false, None).contains(branch.as_str()));
         assert!(!r.contains('\x1b')); // no ANSI when colour is off
-        assert!(scan_report(&snaps, &roots, took, now, 140, true).contains('\x1b')); // …and some when it is
+        assert!(scan_report(&snaps, &roots, took, now, 140, true, None).contains('\x1b')); // …and some when it is
     }
 
     /// A missing selector teaches instead of erroring: what the verb does, the
@@ -2541,7 +2698,15 @@ mod tests {
     #[test]
     fn scan_report_handles_an_empty_fleet() {
         let took = std::time::Duration::from_millis(3);
-        let r = scan_report(&[], &["/home/me/projects".to_string()], took, 0, 140, false);
+        let r = scan_report(
+            &[],
+            &["/home/me/projects".to_string()],
+            took,
+            0,
+            140,
+            false,
+            None,
+        );
         assert!(r.contains("scanned 0 repositories in 3ms"));
         assert!(r.contains("nothing to report"));
         assert!(!r.contains("Do next")); // no sections at all for an empty fleet
@@ -2602,6 +2767,53 @@ mod tests {
         let r = discover_report(&found, &[p("/c")], took, false, false);
         assert!(!r.contains('\x1b') && !r.contains('\x07'), "{r:?}");
         assert!(r.contains("evil[2Jname"), "{r}");
+    }
+
+    /// Under --select the masthead counts both what was scanned and what
+    /// matched, and a clean match is listed by name rather than as a count.
+    #[test]
+    fn scan_report_under_select_counts_both_and_lists_clean_matches() {
+        let now = 1_700_000_000;
+        let took = std::time::Duration::from_millis(5);
+        let fleet = cohors_core::demo::fleet(now);
+        let clean: Vec<_> = fleet
+            .iter()
+            .filter(|s| !s.is_dirty() && s.error.is_none() && s.ahead() == 0 && s.behind() == 0)
+            .take(1)
+            .cloned()
+            .collect();
+        assert_eq!(clean.len(), 1, "the demo fleet has a calm repo");
+        let roots = ["/home/me/code".to_string()];
+        let r = scan_report(&clean, &roots, took, now, 140, false, Some(("name:x", 24)));
+        assert!(
+            r.contains("scanned 24 repositories in 5ms, 1 matches --select name:x"),
+            "{r}"
+        );
+        assert!(r.contains(&clean[0].name), "the match is named: {r}");
+
+        let none = scan_report(&[], &roots, took, now, 140, false, Some(("conflicted", 24)));
+        assert!(none.contains("0 match --select conflicted") && none.contains("nothing matched"));
+    }
+
+    /// The registration lines carry the flags `cohors mcp` was run with, so
+    /// pasting them registers the server that the guide just described.
+    #[test]
+    fn mcp_guide_registers_the_flags_it_was_given() {
+        let caps = cohors_mcp::Caps {
+            allow_writes: true,
+            ..Default::default()
+        };
+        let g = mcp_guide("/bin/cohors", caps, &["~/my code".to_string()], false);
+        assert!(
+            g.contains(
+                "claude mcp add cohors -- /bin/cohors mcp --allow-writes --root '~/my code'"
+            ),
+            "{g}"
+        );
+        assert!(
+            g.contains(r#""args": ["mcp", "--allow-writes", "--root", "~/my code"]"#),
+            "{g}"
+        );
     }
 
     #[test]

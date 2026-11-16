@@ -466,6 +466,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "signal-hook 0.3.18",
  "tempfile",
  "tiny_http",
  "tracing",

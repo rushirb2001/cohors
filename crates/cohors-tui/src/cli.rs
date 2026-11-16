@@ -44,19 +44,29 @@ pub const HELP_TEMPLATE: &str = "\
 #[command(name = "cohors", version, about, long_about = None, styles = HELP_STYLES)]
 pub struct Cli {
     /// Override the config file location.
-    #[arg(long, value_name = "PATH", global = true)]
+    #[arg(
+        long,
+        value_name = "PATH",
+        global = true,
+        help_heading = "Global options"
+    )]
     pub config: Option<String>,
 
     /// Override the configured roots; repeatable (e.g. `--root ~/work --root ~/oss`).
-    #[arg(long, value_name = "DIR", global = true)]
+    #[arg(
+        long,
+        value_name = "DIR",
+        global = true,
+        help_heading = "Global options"
+    )]
     pub root: Vec<String>,
 
     /// Force a fresh scan, ignoring the cache.
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = "Global options")]
     pub no_cache: bool,
 
     /// Keep the dashboard live: re-scan every few seconds (skips the launch screen).
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help_heading = "Global options")]
     pub watch: bool,
 
     #[command(subcommand)]
@@ -100,7 +110,7 @@ pub enum Command {
         /// or shorthand (`dirty`, `behind`, `ahead`, `attention`, `name:pay*`,
         /// `ci:failing`, comma-separated to AND them). Results print in
         /// dirty-first order. Omit to print the whole fleet.
-        #[arg(long, value_name = "QUERY")]
+        #[arg(short, long, value_name = "QUERY")]
         select: Option<String>,
         /// Print raw JSON instead of the human report. JSON is already the
         /// default whenever stdout is piped, so existing scripts keep working.
@@ -216,7 +226,7 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<LaunchpadCmd>,
         /// Only include repos matching a selector (same language as `scan`).
-        #[arg(long, value_name = "QUERY")]
+        #[arg(short, long, value_name = "QUERY")]
         select: Option<String>,
         /// Print JSON instead of the human report.
         #[arg(long)]
@@ -263,10 +273,10 @@ pub struct ActionArgs {
     /// Which repos to act on, in the same selector language as `scan --select`
     /// (`dirty`, `behind`, `name:pay*`, `'{"ahead":true}'`, `all`, …).
     /// Omit it to see what this command does and how to pick repos.
-    #[arg(long, value_name = "QUERY")]
+    #[arg(short, long, value_name = "QUERY")]
     pub select: Option<String>,
     /// Preview the matching repos without acting.
-    #[arg(long)]
+    #[arg(short = 'n', long)]
     pub dry_run: bool,
 }
 

@@ -160,5 +160,11 @@ fn main() -> anyhow::Result<()> {
         let config = cohors_config::Config::load(cli.config.as_deref().map(camino::Utf8Path::new));
         update::print_notice(config.map(|c| c.updates).unwrap_or_default());
     }
+    // A command that already explained itself only needs its exit status.
+    if let Err(err) = &result
+        && let Some(code) = err.downcast_ref::<commands::ExitCode>()
+    {
+        std::process::exit(code.0);
+    }
     result
 }
