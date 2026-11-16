@@ -207,8 +207,22 @@ pub fn discover(cli: &Cli, deep: bool, json: bool) -> Result<()> {
         return Ok(());
     }
     if !human {
+        // One path per line is only safe when no path can break the line: a
+        // folder name with a newline or an escape sequence would forge entries
+        // or reach the terminal. Those are left out here (JSON carries them).
+        let mut held_back = 0;
         for path in &found.repos {
-            println!("{path}");
+            if path.as_str().chars().any(char::is_control) {
+                held_back += 1;
+            } else {
+                println!("{path}");
+            }
+        }
+        if held_back > 0 {
+            eprintln!(
+                "cohors: left out {} whose path has control characters; `cohors discover --json` lists every repo.",
+                plural(held_back, "repository", "repositories")
+            );
         }
         return Ok(());
     }
@@ -276,7 +290,12 @@ fn discover_report(
 
     let mut groups: Vec<(String, Vec<&Utf8PathBuf>)> = roots
         .iter()
-        .map(|r| (crate::ui::abbrev_home(r.as_str()), Vec::new()))
+        .map(|r| {
+            (
+                crate::ui::text::safe(&crate::ui::abbrev_home(r.as_str())),
+                Vec::new(),
+            )
+        })
         .collect();
     let mut elsewhere: Vec<&Utf8PathBuf> = Vec::new();
     for path in &found.repos {
@@ -335,7 +354,7 @@ fn discover_row(
     }
     if let Some(outer) = nested_in(path, &found.repos) {
         let name = outer.file_name().unwrap_or(outer.as_str());
-        notes.push(format!("inside {name}"));
+        notes.push(format!("inside {}", crate::ui::text::safe(name)));
     }
     let mut tail: Vec<String> = Vec::new();
     if found.deep_only.iter().any(|p| p == path) {
@@ -344,7 +363,8 @@ fn discover_row(
     if !notes.is_empty() {
         tail.push(dim(color, &notes.join(" · ")));
     }
-    let name = clip(shown, width);
+    // A folder name is repository-controlled text: no escape sequences.
+    let name = clip(&crate::ui::text::safe(shown), width);
     if tail.is_empty() {
         return format!("    {}\n", bold(color, &name));
     }
@@ -2567,6 +2587,21 @@ mod tests {
             deep.contains("the dashboard shows it from now on"),
             "{deep}"
         );
+    }
+
+    /// A folder name is repository-controlled: an escape sequence in it must
+    /// not reach the terminal through the human list.
+    #[test]
+    fn discover_report_strips_control_characters_from_paths() {
+        let p = |s: &str| Utf8PathBuf::from(s);
+        let found = cohors_fleet::Discovery {
+            repos: vec![p("/c"), p("/c/evil\x1b[2J\x07name")],
+            deep_only: vec![],
+        };
+        let took = std::time::Duration::from_millis(1);
+        let r = discover_report(&found, &[p("/c")], took, false, false);
+        assert!(!r.contains('\x1b') && !r.contains('\x07'), "{r:?}");
+        assert!(r.contains("evil[2Jname"), "{r}");
     }
 
     #[test]

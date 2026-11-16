@@ -496,7 +496,7 @@ mod overview;
 mod repos_table;
 #[cfg(test)]
 mod tests;
-mod text;
+pub(crate) mod text;
 
 pub(crate) use chrome::*;
 pub(crate) use launchpad::{launchpad_line_of, render_launchpad};
