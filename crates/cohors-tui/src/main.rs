@@ -33,12 +33,27 @@ use cli::{Cli, Command};
 /// whether to paint them depends on the terminal, which only exists at runtime.
 fn parse_cli() -> Cli {
     let (before, after) = commands::help_decorations();
-    let matches = Cli::command()
+    let command = Cli::command()
         .before_help(before)
         .after_help(after)
-        .help_template(cli::HELP_TEMPLATE)
-        .get_matches();
-    Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit())
+        .help_template(cli::HELP_TEMPLATE);
+    let grouped = commands::grouped_commands(&command);
+    match command.try_get_matches() {
+        Ok(matches) => Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit()),
+        // `cohors --help` (and `cohors help`): the commands by what they are
+        // for, each group with a line that says so, instead of one flat list.
+        Err(e) if e.kind() == clap::error::ErrorKind::DisplayHelp => {
+            let help = e.render().ansi().to_string();
+            match commands::regroup_help(&help, &grouped) {
+                Some(regrouped) => {
+                    print!("{regrouped}");
+                    std::process::exit(0);
+                }
+                None => e.exit(),
+            }
+        }
+        Err(e) => e.exit(),
+    }
 }
 
 fn main() -> anyhow::Result<()> {

@@ -26,6 +26,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.19] — 2026-11-16
+
+### Changed
+
+- **`cohors --help` groups its commands by what they are for**, each group
+  with a line that says so: *See what needs you* (reports; nothing changes),
+  *Change your repositories* (each lists the repositories and asks before it
+  acts), *Agents and the launchpad*, *Other ways to look*, and *Set up and keep
+  cohors current*. A test makes sure every command is in exactly one group.
+
 ## [0.8.18] — 2026-11-16
 
 ### Changed

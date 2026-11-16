@@ -1165,6 +1165,141 @@ fn guide_row(cmd: &str, why: &str, width: usize, color: bool) -> String {
 /// These are built here rather than as `#[command(before_help = …)]` attributes
 /// because whether to paint them depends on the terminal, which is only knowable
 /// at runtime. `main` attaches them before parsing.
+/// The groups `cohors --help` lists its commands in, each with what the
+/// group is for. Every command is in one of them (a test makes sure), so a
+/// new command cannot quietly go missing from the help.
+pub const COMMAND_GROUPS: &[(&str, &str, &[&str])] = &[
+    (
+        "See what needs you",
+        "reports and reads; nothing changes",
+        &[
+            "overview", "next", "show", "changes", "prs", "standup", "search", "path", "scan",
+            "discover", "watch",
+        ],
+    ),
+    (
+        "Change your repositories",
+        "each lists the repositories and asks before it acts",
+        &["fetch", "pull", "push", "commit", "stash", "run"],
+    ),
+    (
+        "Agents and the launchpad",
+        "start a coding agent, or serve your fleet to one",
+        &["agent", "launchpad", "mcp"],
+    ),
+    (
+        "Other ways to look",
+        "run `cohors` alone for the terminal dashboard",
+        &["web", "demo"],
+    ),
+    (
+        "Set up and keep cohors current",
+        "config, install, updates, completions",
+        &[
+            "init",
+            "install",
+            "update",
+            "doctor",
+            "uninstall",
+            "completions",
+            "help",
+        ],
+    ),
+];
+
+/// The commands block of `cohors --help`: [`COMMAND_GROUPS`], each heading
+/// with its line of purpose, then its commands and what each does (from the
+/// command's own description, without the `(no TUI)` the group heading
+/// already says), aliases kept.
+pub fn grouped_commands(command: &clap::Command) -> String {
+    let color = wants_color(std::io::stdout().is_terminal());
+    let about = |name: &str| -> Option<String> {
+        if name == "help" {
+            return Some("Print this message or the help of the given command".into());
+        }
+        let sub = command.find_subcommand(name)?;
+        let text = sub.get_about().map(|a| a.to_string()).unwrap_or_default();
+        let text = text.replace(" (no TUI)", "");
+        let aliases: Vec<&str> = sub.get_visible_aliases().collect();
+        Some(if aliases.is_empty() {
+            text
+        } else {
+            format!("{text} [alias: {}]", aliases.join(", "))
+        })
+    };
+    let width = COMMAND_GROUPS
+        .iter()
+        .flat_map(|(_, _, names)| names.iter())
+        .map(|n| n.len())
+        .max()
+        .unwrap_or(0);
+    let mut out = String::new();
+    for (i, (title, purpose, names)) in COMMAND_GROUPS.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        out.push_str(&format!(
+            "{}  {}\n",
+            brand(color, &bold(color, title)),
+            dim(color, purpose)
+        ));
+        for name in *names {
+            if let Some(text) = about(name) {
+                out.push_str(&format!(
+                    "  {}  {text}\n",
+                    bold(color, &format!("{name:<width$}"))
+                ));
+            }
+        }
+    }
+    out
+}
+
+/// `help` with its flat `Commands:` block swapped for `grouped`. `None` when
+/// it has no top-level command list (a subcommand's own help), which is
+/// then printed as clap wrote it.
+pub fn regroup_help(help: &str, grouped: &str) -> Option<String> {
+    let plain = |line: &str| strip_ansi(line).trim_end().to_string();
+    let lines: Vec<&str> = help.split_inclusive('\n').collect();
+    let start = lines.iter().position(|l| plain(l) == "Commands:")?;
+    // The top-level list, not a subcommand's (`cohors agent --help` has one).
+    let block: Vec<String> = lines[start..].iter().map(|l| plain(l)).collect();
+    let end = block
+        .iter()
+        .position(|l| l.is_empty())
+        .unwrap_or(block.len());
+    let names: Vec<&str> = block[1..end]
+        .iter()
+        .filter_map(|l| l.split_whitespace().next())
+        .collect();
+    if !(names.contains(&"overview") && names.contains(&"fetch")) {
+        return None;
+    }
+    let mut out: String = lines[..start].concat();
+    out.push_str(grouped);
+    out.push_str(&lines[start + end..].concat());
+    Some(out)
+}
+
+/// `text` without its ANSI colour codes.
+fn strip_ansi(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            // Skip to the end of the escape sequence (a letter).
+            for c in chars.by_ref() {
+                if c.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 pub fn help_decorations() -> (String, String) {
     let color = wants_color(std::io::stdout().is_terminal());
 
@@ -3297,6 +3432,54 @@ mod tests {
         let first = o.repos.iter().find(|r| r.id == step.repos[0]).unwrap();
         let row = w.lines().find(|l| l.contains(&step.title)).unwrap();
         assert!(row.contains(&first.name), "{row}");
+    }
+
+    /// `cohors --help` lists every command once, in a group that says what it
+    /// is for; a subcommand's own help is left as clap writes it.
+    #[test]
+    fn the_help_groups_every_command_once() {
+        use clap::CommandFactory;
+        let command = crate::cli::Cli::command();
+        let mut listed: Vec<&str> = COMMAND_GROUPS
+            .iter()
+            .flat_map(|(_, _, names)| names.iter().copied())
+            .collect();
+        let visible: Vec<String> = command
+            .get_subcommands()
+            .filter(|s| !s.is_hide_set())
+            .map(|s| s.get_name().to_string())
+            .chain(["help".to_string()])
+            .collect();
+        for name in &visible {
+            assert!(listed.contains(&name.as_str()), "`{name}` is in no group");
+        }
+        listed.sort_unstable();
+        let total = listed.len();
+        listed.dedup();
+        assert_eq!(listed.len(), total, "a command is in two groups");
+        assert!(
+            listed.iter().all(|n| visible.iter().any(|v| v == n)),
+            "{listed:?}"
+        );
+
+        let grouped = grouped_commands(&command);
+        let help = command.clone().render_help().to_string();
+        let regrouped = regroup_help(&help, &grouped).expect("the top-level help");
+        assert!(!regrouped.contains("\nCommands:\n"), "{regrouped}");
+        for (title, purpose, _) in COMMAND_GROUPS {
+            assert!(regrouped.contains(title) && regrouped.contains(purpose));
+        }
+        assert!(
+            regrouped.contains("Options:") || regrouped.contains("options"),
+            "{regrouped}"
+        );
+        let agent = command
+            .clone()
+            .find_subcommand_mut("agent")
+            .unwrap()
+            .render_help()
+            .to_string();
+        assert!(regroup_help(&agent, &grouped).is_none());
     }
 
     /// Only a plain yes goes ahead: Enter alone, a no, or anything unclear
