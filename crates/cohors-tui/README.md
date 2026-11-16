@@ -14,13 +14,9 @@ Compiling takes a few minutes. Homebrew, pip, npm and a shell installer ship the
 
 ## Staying up to date
 
-cohors never rebuilds a crates.io install by itself, since that means compiling. When a release is out, the dashboard says so; install it with:
+cohors keeps itself up to date however you installed it. Its first run sets up cohors' own copy in `~/.local/share/cohors` (with `~/.local/bin/cohors` linked to it) and from then on hands over to the newest version there, the way Claude Code does: it looks for a release when it starts and every few minutes, downloads it, checks its SHA-256, tries it, and switches to it. The crates.io install itself is never rebuilt for you (that means compiling); `cargo install cohors` updates it by hand.
 
-```sh
-cargo install cohors
-```
-
-`updates = "off"` in the config, or `COHORS_NO_UPDATE=1`, stops the check.
+`cohors doctor` says how your copy is set up; `updates = "off"` in the config, or `COHORS_DISABLE_UPDATES=1`, turns updating off.
 
 ## Use it
 

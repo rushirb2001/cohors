@@ -94,6 +94,8 @@ cohors
 
 **Do next** lists what to do, most urgent first. Press a step's letter to act on every repo in it, or mark repos with <kbd>Space</kbd> and press the letter yourself.
 
+The mouse works too: click a card to focus it, a row to select it and the same row again to open it, and any key shown on screen is a button. New to it? The line under the header teaches one thing a day; <kbd>x</kbd> shows the next.
+
 <br>
 
 <picture>
@@ -153,7 +155,7 @@ It starts **read-only**. Turn on what Claude may do with `claude plugin configur
 
 <br>
 
-Or let cohors brief Claude for you: `cohors agent run plan-day`, or `cohors agent run task --repo payment-service --task idempotency-keys` to start on one task (run it again to resume the same conversation).
+Or let cohors brief Claude for you: `cohors agent plan-day`, or `cohors agent idempotency-keys --repo payment-service` to start on one task. `cohors agent --resume` picks a conversation up again, and `cohors next` lists the ones worth resuming.
 
 <details>
 <summary>Other MCP clients</summary>
@@ -203,6 +205,8 @@ cohors run --select 'name:web-*' 'npm test'    # one command, many repos
 cohors standup                                 # this week's commits, as Markdown
 cohors overview --json | jq -r '.actions[].title'
 ```
+
+At a terminal, a command that changes repositories lists them and asks `[y/N]` before it acts. Piped, or with `--yes`, it goes straight on.
 
 ## Use it in VS Code and the browser
 
@@ -265,15 +269,15 @@ Check a file with `cohors launchpad validate .`. The format is an open spec: [sp
 ## Safe by default
 
 - `pull` is fast-forward only, and nothing force-pushes.
-- No action runs without `--select`, and every one takes `--dry-run`.
-- No single key can destroy work. Commit and stash ask first.
+- No action runs without `--select` or repository names, and every one takes `--dry-run`.
+- Nothing changes unseen. At a terminal every command that changes repositories lists them and asks first; in the dashboard no single key can destroy work, and commit and stash ask first.
 - The MCP server and the browser dashboard start read-only.
 - One unreadable repo is reported, never fatal.
 - No account, no telemetry. It talks only to GitHub. See the [privacy policy](PRIVACY.md).
 
 ## Staying up to date
 
-Once a day cohors checks for a release. Installed with Homebrew, pip or the shell installer, it updates itself in the background and shows **Restart to update**; press <kbd>R</kbd>. `cohors update` does it now. Set `updates = "notify"` or `"off"` in the config to change that.
+cohors keeps itself up to date however you installed it. Its first run sets up cohors' own copy in `~/.local/share/cohors` (with `~/.local/bin/cohors` linked to it) and from then on hands over to the newest version there, the way Claude Code does: it looks for a release when it starts and every few minutes, downloads it, checks its SHA-256, tries it, and switches to it. The dashboard then says **Updated to … — restart to use it**; press <kbd>R</kbd>. `cohors update` does it now and `cohors doctor` says how your copy is set up. Set `updates = "notify"` or `"off"` in the config, or `COHORS_DISABLE_UPDATES=1`, to change that. Never in CI, and never for a build from source.
 
 <details>
 <summary>Updating by hand</summary>

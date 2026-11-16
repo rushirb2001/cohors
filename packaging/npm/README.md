@@ -29,13 +29,9 @@ Every report prints JSON when piped. Write commands (`fetch`, `pull`, `push`, `c
 
 ## Staying up to date
 
-An npm install is never changed in place, since a global npm folder often needs elevated rights. When a release is out, the dashboard tells you; update with:
+cohors keeps itself up to date however you installed it. Its first run sets up cohors' own copy in `~/.local/share/cohors` (with `~/.local/bin/cohors` linked to it) and from then on hands over to the newest version there, the way Claude Code does: it looks for a release when it starts and every few minutes, downloads it, checks its SHA-256, tries it, and switches to it. The npm package itself is never changed in place (a global npm folder often needs elevated rights); `npm install -g @cohors/cli@latest` updates it by hand, and `npx @cohors/cli@latest` always runs the newest release.
 
-```sh
-npm install -g @cohors/cli@latest
-```
-
-`npx @cohors/cli@latest` always runs the newest release.
+`cohors doctor` says how your copy is set up; `updates = "off"` in the config, or `COHORS_DISABLE_UPDATES=1`, turns updating off.
 
 ## Use it with your coding agent (MCP)
 

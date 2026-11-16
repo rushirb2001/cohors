@@ -23,11 +23,11 @@ With no config, `cohors` finds the folders that hold your repos by itself. Point
 
 | Installed with | What happens when a release comes out |
 |---|---|
-| `pip install cohors` | Once a day the dashboard asks GitHub for the newest release and installs it with the same Python's pip, then shows **Restart to update**. `cohors update` does it now. |
-| `pipx install cohors` | cohors sees a pip install, so the same applies; `pipx upgrade cohors` works too. |
-| `uvx` or `uv tool install` | Never changed in place. `uvx cohors@latest` always runs the newest release; `uv tool upgrade cohors` updates a tool install. |
+| `pip install cohors` | The first run sets up cohors' own copy in `~/.local/share/cohors` and hands over to it from then on. That copy looks for a release when it starts and every few minutes, downloads it, checks its SHA-256 and switches to it; the dashboard says **Updated to X — restart to use it**. `cohors update` does it now, and `cohors doctor` says how your copy is set up. |
+| `pipx install cohors` or `uv tool install cohors` | The same as pip. |
+| `uvx` | `uvx cohors@latest` always runs the newest release. |
 
-Turn the automatic install off with `updates = "notify"` (tell only) or `updates = "off"` in the config, or `COHORS_NO_UPDATE=1`.
+Turn it off with `updates = "notify"` (tell only, set nothing up) or `updates = "off"` in the config, or `COHORS_NO_UPDATE=1`; `COHORS_DISABLE_UPDATES=1` blocks every update.
 
 ## Use it with your coding agent (MCP)
 

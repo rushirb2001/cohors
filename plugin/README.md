@@ -52,7 +52,7 @@ Everything a repository's launchpad file says (flow commands, task titles, notes
 claude plugin update cohors@cohors
 ```
 
-updates the plugin. The `cohors` command updates itself when it came from Homebrew, pip or the shell installer; from npm or Cargo it tells you when a release is out.
+updates the plugin. The `cohors` command keeps itself up to date however you installed it: its first run sets up cohors' own copy, which updates itself.
 
 ## New in 0.7.7
 

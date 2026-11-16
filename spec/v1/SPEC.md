@@ -193,9 +193,9 @@ system-prompt append and never through a headless flag (`claude -p`,
 A runner listed in `supports` but not installed is shown disabled with a reason,
 never hidden. The user should never wonder why an action vanished.
 
-`cohors agent run <what>` performs these invocations, and `cohors agent
-command <what>` prints the one it would perform so an editor can type it into
-its own terminal. Two safety rules apply to every runner:
+`cohors agent <what>` performs these invocations, and `cohors agent <what>
+--print` prints the one it would perform (as JSON) so an editor can type it
+into its own terminal. Two safety rules apply to every runner:
 
 - The prompt is one argument and must never be read as an option, so a
   prompt whose first character is `-` gets a fixed `Prompt:` line in front.

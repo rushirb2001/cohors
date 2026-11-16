@@ -75,8 +75,8 @@ Without `-t`, reports print JSON, ready for `jq`.
 
 The container never updates itself. `docker pull ghcr.io/rushirb2001/cohors` gets the newest `latest`; pin an exact tag for a setup that should not move.
 
-## New in 0.7.7
+## New in 0.8
 
-From 0.7.7 the image is published with every release, under the tags above. cohors 0.7.7 also finds repos nested inside other repos, runs git actions on every selected repo at once, and refuses a commit that would include a file that looks like a secret. [Release notes](https://github.com/rushirb2001/cohors/releases)
+The server answers "where did I leave off?" with a `next` tool (the coding-agent conversations to resume and the fleet's next steps), finds repositories nested inside others with a `discover` tool, accepts a repository by a unique prefix (and says "did you mean" for a typo), and briefs on part of the fleet with `overview` and a selector. The image is published with every release, under the tags above. [Release notes](https://github.com/rushirb2001/cohors/releases)
 
 [Documentation](https://github.com/rushirb2001/cohors#readme) · [Dockerfile](https://github.com/rushirb2001/cohors/blob/main/Dockerfile) · [Issues](https://github.com/rushirb2001/cohors/issues) · MIT licensed

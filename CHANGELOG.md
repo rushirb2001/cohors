@@ -17,14 +17,32 @@ Each number says what a release holds (ADR-059):
   a view, an install channel.
 - **PATCH** (`0.x.y`) — fixes and refinements, with nothing new to learn.
 
-`scripts/bump-version.sh major|minor|patch` applies this: it refuses a patch
-release while **[Unreleased]** lists anything under **Added**.
+Every piece of work gets its own version as it lands: a big feature is a
+MINOR version, and the fixes, refinements and small features after it are
+PATCH versions, so the history reads 0.8.1, 0.8.2, 0.8.3 … .
+`scripts/version.sh patch|minor|major` moves **[Unreleased]** under the new
+version and bumps it everywhere it is written (it refuses less than a
+**Breaking** entry needs); the commit message never carries the number.
 
-Every release gets an entry below and an annotated git tag (`vX.Y.Z`) on the
-release commit. The version in `Cargo.toml` (`[workspace.package]`) is the single
-source of truth and is bumped in a dedicated `chore(release)` commit.
+A release is a separate, public step: `scripts/release.sh` tags the version
+the tree is at (`vX.Y.Z`), and its notes cover every version since the
+previous tag. The version in `Cargo.toml` (`[workspace.package]`) is the single
+source of truth.
 
 ## [Unreleased]
+
+## [0.8.20] — 2026-11-16
+
+### Fixed
+
+- **The documentation describes cohors as it is now.** The README, the
+  package pages (PyPI, npm, crates.io, Docker), the editor extension's and
+  the plugin's pages and the launchpad spec no longer say updates come once a
+  day or only to Homebrew, pip and shell-installer copies, or use the old
+  `cohors agent run` forms; they cover the self-updating install and
+  `cohors doctor`, the mouse and the first-run tips, and commands that ask
+  before they change anything. The changelog's versioning policy says how
+  versions and releases work now.
 
 ## [0.8.19] — 2026-11-16
 

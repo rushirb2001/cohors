@@ -25,7 +25,7 @@ code --install-extension rushirb2001.cohors
 
 **3. Click the cohors icon in the activity bar.** If it can't find `cohors`, run **cohors: How to install the cohors command-line tool**, or set `cohors.binaryPath`.
 
-The editor keeps the extension up to date. The command-line tool updates itself when it came from Homebrew, pip or the shell installer; from npm or Cargo it tells you when a release is out, and so does the sidebar.
+The editor keeps the extension up to date. The command-line tool keeps itself up to date however you installed it: its first run sets up cohors' own copy, which updates itself. The dashboard and the sidebar say when a release is out.
 
 ## What you get
 
