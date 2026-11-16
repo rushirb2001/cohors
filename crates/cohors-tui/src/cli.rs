@@ -180,10 +180,12 @@ pub enum Command {
     Demo,
     /// Update cohors to the newest release, the way this copy was installed.
     ///
-    /// Asks GitHub for the newest release and installs it with Homebrew, pip,
-    /// or the release's shell installer, whichever installed this copy. A
-    /// build from source, or a copy run through `uvx`, only says how to get it.
-    /// The dashboard does this by itself once a day (the `updates` setting).
+    /// Asks the place this copy came from (GitHub releases, the Homebrew tap,
+    /// PyPI, npm or crates.io) for the newest release. cohors' own install
+    /// (`cohors install`) downloads, verifies and switches to it; Homebrew,
+    /// pip and the shell installer install it their way; npm, uv, cargo and
+    /// source builds are told the command. The dashboard does this by itself
+    /// on every launch and every few minutes (the `updates` setting).
     #[command(
         after_help = "Examples:\n  cohors update                     install the newest release the way this one was installed\n  cohors update --check             only say whether there is one"
     )]
@@ -195,6 +197,45 @@ pub enum Command {
         /// With --check: print the answer as JSON.
         #[arg(long, requires = "check")]
         json: bool,
+    },
+    /// Set up cohors' own self-updating copy, or reinstall it.
+    ///
+    /// Downloads the release for this platform from GitHub, checks it against
+    /// the release's SHA-256, keeps it in ~/.local/share/cohors/versions/ and
+    /// links ~/.local/bin/cohors to it. From then on it updates itself, like
+    /// Claude Code's native install. A copy installed by Homebrew, pip, npm or
+    /// cargo sets this up by itself on its first run and hands control to it
+    /// whenever it is newer. Says whether typing `cohors` runs it.
+    #[command(
+        after_help = "Examples:\n  cohors install                    the newest release\n  cohors install 0.7.8              a given release"
+    )]
+    #[command(display_order = 26)]
+    Install {
+        /// A release version (0.7.8), or `latest` (the default).
+        version: Option<String>,
+    },
+    /// Say how cohors is installed and whether it keeps itself up to date.
+    ///
+    /// Read-only: which cohors you ran and whether it handed control to
+    /// cohors' own install, every cohors on your PATH and where it came from,
+    /// the managed versions, whether auto-updates are on and why, the last
+    /// update attempt, and what to fix.
+    #[command(display_order = 27)]
+    Doctor,
+    /// Remove cohors' own self-updating copy and what its updates keep.
+    ///
+    /// Removes ~/.local/share/cohors/versions/, the ~/.local/bin/cohors link
+    /// (only when it is cohors' own), and the update state, lock and memo.
+    /// Leaves your config and anything cohors did not make, and says how to
+    /// remove a copy a package manager installed.
+    #[command(
+        after_help = "Examples:\n  cohors uninstall --dry-run        list what would be removed\n  cohors uninstall                  remove it"
+    )]
+    #[command(display_order = 28)]
+    Uninstall {
+        /// Only list what would be removed.
+        #[arg(long)]
+        dry_run: bool,
     },
     /// git fetch across the selected repos (non-destructive).
     #[command(

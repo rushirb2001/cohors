@@ -49,6 +49,56 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or_default();
     commands::look::init(icons);
 
+    let updates = || {
+        cohors_config::Config::load(cli.config.as_deref().map(camino::Utf8Path::new))
+            .map(|c| c.updates)
+            .unwrap_or_default()
+    };
+    // A copy installed by Homebrew, pip, uv, npm, cargo or the shell installer
+    // sets cohors' own install up on its first run, then hands control to it
+    // whenever it is newer (returning here only when this copy is the one to
+    // run). Not for `install` and `uninstall`, which manage that install;
+    // `doctor` may be handed off but never sets anything up; `mcp` never
+    // prints the one-time notice.
+    if !matches!(
+        cli.command,
+        Some(Command::Install { .. } | Command::Uninstall { .. })
+    ) {
+        update::start(update::Start {
+            configured: updates(),
+            set_up: !matches!(cli.command, Some(Command::Doctor)),
+            quiet: matches!(cli.command, Some(Command::Mcp { .. })),
+        });
+    }
+    // One-off commands end with a line about a newer cohors, when one is known.
+    // Not the dashboard (it shows it in the header), the servers (their output
+    // belongs to a client) or the update commands (they say everything). The
+    // look runs while the command does and is never waited for.
+    let one_off = matches!(
+        cli.command,
+        Some(
+            Command::Init { .. }
+                | Command::Discover { .. }
+                | Command::Scan { .. }
+                | Command::Overview { .. }
+                | Command::Standup { .. }
+                | Command::Fetch { .. }
+                | Command::Pull { .. }
+                | Command::Push { .. }
+                | Command::Commit { .. }
+                | Command::Stash { .. }
+                | Command::Run { .. }
+                | Command::Launchpad { .. }
+                | Command::Next { .. }
+                | Command::Path { .. }
+                | Command::Show { .. }
+                | Command::Changes { .. }
+                | Command::Search { .. }
+                | Command::Prs { .. }
+        )
+    );
+    let pending = one_off.then(|| update::check_in_background(updates()));
+
     let result = match &cli.command {
         Some(Command::Init { force }) => commands::init(&cli, *force),
         Some(Command::Discover { deep, json }) => commands::discover(&cli, *deep, *json),
@@ -66,6 +116,9 @@ fn main() -> anyhow::Result<()> {
         }) => commands::standup(&cli, *today, since.as_deref(), select.as_deref(), *json),
         Some(Command::Demo) => commands::run_demo(),
         Some(Command::Update { check, json }) => update::run_command(*check, *json),
+        Some(Command::Install { version }) => update::install_command(version.as_deref()),
+        Some(Command::Doctor) => update::run_doctor(updates()),
+        Some(Command::Uninstall { dry_run }) => update::uninstall_command(*dry_run),
         Some(Command::Fetch { action: a, names }) => commands::run_action(
             &cli,
             commands::CliAction::Fetch,
@@ -195,35 +248,8 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Watch { json }) => commands::watch::run(&cli, *json),
         None => commands::run_tui(&cli),
     };
-    // One-off commands end with a line about a newer cohors, when one is known.
-    // Not the dashboard (it shows it in the header), the servers (their output
-    // belongs to a client) or `update` (it just said everything).
-    let one_off = matches!(
-        cli.command,
-        Some(
-            Command::Init { .. }
-                | Command::Discover { .. }
-                | Command::Scan { .. }
-                | Command::Overview { .. }
-                | Command::Standup { .. }
-                | Command::Fetch { .. }
-                | Command::Pull { .. }
-                | Command::Push { .. }
-                | Command::Commit { .. }
-                | Command::Stash { .. }
-                | Command::Run { .. }
-                | Command::Launchpad { .. }
-                | Command::Next { .. }
-                | Command::Path { .. }
-                | Command::Show { .. }
-                | Command::Changes { .. }
-                | Command::Search { .. }
-                | Command::Prs { .. }
-        )
-    );
-    if one_off {
-        let config = cohors_config::Config::load(cli.config.as_deref().map(camino::Utf8Path::new));
-        update::print_notice(config.map(|c| c.updates).unwrap_or_default());
+    if let Some(pending) = pending {
+        update::print_notice(pending);
     }
     // A command that already explained itself only needs its exit status.
     if let Err(err) = &result

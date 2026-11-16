@@ -26,6 +26,84 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-11-16
+
+### Added
+
+- **Every copy hands over to cohors' own install.** The first run of a copy
+  from Homebrew, pip, pipx, uv, npm or `cargo install` sets up cohors' own
+  install in `~/.local/share/cohors` (a copy of itself, so no download) with
+  `~/.local/bin/cohors` linked to it, and says so once. From then on every
+  run hands over to the newest version there, whichever `cohors` your PATH
+  finds. Not in CI, for builds from source, or with `updates = "off"`,
+  `COHORS_NO_UP2026-11-16` or `COHORS_DISABLE_UP2026-11-16S`; `"notify"` sets nothing up.
+- **`cohors uninstall`** (try `--dry-run` first) removes cohors' own copy and
+  its update files, and names the command that removes any copy a package
+  manager installed (`brew uninstall cohors`, `pip uninstall cohors`,
+  `npm rm -g @cohors/cli`).
+
+## [0.8.0] — 2026-11-16
+
+### Added
+
+- **cohors updates itself, the way Claude Code does.** cohors' own install
+  downloads the release for your platform, checks its SHA-256, tries the new
+  binary, then switches to it, keeping the two newest versions. A binary that
+  fails its check is never run.
+- **`cohors install [version]`** sets that install up (or reinstalls it) by
+  hand and says whether typing `cohors` runs it.
+- **`cohors doctor`** says which cohors you ran and whether it handed over,
+  every cohors on your PATH and where it came from, the versions kept,
+  whether updates are on and why, the last update, and what to fix. It
+  changes nothing.
+- **`COHORS_DISABLE_UP2026-11-16S=1`** blocks every update, `cohors update` and
+  `cohors install` included; `COHORS_NO_UP2026-11-16` still stops only the
+  background checks.
+
+## [0.7.16] — 2026-11-16
+
+### Fixed
+
+- **`uv tool install` copies are recognised** (they were taken for `uvx`) and
+  told `uv tool upgrade cohors`.
+
+## [0.7.15] — 2026-11-16
+
+### Changed
+
+- **Each copy asks the place it installs from:** Homebrew's tap, PyPI, npm,
+  crates.io or GitHub releases, so cohors never offers what that channel
+  cannot install yet (Homebrew and pip updates used to start before the tap
+  and PyPI had the release, fail, and stay failed for a day). A copy that
+  only tells names the exact command (`npm i -g @cohors/cli@latest`,
+  `cargo install cohors`); a failed update says "Auto-update failed · run
+  cohors doctor" and is not tried again for a day.
+
+## [0.7.14] — 2026-11-16
+
+### Changed
+
+- **A command you run at a terminal looks for a newer cohors while it runs**
+  and says so at the end, never waiting on the network. It used to repeat
+  only what the dashboard had last found.
+
+## [0.7.13] — 2026-11-16
+
+### Changed
+
+- **The dashboard looks for a new release when it opens and every five
+  minutes while it runs**, and says so in its header the moment it knows:
+  "Update available: 0.7.8 — updating…", then "Updated to 0.7.8 — restart to
+  use it (R)". An open dashboard used to look once. Each look is a
+  conditional request, so it usually costs an empty "not modified".
+
+## [0.7.12] — 2026-11-16
+
+### Fixed
+
+- **A new release is noticed right away.** It could stay hidden for up to a
+  day behind the once-a-day check.
+
 ## [0.7.11] — 2026-11-16
 
 ### Changed

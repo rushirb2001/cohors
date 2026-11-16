@@ -408,8 +408,8 @@ fn braille_chart(activity: &[u32]) -> Option<[Vec<(char, bool)>; 2]> {
     Some(rows)
 }
 
-/// The notice about a newer cohors, in the same words as every other surface,
-/// plus the key once a restart is all that is left, and its style.
+/// The notice about a newer cohors, in the dashboard's words (which name the
+/// `R` key once a restart is all that is left), and its style.
 fn update_notice(app: &App, theme: &Theme) -> Option<(String, Style)> {
     use cohors_core::update::UpdateState;
     let state = app.update.as_ref()?;
@@ -418,8 +418,7 @@ fn update_notice(app: &App, theme: &Theme) -> Option<(String, Style)> {
         UpdateState::Failed { .. } => theme.warn(),
         _ => theme.accent(),
     };
-    let key = if app.update_ready() { "  R" } else { "" };
-    Some((format!("{}{key}", state.notice()), style))
+    Some((state.notice_in_dashboard(), style))
 }
 
 /// The header on a short screen: everything that matters, on one line.

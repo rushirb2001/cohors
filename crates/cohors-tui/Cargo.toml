@@ -57,7 +57,10 @@ tiny_http = { workspace = true }
 # Looking up cohors' own latest release, and fetching its installer, to keep
 # cohors up to date (src/update.rs). The same client the GitHub adapter uses.
 ureq = { workspace = true }
-
+# Verifying a downloaded release against its published SHA-256 before cohors'
+# own install switches to it (src/update/managed.rs). Already in the tree
+# through gix.
+sha2 = "0.10"
 
 # Forwards Ctrl-C to `cohors run`'s jobs, which run in their own process
 # groups (so a timeout can stop everything they start). Already in the tree

@@ -2836,12 +2836,11 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
     let actions_config = scanner.actions_config();
     let scan = || scanner.scan();
     // The server only reports a newer cohors; installing is left to the
-    // dashboard or `cohors update`. It does the once-a-day lookup in the
-    // background, so an agent-only user hears about new releases too.
+    // dashboard or `cohors update` (an agent starting a server must never set
+    // off an install). It looks in the background, now and every few minutes,
+    // so an agent-only user hears about new releases too.
     let mode = crate::update::effective_mode(scanner.updates_mode());
-    if mode != cohors_config::UpdatesMode::Off {
-        std::thread::spawn(move || crate::update::newer_release(false, now_secs()));
-    }
+    crate::update::watch(mode, false, |_| true);
     let update = move || crate::update::remembered(mode);
     // Started by the Claude Code plugin, the server lives exactly as long as
     // the session, so it notes the session's start and end on the launchpad's

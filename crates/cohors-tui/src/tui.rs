@@ -1363,14 +1363,14 @@ fn run_interactive_then_refresh(
 
 // ----- background workers ---------------------------------------------------
 
-/// Look for a newer cohors off the UI thread and, in `auto` mode, install it.
-/// Each step arrives as a message, so the header can say where it stands.
+/// Look for a newer cohors off the UI thread, now and every few minutes while
+/// the dashboard runs, and in `auto` mode install it. Each step arrives as a
+/// message, so the header says where it stands the moment it is known. The
+/// looking stops when the dashboard closes (the send fails).
 fn spawn_update_check(scanner: &Arc<Scanner>, tx: Sender<BgMsg>) {
     let mode = crate::update::effective_mode(scanner.updates_mode());
-    std::thread::spawn(move || {
-        crate::update::run_in_background(mode, now_secs(), |state| {
-            let _ = tx.send(BgMsg::Update(state));
-        });
+    crate::update::watch(mode, true, move |state| {
+        tx.send(BgMsg::Update(state)).is_ok()
     });
 }
 
