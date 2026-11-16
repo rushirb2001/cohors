@@ -144,9 +144,101 @@ pub fn push_branch(
 /// is a no-op success, not a failure (like [`stash_push`]). Never amends and
 /// never rewrites history. Returns a short status message.
 pub fn commit(path: &Utf8Path, name: &str, message: &str) -> Result<String, String> {
-    let add = run_git(path, &["add", "-A"])?;
-    if !add.status.success() {
-        return Err(format!("commit {name}: {}", telling_line(&add.stderr)));
+    commit_with(path, name, message, CommitOptions::default())
+}
+
+/// How a commit stages, and whether it may include files that look like
+/// secrets.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CommitOptions {
+    /// Commit only what is already staged (no `git add -A`).
+    pub staged_only: bool,
+    /// Commit even when a file that looks like a secret (`.env`, a private
+    /// key) would go in. Off on every surface unless a person asks for it.
+    pub allow_secrets: bool,
+}
+
+/// The repo-relative paths a commit would include: everything `git add -A`
+/// stages, or (`staged_only`) what is staged now.
+pub fn paths_to_commit(path: &Utf8Path, staged_only: bool) -> Result<Vec<String>, String> {
+    if staged_only {
+        let out = run_git(path, &["diff", "--cached", "--name-only", "-z"])?;
+        return Ok(String::from_utf8_lossy(&out.stdout)
+            .split('\0')
+            .filter(|p| !p.is_empty())
+            .map(str::to_string)
+            .collect());
+    }
+    // Porcelain v1 with -z: `XY path\0`, and for a rename or copy the old
+    // path follows as its own field. Untracked files are listed one by one.
+    let out = run_git(
+        path,
+        &["status", "--porcelain=v1", "-z", "--untracked-files=all"],
+    )?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let mut fields = text.split('\0').filter(|f| !f.is_empty());
+    let mut paths = Vec::new();
+    while let Some(entry) = fields.next() {
+        if entry.len() < 4 {
+            continue;
+        }
+        let (status, file) = entry.split_at(3);
+        // Ignored files (`!!`) are never staged by `add -A`.
+        if status.starts_with("!!") {
+            continue;
+        }
+        paths.push(file.to_string());
+        if status.starts_with('R') || status.starts_with('C') {
+            fields.next(); // the old path of a rename or copy
+        }
+    }
+    Ok(paths)
+}
+
+/// Of `paths`, the ones that look like secrets (`.env`, private keys, the
+/// same rule the content search and the MCP `changes` read use).
+pub fn secret_paths(paths: &[String]) -> Vec<String> {
+    paths
+        .iter()
+        .filter(|p| cohors_core::is_sensitive_path(p))
+        .cloned()
+        .collect()
+}
+
+/// [`commit`] with [`CommitOptions`]. Refuses, before staging anything, when a
+/// file that looks like a secret would be committed (unless `allow_secrets`),
+/// so a fleet-wide `commit` can never sweep a `.env` into history on the way
+/// to a `push`.
+pub fn commit_with(
+    path: &Utf8Path,
+    name: &str,
+    message: &str,
+    opts: CommitOptions,
+) -> Result<String, String> {
+    if message.trim().is_empty() {
+        return Err(format!("commit {name}: the message is empty"));
+    }
+    if !opts.allow_secrets {
+        let secrets = secret_paths(&paths_to_commit(path, opts.staged_only)?);
+        if !secrets.is_empty() {
+            let shown: Vec<&str> = secrets.iter().take(3).map(String::as_str).collect();
+            let more = secrets.len().saturating_sub(shown.len());
+            let more = if more > 0 {
+                format!(" and {more} more")
+            } else {
+                String::new()
+            };
+            return Err(format!(
+                "commit {name}: refused, {}{more} looks like a secret (ignore it in .gitignore, or commit it on purpose)",
+                shown.join(", ")
+            ));
+        }
+    }
+    if !opts.staged_only {
+        let add = run_git(path, &["add", "-A"])?;
+        if !add.status.success() {
+            return Err(format!("commit {name}: {}", telling_line(&add.stderr)));
+        }
     }
     let out = run_git(path, &["commit", "-m", message])?;
     if out.status.success() {
@@ -559,6 +651,97 @@ mod tests {
         let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir()).unwrap();
         let r = run_command_timeout(&dir, "sleep 30", std::time::Duration::from_millis(300));
         assert!(r.timed_out);
+    }
+
+    /// A commit that would sweep in a secret is refused before anything is
+    /// staged; asking for it on purpose still works; `staged_only` commits just
+    /// the index.
+    #[test]
+    fn commit_refuses_secrets_and_can_commit_only_the_index() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = camino::Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+        let git = |args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(dir.as_str())
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {out:?}");
+            String::from_utf8_lossy(&out.stdout).trim().to_string()
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["config", "user.email", "t@example.com"]);
+        git(&["config", "user.name", "T"]);
+        std::fs::write(dir.join("a.txt"), "a").unwrap();
+        std::fs::write(dir.join(".env"), "API_KEY=x").unwrap();
+
+        let refused = commit(&dir, "app", "wip").unwrap_err();
+        assert!(
+            refused.contains("refused") && refused.contains(".env"),
+            "{refused}"
+        );
+        assert_eq!(
+            git(&["diff", "--cached", "--name-only"]),
+            "",
+            "nothing was staged"
+        );
+
+        // Only the index: stage a.txt by hand, the .env stays out.
+        git(&["add", "a.txt"]);
+        let staged = CommitOptions {
+            staged_only: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            commit_with(&dir, "app", "add a", staged),
+            Ok("committed app".into())
+        );
+        assert_eq!(git(&["show", "--name-only", "--format=", "HEAD"]), "a.txt");
+
+        // On purpose, it goes in.
+        let anyway = CommitOptions {
+            allow_secrets: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            commit_with(&dir, "app", "env", anyway),
+            Ok("committed app".into())
+        );
+        assert_eq!(
+            commit(&dir, "app", "   ").unwrap_err(),
+            "commit app: the message is empty"
+        );
+    }
+
+    #[test]
+    fn paths_to_commit_lists_untracked_files_and_renames_once() {
+        use std::process::Command;
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = camino::Utf8PathBuf::from_path_buf(tmp.path().to_path_buf()).unwrap();
+        let git = |args: &[&str]| {
+            let out = Command::new("git")
+                .arg("-C")
+                .arg(dir.as_str())
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(out.status.success(), "git {args:?}: {out:?}");
+        };
+        git(&["init", "-q", "-b", "main"]);
+        git(&["config", "user.email", "t@example.com"]);
+        git(&["config", "user.name", "T"]);
+        std::fs::write(dir.join("old.txt"), "x").unwrap();
+        git(&["add", "-A"]);
+        git(&["commit", "-q", "-m", "one"]);
+        git(&["mv", "old.txt", "new.txt"]);
+        std::fs::create_dir_all(dir.join("keys")).unwrap();
+        std::fs::write(dir.join("keys/id_rsa"), "k").unwrap();
+        let mut paths = paths_to_commit(&dir, false).unwrap();
+        paths.sort();
+        assert_eq!(paths, ["keys/id_rsa", "new.txt"]);
+        assert_eq!(secret_paths(&paths), ["keys/id_rsa"]);
     }
 
     /// Ctrl-C at the CLI sets the interrupt flag: the running job (here a
