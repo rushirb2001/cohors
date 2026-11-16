@@ -1334,6 +1334,7 @@ pub fn run_action(
     repos: &[String],
     dry_run: bool,
     json: bool,
+    yes: bool,
 ) -> Result<()> {
     let human = !json;
     let color = human && wants_color(std::io::stdout().is_terminal());
@@ -1429,23 +1430,31 @@ pub fn run_action(
                 color
             )
         );
-        let w = targets
-            .iter()
-            .map(|s| s.name.chars().count())
-            .max()
-            .unwrap_or(0);
-        for s in &targets {
-            print!(
-                "{}",
-                guide_row(&s.name, s.path.as_ref().unwrap().as_str(), w, color)
-            );
-            // A commit's preview names the files, so nothing goes in unseen.
-            if let CliAction::Commit(_, opts) = &action {
-                print!("{}", commit_preview(s.path.as_ref().unwrap(), *opts, color));
-            }
-        }
+        print_targets(&targets, Some(&action), color);
         println!();
         return Ok(());
+    }
+
+    // At a terminal, nothing changes until the person has seen what will and
+    // said yes (ADR-069). `--yes`, and scripts, go straight on.
+    if should_ask(dry_run, json, yes) {
+        print!(
+            "{}",
+            section(&format!("will {verb}"), &format!("{n} repo{plural}"), color)
+        );
+        print_targets(&targets, Some(&action), color);
+        if !confirm(
+            &format!(
+                "{} {n} repositor{}?",
+                capitalize(verb),
+                if n == 1 { "y" } else { "ies" }
+            ),
+            color,
+        ) {
+            println!("  {}\n", dim(color, "Nothing done."));
+            return Ok(());
+        }
+        println!();
     }
 
     // Pull/stash/commit mutate the worktree: a conflicted or mid-operation
@@ -1675,6 +1684,7 @@ pub fn run_command_action(
     timeout: u64,
     dry_run: bool,
     json: bool,
+    yes: bool,
 ) -> Result<()> {
     let human = !json;
     let color = human && wants_color(std::io::stdout().is_terminal());
@@ -1737,19 +1747,33 @@ pub fn run_command_action(
                 color
             )
         );
-        let w = targets
-            .iter()
-            .map(|s| s.name.chars().count())
-            .max()
-            .unwrap_or(0);
-        for s in &targets {
-            print!(
-                "{}",
-                guide_row(&s.name, s.path.as_ref().unwrap().as_str(), w, color)
-            );
-        }
+        print_targets(&targets, None, color);
         println!();
         return Ok(());
+    }
+
+    // As for the git verbs: at a terminal, see where it will run, then say yes.
+    if should_ask(dry_run, json, yes) {
+        print!(
+            "{}",
+            section(
+                "will run",
+                &format!("`{command}` in {n} repo{plural}"),
+                color
+            )
+        );
+        print_targets(&targets, None, color);
+        if !confirm(
+            &format!(
+                "Run `{command}` in {n} repositor{}?",
+                if n == 1 { "y" } else { "ies" }
+            ),
+            color,
+        ) {
+            println!("  {}\n", dim(color, "Nothing done."));
+            return Ok(());
+        }
+        println!();
     }
 
     let timeout = std::time::Duration::from_secs(timeout.max(1));
@@ -2489,6 +2513,54 @@ fn found_rows(repos: &[&cohors_core::RepoLine], width: usize, color: bool) -> St
     out
 }
 
+/// The repositories a command is about to act on, one per line with its
+/// path; for a commit, each with the files that would go in.
+fn print_targets(targets: &[&cohors_core::RepoSnapshot], action: Option<&CliAction>, color: bool) {
+    let w = targets
+        .iter()
+        .map(|s| s.name.chars().count())
+        .max()
+        .unwrap_or(0);
+    for s in targets {
+        let path = s.path.as_ref().map(|p| p.as_str()).unwrap_or_default();
+        print!("{}", guide_row(&s.name, path, w, color));
+        // A commit's preview names the files, so nothing goes in unseen.
+        if let (Some(CliAction::Commit(_, opts)), Some(path)) = (action, &s.path) {
+            print!("{}", commit_preview(path, *opts, color));
+        }
+    }
+}
+
+/// Whether to ask before acting: a real run (not `--dry-run`), for a person
+/// (not `--json`), not told `--yes`, with a terminal at both ends. A script
+/// or an agent piping cohors is never asked; it chose its repos already.
+fn should_ask(dry_run: bool, json: bool, yes: bool) -> bool {
+    !dry_run && !json && !yes && std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
+}
+
+/// Ask `question [y/N]` and wait for the answer: only `y` or `yes` goes
+/// ahead; Enter alone, anything else, or a closed input is no.
+fn confirm(question: &str, color: bool) -> bool {
+    use std::io::Write;
+    print!("  {} {} ", bold(color, question), dim(color, "[y/N]"));
+    let _ = std::io::stdout().flush();
+    let mut answer = String::new();
+    std::io::stdin().read_line(&mut answer).is_ok() && is_yes(&answer)
+}
+
+fn is_yes(answer: &str) -> bool {
+    matches!(answer.trim().to_ascii_lowercase().as_str(), "y" | "yes")
+}
+
+/// `pull` → `Pull`.
+fn capitalize(word: &str) -> String {
+    let mut chars = word.chars();
+    chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
 /// Read a key for the launch prompt: Enter / `y` launches, `q` / `Esc` /
 /// `Ctrl-C` quits, and any other key is ignored (keep waiting). Raw mode so a
 /// lone keypress is enough — no Enter required for the `q`/`y` shortcuts.
@@ -3225,6 +3297,23 @@ mod tests {
         let first = o.repos.iter().find(|r| r.id == step.repos[0]).unwrap();
         let row = w.lines().find(|l| l.contains(&step.title)).unwrap();
         assert!(row.contains(&first.name), "{row}");
+    }
+
+    /// Only a plain yes goes ahead: Enter alone, a no, or anything unclear
+    /// changes nothing.
+    #[test]
+    fn only_y_or_yes_goes_ahead() {
+        for answer in ["y", "Y", "yes", "YES\n", " y \n"] {
+            assert!(is_yes(answer), "{answer:?}");
+        }
+        for answer in ["", "\n", "n", "no", "yep", "sure", "y es"] {
+            assert!(!is_yes(answer), "{answer:?}");
+        }
+        assert_eq!(capitalize("pull"), "Pull");
+        // Asking needs a person: never with --dry-run, --json or --yes.
+        assert!(!should_ask(true, false, false));
+        assert!(!should_ask(false, true, false));
+        assert!(!should_ask(false, false, true));
     }
 
     /// A fleet with nothing to do still gets a launch screen that says so.

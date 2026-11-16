@@ -587,6 +587,11 @@ pub struct ActionArgs {
     /// Print the per-repo results (or, with --dry-run, the targets) as JSON.
     #[arg(long)]
     pub json: bool,
+    /// Act without asking first. At a terminal cohors lists the repositories
+    /// it is about to change and asks `[y/N]`; a script (no terminal) is never
+    /// asked.
+    #[arg(short = 'y', long)]
+    pub yes: bool,
 }
 
 /// Repos named directly, as an alternative to `--select`.

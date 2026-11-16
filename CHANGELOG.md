@@ -26,6 +26,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.18] — 2026-11-16
+
+### Changed
+
+- **A command that changes your repositories asks first.** At a terminal,
+  `fetch`, `pull`, `push`, `commit`, `stash` and `run` list the repositories
+  they are about to change (a commit with the files that would go in) and
+  ask `Pull 5 repositories? [y/N]`; only `y` goes ahead. `--yes` (`-y`) skips
+  the question, `--dry-run` shows the same list without asking, and a script
+  with no terminal is never asked.
+
 ## [0.8.17] — 2026-11-16
 
 ### Fixed

@@ -127,6 +127,7 @@ fn main() -> anyhow::Result<()> {
             &names.repos,
             a.dry_run,
             a.json,
+            a.yes,
         ),
         Some(Command::Pull { action: a, names }) => commands::run_action(
             &cli,
@@ -135,6 +136,7 @@ fn main() -> anyhow::Result<()> {
             &names.repos,
             a.dry_run,
             a.json,
+            a.yes,
         ),
         Some(Command::Push { action: a, names }) => commands::run_action(
             &cli,
@@ -143,6 +145,7 @@ fn main() -> anyhow::Result<()> {
             &names.repos,
             a.dry_run,
             a.json,
+            a.yes,
         ),
         Some(Command::Commit {
             action,
@@ -163,6 +166,7 @@ fn main() -> anyhow::Result<()> {
             &names.repos,
             action.dry_run,
             action.json,
+            action.yes,
         ),
         Some(Command::Stash { action: a, names }) => commands::run_action(
             &cli,
@@ -171,6 +175,7 @@ fn main() -> anyhow::Result<()> {
             &names.repos,
             a.dry_run,
             a.json,
+            a.yes,
         ),
         Some(Command::Run {
             action,
@@ -183,6 +188,7 @@ fn main() -> anyhow::Result<()> {
             *timeout,
             action.dry_run,
             action.json,
+            action.yes,
         ),
         Some(Command::Web {
             port,
