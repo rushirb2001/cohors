@@ -222,18 +222,25 @@ fn main() -> anyhow::Result<()> {
             allow_run,
             allow_open,
             allow_launchpad,
-        }) => commands::run_mcp(
-            &cli,
-            cohors_mcp::Caps {
-                allow_writes: *allow_writes,
-                allow_run: *allow_run,
-                allow_open: *allow_open,
-                allow_launchpad: *allow_launchpad,
-                // Set by the Claude Code plugin's launcher, so refusals name
-                // the plugin setting to turn on rather than a flag.
-                plugin: std::env::var("COHORS_MCP_FROM_PLUGIN").is_ok_and(|v| v == "1"),
-            },
-        ),
+        }) => {
+            if *allow_open {
+                // On stderr: stdout carries the protocol. An MCP client shows
+                // a server's stderr in its logs, so the person who registered
+                // the flag can find out it does nothing.
+                eprintln!("{}", commands::ALLOW_OPEN_DEPRECATED);
+            }
+            commands::run_mcp(
+                &cli,
+                cohors_mcp::Caps {
+                    allow_writes: *allow_writes,
+                    allow_run: *allow_run,
+                    allow_launchpad: *allow_launchpad,
+                    // Set by the Claude Code plugin's launcher, so refusals
+                    // name the plugin setting to turn on rather than a flag.
+                    plugin: std::env::var("COHORS_MCP_FROM_PLUGIN").is_ok_and(|v| v == "1"),
+                },
+            )
+        }
         Some(Command::Path { repo }) => commands::reads::path(&cli, repo),
         Some(Command::Show { repo, json }) => commands::reads::show(&cli, repo, *json),
         Some(Command::Changes {

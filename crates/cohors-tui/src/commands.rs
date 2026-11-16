@@ -2723,18 +2723,18 @@ pub fn run_demo() -> Result<()> {
     crate::tui::run_demo()
 }
 
+/// What `cohors mcp --allow-open` prints on stderr. The flag was meant for an
+/// `open` tool that was never built, so it never did anything; it is still
+/// accepted so a server registered with it keeps starting.
+pub const ALLOW_OPEN_DEPRECATED: &str = "cohors: --allow-open is deprecated and does nothing (there is no `open` tool: an agent gets a repo's folder from `repo_path`). Remove it from the server's registration; a later release will refuse it.";
+
 /// What `cohors mcp` prints when a human runs it at a terminal: what the server
 /// is, why nothing appeared to happen, and the copy-pasteable line that registers
 /// it. The absolute path matters — agents spawn with a stripped `PATH`, so a bare
 /// `cohors mcp` often fails to resolve and the agent silently ends up with no
 /// tools at all.
 fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, roots: &[String], color: bool) -> String {
-    let (writes, run, open, launchpad) = (
-        caps.allow_writes,
-        caps.allow_run,
-        caps.allow_open,
-        caps.allow_launchpad,
-    );
+    let (writes, run, launchpad) = (caps.allow_writes, caps.allow_run, caps.allow_launchpad);
     let mut out = masthead(
         "mcp: your fleet, for a coding agent",
         "it speaks JSON-RPC over stdio, so a client spawns it, not you",
@@ -2762,7 +2762,6 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, roots: &[String], color: bool) -
     for (on, flag) in [
         (caps.allow_writes, "--allow-writes"),
         (caps.allow_run, "--allow-run"),
-        (caps.allow_open, "--allow-open"),
         (caps.allow_launchpad, "--allow-launchpad"),
     ] {
         if on {
@@ -2840,10 +2839,6 @@ fn mcp_guide(exe: &str, caps: cohors_mcp::Caps, roots: &[String], color: bool) -
         (
             "--allow-run".to_string(),
             format!("run shell commands across repos ({})", state(run)),
-        ),
-        (
-            "--allow-open".to_string(),
-            format!("the local-only open tool ({})", state(open)),
         ),
     ];
     let w = rows
@@ -3495,6 +3490,34 @@ mod tests {
 
     /// The registration lines carry the flags `cohors mcp` was run with, so
     /// pasting them registers the server that the guide just described.
+    #[test]
+    fn allow_open_still_parses_but_is_hidden_and_explained() {
+        use clap::{CommandFactory, Parser};
+        // A registration that passes it must keep starting the server.
+        let cli = crate::cli::Cli::try_parse_from(["cohors", "mcp", "--allow-open"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Some(crate::cli::Command::Mcp {
+                allow_open: true,
+                ..
+            })
+        ));
+        // But nobody is offered it any more.
+        let mut cmd = crate::cli::Cli::command();
+        let help = cmd
+            .find_subcommand_mut("mcp")
+            .unwrap()
+            .render_long_help()
+            .to_string();
+        assert!(!help.contains("allow-open"), "{help}");
+        let guide = mcp_guide("/bin/cohors", cohors_mcp::Caps::default(), &[], false);
+        assert!(
+            !guide.contains("--allow-open") && !guide.contains("open tool"),
+            "{guide}"
+        );
+        assert!(ALLOW_OPEN_DEPRECATED.contains("deprecated and does nothing"));
+    }
+
     #[test]
     fn mcp_guide_registers_the_flags_it_was_given() {
         let caps = cohors_mcp::Caps {

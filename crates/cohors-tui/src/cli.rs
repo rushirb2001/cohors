@@ -453,8 +453,10 @@ pub enum Command {
         /// Enable the `run` tool (arbitrary shell across repos).
         #[arg(long)]
         allow_run: bool,
-        /// Enable the local-only `open` tool (shared desktop session).
-        #[arg(long)]
+        /// Deprecated, and does nothing: it was meant for an `open` tool that
+        /// was never built. Still accepted (hidden from --help) so a
+        /// registration that passes it keeps starting; it prints a warning.
+        #[arg(long, hide = true)]
         allow_open: bool,
         /// Enable the launchpad write tools (`write_repo_contribution`,
         /// `write_board`, `record_activity`): launchpad metadata only, never git.

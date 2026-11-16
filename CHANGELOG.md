@@ -26,6 +26,14 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.13] — 2026-11-16
+
+### Changed
+
+- **`cohors mcp --allow-open` is deprecated.** It never did anything: the
+  `open` tool it was meant for was never built. A server registered with it
+  still starts, and says on stderr that the flag can go.
+
 ## [0.8.12] — 2026-11-16
 
 ### Fixed

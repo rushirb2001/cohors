@@ -45,8 +45,6 @@ const PROTOCOL_VERSION: &str = "2024-11-05";
 pub struct Caps {
     pub allow_writes: bool,
     pub allow_run: bool,
-    /// Enable the local-only `open` tool (shared desktop session).
-    pub allow_open: bool,
     /// Enable the launchpad write tools (`write_repo_contribution`,
     /// `write_board`, `record_activity`). These write only launchpad metadata —
     /// a repo's `.cohors/` directory and the user's launchpad home — never
@@ -639,13 +637,13 @@ fn call_tool(name: &str, args: &Value, ctx: &Ctx, now: i64) -> Result<Value, Str
             now,
             "cohors mcp",
         ),
-        "open" => {
-            if ctx.caps.allow_open {
-                Err("`open` is not yet implemented; it will open the repo in the system file manager.".to_string())
-            } else {
-                Err("`open` requires --allow-open (local-desktop tool).".to_string())
-            }
-        }
+        // Planned once, never built (it was never in the catalog): opening a
+        // folder belongs to the person's own editor or file manager, so an
+        // agent gets the path instead.
+        "open" => Err(
+            "there is no `open` tool: call repo_path for the repository's folder and let the user open it"
+                .to_string(),
+        ),
         other => Err(format!("unknown tool `{other}`")),
     }
 }
@@ -1818,14 +1816,12 @@ mod tests {
     const WRITES: Caps = Caps {
         allow_writes: true,
         allow_run: false,
-        allow_open: false,
         allow_launchpad: false,
         plugin: false,
     };
     const RUN: Caps = Caps {
         allow_writes: false,
         allow_run: true,
-        allow_open: false,
         allow_launchpad: false,
         plugin: false,
     };
@@ -2823,7 +2819,6 @@ mod tests {
     const LAUNCHPAD: Caps = Caps {
         allow_writes: false,
         allow_run: false,
-        allow_open: false,
         allow_launchpad: true,
         plugin: false,
     };
