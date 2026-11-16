@@ -26,6 +26,8 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.7] — 2026-11-16
+
 ### Added
 
 - **Repos nested inside a repo are found.** When a folder you point cohors at
