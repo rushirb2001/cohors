@@ -173,7 +173,8 @@ impl Line {
         let mut text = format!(
             "  {}  {}\n",
             dim(color, &format!("{reason:<9}")),
-            bold(color, headline)
+            // Repository-authored text (names in the headline): no escapes.
+            bold(color, &crate::ui::text::safe(headline))
         );
         if fresh && state.seq > 1 && !state.changed.is_empty() {
             let names: Vec<String> = state
@@ -189,7 +190,8 @@ impl Line {
                         .unwrap_or_else(|| id.rsplit('/').next().unwrap_or(id).to_string())
                 })
                 .collect();
-            text.push_str(&format!("  {:<9}  {}\n", "", dim(color, &names.join(", "))));
+            let names = crate::ui::text::safe(&names.join(", "));
+            text.push_str(&format!("  {:<9}  {}\n", "", dim(color, &names)));
         }
         text
     }
