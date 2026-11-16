@@ -614,9 +614,32 @@ fn the_overview_at_119_columns_matches_the_approved_frame() {
     let top = row_with(&rows, &["cohors", "your git fleet"]);
     assert_eq!(column_of(top, "▜"), 2);
     assert_eq!(column_of(top, "cohors"), 14);
-    assert_eq!(column_of(top, "commits,"), 85);
-    assert_eq!(column_of(row_with(&rows, &["scanned"]), "scanned"), 78);
-    assert_eq!(column_of(&rows[2], "▅"), 78); // the sparkline's first bar
+    // The right-hand block: the chart's two rows and the caption under them
+    // end in the same column (right-aligned together), and the chart is one
+    // block of bars in a field of braille dots, not bars floating in space.
+    // The last column inside the header card (its frame and padding aside).
+    let last = |row: &[char]| {
+        row.iter()
+            .rposition(|c| !c.is_whitespace() && !['│', '╮', '╯'].contains(c))
+            .unwrap()
+    };
+    let caption = row_with(&rows, &["12 weeks", "scanned"]);
+    let middle = &rows[2];
+    assert_eq!(
+        last(top),
+        last(caption),
+        "chart top row and caption end together"
+    );
+    assert_eq!(
+        last(middle),
+        last(caption),
+        "chart bottom row and caption end together"
+    );
+    let chart: String = top[last(top) - 23..=last(top)].iter().collect();
+    assert!(
+        chart.chars().all(|c| c == '⣿' || "▁▂▃▄▅▆▇█".contains(c)),
+        "{chart:?}"
+    );
 
     // Six figure cards, 19 columns each, one column apart.
     let figures = row_with(&rows, &["Not backed up", "Commits 7d"]);

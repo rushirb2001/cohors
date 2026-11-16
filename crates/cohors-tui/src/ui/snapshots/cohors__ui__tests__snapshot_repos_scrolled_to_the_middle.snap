@@ -3,9 +3,9 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: screen
 ---
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ ▜▒▟███▙▒▛   cohors  your git fleet                                                  commits, 12 weeks                │
-│ ▟██▌█▐██▙   ~/code                                                           ▅ ▇ ▆ ▇ ▇ ▅ ▆ ▄ ▇ ▅ █ ▆                 │
-│ ▀▐▖▀█▀▗▌▀   12 repositories. 6 have work at risk, 4 need a look, 2 are cle…  scanned 2m ago                          │
+│ ▜▒▟███▙▒▛   cohors  your git fleet                                                          ▂▂▇▇▄▄▇▇▅▅▂▂▂▂⣿⣿▅▅▁▁██▄▄ │
+│ ▟██▌█▐██▙   ~/code                                                                          ██████████████▆▆████████ │
+│ ▀▐▖▀█▀▗▌▀   12 repositories. 6 have work at risk, 4 need a look, 2 are clean.              12 weeks · scanned 2m ago │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─────────────────╮ ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮ ╭─────────────────╮ ╭─────────────────╮
 │ Not backed up   │ │ Stashes         │ │ Uncommitted      │ │ Stale fetch     │ │ Open tasks      │ │ Commits 7d      │

@@ -26,6 +26,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.11] — 2026-11-16
+
+### Changed
+
+- **The dashboard's commit chart is one solid block.** The last twelve weeks
+  sit two rows tall at the header's top right, each week's bar filled with
+  block glyphs and the space above it with braille dots, right-aligned with
+  the line under it (`12 weeks · scanned 2m ago`), instead of thin bars
+  floating in blank space over a caption out of line with them. The
+  plain-text look keeps its one-row ASCII chart.
+
 ## [0.7.10] — 2026-11-16
 
 ### Fixed

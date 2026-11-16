@@ -23,7 +23,7 @@ use crate::app::{Card, Screen, action_key};
 /// Weeks of history in the header's sparkline.
 const SPARK_WEEKS: usize = 12;
 /// The widest the header's right-hand block (sparkline and scan time) gets.
-const HEADER_SIDE_WIDTH: usize = 39;
+const HEADER_SIDE_WIDTH: usize = 28;
 
 /// Draw the overview into `area`.
 pub(crate) fn render_overview(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme) {
@@ -318,29 +318,94 @@ fn render_header_card(frame: &mut Frame, area: Rect, app: &App, now: i64, theme:
     }
 }
 
-/// The header's right-hand block: a caption, the sparkline, the scan time.
+/// The header's right-hand block: the 12-week commit chart over a line that
+/// names it and says when the fleet was scanned, all three right-aligned to
+/// the same edge. A Unicode tier draws the chart as one block, two rows tall
+/// (filled bars in a field of braille dots); the plain-text tier keeps a
+/// one-row chart in ASCII.
 fn header_side_lines(app: &App, now: i64, theme: &Theme) -> Vec<Line<'static>> {
-    let bars = app
-        .overview
-        .as_ref()
-        .map(|o| sparkline(&o.activity, theme.glyphs.spark_ramp()))
-        .unwrap_or_default();
-    let status = Line::from(Span::styled(scan_status(app, now, theme), theme.dim()));
-    if bars.is_empty() {
-        return vec![Line::default(), Line::default(), status];
+    let right = |spans: Vec<Span<'static>>| Line::from(spans).alignment(Alignment::Right);
+    let activity: &[u32] = app.overview.as_ref().map_or(&[], |o| &o.activity[..]);
+    let weeks = activity.len().min(SPARK_WEEKS);
+    let status = scan_status(app, now, theme);
+    let caption = if weeks > 0 {
+        // The chart is plainly commits; the caption only says over how long,
+        // so the headline beside it keeps its room.
+        let label = format!("{weeks} weeks");
+        if status.is_empty() {
+            label
+        } else {
+            // `·` is Unicode; the plain-text tier joins with a comma.
+            let sep = if theme.glyphs.braille() {
+                " \u{b7} "
+            } else {
+                ", "
+            };
+            format!("{label}{sep}{status}")
+        }
+    } else {
+        status
+    };
+    let caption = right(vec![Span::styled(caption, theme.dim())]);
+    if theme.glyphs.braille()
+        && let Some(rows) = braille_chart(activity)
+    {
+        let style = |bar: bool| if bar { theme.accent() } else { theme.dim() };
+        let row = |cells: &[(char, bool)]| {
+            right(
+                cells
+                    .iter()
+                    .map(|&(c, bar)| Span::styled(c.to_string(), style(bar)))
+                    .collect(),
+            )
+        };
+        return vec![row(&rows[0]), row(&rows[1]), caption];
     }
-    let weeks = app
-        .overview
-        .as_ref()
-        .map_or(0, |o| o.activity.len().min(SPARK_WEEKS));
-    // The caption sits over the right end of the bars, as in the design.
-    let caption = format!("commits, {weeks} weeks");
-    let caption = format!("{caption:>width$}", width = bars.chars().count() + 1);
+    let bars = sparkline(activity, theme.glyphs.spark_ramp());
+    if bars.is_empty() {
+        return vec![Line::default(), Line::default(), caption];
+    }
     vec![
-        Line::from(Span::styled(caption, theme.dim())),
-        Line::from(Span::styled(bars, theme.accent())),
-        status,
+        Line::default(),
+        right(vec![Span::styled(bars, theme.accent())]),
+        caption,
     ]
+}
+
+/// The last [`SPARK_WEEKS`] weeks of commits as one solid block, two rows
+/// tall and two columns a week, with no gaps: each week's bar is filled with
+/// block glyphs (eighths, so sixteen levels over the two rows), and the space
+/// above it is filled with braille dots. The chart reads as one chunk, the
+/// bars set into a dotted field, rather than bars floating in blank space.
+/// Each cell comes with whether it is a bar (`true`) or the dotted field.
+/// `None` when there were no commits.
+fn braille_chart(activity: &[u32]) -> Option<[Vec<(char, bool)>; 2]> {
+    const EIGHTHS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    const DOTS: char = '⣿';
+    let start = activity.len().saturating_sub(SPARK_WEEKS);
+    let weeks = &activity[start..];
+    let max = weeks.iter().copied().max().unwrap_or(0);
+    if max == 0 {
+        return None;
+    }
+    let mut rows: [Vec<(char, bool)>; 2] = [Vec::new(), Vec::new()];
+    for &count in weeks {
+        // Sixteen levels over two rows; any week with commits shows at least
+        // one, so it is never mistaken for silence.
+        let level = ((u64::from(count) * 16 + u64::from(max) / 2) / u64::from(max)) as usize;
+        let level = if count == 0 { 0 } else { level.clamp(1, 16) };
+        // Bottom row holds levels 1..=8, the top row 9..=16.
+        for (row, fill) in [(0, level.saturating_sub(8)), (1, level.min(8))] {
+            let cell = if fill == 0 {
+                (DOTS, false)
+            } else {
+                (EIGHTHS[fill - 1], true)
+            };
+            rows[row].push(cell);
+            rows[row].push(cell);
+        }
+    }
+    Some(rows)
 }
 
 /// The notice about a newer cohors, in the same words as every other surface,
@@ -1317,6 +1382,26 @@ fn key_bar_hints(app: &App, theme: &Theme) -> Vec<Hint> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_commit_chart_is_one_block_of_filled_bars_in_a_dotted_field() {
+        // 12 weeks: silent, a little, the most.
+        let mut weeks = vec![0u32; 10];
+        weeks.extend([1, 8]);
+        let [top, bottom] = super::braille_chart(&weeks).expect("there were commits");
+        assert_eq!(top.len(), 24, "two columns a week, no gaps");
+        assert_eq!(bottom.len(), 24);
+        // A silent week is all dotted field, both rows.
+        assert_eq!(top[0], ('⣿', false));
+        assert_eq!(bottom[0], ('⣿', false));
+        // One commit of eight: two of sixteen levels, the bottom row's ▂.
+        assert_eq!(bottom[20], ('▂', true));
+        assert_eq!(top[20], ('⣿', false));
+        // The busiest week fills both rows solid.
+        assert_eq!(top[22], ('█', true));
+        assert_eq!(bottom[23], ('█', true));
+        assert!(super::braille_chart(&[0, 0, 0]).is_none());
+    }
+
     use super::*;
 
     const RAMP: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];

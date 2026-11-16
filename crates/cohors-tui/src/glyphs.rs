@@ -293,6 +293,11 @@ impl Glyphs {
     /// cadence), lowest to highest. Block elements in the glyph tiers; a plain
     /// ASCII density ramp otherwise — the *shape* carries the reading either
     /// way, so no colour is required.
+    /// Whether charts may use braille dots (any tier but plain text).
+    pub fn braille(&self) -> bool {
+        self.kind != IconKind::Ascii
+    }
+
     pub fn spark_ramp(&self) -> &'static [char; 8] {
         match self.kind {
             IconKind::Unicode | IconKind::Nerd => &['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'],
