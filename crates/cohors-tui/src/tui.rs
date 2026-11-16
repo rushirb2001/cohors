@@ -1404,7 +1404,9 @@ fn spawn_tip(tx: Sender<BgMsg>) {
             return;
         };
         let now = now_secs();
-        let tips = cohors_fleet::tips::current(&env, now, cohors_core::suggest::TIPS_AT_ONCE);
+        // Every tip that applies, setup tips first: one is on screen, and `x`
+        // brings up the next (the first-run tips page through this way).
+        let tips = cohors_fleet::tips::current_with_first_run(&env, now, usize::MAX);
         if !tips.is_empty() {
             cohors_fleet::tips::note_shown(&env, &tips[..1], now);
             let _ = tx.send(BgMsg::Tips(tips));
@@ -1436,11 +1438,13 @@ fn hide_tip(app: &mut App) {
         (Some(env), Some(id)) => cohors_fleet::tips::dismiss(env, id).map_err(|e| e.to_string()),
         _ => Err("tips are turned off".to_string()),
     };
-    app.status = Some(match saved {
-        Ok(_) => "tip hidden for good".to_string(),
+    app.status = match saved {
+        // A first-run tip simply makes way for the next one.
+        Ok(_) if hidden.is_first_run_tip() => None,
+        Ok(_) => Some("tip hidden for good".to_string()),
         // Gone for this run all the same.
-        Err(e) => format!("tip hidden for now (could not save that: {e})"),
-    });
+        Err(e) => Some(format!("tip hidden for now (could not save that: {e})")),
+    };
     // The next tip is on screen now: it counts as shown from today.
     if let (Some(env), Some(next)) = (&env, app.tips.first()) {
         cohors_fleet::tips::note_shown(env, std::slice::from_ref(next), now_secs());

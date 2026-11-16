@@ -55,14 +55,13 @@ pub(crate) fn render_overview(frame: &mut Frame, area: Rect, app: &App, now: i64
     if let Some(tip) = tip {
         let width = tip_row.width as usize;
         frame.render_widget(Paragraph::new(tip_line(tip, width, theme)), tip_row);
-        // `i copy` and `x hide` sit at the right end, when there is room.
-        if tip_keys_fit(width) {
-            use crate::mouse::{Target, record};
-            use ratatui::crossterm::event::KeyCode;
-            let i = tip_row.x + (width - TIP_KEYS_WIDTH - 2) as u16;
-            let one = |x: u16| Rect::new(x, tip_row.y, 6, 1);
-            record(one(i), Target::Key(KeyCode::Char('i')));
-            record(one(i + 9), Target::Key(KeyCode::Char('x')));
+        // Its keys (`i copy`, `x hide`) sit at the right end: buttons too.
+        for (at, key, label) in tip_key_slots(tip, width) {
+            let area = Rect::new(tip_row.x + at as u16, tip_row.y, 2 + label.len() as u16, 1);
+            crate::mouse::record(
+                area,
+                crate::mouse::Target::Key(ratatui::crossterm::event::KeyCode::Char(key)),
+            );
         }
     }
     render_key_bar(frame, keys, app, theme);
@@ -779,6 +778,42 @@ fn tip_keys_fit(width: usize) -> bool {
     width >= TIP_LEAD + 24 + 3 + TIP_KEYS_WIDTH + 2
 }
 
+/// The tip's keys and where each starts on a line `width` wide, right-aligned
+/// two columns from the end; none when they do not fit. `i copy` only when
+/// there is a command to copy; then `x hide` for a setup tip (it goes for
+/// good) or `x next` for a first-run tip (the next one takes its place).
+fn tip_key_slots(
+    tip: &cohors_core::suggest::Suggestion,
+    width: usize,
+) -> Vec<(usize, char, &'static str)> {
+    if !tip_keys_fit(width) {
+        return Vec::new();
+    }
+    let mut keys = Vec::new();
+    if tip.copyable() {
+        keys.push(('i', "copy"));
+    }
+    keys.push((
+        'x',
+        if tip.is_first_run_tip() {
+            "next"
+        } else {
+            "hide"
+        },
+    ));
+    // `k label`, three columns apart.
+    let total: usize =
+        keys.iter().map(|(_, label)| 2 + label.len()).sum::<usize>() + 3 * (keys.len() - 1);
+    let mut at = width - 2 - total;
+    keys.into_iter()
+        .map(|(key, label)| {
+            let slot = (at, key, label);
+            at += 2 + label.len() + 3;
+            slot
+        })
+        .collect()
+}
+
 fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, theme: &Theme) -> Line<'static> {
     const LEAD: usize = TIP_LEAD;
     const KEYS_WIDTH: usize = TIP_KEYS_WIDTH;
@@ -823,15 +858,13 @@ fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, theme: &Theme)
         spans.push(Span::styled(": ", theme.dim()));
     }
     spans.push(Span::styled(command, theme.accent()));
-    if keys {
-        let bold = Style::new().add_modifier(Modifier::BOLD);
-        spans.push(Span::raw(
-            " ".repeat(width.saturating_sub(used + KEYS_WIDTH + 2)),
-        ));
-        spans.push(Span::styled("i", bold));
-        spans.push(Span::styled(" copy   ", theme.dim()));
-        spans.push(Span::styled("x", bold));
-        spans.push(Span::styled(" hide", theme.dim()));
+    let bold = Style::new().add_modifier(Modifier::BOLD);
+    let mut end = used;
+    for (at, key, label) in tip_key_slots(tip, width) {
+        spans.push(Span::raw(" ".repeat(at.saturating_sub(end))));
+        spans.push(Span::styled(key.to_string(), bold));
+        spans.push(Span::styled(format!(" {label}"), theme.dim()));
+        end = at + 2 + label.len();
     }
     Line::from(spans)
 }

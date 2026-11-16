@@ -26,6 +26,20 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.5] — 2026-11-16
+
+### Added
+
+- **Thirty first-run tips teach cohors one thing a day.** After the setup
+  tips, the dashboard's tip line and the start screen show one tip for
+  someone new to cohors: the dashboard's keys first (jump to a card, filter
+  with `/`, the standup, marking repositories and acting on them all, commit
+  and stash, open, run, start an agent…), then commands worth knowing
+  (`cohors next`, `cohors search`, `cd "$(cohors path NAME)"`,
+  `cohors pull --select behind --dry-run`, `cohors discover --deep`…). Each
+  stays up for a day, then the next takes its place; `x` moves on at once,
+  and `i` copies a command tip. `COHORS_NO_TIPS=1` turns them off.
+
 ## [0.8.4] — 2026-11-16
 
 ### Added

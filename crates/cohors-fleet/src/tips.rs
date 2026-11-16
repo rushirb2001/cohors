@@ -356,6 +356,17 @@ pub fn current(env: &TipEnv, now: i64, max: usize) -> Vec<Suggestion> {
     tips_to_show(setup_tips(&detect(env)), &read_ledger(env), now, max)
 }
 
+/// The tips for a place someone is learning cohors in (the dashboard, the
+/// start screen): the setup tips first, then the first-run tips
+/// (`cohors_core::suggest::LEARN_TIPS`), at most `max`. `cohors next` and the
+/// web page keep to the setup tips: the first-run tips are mostly about the
+/// dashboard's keys.
+pub fn current_with_first_run(env: &TipEnv, now: i64, max: usize) -> Vec<Suggestion> {
+    let mut tips = setup_tips(&detect(env));
+    tips.extend(cohors_core::suggest::learn_tips());
+    tips_to_show(tips, &read_ledger(env), now, max)
+}
+
 /// Count `shown` as put in front of a person today. Quiet on failure: a tip
 /// that is not counted is only shown a day longer.
 pub fn note_shown(env: &TipEnv, shown: &[Suggestion], now: i64) {

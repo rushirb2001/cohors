@@ -106,6 +106,19 @@ impl Suggestion {
     pub fn runs_cohors(&self) -> bool {
         self.program == COHORS
     }
+
+    /// Whether it has a command worth copying (a first-run tip about the
+    /// dashboard's keys has none: its "command" is the keys).
+    pub fn copyable(&self) -> bool {
+        self.program != KEYS
+    }
+
+    /// Whether it is one of the first-run tips ([`LEARN_TIPS`]).
+    pub fn is_first_run_tip(&self) -> bool {
+        self.tip
+            .as_deref()
+            .is_some_and(|id| id.starts_with(LEARN_PREFIX))
+    }
 }
 
 /// Sessions older than this are not suggested: a month-old conversation is
@@ -469,8 +482,237 @@ pub fn tip_label(id: &str) -> Option<&'static str> {
         TIP_WEB => "open your fleet in the browser",
         TIP_EXTENSION => "install the cohors extension for your editor",
         TIP_CLAUDE => "let Claude Code see your fleet",
-        _ => return None,
+        _ => return LEARN_TIPS.iter().find(|t| t.0 == id).map(|t| t.1),
     })
+}
+
+// ── First-run tips ───────────────────────────────────────────────────────────
+
+/// The `program` of a tip that names keys to press in the dashboard rather
+/// than a command to run: it is read, never copied or run.
+pub const KEYS: &str = "keys";
+
+/// Every first-run tip's id starts with this.
+pub const LEARN_PREFIX: &str = "learn-";
+
+/// A first-run tip is shown on one day, then the next one takes its place:
+/// about a month of one new thing a day, and `x` in the dashboard moves on
+/// at once for anyone who wants them faster.
+pub const LEARN_SHOWN_DAYS: u32 = 1;
+
+/// The first-run tips, most useful first: `(id, what it does, the keys or
+/// the command, program)`. The dashboard's keys come first (that is where
+/// a new user is), then the commands worth knowing at a terminal. Every key
+/// and flag named here is real; a test in `cohors` checks the keys against
+/// the dashboard's keymap.
+pub const LEARN_TIPS: &[(&str, &str, &str, &str)] = &[
+    (
+        "learn-cards",
+        "Jump to a card with its number, or click it",
+        "1-5",
+        KEYS,
+    ),
+    (
+        "learn-mouse",
+        "Click a row to select it, click it again to open it",
+        "click",
+        KEYS,
+    ),
+    (
+        "learn-filter",
+        "Filter the repositories by name as you type",
+        "/",
+        KEYS,
+    ),
+    (
+        "learn-detail",
+        "Open the selected repository's full detail",
+        "enter",
+        KEYS,
+    ),
+    (
+        "learn-standup",
+        "See what you committed, by day, across every repository",
+        "s",
+        KEYS,
+    ),
+    (
+        "learn-standup-copy",
+        "Copy your standup as markdown, ready to paste",
+        "Y",
+        KEYS,
+    ),
+    (
+        "learn-board",
+        "Open the task board of every repository",
+        "t",
+        KEYS,
+    ),
+    (
+        "learn-mark",
+        "Mark several repositories, then act on all of them at once",
+        "space",
+        KEYS,
+    ),
+    (
+        "learn-fetch-all",
+        "Fetch every repository at once",
+        "F",
+        KEYS,
+    ),
+    (
+        "learn-pull",
+        "Pull the selected repositories, fast-forward only",
+        "p",
+        KEYS,
+    ),
+    (
+        "learn-push",
+        "Push the selected repositories, publishing new branches",
+        "P",
+        KEYS,
+    ),
+    (
+        "learn-commit",
+        "Commit: cohors asks for the message and confirms first",
+        "c",
+        KEYS,
+    ),
+    (
+        "learn-stash",
+        "Stash the changes in the selected repositories, after asking",
+        "S",
+        KEYS,
+    ),
+    (
+        "learn-open",
+        "Open the selected repository in your editor or another app",
+        "o",
+        KEYS,
+    ),
+    (
+        "learn-run",
+        "Run a shell command in every selected repository",
+        "!",
+        KEYS,
+    ),
+    (
+        "learn-agent",
+        "Start a coding agent in the selected repository",
+        "a",
+        KEYS,
+    ),
+    (
+        "learn-copy-path",
+        "Copy the selected repository's path",
+        "y",
+        KEYS,
+    ),
+    (
+        "learn-changes",
+        "See the changed files and their diff, in the detail view",
+        "d",
+        KEYS,
+    ),
+    (
+        "learn-command",
+        "Sort, narrow or jump with a command, such as :sort name",
+        ":",
+        KEYS,
+    ),
+    (
+        "learn-lazygit",
+        "Open lazygit in the selected repository, when it is installed",
+        "L",
+        KEYS,
+    ),
+    (
+        "learn-rescan",
+        "Rescan now; the dashboard also follows changes by itself",
+        "r",
+        KEYS,
+    ),
+    ("learn-help", "See every key", "?", KEYS),
+    (
+        "learn-next",
+        "Ask what to do next, and which agent session to resume",
+        "cohors next",
+        COHORS,
+    ),
+    (
+        "learn-standup-cli",
+        "Your commits of the last week, across every repository",
+        "cohors standup --since 7d",
+        COHORS,
+    ),
+    (
+        "learn-search",
+        "Search every repository at once",
+        "cohors search TODO",
+        COHORS,
+    ),
+    (
+        "learn-path",
+        "Go to a repository by name from any shell",
+        "cd \"$(cohors path NAME)\"",
+        COHORS,
+    ),
+    (
+        "learn-dry-run",
+        "See which repositories a pull would touch, without pulling",
+        "cohors pull --select behind --dry-run",
+        COHORS,
+    ),
+    (
+        "learn-deep",
+        "Find repositories nested inside other repositories",
+        "cohors discover --deep",
+        COHORS,
+    ),
+    (
+        "learn-watch",
+        "Follow changes across your repositories as they happen",
+        "cohors watch",
+        COHORS,
+    ),
+    (
+        "learn-doctor",
+        "Check which cohors you run and whether it updates itself",
+        "cohors doctor",
+        COHORS,
+    ),
+];
+
+/// The first-run tips as suggestions, in [`LEARN_TIPS`] order, each scored
+/// below every setup tip.
+pub fn learn_tips() -> Vec<Suggestion> {
+    LEARN_TIPS
+        .iter()
+        .map(|&(id, title, command, program)| Suggestion {
+            // A tip, like the setup tips: shown on the tip line, never in a
+            // list of work.
+            kind: SuggestionKind::Setup,
+            title: title.to_string(),
+            why: String::new(),
+            command: command.to_string(),
+            // Never run: a tip is read, or its command copied.
+            args: Vec::new(),
+            repo: None,
+            score: 0,
+            program: program.to_string(),
+            tip: Some(id.to_string()),
+            label: None,
+        })
+        .collect()
+}
+
+/// On how many days tip `id` is shown before it retires.
+fn shown_days_for(id: &str) -> u32 {
+    if id.starts_with(LEARN_PREFIX) {
+        LEARN_SHOWN_DAYS
+    } else {
+        TIP_SHOWN_DAYS
+    }
 }
 
 fn setup_tip(
@@ -581,7 +823,8 @@ impl TipLedger {
     /// shown, so it does not vanish halfway through a day.
     pub fn hides(&self, id: &str, now: i64) -> bool {
         self.tips.get(id).is_some_and(|record| {
-            record.dismissed || (record.days >= TIP_SHOWN_DAYS && record.last_day != day_of(now))
+            record.dismissed
+                || (record.days >= shown_days_for(id) && record.last_day != day_of(now))
         })
     }
 
@@ -871,6 +1114,52 @@ mod tests {
             !ledger.hides(TIP_CLAUDE, last + DAY),
             "each tip counts alone"
         );
+    }
+
+    #[test]
+    fn there_are_thirty_first_run_tips_each_its_own_and_short() {
+        let tips = learn_tips();
+        assert_eq!(tips.len(), 30);
+        let mut ids: Vec<&str> = tips.iter().filter_map(|t| t.tip.as_deref()).collect();
+        assert!(ids.iter().all(|id| id.starts_with(LEARN_PREFIX)));
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), tips.len(), "every id is unique");
+        for tip in &tips {
+            assert!(tip.is_first_run_tip() && tip.score == 0, "{tip:?}");
+            // One line of a dashboard: the sentence and its keys or command.
+            assert!(tip.title.chars().count() <= 64, "too long: {}", tip.title);
+            assert_eq!(
+                tip_label(tip.tip.as_deref().unwrap()),
+                Some(tip.title.as_str())
+            );
+            assert!(tip.args.is_empty(), "a tip is never run");
+            assert_eq!(tip.copyable(), tip.program == COHORS, "{tip:?}");
+        }
+        assert!(!setup_tips(&fresh_machine())[0].is_first_run_tip());
+    }
+
+    #[test]
+    fn a_first_run_tip_is_shown_on_one_day_and_then_makes_way() {
+        const DAY: i64 = 24 * HOUR;
+        let mut ledger = TipLedger::default();
+        let first = |ledger: &TipLedger, now| {
+            tips_to_show(learn_tips(), ledger, now, 1)[0]
+                .tip
+                .clone()
+                .unwrap()
+        };
+        assert_eq!(first(&ledger, NOW), "learn-cards");
+        ledger.note_shown("learn-cards", NOW);
+        assert_eq!(first(&ledger, NOW + HOUR), "learn-cards", "all day long");
+        assert_eq!(
+            first(&ledger, NOW + DAY),
+            "learn-mouse",
+            "the next day, the next"
+        );
+        // `x` moves on at once.
+        ledger.dismiss("learn-mouse");
+        assert_eq!(first(&ledger, NOW + DAY), "learn-filter");
     }
 
     #[test]

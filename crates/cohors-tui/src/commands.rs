@@ -2304,7 +2304,12 @@ fn launch_screen(
 /// not fit, and how to hide the tip is added when it does.
 fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, color: bool) -> String {
     let title = crate::ui::text::safe(&tip.title);
-    let command = crate::ui::text::safe(&tip.command);
+    let command = if tip.copyable() {
+        crate::ui::text::safe(&tip.command)
+    } else {
+        // Keys: they work in the dashboard, which this screen opens.
+        format!("{} in the dashboard", crate::ui::text::safe(&tip.command))
+    };
     let lead = 2 + "Tip: ".len() + title.chars().count() + 3;
     let (shown, room) = if lead + command.chars().count() <= width {
         (
@@ -2315,9 +2320,12 @@ fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, color: bool) -
         let note = "`cohors next` shows how";
         (dim(color, note), width.saturating_sub(lead + note.len()))
     };
+    // A first-run tip retires after a day by itself: no need to say how to
+    // hide it.
     let hide = tip
         .tip
         .as_deref()
+        .filter(|_| !tip.is_first_run_tip())
         .map(|id| format!(" \u{b7} cohors next --dismiss {id} hides it"))
         .filter(|h| h.chars().count() <= room)
         .map(|h| dim(color, &h))
@@ -2519,7 +2527,7 @@ fn launch(scanner: &crate::scan::Scanner, roots: &[String], first_run: bool) -> 
         .flatten();
     let tip = tip_env
         .as_ref()
-        .and_then(|env| cohors_fleet::tips::current(env, now_secs(), 1).pop());
+        .and_then(|env| cohors_fleet::tips::current_with_first_run(env, now_secs(), 1).pop());
     print!(
         "{}",
         launch_screen(&overview, &pairs, first_run, tip.as_ref(), color)
@@ -3098,6 +3106,18 @@ mod tests {
             "{line}"
         );
         assert!(line.chars().count() <= 96, "{line}");
+
+        // A first-run tip about the dashboard's keys says where they work,
+        // and nothing about hiding it (it retires after a day by itself).
+        let learn = cohors_core::suggest::learn_tips();
+        let keys = look::with(current, || {
+            launch_screen(&o, &roots, false, Some(&learn[2]), false)
+        });
+        let line = keys.lines().find(|l| l.contains("Tip:")).unwrap();
+        assert_eq!(
+            line,
+            "  Tip: Filter the repositories by name as you type   / in the dashboard"
+        );
     }
 
     /// A first run (no config) also says which folders were gathered and how

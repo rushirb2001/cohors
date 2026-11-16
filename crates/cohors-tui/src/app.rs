@@ -1157,7 +1157,11 @@ impl App {
             }
             // The setup tip under the header, only while it is on screen: at
             // any other time these keys do nothing.
-            KeyCode::Char('i') if self.tip_on_screen() => return Some(Cmd::CopyTip),
+            KeyCode::Char('i')
+                if self.tip_on_screen() && self.shown_tip().is_some_and(|t| t.copyable()) =>
+            {
+                return Some(Cmd::CopyTip);
+            }
             KeyCode::Char('x') if self.tip_on_screen() => return Some(Cmd::HideTip),
             // A number key focuses that card, from either screen.
             KeyCode::Char(c) if Card::from_key(c).is_some() => {

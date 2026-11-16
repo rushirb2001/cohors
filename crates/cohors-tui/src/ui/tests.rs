@@ -1939,3 +1939,89 @@ mod mouse {
         assert_eq!(app.selected, 0);
     }
 }
+
+// ── First-run tips ───────────────────────────────────────────────────────────
+
+/// Every key a first-run tip names does something in the dashboard, on the
+/// overview or the detail view: a tip never teaches a key that is not there.
+#[test]
+fn every_key_a_first_run_tip_names_works() {
+    use crate::app::Cmd;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    for tip in cohors_core::suggest::learn_tips()
+        .into_iter()
+        .filter(|t| !t.copyable())
+    {
+        let code = match tip.command.as_str() {
+            "enter" => KeyCode::Enter,
+            "space" => KeyCode::Char(' '),
+            // A range of keys and the mouse have tests of their own.
+            "1-5" | "click" => continue,
+            one if one.chars().count() == 1 => KeyCode::Char(one.chars().next().unwrap()),
+            other => panic!("a first-run tip names an unknown key: {other}"),
+        };
+        let works = [Screen::Overview, Screen::Repos].into_iter().any(|screen| {
+            [Card::Repos, Card::AtRisk, Card::DoNext]
+                .into_iter()
+                .any(|card| {
+                    let mut app = fleet_app();
+                    app.screen = screen;
+                    app.focus = card;
+                    let before = (app.mode, app.screen, app.focus, app.selection.len());
+                    let cmd = app.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+                    cmd != Cmd::None
+                        || before != (app.mode, app.screen, app.focus, app.selection.len())
+                })
+        });
+        assert!(works, "{:?} names a key that does nothing", tip.tip);
+    }
+}
+
+/// A first-run tip about the dashboard's keys: no command to copy, so no
+/// `i`; `x` moves on to the next one.
+#[test]
+fn a_first_run_tip_shows_its_keys_and_offers_the_next() {
+    use crate::mouse::Target;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut app = fleet_app();
+    app.tips = cohors_core::suggest::learn_tips();
+    app.tips.drain(..2); // the third: filtering, `/`
+    let text = render_to_string(&app, 120, 40);
+    let line = text
+        .lines()
+        .find(|l| l.contains("Tip"))
+        .expect("a tip line");
+    assert!(
+        line.contains("Tip  Filter the repositories by name as you type: /"),
+        "{line}"
+    );
+    assert!(line.trim_end().ends_with("x next"), "{line}");
+    assert!(!line.contains("i copy"), "{line}");
+    let hits = app.hits.borrow().clone();
+    assert!(
+        hits.iter()
+            .any(|h| h.target == Target::Key(KeyCode::Char('x')))
+    );
+    assert!(
+        !hits
+            .iter()
+            .any(|h| h.target == Target::Key(KeyCode::Char('i')))
+    );
+    // `i` copies nothing here; `x` hides it and the next comes up.
+    let press = |c| KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE);
+    assert_eq!(app.on_key(press('i')), crate::app::Cmd::None);
+    assert_eq!(app.on_key(press('x')), crate::app::Cmd::HideTip);
+
+    // A command tip can be copied.
+    let mut app = fleet_app();
+    app.tips = cohors_core::suggest::learn_tips()
+        .into_iter()
+        .filter(|t| t.copyable())
+        .collect();
+    let text = render_to_string(&app, 120, 40);
+    let line = text.lines().find(|l| l.contains("Tip")).unwrap();
+    assert!(
+        line.contains(": cohors next") && line.contains("i copy"),
+        "{line}"
+    );
+}
