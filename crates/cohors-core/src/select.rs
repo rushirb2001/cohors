@@ -103,7 +103,10 @@ pub struct Selector {
     pub in_operation: bool,
     /// The repo failed to read.
     pub error: bool,
-    /// Current branch equals this exact name.
+    /// Current branch matches this glob, the same case-insensitive matcher as
+    /// `name` (`feat/*`; `*` stays within one `/` segment, `**` crosses it). A
+    /// plain name matches only itself: git forbids `*`, `?` and `[` in branch
+    /// names, so an exact name has no wildcard to misread.
     pub branch: Option<String>,
     /// Minimum attention severity (clock-dependent — see [`resolve`]).
     pub attention: Option<AttentionLevel>,
@@ -215,9 +218,9 @@ impl Selector {
         if self.error && !repo.has_error() {
             return false;
         }
-        if let Some(want) = &self.branch {
+        if let Some(pat) = &self.branch {
             match &repo.branch {
-                Branch::Named(name) if name == want => {}
+                Branch::Named(name) if glob_ci(pat, name) => {}
                 _ => return false,
             }
         }
@@ -805,13 +808,102 @@ impl std::fmt::Display for ParseSelectorError {
 
 impl std::error::Error for ParseSelectorError {}
 
+/// What a bare shorthand token does. Matched exhaustively in
+/// [`parse_shorthand`], so a new variant cannot be forgotten there.
+#[derive(Debug, Clone, Copy)]
+enum Flag {
+    All,
+    Dirty,
+    Ahead,
+    Behind,
+    Diverged,
+    NoUpstream,
+    Unpublished,
+    StaleFetch,
+    Stash,
+    Detached,
+    Conflicted,
+    Operation,
+    Error,
+    Attention,
+    Clean,
+    PrsOpen,
+    RedCi,
+}
+
+/// Every bare token the shorthand accepts: the canonical spelling, its
+/// aliases, and what it does. The single source of truth for both parsing and
+/// the unknown-token hint, so the two cannot drift apart.
+const FLAGS: &[(&str, &[&str], Flag)] = &[
+    ("all", &[], Flag::All),
+    ("dirty", &[], Flag::Dirty),
+    ("ahead", &["unpushed"], Flag::Ahead),
+    ("behind", &[], Flag::Behind),
+    ("diverged", &[], Flag::Diverged),
+    ("no-upstream", &[], Flag::NoUpstream),
+    ("unpublished", &["never-pushed"], Flag::Unpublished),
+    ("stale-fetch", &[], Flag::StaleFetch),
+    ("stash", &["has-stash"], Flag::Stash),
+    ("detached", &[], Flag::Detached),
+    ("conflicted", &["conflicts"], Flag::Conflicted),
+    ("operation", &["in-progress"], Flag::Operation),
+    ("error", &["errors"], Flag::Error),
+    ("attention", &["needs-attention"], Flag::Attention),
+    ("clean", &[], Flag::Clean),
+    ("prs-open", &[], Flag::PrsOpen),
+    ("red-ci", &[], Flag::RedCi),
+];
+
+/// Which predicate a `key:value` token sets. Matched exhaustively too.
+#[derive(Debug, Clone, Copy)]
+enum Key {
+    Name,
+    Id,
+    Branch,
+    Path,
+    Root,
+    Group,
+    Ci,
+    Prs,
+    Attention,
+}
+
+/// Every `key:` the shorthand accepts: canonical spelling, aliases, the shape
+/// of its value (shown in the hint), and the predicate it sets.
+const KEYS: &[(&str, &[&str], &str, Key)] = &[
+    ("name", &[], "<glob>", Key::Name),
+    ("id", &[], "<repo-id>", Key::Id),
+    ("branch", &[], "<glob>", Key::Branch),
+    ("path", &[], "<glob>", Key::Path),
+    ("root", &[], "<dir>", Key::Root),
+    ("group", &[], "<group>", Key::Group),
+    ("ci", &[], "passing|failing|pending|none", Key::Ci),
+    ("prs", &["min-prs"], "<n>", Key::Prs),
+    ("attention", &[], "any|notice|warn|risk", Key::Attention),
+];
+
+/// The whole shorthand vocabulary in one line, generated from [`FLAGS`] and
+/// [`KEYS`] (canonical spellings; aliases still parse).
+fn vocabulary_hint() -> String {
+    let flags: Vec<&str> = FLAGS.iter().map(|(name, ..)| *name).collect();
+    let keys: Vec<String> = KEYS
+        .iter()
+        .map(|(name, _, value, _)| format!("{name}:{value}"))
+        .collect();
+    format!(
+        "try: {}, {}; prefix any token with ! to negate it",
+        flags.join(", "),
+        keys.join(", ")
+    )
+}
+
 /// Parse comma-separated shorthand tokens into a [`Selector`] (tokens AND
 /// together). Bare flags (`dirty`, `behind`, …) set booleans; `key:value`
 /// tokens (`name:pay*`, `id:payments-api`, `ci:failing`, `prs:1`,
-/// `branch:main`, `root:~/work`) set the scoped predicates; a few named views
+/// `branch:feat/*`, `root:~/work`) set the scoped predicates; a few named views
 /// (`clean`, `attention`) expand to their selectors. A `!` prefix negates any
 /// token (`!dirty`, `!name:pay*`) — negations AND in, so `dirty,!behind` reads
-/// "dirty and not behind".
+/// "dirty and not behind". The full vocabulary lives in [`FLAGS`] and [`KEYS`].
 pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
     let mut sel = Selector::default();
     // Negated tokens accumulate here and fold into `sel.not` at the end:
@@ -833,57 +925,72 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
             continue;
         }
         if let Some((key, value)) = token.split_once(':') {
+            let key = key.trim();
             let value = value.trim().to_string();
-            match key.trim() {
-                "name" => sel.name = Some(value),
-                "id" => sel.ids.push(value),
-                "branch" => sel.branch = Some(value),
-                "root" => sel.root = Some(value),
-                "path" => sel.path_glob = Some(value),
-                "group" => sel.group = Some(value),
+            let Some(&(.., which)) = KEYS
+                .iter()
+                .find(|(name, aliases, ..)| *name == key || aliases.contains(&key))
+            else {
+                let keys: Vec<&str> = KEYS.iter().map(|(name, ..)| *name).collect();
+                return Err(ParseSelectorError(format!(
+                    "unknown selector key `{key}:` (keys: {})",
+                    keys.join(", ")
+                )));
+            };
+            match which {
+                Key::Name => sel.name = Some(value),
+                Key::Id => sel.ids.push(value),
+                Key::Branch => sel.branch = Some(value),
+                Key::Root => sel.root = Some(value),
+                Key::Path => sel.path_glob = Some(value),
+                Key::Group => sel.group = Some(value),
                 // `FromStr` on CiStatus is the same case-insensitive vocabulary
                 // the wire uses, so `ci:none` (no CI configured) works too.
-                "ci" => {
+                Key::Ci => {
                     sel.ci = Some(value.parse().map_err(|_| {
                         ParseSelectorError(format!(
                             "unknown ci status `{value}` (passing | failing | pending | none)"
                         ))
                     })?)
                 }
-                "prs" | "min-prs" => {
+                Key::Prs => {
                     sel.min_prs = Some(value.parse().map_err(|_| {
                         ParseSelectorError(format!("`prs:` expects a number, got `{value}`"))
                     })?)
                 }
-                "attention" => sel.attention = Some(parse_attention(&value)?),
-                other => {
-                    return Err(ParseSelectorError(format!(
-                        "unknown selector key `{other}:`"
-                    )));
-                }
+                Key::Attention => sel.attention = Some(parse_attention(&value)?),
             }
             continue;
         }
-        match token {
-            "all" => sel.all = true,
-            "dirty" => sel.dirty = true,
-            "ahead" | "unpushed" => sel.ahead = true,
-            "behind" => sel.behind = true,
-            "diverged" => sel.diverged = true,
-            "no-upstream" => sel.no_upstream = true,
-            "unpublished" | "never-pushed" => sel.unpublished = true,
-            "stale-fetch" => sel.stale_fetch = true,
-            "stash" | "has-stash" => sel.has_stash = true,
-            "detached" => sel.detached = true,
-            "conflicted" | "conflicts" => sel.conflicted = true,
-            "operation" | "in-progress" => sel.in_operation = true,
-            "error" | "errors" => sel.error = true,
-            "attention" | "needs-attention" => sel.attention = Some(AttentionLevel::Any),
-            "prs-open" => sel.min_prs = Some(1),
-            "red-ci" => sel.ci = Some(CiStatus::Failing),
+        let Some(&(.., flag)) = FLAGS
+            .iter()
+            .find(|(name, aliases, _)| *name == token || aliases.contains(&token))
+        else {
+            return Err(ParseSelectorError(format!(
+                "unknown selector `{token}` ({})",
+                vocabulary_hint()
+            )));
+        };
+        match flag {
+            Flag::All => sel.all = true,
+            Flag::Dirty => sel.dirty = true,
+            Flag::Ahead => sel.ahead = true,
+            Flag::Behind => sel.behind = true,
+            Flag::Diverged => sel.diverged = true,
+            Flag::NoUpstream => sel.no_upstream = true,
+            Flag::Unpublished => sel.unpublished = true,
+            Flag::StaleFetch => sel.stale_fetch = true,
+            Flag::Stash => sel.has_stash = true,
+            Flag::Detached => sel.detached = true,
+            Flag::Conflicted => sel.conflicted = true,
+            Flag::Operation => sel.in_operation = true,
+            Flag::Error => sel.error = true,
+            Flag::Attention => sel.attention = Some(AttentionLevel::Any),
+            Flag::PrsOpen => sel.min_prs = Some(1),
+            Flag::RedCi => sel.ci = Some(CiStatus::Failing),
             // "clean" = nothing the attention layer would flag and readable —
             // expressed as negations so it composes with explicit `!` tokens.
-            "clean" => {
+            Flag::Clean => {
                 for flagged in [
                     Selector {
                         dirty: true,
@@ -908,11 +1015,6 @@ pub fn parse_shorthand(query: &str) -> Result<Selector, ParseSelectorError> {
                 ] {
                     negated.push(flagged);
                 }
-            }
-            other => {
-                return Err(ParseSelectorError(format!(
-                    "unknown selector `{other}` (try: dirty, behind, ahead, conflicted, operation, attention, clean, name:<glob>, or !token to negate)"
-                )));
             }
         }
     }
@@ -1056,6 +1158,109 @@ mod parse_tests {
         assert!(parse_shorthand("frobnicate").is_err());
         assert!(parse_shorthand("ci:sideways").is_err());
         assert!(parse_shorthand("!").is_err());
+        let err = parse_shorthand("bogus:x").unwrap_err().to_string();
+        assert!(err.contains("unknown selector key `bogus:`"), "{err}");
+        assert!(err.contains("branch") && err.contains("prs"), "{err}");
+    }
+
+    /// The unknown-token hint is generated from the parser's own tables, so it
+    /// names the whole vocabulary (the old hand-written one left out about
+    /// half), and every token it offers really parses. `<placeholder>` values
+    /// and `a|b|c` alternatives are expanded to concrete values first.
+    #[test]
+    fn the_unknown_token_hint_lists_only_tokens_that_parse() {
+        let err = parse_shorthand("bogus").unwrap_err().to_string();
+        let hint = err
+            .split("try: ")
+            .nth(1)
+            .and_then(|rest| rest.split(';').next())
+            .expect("the hint has a `try:` list");
+        let offered: Vec<&str> = hint.split(", ").map(str::trim).collect();
+        for needed in [
+            "dirty",
+            "diverged",
+            "stale-fetch",
+            "stash",
+            "unpublished",
+            "all",
+            "error",
+            "branch:<glob>",
+            "group:<group>",
+            "ci:passing|failing|pending|none",
+            "path:<glob>",
+            "root:<dir>",
+            "prs:<n>",
+        ] {
+            assert!(offered.contains(&needed), "hint omits `{needed}`: {err}");
+        }
+        let sample = |placeholder: &str| match placeholder {
+            "<glob>" => "x*",
+            "<repo-id>" => "/x",
+            "<dir>" => "/x",
+            "<group>" => "g",
+            "<n>" => "1",
+            other => panic!("no sample value for `{other}`"),
+        };
+        for token in offered {
+            let candidates: Vec<String> = match token.split_once(':') {
+                Some((key, value)) if value.starts_with('<') => {
+                    vec![format!("{key}:{}", sample(value))]
+                }
+                Some((key, value)) => value.split('|').map(|v| format!("{key}:{v}")).collect(),
+                None => vec![token.to_string()],
+            };
+            for candidate in candidates {
+                assert!(
+                    parse_shorthand(&candidate).is_ok(),
+                    "the hint offers `{candidate}` but it does not parse"
+                );
+            }
+        }
+        // Aliases are not advertised but still parse.
+        for (_, aliases, _) in FLAGS {
+            for alias in *aliases {
+                assert!(parse_shorthand(alias).is_ok(), "alias `{alias}`");
+            }
+        }
+    }
+
+    /// `branch:` takes the same globs as `name:` (`feat/*` used to match
+    /// nothing, since branch was exact-only), and exact names still work.
+    #[test]
+    fn branch_selector_globs_like_name() {
+        let mut repos = fleet_for_new_predicates();
+        repos[0].branch = Branch::Named("feat/login".into());
+        repos[1].branch = Branch::Named("main".into());
+        let resolve_in = |repos: &[RepoSnapshot], q: &str| -> Vec<String> {
+            resolve(repos, &parse_shorthand(q).unwrap(), SortMode::Name, 0)
+                .into_iter()
+                .map(|id| id.0)
+                .collect()
+        };
+        let hits = |q: &str| resolve_in(&repos, q);
+        assert_eq!(hits("branch:feat/*"), ["a"]);
+        assert_eq!(hits("branch:main"), ["b"]);
+        assert_eq!(hits("branch:ma*"), ["b"]);
+        assert_eq!(
+            hits("branch:FEAT/LOGIN"),
+            ["a"],
+            "case-insensitive like name:"
+        );
+        assert!(
+            hits("branch:feat").is_empty(),
+            "no prefix match without `*`"
+        );
+        assert!(
+            hits("branch:*/*/*").is_empty(),
+            "`*` stays within a segment"
+        );
+        assert_eq!(hits("!branch:feat/*"), ["b"]);
+        // `**` crosses `/`, so it matches every named branch.
+        assert_eq!(hits("branch:**"), ["a", "b"]);
+        // A detached HEAD has no branch name, so no branch glob matches it.
+        let mut detached = repos.clone();
+        detached[1].branch = Branch::Detached("abc1234".into());
+        assert_eq!(resolve_in(&detached, "branch:**"), ["a"]);
     }
 
     #[test]
