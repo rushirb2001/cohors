@@ -75,7 +75,7 @@ CI and pull-request status come from GitHub. cohors uses the GitHub CLI's token 
 ## What you get
 
 - **`cohors`**: the dashboard. Branch, ahead/behind, uncommitted work, stashes, CI and pull requests for every repo, with what needs you first.
-- **`cohors overview`, `scan`, `standup`, `discover`**: the same answers as reports, or JSON when piped.
+- **`cohors overview`, `scan`, `standup`, `discover`**: the same answers as reports, or JSON when piped (`--report` keeps the report on a pipe).
 - **`cohors fetch | pull | push | commit | stash | run --select dirty`**: act on many repos at once. Add `--dry-run` to see what would happen first.
 - **`cohors web`**: the dashboard in your browser. `cohors web --demo` shows it on sample data.
 

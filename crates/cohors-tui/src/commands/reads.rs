@@ -194,7 +194,7 @@ pub fn path(cli: &Cli, key: &str) -> Result<()> {
 /// `cohors show <repo>` — one repo in detail: what the dashboard's detail
 /// pane shows, from the same two reads the MCP `get_repo` tool makes.
 pub fn show(cli: &Cli, key: &str, json: bool) -> Result<()> {
-    let human = !json && std::io::stdout().is_terminal();
+    let human = super::wants_report(json);
     let color = wants_color(human);
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
@@ -823,7 +823,7 @@ pub fn changes(
     max_bytes: usize,
     json: bool,
 ) -> Result<()> {
-    let human = !json && std::io::stdout().is_terminal();
+    let human = super::wants_report(json);
     let color = wants_color(human);
     let selector = selector_or(
         select,
@@ -986,7 +986,7 @@ pub fn search(
         eprintln!("cohors: search needs some text to look for, e.g. cohors search \"TODO\"");
         return Err(ExitCode(2).into());
     }
-    let human = !json && std::io::stdout().is_terminal();
+    let human = super::wants_report(json);
     let color = wants_color(human);
     let selector = selector_or(
         select,
@@ -1186,7 +1186,7 @@ struct PrRow {
 /// `ci_status` read (the fleet enriched from GitHub, then selected, so
 /// `--select ci:failing` works). With no token it says so and lists nothing.
 pub fn prs(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
-    let human = !json && std::io::stdout().is_terminal();
+    let human = super::wants_report(json);
     let color = wants_color(human);
     let selector = selector_or(
         select,

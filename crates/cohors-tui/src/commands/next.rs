@@ -69,7 +69,7 @@ pub fn run(
         return run_suggestion(item);
     }
 
-    let human = !json && std::io::stdout().is_terminal();
+    let human = super::wants_report(json);
     if !human {
         let out = serde_json::json!({
             "here": here,

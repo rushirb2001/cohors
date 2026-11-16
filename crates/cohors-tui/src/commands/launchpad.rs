@@ -53,7 +53,7 @@ pub fn run(
 }
 
 fn report(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
-    let human = !json && std::io::stdout().is_terminal();
+    let human = super::wants_report(json);
     let color = super::wants_color(human);
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();

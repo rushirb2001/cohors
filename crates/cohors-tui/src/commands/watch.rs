@@ -30,7 +30,7 @@
 //! reader of its output goes away (a closed pipe ends it quietly, with
 //! success).
 
-use std::io::{ErrorKind, IsTerminal, Write};
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::mpsc::RecvTimeoutError;
@@ -56,7 +56,7 @@ const UPDATE_CHECK: Duration = Duration::from_secs(10);
 
 /// `cohors watch [--json]`.
 pub fn run(cli: &Cli, json: bool) -> Result<()> {
-    let human = !json && std::io::stdout().is_terminal();
+    let human = super::wants_report(json);
     let color = wants_color(human);
     let scanner = Arc::new(crate::scan::from_cli(cli)?);
     end_when_input_closes();
@@ -312,5 +312,7 @@ fn input_is_a_pipe() -> bool {
 
 #[cfg(not(unix))]
 fn input_is_a_pipe() -> bool {
+    // Imported here because this is the file's only use, and only off Unix.
+    use std::io::IsTerminal;
     !std::io::stdin().is_terminal()
 }

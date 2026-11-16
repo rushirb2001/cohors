@@ -91,7 +91,7 @@ pub fn init(cli: &Cli, force: bool) -> Result<()> {
 pub fn scan(cli: &Cli, select: Option<&str>, json: bool, deep: bool) -> Result<()> {
     // Decide the surface up front: only a human at a terminal gets the progress
     // note and the styled report.
-    let human = !json && std::io::stdout().is_terminal();
+    let human = wants_report(json);
     let color = wants_color(human);
     let scanner = crate::scan::from_cli(cli)?;
     let roots = scanner.roots();
@@ -203,7 +203,7 @@ fn deep_note(deep: bool, deep_only: usize, cmd: &str, color: bool) -> String {
 /// At a terminal: the repos under each root, nested ones marked. Piped: one
 /// absolute path per line. `--json`: `[{path, name, nested_in, deep_only}]`.
 pub fn discover(cli: &Cli, deep: bool, json: bool) -> Result<()> {
-    let human = !json && std::io::stdout().is_terminal();
+    let human = wants_report(json);
     let color = wants_color(human);
     let scanner = crate::scan::from_cli(cli)?;
     let roots = scanner.root_dirs();
@@ -784,7 +784,7 @@ fn scan_report(
 /// redirect or `--json` gets the whole model as JSON, which is how the editor
 /// extension and scripts read it.
 pub fn overview(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
-    let human = !json && std::io::stdout().is_terminal();
+    let human = wants_report(json);
     let color = wants_color(human);
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = selected(scanner.scan(), select)?;
@@ -2229,7 +2229,35 @@ pub fn run_web(
 
 /// True when `is_tty` and `NO_COLOR` is unset — the rule for emitting ANSI.
 fn wants_color(is_tty: bool) -> bool {
-    is_tty && std::env::var_os("NO_COLOR").is_none()
+    is_tty && std::env::var_os("NO_COLOR").is_none() && !report_on_a_pipe()
+}
+
+/// `--report`, chosen once at startup (see [`set_report`]).
+static REPORT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Record the global `--report` flag. Called once, from `main`, before any
+/// command runs; a process-wide switch like [`look::init`], so the dozen
+/// commands that print a report do not each take one more argument.
+pub fn set_report(on: bool) {
+    REPORT.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether a read prints its report (what a person reads) rather than JSON.
+///
+/// A terminal gets the report and a pipe gets JSON, so scripts keep working.
+/// `--json` always wins, and `--report` asks for the report on a pipe too:
+/// the full JSON of a view is many times larger than its report, which
+/// matters when the reader is a coding agent that pays for every character
+/// (ADR-070).
+fn wants_report(json: bool) -> bool {
+    !json && (REPORT.load(std::sync::atomic::Ordering::Relaxed) || std::io::stdout().is_terminal())
+}
+
+/// `--report` on a pipe: the reader is a program, so the report is plain
+/// text. Without this a forced report would carry colour codes, since most
+/// commands colour whenever they print for a person.
+fn report_on_a_pipe() -> bool {
+    REPORT.load(std::sync::atomic::Ordering::Relaxed) && !std::io::stdout().is_terminal()
 }
 
 /// Whether the `cohors web` hint (which goes to stderr) should be styled.

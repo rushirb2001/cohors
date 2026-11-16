@@ -95,7 +95,7 @@ fn exec(runner_id: &str, prompt_file: &str, session: Option<&str>) -> Result<()>
 /// `cohors agent runners`.
 fn runners(as_json: bool) -> Result<()> {
     let statuses = lp::detect_runners();
-    let human = !as_json && std::io::stdout().is_terminal();
+    let human = super::wants_report(as_json);
     if !human {
         println!(
             "{}",
@@ -153,7 +153,7 @@ fn runners_report(statuses: &[RunnerStatus], color: bool) -> String {
 
 /// `cohors agent prompts`.
 fn prompts(as_json: bool) -> Result<()> {
-    let human = !as_json && std::io::stdout().is_terminal();
+    let human = super::wants_report(as_json);
     if !human {
         println!(
             "{}",
@@ -620,7 +620,7 @@ fn ls(cli: &Cli, repo_arg: Option<&str>, as_json: bool) -> Result<()> {
     let repo = resolve_repo(repo_arg, &fleet).ok().flatten();
     let (tasks, agents) = repo_offers(repo.as_ref());
     let sessions = ranked_sessions(&fleet, repo.as_ref());
-    let human = !as_json && std::io::stdout().is_terminal();
+    let human = super::wants_report(as_json);
     if !human {
         let out = json!({
             "default_runner": default,

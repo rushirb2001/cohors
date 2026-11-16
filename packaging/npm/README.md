@@ -25,7 +25,7 @@ npm install -D @cohors/cli
 npx cohors scan --select dirty --json
 ```
 
-Every report prints JSON when piped. Write commands (`fetch`, `pull`, `push`, `commit`, `stash`, `run`) exit 1 when any repo fails, so a CI step sees the failure.
+Every report prints JSON when piped (`--report` prints the report itself instead, as plain text). Write commands (`fetch`, `pull`, `push`, `commit`, `stash`, `run`) exit 1 when any repo fails, so a CI step sees the failure.
 
 ## Staying up to date
 

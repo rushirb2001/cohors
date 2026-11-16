@@ -59,6 +59,8 @@ fn parse_cli() -> Cli {
 fn main() -> anyhow::Result<()> {
     let cli = parse_cli();
     logging::init();
+    // `--report`: the report a person reads, even on a pipe. Chosen once.
+    commands::set_report(cli.report);
     // How the plain-terminal screens look (style, ASCII, width), chosen once.
     let icons = cohors_config::Config::load(cli.config.as_deref().map(camino::Utf8Path::new))
         .map(|c| c.icons)

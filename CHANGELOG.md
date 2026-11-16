@@ -31,6 +31,20 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.23] — 2026-11-16
+
+### Added
+
+- **`--report` prints the report a person reads even when the output is
+  piped**, as plain text with no colour codes. A pipe still gets JSON without
+  it, so scripts are unchanged, and `--json` wins when both are given. It is
+  for a coding agent calling cohors through a shell: on a fleet of 27
+  repositories `cohors overview` piped is 39,700 characters of JSON and
+  3,200 with `--report`, `cohors scan` 89,400 and 4,200. It works on every
+  command that has a report (`overview`, `scan`, `next`, `launchpad`, `prs`,
+  `changes`, `show`, `search`, `discover`, `watch`, `agent ls`), before or
+  after the command's name.
+
 ## [0.8.22] — 2026-11-16
 
 ### Changed

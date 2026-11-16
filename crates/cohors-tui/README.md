@@ -27,7 +27,7 @@ cohors init                     # write a config you can edit
 cohors demo                     # try it on sample repositories
 ```
 
-Every view is also a command that prints a report at a terminal and JSON when piped: `cohors overview`, `cohors scan --select dirty`, `cohors standup`, `cohors discover`.
+Every view is also a command that prints a report at a terminal and JSON when piped: `cohors overview`, `cohors scan --select dirty`, `cohors standup`, `cohors discover`. `--report` prints the report to a pipe too, as plain text.
 
 Act on many repos at once with a selector, and preview first with `--dry-run`:
 

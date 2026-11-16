@@ -69,6 +69,11 @@ pub struct Cli {
     #[arg(long, global = true, help_heading = "Global options")]
     pub watch: bool,
 
+    /// Print the report a person reads even when the output is piped, in plain
+    /// text. A pipe gets JSON otherwise; a coding agent's shell wants this.
+    #[arg(long, global = true, help_heading = "Global options")]
+    pub report: bool,
+
     #[command(subcommand)]
     pub command: Option<Command>,
 }

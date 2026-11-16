@@ -175,7 +175,7 @@ Or with cohors installed: `claude mcp add --scope user cohors -- "$HOME/.local/b
 
 ## Use it from scripts
 
-Every view is a command. At a terminal it prints a report; piped, it prints JSON.
+Every view is a command. At a terminal it prints a report; piped, it prints JSON. Add `--report` to get the report through a pipe too, as plain text: a fraction of the JSON's size, and the form to hand a coding agent's shell.
 
 <br>
 

@@ -468,3 +468,64 @@ fn status_is_another_name_for_overview() {
     assert!(json["roots"].is_array(), "the overview model: {json}");
     assert!(json["headline"].is_string(), "the overview model: {json}");
 }
+
+/// These tests read the binary's output through a pipe, which is how a script
+/// and a coding agent's shell read it too. A pipe gets JSON; `--report` asks
+/// for the report a person reads instead, as plain text (ADR-070).
+#[test]
+fn report_prints_the_plain_report_to_a_pipe_and_json_still_wins() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let repo = root.path().join("myrepo");
+    init_repo_with_commit(&repo);
+    std::fs::write(repo.join("notes.txt"), "uncommitted").unwrap();
+
+    // Unasked, a pipe gets the whole model as JSON.
+    let json = stdout_of(
+        &read_cmd(cache.path(), root.path(), &["overview"])
+            .assert()
+            .success(),
+    );
+    assert!(json.trim_start().starts_with('{'), "{json}");
+
+    // `--report` gets the report: the headline in words, not a JSON document,
+    // and no colour codes, since nothing at the other end can draw them.
+    let report = stdout_of(
+        &read_cmd(cache.path(), root.path(), &["overview", "--report"])
+            .assert()
+            .success(),
+    );
+    assert!(!report.trim_start().starts_with('{'), "{report}");
+    assert!(report.contains("1 repository"), "{report}");
+    assert!(!report.contains('\u{1b}'), "colour codes in {report:?}");
+    assert!(
+        report.len() < json.len(),
+        "the report ({}) is the short form of the JSON ({})",
+        report.len(),
+        json.len()
+    );
+
+    // It is a global flag, so it works before the command and on other reads.
+    for args in [
+        &["--report", "scan"][..],
+        &["launchpad", "--report"],
+        &["changes", "--report"],
+    ] {
+        let out = stdout_of(&read_cmd(cache.path(), root.path(), args).assert().success());
+        let first = out.trim_start().chars().next();
+        assert!(!matches!(first, Some('{' | '[')), "{args:?}: {out}");
+        assert!(!out.contains('\u{1b}'), "{args:?}: colour codes");
+    }
+
+    // An explicit `--json` still wins.
+    let both = stdout_of(
+        &read_cmd(
+            cache.path(),
+            root.path(),
+            &["overview", "--report", "--json"],
+        )
+        .assert()
+        .success(),
+    );
+    assert!(both.trim_start().starts_with('{'), "{both}");
+}
