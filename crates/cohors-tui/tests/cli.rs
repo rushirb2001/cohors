@@ -9,9 +9,15 @@ use std::process::Command as StdCommand;
 use assert_cmd::Command;
 use tempfile::TempDir;
 
-/// A config path that doesn't exist, so the binary falls back to defaults
-/// instead of reading the developer's real `~/.config/cohors/config.toml`.
-const MISSING_CONFIG: &str = "/nonexistent/cohors-test-config.toml";
+/// Write an empty config file into `dir` and return its path, so the binary
+/// runs on defaults instead of reading the developer's real
+/// `~/.config/cohors/config.toml`. It has to exist: a `--config` naming a
+/// missing file is an error (a typo must not silently scan another fleet).
+fn empty_config(dir: &Path) -> std::path::PathBuf {
+    let path = dir.join("empty-config.toml");
+    std::fs::write(&path, "").expect("write empty config");
+    path
+}
 
 /// The `cohors` binary, with logging pointed at an isolated cache dir.
 fn cohors(cache: &Path) -> Command {
@@ -111,7 +117,9 @@ fn scan_outputs_json_array_with_repo() {
     init_repo_with_commit(&root.path().join("myrepo"));
 
     let assert = cohors(cache.path())
-        .args(["scan", "--config", MISSING_CONFIG, "--root"])
+        .args(["scan", "--config"])
+        .arg(empty_config(cache.path()))
+        .arg("--root")
         .arg(root.path())
         .assert()
         .success();
@@ -132,7 +140,9 @@ fn scan_empty_root_is_empty_json_array() {
     let root = TempDir::new().unwrap();
 
     let assert = cohors(cache.path())
-        .args(["scan", "--config", MISSING_CONFIG, "--root"])
+        .args(["scan", "--config"])
+        .arg(empty_config(cache.path()))
+        .arg("--root")
         .arg(root.path())
         .assert()
         .success();
@@ -143,13 +153,39 @@ fn scan_empty_root_is_empty_json_array() {
 }
 
 #[test]
+fn a_missing_explicit_config_is_an_error_that_says_how_to_create_it() {
+    // A mistyped `--config` used to fall back to auto-detection silently and
+    // scan a different fleet. It must fail, name the path, and say how to fix it.
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let missing = cache.path().join("typo.toml");
+
+    let assert = cohors(cache.path())
+        .args(["scan", "--config"])
+        .arg(&missing)
+        .arg("--root")
+        .arg(root.path())
+        .assert()
+        .failure();
+
+    let stderr = String::from_utf8(assert.get_output().stderr.clone()).unwrap();
+    let missing = missing.display().to_string();
+    assert!(stderr.contains(&missing), "stderr: {stderr}");
+    assert!(
+        stderr.contains(&format!("cohors init --config {missing}")),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
 fn action_without_a_selector_explains_itself() {
     // Bulk actions still never silently hit the whole fleet, but a missing
     // `--select` is a question, not a punishment: it prints the verb's guide and
     // acts on nothing.
     let cache = TempDir::new().unwrap();
     let assert = cohors(cache.path())
-        .args(["fetch", "--config", MISSING_CONFIG])
+        .args(["fetch", "--config"])
+        .arg(empty_config(cache.path()))
         .assert()
         .success();
 
@@ -171,15 +207,9 @@ fn fetch_dry_run_lists_targets_without_acting() {
     init_repo_with_commit(&root.path().join("myrepo"));
 
     let assert = cohors(cache.path())
-        .args([
-            "fetch",
-            "--select",
-            "all",
-            "--dry-run",
-            "--config",
-            MISSING_CONFIG,
-            "--root",
-        ])
+        .args(["fetch", "--select", "all", "--dry-run", "--config"])
+        .arg(empty_config(cache.path()))
+        .arg("--root")
         .arg(root.path())
         .assert()
         .success();
@@ -210,9 +240,9 @@ fn commit_creates_a_commit_across_selected_repos() {
             "--message",
             "snapshot wip",
             "--config",
-            MISSING_CONFIG,
-            "--root",
         ])
+        .arg(empty_config(cache.path()))
+        .arg("--root")
         .arg(root.path())
         .assert()
         .success();

@@ -160,7 +160,70 @@ fn invalid_config_is_a_fleet_error() {
     let Err(err) = Scanner::new(Some(&cfg), &[]) else {
         panic!("invalid TOML must not build a scanner");
     };
-    assert!(err.to_string().contains("loading config"), "{err}");
+    let msg = err.to_string();
+    assert!(msg.contains("loading config"), "{msg}");
+    assert!(msg.contains(&format!("invalid TOML in {cfg}")), "{msg}");
+    // The cause survives the flattening: where and why, not just "invalid".
+    assert!(msg.contains("line 1, column"), "{msg}");
+}
+
+/// Error edge: a config file named explicitly (`--config`) that does not exist
+/// is an error naming the path and how to create it, never a silent fall back
+/// to auto-detected roots (which scanned a different fleet).
+#[test]
+fn explicit_missing_config_is_a_fleet_error() {
+    let (_t, root) = tmp();
+    let missing = root.join("typo.toml");
+    let Err(err) = Scanner::new(Some(&missing), &[]) else {
+        panic!("a missing explicit config must not build a scanner");
+    };
+    let msg = err.to_string();
+    assert!(msg.contains(missing.as_str()), "{msg}");
+    assert!(
+        msg.contains(&format!("cohors init --config {missing}")),
+        "{msg}"
+    );
+}
+
+/// The dashboard's constructor tolerates the missing file: its first-run
+/// greeting and empty-state rescue are what create it at that path.
+#[test]
+fn dashboard_scanner_tolerates_a_missing_explicit_config() {
+    let (_t, root) = tmp();
+    make_repo(&root.join("code/solo"));
+    let missing = root.join("not-yet.toml");
+    let scanner =
+        Scanner::new_allowing_missing_config(Some(&missing), &[format!("{root}/code")]).unwrap();
+    assert_eq!(scanner.config_path(), missing.to_string());
+    assert!(scanner.config_warnings().is_empty());
+    let names: Vec<String> = scanner.scan().into_iter().map(|s| s.name).collect();
+    assert_eq!(names, vec!["solo".to_string()]);
+}
+
+/// Config edge: unknown keys (typos) are surfaced for a front-end to print,
+/// not only logged; the typo itself is ignored.
+#[test]
+fn config_warnings_name_unknown_keys() {
+    let (_t, root) = tmp();
+    let cfg = write_config(
+        &root,
+        &format!("roots = [\"{root}/code\"]\nmax_dept = 9\nthme = \"dark\"\n"),
+    );
+    let scanner = Scanner::new(Some(&cfg), &[]).unwrap();
+    let warnings = scanner.config_warnings();
+    assert_eq!(warnings.len(), 2, "{warnings:?}");
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("`max_dept`") && w.contains("`max_depth`")),
+        "{warnings:?}"
+    );
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.contains("`thme`") && w.contains("`theme`")),
+        "{warnings:?}"
+    );
 }
 
 /// GitHub edge (offline half): token discovery must never fail construction —

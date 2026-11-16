@@ -58,6 +58,12 @@ pub struct Config {
     pub theme: ThemeMode,
     /// Keeping cohors itself up to date (auto / notify / off).
     pub updates: UpdatesMode,
+    /// Top-level keys the file held that cohors does not know (typos such as
+    /// `max_dept`), recorded by [`Config::parse`] so a front-end can warn about
+    /// them (see [`Config::warnings`]). Not part of the file format: never read
+    /// from or written to TOML.
+    #[serde(skip)]
+    unknown_keys: Vec<String>,
 }
 
 /// Keeping cohors itself up to date. The default `auto` looks for a new
@@ -147,6 +153,7 @@ impl Default for Config {
             icons: IconMode::default(),
             theme: ThemeMode::default(),
             updates: UpdatesMode::default(),
+            unknown_keys: Vec::new(),
         }
     }
 }
@@ -177,20 +184,99 @@ const KNOWN_KEYS: &[&str] = &[
     "updates",
 ];
 
+/// Read a config file: `Ok(None)` when it does not exist (the caller decides
+/// whether that is fine), a typed error for anything else (permissions, a
+/// directory in its place).
+fn read_config_file(path: &Utf8Path) -> Result<Option<String>, ConfigError> {
+    match std::fs::read_to_string(path) {
+        Ok(content) => Ok(Some(content)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(ConfigError::Read {
+            path: path.to_owned(),
+            source,
+        }),
+    }
+}
+
+/// The config for a file that is not there yet: defaults, noted in the log.
+fn defaults_for_missing(path: &Utf8Path) -> Config {
+    tracing::info!(
+        %path,
+        "no config file; using defaults (run `cohors init` to create one)"
+    );
+    Config::default()
+}
+
+/// The recognised key an unknown one is most likely a typo of, if any: the
+/// nearest by edit distance, allowing one edit per four characters (at least
+/// one), so `max_dept` → `max_depth` and `thme` → `theme`, but `colour_theme`
+/// suggests nothing.
+fn closest_known_key(unknown: &str) -> Option<&'static str> {
+    let budget = (unknown.chars().count() / 4).max(1);
+    KNOWN_KEYS
+        .iter()
+        .map(|known| (edit_distance(unknown, known), *known))
+        .filter(|(distance, _)| *distance <= budget)
+        .min_by_key(|(distance, _)| *distance)
+        .map(|(_, known)| known)
+}
+
+/// Levenshtein distance (insertions, deletions, substitutions), by characters.
+/// Keys are short, so the plain two-row dynamic programme is plenty.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut row = Vec::with_capacity(b.len() + 1);
+        row.push(i + 1);
+        for (j, cb) in b.iter().enumerate() {
+            let substitute = prev[j] + usize::from(ca != *cb);
+            row.push(substitute.min(prev[j + 1] + 1).min(row[j] + 1));
+        }
+        prev = row;
+    }
+    prev[b.len()]
+}
+
 impl Config {
     /// Load from an explicit path, the `COHORS_CONFIG` env var, or the default
-    /// location — in that precedence order. A missing file yields
-    /// [`Config::default`]. Environment overrides (`COHORS_*`) apply on top.
+    /// location — in that precedence order. Environment overrides (`COHORS_*`)
+    /// apply on top.
+    ///
+    /// A missing file at the default location (or at `COHORS_CONFIG`) yields
+    /// [`Config::default`]: zero-config use. A missing file at an *explicit*
+    /// `path` is [`ConfigError::NotFound`], because the user named that file and
+    /// silently scanning a different fleet would hide the typo. A front-end that
+    /// is about to offer to create the file uses [`Config::load_or_default`].
     pub fn load(path: Option<&Utf8Path>) -> Result<Config, ConfigError> {
+        Self::load_resolved(path, true)
+    }
+
+    /// [`Config::load`], except that a missing explicit file also yields
+    /// defaults. For a surface that offers to *create* that very file (the
+    /// dashboard's first-run greeting and empty-state rescue write to
+    /// `--config`), where refusing to start would leave nothing to create it.
+    pub fn load_or_default(path: Option<&Utf8Path>) -> Result<Config, ConfigError> {
+        Self::load_resolved(path, false)
+    }
+
+    fn load_resolved(
+        path: Option<&Utf8Path>,
+        explicit_must_exist: bool,
+    ) -> Result<Config, ConfigError> {
         let env_path = std::env::var("COHORS_CONFIG")
             .ok()
             .filter(|p| !p.is_empty());
-        let path = match (path, env_path) {
-            (Some(p), _) => p.to_owned(),
-            (None, Some(p)) => p.into(),
-            (None, None) => crate::paths::config_file()?,
+        let (path, explicit) = match (path, env_path) {
+            (Some(p), _) => (p.to_owned(), true),
+            (None, Some(p)) => (p.into(), false),
+            (None, None) => (crate::paths::config_file()?, false),
         };
-        let mut config = Self::load_from(&path)?;
+        let mut config = match read_config_file(&path)? {
+            Some(content) => Self::parse(&content, &path)?,
+            None if explicit && explicit_must_exist => return Err(ConfigError::NotFound(path)),
+            None => defaults_for_missing(&path),
+        };
         config.apply_env(|key| std::env::var(key).ok());
         Ok(config)
     }
@@ -199,29 +285,17 @@ impl Config {
     /// through [`Config::load`]). A missing file is not an error — the user
     /// simply hasn't run `cohors init` yet, so they get defaults.
     pub fn load_from(path: &Utf8Path) -> Result<Config, ConfigError> {
-        let content = match std::fs::read_to_string(path) {
-            Ok(c) => c,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                tracing::info!(
-                    %path,
-                    "no config file; using defaults (run `cohors init` to create one)"
-                );
-                return Ok(Config::default());
-            }
-            Err(source) => {
-                return Err(ConfigError::Read {
-                    path: path.to_owned(),
-                    source,
-                });
-            }
-        };
-        Self::parse(&content, path)
+        match read_config_file(path)? {
+            Some(content) => Self::parse(&content, path),
+            None => Ok(defaults_for_missing(path)),
+        }
     }
 
-    /// Parse config text, warning about (and ignoring) unknown top-level keys
-    /// and logging any semantic validation warnings.
+    /// Parse config text, recording (and ignoring) unknown top-level keys and
+    /// logging them plus any semantic validation warnings. Front-ends get the
+    /// same list as sentences from [`Config::warnings`].
     pub fn parse(content: &str, path: &Utf8Path) -> Result<Config, ConfigError> {
-        let config: Config = toml::from_str(content).map_err(|source| ConfigError::Parse {
+        let mut config: Config = toml::from_str(content).map_err(|source| ConfigError::Parse {
             path: path.to_owned(),
             source,
         })?;
@@ -229,12 +303,13 @@ impl Config {
         // Re-parse as a generic table to spot unknown keys: serde silently
         // drops them, but the user probably made a typo worth flagging.
         if let Ok(table) = toml::from_str::<toml::Table>(content) {
-            let unknown: Vec<&str> = table
+            config.unknown_keys = table
                 .keys()
-                .map(String::as_str)
-                .filter(|k| !KNOWN_KEYS.contains(k))
+                .filter(|k| !KNOWN_KEYS.contains(&k.as_str()))
+                .cloned()
                 .collect();
-            if !unknown.is_empty() {
+            if !config.unknown_keys.is_empty() {
+                let unknown = &config.unknown_keys;
                 tracing::warn!(?unknown, %path, "ignoring unknown config keys");
             }
         }
@@ -243,6 +318,32 @@ impl Config {
             tracing::warn!(%path, "{warning}");
         }
         Ok(config)
+    }
+
+    /// Top-level keys the loaded file held that cohors does not recognise
+    /// (they were ignored). Empty for defaults and for a clean file.
+    pub fn unknown_keys(&self) -> &[String] {
+        &self.unknown_keys
+    }
+
+    /// Everything worth telling the user about this config, one sentence each:
+    /// every unknown key (with a "did you mean" when it is a near miss of a real
+    /// one, e.g. `max_dept` → `max_depth`), then the [`Config::validate`]
+    /// warnings. Empty for a clean config. Front-ends print these; the same
+    /// facts also go to the log file.
+    pub fn warnings(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .unknown_keys
+            .iter()
+            .map(|key| match closest_known_key(key) {
+                Some(known) => {
+                    format!("unknown config key `{key}` (ignored; did you mean `{known}`?)")
+                }
+                None => format!("unknown config key `{key}` (ignored)"),
+            })
+            .collect();
+        out.extend(self.validate());
+        out
     }
 
     /// Semantic sanity checks that parsing can't catch. Warnings, never errors:
@@ -577,12 +678,119 @@ mod tests {
         "#;
         let c = Config::parse(toml, Utf8Path::new("test.toml")).expect("parse");
         assert_eq!(c.roots, ["~/x"]);
+        assert_eq!(c.unknown_keys(), ["colour_theme"]);
+    }
+
+    /// Unknown keys are kept (not just logged) so a front-end can warn, with a
+    /// "did you mean" for a near miss and none for something unrelated.
+    #[test]
+    fn unknown_keys_become_warnings_with_suggestions() {
+        let toml = "max_dept = 2\nthme = \"dark\"\ncolour_theme = \"dracula\"\nroots = []\n";
+        let c = Config::parse(toml, Utf8Path::new("t.toml")).expect("parse");
+        let mut keys = c.unknown_keys().to_vec();
+        keys.sort();
+        assert_eq!(keys, ["colour_theme", "max_dept", "thme"]);
+        // The typo is ignored, not applied.
+        assert_eq!(c.max_depth, Config::default().max_depth);
+
+        let warnings = c.warnings();
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert!(
+            warnings.contains(
+                &"unknown config key `max_dept` (ignored; did you mean `max_depth`?)".to_string()
+            ),
+            "{warnings:?}"
+        );
+        assert!(
+            warnings.contains(
+                &"unknown config key `thme` (ignored; did you mean `theme`?)".to_string()
+            ),
+            "{warnings:?}"
+        );
+        assert!(
+            warnings.contains(&"unknown config key `colour_theme` (ignored)".to_string()),
+            "{warnings:?}"
+        );
+        // A clean config (and the defaults) have nothing to say.
+        assert!(Config::default().warnings().is_empty());
+        let clean = Config::parse(STARTER_CONFIG, Utf8Path::new("s.toml")).unwrap();
+        assert!(clean.warnings().is_empty());
+    }
+
+    /// Semantic warnings (previously log-only) are part of the same list.
+    #[test]
+    fn warnings_include_validation_findings() {
+        let c = Config::parse("max_depth = 0\n", Utf8Path::new("t.toml")).unwrap();
+        let warnings = c.warnings();
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(warnings[0].contains("max_depth = 0"), "{warnings:?}");
+    }
+
+    #[test]
+    fn edit_distance_counts_single_edits() {
+        assert_eq!(edit_distance("max_dept", "max_depth"), 1);
+        assert_eq!(edit_distance("thme", "theme"), 1);
+        assert_eq!(edit_distance("rots", "roots"), 1);
+        assert_eq!(edit_distance("", "abc"), 3);
+        assert_eq!(edit_distance("same", "same"), 0);
+        assert_eq!(closest_known_key("colour_theme"), None);
+        assert_eq!(closest_known_key("icon"), Some("icons"));
     }
 
     #[test]
     fn malformed_toml_is_an_error() {
         let err = Config::parse("this is = = not toml", Utf8Path::new("bad.toml"));
         assert!(matches!(err, Err(ConfigError::Parse { .. })));
+    }
+
+    /// The parse error's *source* carries where and why (line, column, cause);
+    /// callers that flatten the error must walk `source()` to keep it.
+    #[test]
+    fn malformed_toml_error_source_has_line_and_column() {
+        let err = Config::parse("roots = [not valid toml", Utf8Path::new("bad.toml")).unwrap_err();
+        assert_eq!(err.to_string(), "invalid TOML in bad.toml");
+        let cause = std::error::Error::source(&err).expect("parse error has a source");
+        let cause = cause.to_string();
+        assert!(cause.contains("line 1"), "{cause}");
+        assert!(cause.contains("column"), "{cause}");
+    }
+
+    /// A config file the user *named* that does not exist is an error naming
+    /// the path and how to create it — not a silent fall back to defaults.
+    #[test]
+    fn explicit_missing_config_is_not_found() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = Utf8PathBuf::from_path_buf(dir.path().join("typo.toml")).expect("utf8 path");
+        let err = Config::load(Some(&path)).unwrap_err();
+        assert!(
+            matches!(&err, ConfigError::NotFound(p) if *p == path),
+            "{err:?}"
+        );
+        let msg = err.to_string();
+        assert!(msg.contains(path.as_str()), "{msg}");
+        assert!(
+            msg.contains(&format!("cohors init --config {path}")),
+            "{msg}"
+        );
+    }
+
+    /// The lenient form, for a surface that offers to create the file: a
+    /// missing explicit path yields defaults. A present file loads either way.
+    #[test]
+    fn load_or_default_tolerates_a_missing_explicit_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let missing = Utf8PathBuf::from_path_buf(dir.path().join("new.toml")).expect("utf8 path");
+        let c = Config::load_or_default(Some(&missing)).expect("missing → defaults");
+        assert!(c.unknown_keys().is_empty());
+
+        let present = Utf8PathBuf::from_path_buf(dir.path().join("cfg.toml")).expect("utf8 path");
+        std::fs::write(&present, "max_dept = 3\n").unwrap();
+        for c in [
+            Config::load(Some(&present)).expect("strict load"),
+            Config::load_or_default(Some(&present)).expect("lenient load"),
+        ] {
+            assert_eq!(c.unknown_keys(), ["max_dept"]);
+        }
     }
 
     #[test]

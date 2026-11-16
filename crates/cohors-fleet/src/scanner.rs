@@ -52,12 +52,38 @@ impl Scanner {
     ///
     /// The two overrides are exactly what a CLI's `--config` / `--root` flags
     /// carry — but expressed as plain values so any surface can construct one.
+    ///
+    /// An explicit `config_path_override` that does not exist is an error
+    /// (naming the path and `cohors init --config <path>`): scanning a fleet
+    /// from defaults instead would hide the typo. A missing file at the default
+    /// location is fine (zero-config use). See
+    /// [`Scanner::new_allowing_missing_config`] for the one surface that offers
+    /// to create the file itself.
     pub fn new(
         config_path_override: Option<&Utf8Path>,
         root_overrides: &[String],
     ) -> Result<Self, FleetError> {
-        let config =
-            Config::load(config_path_override).map_err(|e| FleetError::Config(e.to_string()))?;
+        let config = Config::load(config_path_override).map_err(config_error)?;
+        Ok(Self::build(config, config_path_override, root_overrides))
+    }
+
+    /// [`Scanner::new`], except that a missing *explicit* config file yields
+    /// defaults instead of an error. For the dashboard, whose first-run greeting
+    /// and empty-state rescue write the config to that very `--config` path:
+    /// refusing to start would leave nothing to create it.
+    pub fn new_allowing_missing_config(
+        config_path_override: Option<&Utf8Path>,
+        root_overrides: &[String],
+    ) -> Result<Self, FleetError> {
+        let config = Config::load_or_default(config_path_override).map_err(config_error)?;
+        Ok(Self::build(config, config_path_override, root_overrides))
+    }
+
+    fn build(
+        config: Config,
+        config_path_override: Option<&Utf8Path>,
+        root_overrides: &[String],
+    ) -> Self {
         let home = cohors_config::paths::home_dir().ok();
         let options = discovery_options(&config, root_overrides, home.as_deref());
         let config_path = match config_path_override {
@@ -66,7 +92,7 @@ impl Scanner {
                 .map(|p| p.to_string())
                 .unwrap_or_else(|_| "<unknown>".to_string()),
         };
-        Ok(Self {
+        Self {
             provider: LocalGitProvider::new(options),
             config,
             home,
@@ -74,7 +100,7 @@ impl Scanner {
             token: cohors_github::discover_token(),
             author_email: git_user_email(),
             known_file: crate::known::default_path(),
-        })
+        }
     }
 
     /// Keep the remembered repos somewhere else (`None`: remember nothing).
@@ -236,6 +262,32 @@ impl Scanner {
     pub fn updates_mode(&self) -> cohors_config::UpdatesMode {
         self.config.updates
     }
+
+    /// What a front-end should tell the user about the loaded config, one
+    /// sentence each: unknown keys (typos such as `max_dept`, with a "did you
+    /// mean") and semantic footguns (`max_depth = 0`, an empty group). Empty
+    /// for a clean config or defaults. These used to reach only the log file.
+    pub fn config_warnings(&self) -> Vec<String> {
+        self.config.warnings()
+    }
+}
+
+/// Flatten a config error into [`FleetError::Config`], keeping its whole
+/// `source()` chain: the TOML parser's line, column and reason live in the
+/// source, and `to_string()` alone would print only "invalid TOML in <path>".
+fn config_error(e: cohors_config::ConfigError) -> FleetError {
+    let mut message = e.to_string();
+    let mut source = std::error::Error::source(&e);
+    while let Some(cause) = source {
+        let text = cause.to_string();
+        let text = text.trim_end();
+        if !text.is_empty() && !message.contains(text) {
+            message.push_str(": ");
+            message.push_str(text);
+        }
+        source = cause.source();
+    }
+    FleetError::Config(message)
 }
 
 /// The user's configured git email (`git config user.email`), for the standup.
