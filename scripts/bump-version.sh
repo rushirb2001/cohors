@@ -9,9 +9,10 @@
 #
 # What each number means is ADR-059 (and the CHANGELOG's "Versioning policy"):
 # X a headline change or a contract break, Y anything a user can newly do, Z
-# fixes and refinements. The CHANGELOG's [Unreleased] section decides which one
-# a release is: a patch bump is refused while it has an "### Added" entry, and
-# a bump smaller than a "### Breaking" entry calls for is refused too. Pass
+# fixes and refinements. A big feature is a minor release; small features and
+# refinements after it ship as patches, each as soon as it is done (ADR-059,
+# release cadence; scripts/release.sh does the whole release). A bump smaller
+# than a "### Breaking" entry in [Unreleased] calls for is refused; pass
 # --force to override on purpose.
 #
 # The workspace version in Cargo.toml is the source of truth. Since cohors is
@@ -73,8 +74,9 @@ fi
 # What the release holds, from the CHANGELOG's [Unreleased] section.
 unreleased=$(awk '/^## \[Unreleased\]/ { on = 1; next } /^## \[/ { on = 0 } on' CHANGELOG.md)
 has() { printf '%s\n' "$unreleased" | grep -q "^### $1"; }
+# Small features and refinements ship as patches (ADR-059, release cadence),
+# so additions alone never force a minor release; a breaking change does.
 needed=patch
-if has Added; then needed=minor; fi
 if has Breaking; then
   # Before 1.0 a contract break bumps Y (ADR-018); from 1.0 on it bumps X.
   if [ "$x" -eq 0 ]; then needed=minor; else needed=major; fi
@@ -85,8 +87,7 @@ if [ "$(rank "$kind")" -lt "$(rank "$needed")" ]; then
     minor) suggest="$x.$((y + 1)).0" ;;
     major) suggest="$((x + 1)).0.0" ;;
   esac
-  why="new features (### Added)"
-  has Breaking && why="a breaking change (### Breaking)"
+  why="a breaking change (### Breaking)"
   if [ "$force" -eq 1 ]; then
     echo "note: [Unreleased] lists $why, which makes this a $needed release ($suggest); --force keeps $new." >&2
   else
