@@ -28,12 +28,21 @@ impl LocalGitProvider {
     /// `rayon`. Each task opens its own repo handles, so nothing git-related is
     /// shared across threads.
     pub fn scan(&self) -> Result<Vec<RepoSnapshot>, GitError> {
-        let refs = self.list()?;
-        // One clock for the whole scan, so every repo's activity sparkline buckets
-        // against the same "now".
-        let now = now_secs();
-        Ok(refs.par_iter().map(|r| snapshot_repo(r, now)).collect())
+        self.scan_with(&self.options)
     }
+
+    /// [`scan`](Self::scan) with other discovery options for this one call: a
+    /// deep search, or the repos remembered since the provider was built.
+    pub fn scan_with(&self, options: &DiscoveryOptions) -> Result<Vec<RepoSnapshot>, GitError> {
+        Ok(snapshot_all(&discover(options)?))
+    }
+}
+
+/// Snapshot `refs` in parallel, against one clock (so every repo's activity
+/// sparkline buckets against the same "now").
+pub fn snapshot_all(refs: &[RepoRef]) -> Vec<RepoSnapshot> {
+    let now = now_secs();
+    refs.par_iter().map(|r| snapshot_repo(r, now)).collect()
 }
 
 /// Current Unix time in seconds (for the activity sparkline buckets). Native-only

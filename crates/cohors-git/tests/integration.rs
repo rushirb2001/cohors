@@ -86,7 +86,29 @@ fn opts_for(root: &Path) -> DiscoveryOptions {
         max_depth: 6,
         stop_at_repo: true,
         follow_symlinks: false,
+        deep: false,
+        known: Vec::new(),
     }
+}
+
+/// The discovered paths, relative to `root` (the root itself is `.`), sorted.
+/// Both sides are canonicalized: on macOS the temp dir sits behind a symlink.
+fn found_under(root: &Path, opts: &DiscoveryOptions) -> Vec<String> {
+    let base = Utf8PathBuf::from_path_buf(root.canonicalize().unwrap()).unwrap();
+    let mut out: Vec<String> = discover(opts)
+        .unwrap()
+        .into_iter()
+        .map(|r| {
+            let p = r.path.unwrap();
+            match p.strip_prefix(&base) {
+                Ok(rel) if rel.as_str().is_empty() => ".".to_string(),
+                Ok(rel) => rel.as_str().to_string(),
+                Err(_) => p.as_str().to_string(),
+            }
+        })
+        .collect();
+    out.sort();
+    out
 }
 
 // ----- snapshot tests -------------------------------------------------------
@@ -322,6 +344,195 @@ fn max_depth_limits_descent() {
 
     opts.max_depth = 6;
     assert_eq!(discover(&opts).unwrap().len(), 1, "deep enough to find it");
+}
+
+// ----- nested repos (ADR-058) ----------------------------------------------
+
+/// `code/` is itself a repo (private notes) holding other repos two and three
+/// levels down, one of them in a plain folder: all of them are found.
+#[test]
+fn a_root_that_is_a_repo_is_still_walked_for_nested_repos() {
+    let tmp = TempDir::new().unwrap();
+    let code = tmp.path().join("code");
+    init_repo_with_commit(&code, "notes.md", "todo", "private notes");
+    init_repo_with_commit(&code.join("projects/api-dashboard"), "f", "1", "c");
+    init_repo_with_commit(&code.join("projects/clients/acme"), "f", "1", "c");
+    init_repo_with_commit(&code.join("notebooks/ml-notes"), "f", "1", "c");
+    std::fs::create_dir_all(code.join("notebooks/scratch")).unwrap();
+    write(&code.join("notebooks/scratch"), "a.txt", "not a repo");
+
+    // Default options (stop_at_repo = true): the root rule still applies.
+    assert_eq!(
+        found_under(&code, &opts_for(&code)),
+        [
+            ".",
+            "notebooks/ml-notes",
+            "projects/api-dashboard",
+            "projects/clients/acme"
+        ]
+    );
+}
+
+#[test]
+fn overlapping_roots_list_each_repo_once() {
+    let tmp = TempDir::new().unwrap();
+    let code = tmp.path().join("code");
+    init_repo_with_commit(&code, "f", "1", "c");
+    init_repo_with_commit(&code.join("projects/api-dashboard"), "f", "1", "c");
+
+    let mut opts = opts_for(&code);
+    opts.roots
+        .push(code.join("projects").to_str().unwrap().to_string());
+    opts.roots.push(code.to_str().unwrap().to_string());
+    assert_eq!(
+        found_under(&code, &opts),
+        [".", "projects/api-dashboard"],
+        "a repo reached from three roots is listed once"
+    );
+}
+
+#[test]
+fn ignore_globs_still_apply_inside_a_root_repo() {
+    let tmp = TempDir::new().unwrap();
+    let code = tmp.path().join("code");
+    init_repo_with_commit(&code, "f", "1", "c");
+    init_repo_with_commit(&code.join("projects/keep"), "f", "1", "c");
+    init_repo_with_commit(&code.join("archive/old-site"), "f", "1", "c");
+    init_repo_with_commit(&code.join("libs/node_modules/pkg"), "f", "1", "c");
+
+    let mut opts = opts_for(&code);
+    opts.ignore = vec!["**/archive/**".to_string()];
+    assert_eq!(found_under(&code, &opts), [".", "projects/keep"]);
+}
+
+/// Inside a repo, build output and dependency folders hold package-manager
+/// clones, not projects; outside a repo the same names are ordinary folders.
+#[test]
+fn generated_folders_are_skipped_only_inside_a_repo() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    // Not a repo at the root: `build/tool` is a real project folder here.
+    init_repo_with_commit(&root.join("build/tool"), "f", "1", "c");
+    // A repo whose `target/` and `vendor/` hold dependency clones.
+    let app = root.join("app");
+    init_repo_with_commit(&app, "f", "1", "c");
+    init_repo_with_commit(&app.join("target/git-dep"), "f", "1", "c");
+    init_repo_with_commit(&app.join("vendor/lib"), "f", "1", "c");
+
+    let mut opts = opts_for(root);
+    opts.deep = true; // even the exhaustive search skips them
+    assert_eq!(found_under(root, &opts), ["app", "build/tool"]);
+}
+
+/// A repo's own submodule and a worktree kept inside it are part of that repo,
+/// so walking into the repo must not list them a second time.
+#[test]
+fn submodules_and_inner_worktrees_are_not_counted_twice() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().join("code");
+    init_repo_with_commit(&root, "f", "1", "c");
+    let app = root.join("projects/app");
+    init_repo_with_commit(&app, "f", "1", "c");
+    let upstream = tmp.path().join("upstream-ui");
+    init_repo_with_commit(&upstream, "f", "1", "c");
+    git(
+        &app,
+        &[
+            "-c",
+            "protocol.file.allow=always",
+            "submodule",
+            "add",
+            "-q",
+            upstream.to_str().unwrap(),
+            "libs/ui",
+        ],
+    );
+    git(&app, &["commit", "-q", "-m", "add ui"]);
+    git(&app, &["worktree", "add", "-q", "wt/feat", "-b", "feat"]);
+    assert!(
+        app.join("libs/ui/.git").is_file(),
+        "a submodule has a .git file"
+    );
+    assert!(
+        app.join("wt/feat/.git").is_file(),
+        "so does a linked worktree"
+    );
+
+    let mut opts = opts_for(&root);
+    assert_eq!(found_under(&root, &opts), [".", "projects/app"]);
+    opts.deep = true;
+    assert_eq!(found_under(&root, &opts), [".", "projects/app"], "deep too");
+}
+
+/// A worktree kept beside its repo (not inside it) is a checkout of its own
+/// and stays listed, as before nested discovery existed.
+#[test]
+fn a_worktree_beside_its_repo_is_still_listed() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    let app = root.join("app");
+    init_repo_with_commit(&app, "f", "1", "c");
+    git(
+        &app,
+        &["worktree", "add", "-q", "../app-feat", "-b", "feat"],
+    );
+    assert_eq!(found_under(root, &opts_for(root)), ["app", "app-feat"]);
+}
+
+/// A repo *below* a root is not entered by default (stop_at_repo); the deep
+/// search enters it and finds what is nested inside.
+#[test]
+fn deep_finds_repos_nested_in_an_intermediate_repo() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    init_repo_with_commit(&root.join("archive/old-site"), "f", "1", "c");
+    init_repo_with_commit(&root.join("archive/old-site/tools/linter"), "f", "1", "c");
+
+    let mut opts = opts_for(root);
+    assert_eq!(found_under(root, &opts), ["archive/old-site"]);
+    opts.deep = true;
+    assert_eq!(
+        found_under(root, &opts),
+        ["archive/old-site", "archive/old-site/tools/linter"]
+    );
+}
+
+#[test]
+fn deep_has_no_depth_limit() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path();
+    init_repo_with_commit(&root.join("a/b/c/d/e/f/g/far"), "f", "1", "c");
+
+    let mut opts = opts_for(root);
+    opts.max_depth = 2;
+    assert!(found_under(root, &opts).is_empty());
+    opts.deep = true;
+    assert_eq!(found_under(root, &opts), ["a/b/c/d/e/f/g/far"]);
+}
+
+/// Repos remembered from an earlier deep search join a normal one — but only
+/// while they are still repos, under a root, and not ignored.
+#[test]
+fn known_repos_join_only_while_still_valid() {
+    let tmp = TempDir::new().unwrap();
+    let root = tmp.path().join("code");
+    let far = root.join("a/b/c/d/e/f/far");
+    let ignored = root.join("x/node_modules/pkg");
+    let gone = root.join("deleted");
+    let outside = tmp.path().join("elsewhere/repo");
+    for repo in [&far, &ignored, &outside] {
+        init_repo_with_commit(repo, "f", "1", "c");
+    }
+
+    let mut opts = opts_for(&root);
+    opts.max_depth = 2;
+    opts.ignore = vec!["**/node_modules/**".to_string()];
+    opts.known = [&far, &ignored, &gone, &outside]
+        .iter()
+        .map(|p| p.to_str().unwrap().to_string())
+        .collect();
+    assert_eq!(found_under(&root, &opts), ["a/b/c/d/e/f/far"]);
+    assert_eq!(cohors_git::admit_known_repos(&opts).unwrap().len(), 1);
 }
 
 // ----- changes / diff -------------------------------------------------------

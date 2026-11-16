@@ -176,3 +176,57 @@ fn token_discovery_is_best_effort() {
     let _ = scanner.github_token();
     let _ = scanner.author_email();
 }
+
+/// Nested-repo edge (ADR-058): a deep search remembers what a normal search
+/// cannot reach, and every later normal scan includes it — the path that lets a
+/// running dashboard pick up `cohors scan --deep` without a restart.
+#[test]
+fn a_deep_search_is_remembered_for_normal_scans() {
+    let (_t, root) = tmp();
+    // `code` is a repo; `code/archive` is an intermediate repo holding another.
+    make_repo(&root.join("code"));
+    make_repo(&root.join("code/projects/api-dashboard"));
+    make_repo(&root.join("code/archive"));
+    std::fs::create_dir_all(root.join("code/archive/tools").as_std_path()).unwrap();
+    make_repo(&root.join("code/archive/tools/linter"));
+    let cfg = write_config(
+        &root,
+        &format!("roots = [\"{root}/code\"]\nmax_depth = 4\n"),
+    );
+    let known = root.join("cache/known-repos.json");
+    let scanner = Scanner::new(Some(&cfg), &[])
+        .unwrap()
+        .with_known_file(Some(known.clone()));
+    let names = |snaps: Vec<cohors_core::RepoSnapshot>| {
+        let mut n: Vec<String> = snaps.into_iter().map(|s| s.name).collect();
+        n.sort();
+        n
+    };
+
+    // Normal search: the root repo is walked (its nested repos are found), but
+    // the repo inside `archive` is not, and nothing is remembered yet.
+    assert_eq!(names(scanner.scan()), ["api-dashboard", "archive", "code"]);
+    assert!(scanner.known_stamp().is_none());
+
+    // The deep search finds it, says it was deep-only, and remembers it.
+    let deep = scanner.discover(true);
+    assert_eq!(deep.repos.len(), 4);
+    assert_eq!(deep.deep_only.len(), 1);
+    assert!(deep.deep_only[0].as_str().ends_with("tools/linter"));
+    assert!(
+        scanner.known_stamp().is_some(),
+        "the memory file now exists"
+    );
+
+    // From now on a normal scan includes it, and says where it came from.
+    assert_eq!(
+        names(scanner.scan()),
+        ["api-dashboard", "archive", "code", "linter"]
+    );
+    let normal = scanner.discover(false);
+    assert_eq!(normal.deep_only, deep.deep_only);
+
+    // Deleting the repo drops it again, with no deep search needed.
+    std::fs::remove_dir_all(root.join("code/archive/tools/linter").as_std_path()).unwrap();
+    assert_eq!(names(scanner.scan()), ["api-dashboard", "archive", "code"]);
+}

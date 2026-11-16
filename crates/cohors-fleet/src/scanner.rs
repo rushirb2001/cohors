@@ -5,9 +5,12 @@
 //! apply aliases. It's `Send + Sync`, so front-ends can run [`Scanner::scan`]
 //! on a background thread.
 
+use std::collections::BTreeSet;
+use std::time::SystemTime;
+
 use camino::{Utf8Path, Utf8PathBuf};
 use cohors_config::{Config, expand_tilde};
-use cohors_core::RepoSnapshot;
+use cohors_core::{RepoRef, RepoSnapshot};
 use cohors_git::{DiscoveryOptions, LocalGitProvider};
 
 /// Why a [`Scanner`] couldn't be built. (Scanning itself is best-effort and
@@ -27,6 +30,19 @@ pub struct Scanner {
     token: Option<String>,
     /// The user's git email, for the standup (commits they authored).
     author_email: Option<String>,
+    /// Where repos found by a deep search are remembered (see [`crate::known`]).
+    known_file: Option<Utf8PathBuf>,
+}
+
+/// What a search found (`cohors discover`).
+#[derive(Debug, Clone, Default)]
+pub struct Discovery {
+    /// Every repo, canonical, sorted by path.
+    pub repos: Vec<Utf8PathBuf>,
+    /// Of `repos`, the ones only a deep search reaches. After a normal search
+    /// these came from memory (an earlier `--deep`); after a deep search they
+    /// are the ones it just found and remembered.
+    pub deep_only: Vec<Utf8PathBuf>,
 }
 
 impl Scanner {
@@ -57,7 +73,15 @@ impl Scanner {
             config_path,
             token: cohors_github::discover_token(),
             author_email: git_user_email(),
+            known_file: crate::known::default_path(),
         })
+    }
+
+    /// Keep the remembered repos somewhere else (`None`: remember nothing).
+    /// For tests, and for surfaces that must not share the user's memory.
+    pub fn with_known_file(mut self, path: Option<Utf8PathBuf>) -> Self {
+        self.known_file = path;
+        self
     }
 
     /// The GitHub token, if one was found (enables remote PR/CI enrichment).
@@ -73,20 +97,108 @@ impl Scanner {
     /// Discover and snapshot every repo (in parallel), applying aliases.
     /// Best-effort: a discovery error is logged and yields an empty list rather
     /// than failing the dashboard.
+    ///
+    /// Includes the repos remembered from an earlier deep search that are
+    /// still valid, so every surface shows them without walking deep.
     pub fn scan(&self) -> Vec<RepoSnapshot> {
-        match self.provider.scan() {
-            Ok(mut snapshots) => {
-                // Groups first (match the raw directory name), then aliases
-                // (a cosmetic rename that must not change group membership).
-                apply_groups(&self.config, &mut snapshots);
-                apply_aliases(&self.config, self.home.as_deref(), &mut snapshots);
-                snapshots
-            }
+        self.scan_with(false)
+    }
+
+    /// [`scan`](Self::scan), optionally as the deep search (no depth limit,
+    /// nested repos at every level). A deep scan remembers what only it could
+    /// find, for every later normal scan; see [`Scanner::discover`].
+    pub fn scan_with(&self, deep: bool) -> Vec<RepoSnapshot> {
+        self.scan_discovered(deep).0
+    }
+
+    /// [`scan_with`](Self::scan_with), also returning what the search found
+    /// (so a report can say which repos only a deep search reaches).
+    pub fn scan_discovered(&self, deep: bool) -> (Vec<RepoSnapshot>, Discovery) {
+        let found = self.discover(deep);
+        let refs: Vec<RepoRef> = found
+            .repos
+            .iter()
+            .cloned()
+            .map(|path| RepoRef {
+                id: cohors_core::RepoId(path.to_string()),
+                path: Some(path),
+            })
+            .collect();
+        let mut snapshots = cohors_git::snapshot_all(&refs);
+        // Groups first (match the raw directory name), then aliases
+        // (a cosmetic rename that must not change group membership).
+        apply_groups(&self.config, &mut snapshots);
+        apply_aliases(&self.config, self.home.as_deref(), &mut snapshots);
+        (snapshots, found)
+    }
+
+    /// Find the repos without reading them: the normal search plus the
+    /// remembered ones, or (`deep`) the exhaustive search, whose finds beyond
+    /// a normal search's reach are then remembered. Best-effort like
+    /// [`scan`](Self::scan): a discovery error is logged and yields nothing.
+    pub fn discover(&self, deep: bool) -> Discovery {
+        match self.try_discover(deep) {
+            Ok(found) => found,
             Err(err) => {
                 tracing::error!(error = %err, "discovery failed");
-                Vec::new()
+                Discovery::default()
             }
         }
+    }
+
+    fn try_discover(&self, deep: bool) -> Result<Discovery, cohors_git::GitError> {
+        let paths = |refs: Vec<RepoRef>| -> BTreeSet<Utf8PathBuf> {
+            refs.into_iter().filter_map(|r| r.path).collect()
+        };
+        // The normal walk, without memory: what any refresh reaches by itself.
+        let mut normal_opts = self.provider.options().clone();
+        normal_opts.known.clear();
+        let walked = paths(cohors_git::discover(&normal_opts)?);
+
+        if deep {
+            let mut deep_opts = normal_opts.clone();
+            deep_opts.deep = true;
+            let all = paths(cohors_git::discover(&deep_opts)?);
+            let extra: Vec<Utf8PathBuf> = all.difference(&walked).cloned().collect();
+            if let Some(file) = &self.known_file {
+                let covered = cohors_git::root_dirs(&deep_opts);
+                if let Err(err) = crate::known::remember(file, &covered, &extra) {
+                    tracing::warn!(error = %err, %file, "could not remember deep-search repos");
+                }
+            }
+            return Ok(Discovery {
+                repos: all.into_iter().collect(),
+                deep_only: extra,
+            });
+        }
+
+        let mut known_opts = normal_opts;
+        known_opts.known = self
+            .known_file
+            .as_deref()
+            .map(crate::known::load)
+            .unwrap_or_default();
+        let remembered: BTreeSet<Utf8PathBuf> = cohors_git::admit_known_repos(&known_opts)?
+            .into_iter()
+            .filter(|p| !walked.contains(p))
+            .collect();
+        Ok(Discovery {
+            repos: walked.union(&remembered).cloned().collect(),
+            deep_only: remembered.into_iter().collect(),
+        })
+    }
+
+    /// When the remembered repos last changed. A long-lived surface (the
+    /// dashboard) compares this between ticks and rescans when it moves, so a
+    /// deep search run elsewhere shows up without a restart.
+    pub fn known_stamp(&self) -> Option<SystemTime> {
+        self.known_file.as_deref().and_then(crate::known::stamp)
+    }
+
+    /// The roots as the folders they name: globs expanded, missing ones left
+    /// out, canonical (so they compare with discovered repo paths).
+    pub fn root_dirs(&self) -> Vec<Utf8PathBuf> {
+        cohors_git::root_dirs(self.provider.options())
     }
 
     /// The (expanded) roots being searched, for the empty/loading states.
@@ -182,6 +294,8 @@ fn discovery_options(
         max_depth: config.max_depth,
         stop_at_repo: config.stop_at_repo,
         follow_symlinks: config.follow_symlinks,
+        deep: false,
+        known: Vec::new(),
     }
 }
 

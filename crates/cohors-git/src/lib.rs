@@ -21,9 +21,9 @@ mod snapshot;
 mod standup;
 
 pub use detail::{repo_changes, repo_detail, working_tree_patch};
-pub use discover::{DiscoveryOptions, discover};
+pub use discover::{DiscoveryOptions, GENERATED_DIRS, admit_known_repos, discover, root_dirs};
 pub use error::GitError;
-pub use provider::LocalGitProvider;
+pub use provider::{LocalGitProvider, snapshot_all};
 pub use search::{ContentHit, search_content};
 pub use snapshot::snapshot_repo;
 pub use standup::collect_commits;

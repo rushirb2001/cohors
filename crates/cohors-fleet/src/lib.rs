@@ -12,13 +12,14 @@
 
 mod detail;
 mod detect;
+pub mod known;
 mod overview;
 mod scanner;
 
 pub use detail::{DetailBundle, detail_bundle};
 pub use detect::detect_roots;
 pub use overview::{LaunchpadBundle, fleet_commits, launchpad_bundle, overview};
-pub use scanner::{FleetError, Scanner};
+pub use scanner::{Discovery, FleetError, Scanner};
 
 // ── The read facade ──────────────────────────────────────────────────────────
 // Front-ends read the fleet through THIS crate only — never `cohors-git` or
