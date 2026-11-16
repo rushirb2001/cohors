@@ -26,6 +26,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-11-16
+
+### Fixed
+
+- **The start screen says what it found and where.** Each folder is listed
+  with how many repositories it holds, how many are at risk, need a look or
+  sit inside another repo, and the repositories by name (at risk first and
+  marked); each "do next" step names the repositories it is about.
+
 ## [0.7.8] — 2026-11-16
 
 ### Fixed
