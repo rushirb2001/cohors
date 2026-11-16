@@ -411,8 +411,11 @@ mod tests {
         let res = push(&work, "work");
         assert_eq!(res, Ok("published work (new branch on origin)".to_string()));
         // The remote has the branch, and the local branch now tracks it.
+        // `--git-dir` names the bare remote outright: `-C` into a bare repo is
+        // refused where git runs with `safe.bareRepository=explicit`.
+        let git_dir = format!("--git-dir={bare}");
         assert_eq!(
-            git(&bare, &["rev-parse", "refs/heads/feature"]),
+            git(root, &[&git_dir, "rev-parse", "refs/heads/feature"]),
             git(&work, &["rev-parse", "HEAD"])
         );
         assert_eq!(
@@ -463,9 +466,9 @@ mod tests {
 
         let res = push_branch(&work, "work", "feat", true);
         assert_eq!(res, Ok("pushed work (feat)".to_string()));
+        // `--git-dir`, not `-C`: see push_publishes_a_branch_that_has_no_upstream.
         let refs = Command::new("git")
-            .arg("-C")
-            .arg(bare.as_str())
+            .arg(format!("--git-dir={bare}"))
             .args(["branch", "--list"])
             .output()
             .unwrap();
