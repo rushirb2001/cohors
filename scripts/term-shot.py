@@ -13,7 +13,7 @@ which is all a full-screen program like the dashboard uses.
 
     scripts/term-shot.py --size 119x53 --out shots --name overview \\
         --keys "wait:1500 shot:overview 5 enter wait:400 shot:detail q" \\
-        -- cohors --root ~/code --watch
+        -- cohors --root ~/Developer --watch
 
 Each `shot:NAME` writes NAME.txt (plain text, as the screen reads) and
 NAME.html (the same with colours, to open in a browser). Without any `shot:`

@@ -18,14 +18,16 @@ What's unpushed, what's behind, and what to do next, across every repository on 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![Built with Rust](https://img.shields.io/badge/built%20with-Rust-orange)](https://www.rust-lang.org/)
 
-<kbd>&nbsp;[Install](#install)&nbsp;</kbd>&ensp;
-<kbd>&nbsp;[Terminal](#use-it-in-the-terminal)&nbsp;</kbd>&ensp;
-<kbd>&nbsp;[Claude Code](#use-it-with-claude-code)&nbsp;</kbd>&ensp;
-<kbd>&nbsp;[Scripts](#use-it-from-scripts)&nbsp;</kbd>&ensp;
-<kbd>&nbsp;[VS Code & browser](#use-it-in-vs-code-and-the-browser)&nbsp;</kbd>&ensp;
-<kbd>&nbsp;[Launchpad](#the-launchpad)&nbsp;</kbd>
+<p>
+<a href="#install"><img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/nav-install.svg" alt="Install" height="33"></a>&nbsp;
+<a href="#use-it-in-the-terminal"><img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/nav-terminal.svg" alt="Terminal" height="33"></a>&nbsp;
+<a href="#use-it-with-claude-code"><img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/nav-claude-code.svg" alt="Claude Code" height="33"></a>&nbsp;
+<a href="#use-it-from-scripts"><img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/nav-scripts.svg" alt="Scripts" height="33"></a>&nbsp;
+<a href="#use-it-in-vs-code-and-the-browser"><img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/nav-vs-code-browser.svg" alt="VS Code &amp; browser" height="33"></a>&nbsp;
+<a href="#the-launchpad"><img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/nav-launchpad.svg" alt="Launchpad" height="33"></a>
+</p>
 
-<img src="assets/demo.gif" alt="The cohors mark assembles, then the dashboard: pressing P on Do next pushes every commit that exists only on this machine, and Not backed up drops from five to one." width="100%">
+<img src="assets/demo.gif" alt="It starts with one agent: Claude Code finishes a task in payment-service and commits it. Now ten Claude Code sessions in ten repositories each say done. But who checks all ten? The cohors mark and name answer. cohors opens on all 24 repositories and outlines what they left: 9 not backed up. P pushes 8 of them, never forcing, and Not backed up drops from 9 to 1. Or ask your agent: Claude calls cohors and answers for all 24 repositories. The end card shows how to install it." width="100%">
 
 </div>
 
@@ -102,7 +104,7 @@ cohors
 
 <br>
 
-From the <kbd>:</kbd> line: `:commit wip: cart drawer` commits the marked repos, `:!npm test` runs a command in them, `:jump payments` goes to one. `cohors --watch` keeps it all live.
+From the <kbd>:</kbd> line: `:commit wip: cart drawer` commits the marked repos, `:!npm test` runs a command in them, `:jump payment-service` goes to one. `cohors --watch` keeps it all live.
 
 <a name="use-it-with-claude-code"></a>
 
@@ -122,7 +124,7 @@ Ask *"what needs my attention across my repos?"* and Claude gets the whole fleet
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude-light.svg">
-  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude.svg" alt="Claude asks cohors what needs attention; overview returns: 13 repositories, 6 have work at risk, 2 are clean, then the actions: push 4 commits from 3 repositories (risk), reconcile 1 diverged branch, publish 1 branch with no upstream (warn)." width="100%">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/claude.svg" alt="Claude asks cohors what needs attention; overview returns: 24 repositories, 6 have work at risk, 15 are clean, then the actions: push 3 commits from 3 repositories (risk), reconcile 1 diverged branch, publish 1 branch with no upstream (warn)." width="100%">
 </picture>
 
 <br>
@@ -151,7 +153,7 @@ It starts **read-only**. Turn on what Claude may do with `claude plugin configur
 
 <br>
 
-Or let cohors brief Claude for you: `cohors agent run plan-day`, or `cohors agent run task --repo payments --task idempotency-keys` to start on one task (run it again to resume the same conversation).
+Or let cohors brief Claude for you: `cohors agent run plan-day`, or `cohors agent run task --repo payment-service --task idempotency-keys` to start on one task (run it again to resume the same conversation).
 
 <details>
 <summary>Other MCP clients</summary>
@@ -178,7 +180,7 @@ Every view is a command. At a terminal it prints a report; piped, it prints JSON
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts-light.svg">
-  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts.svg" alt="cohors overview prints the fleet headline and Do next: RISK push 4 commits from 3 repositories, with the command cohors push --select ahead,!diverged; WARN reconcile 1 diverged branch. Then cohors push --select ahead --dry-run would push 4 repos, nothing will change: mobile-app, payments, design-system, analytics." width="100%">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/scripts.svg" alt="cohors overview prints the fleet headline and Do next: RISK push 3 commits from 3 repositories, with the command cohors push --select ahead,!diverged; WARN reconcile 1 diverged branch. Then cohors push --select ahead --dry-run would push 4 repos, nothing will change: mobile-app, analytics-service, design-system, payment-service." width="100%">
 </picture>
 
 <br>
@@ -253,7 +255,7 @@ Ask Claude to *set up this repo for the launchpad* and it writes the file. Comma
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/launchpad-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/launchpad-light.svg">
-  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/launchpad.svg" alt="cohors launchpad: 13 repositories, 3 set up, 5 open tasks. Your focus board, then open tasks per repo: data-pipeline, payments (idempotency keys on charge retries, doing), web-app (keyboard order in the checkout form, blocked)." width="100%">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/launchpad.svg" alt="cohors launchpad: 24 repositories, 4 set up, 6 open tasks. Your focus board, then open tasks per repo: api-docs (search box in the top navigation), event-ingest, payment-service (back off on processor rate limits, doing), web-storefront (keyboard order in the checkout form, blocked)." width="100%">
 </picture>
 
 <br>

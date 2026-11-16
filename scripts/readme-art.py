@@ -293,7 +293,7 @@ def keys(theme):
 # ── More to ask: chat bubbles pointing at the tool that answers ─────────────
 
 ASK = [
-    ("What have I changed in web-app?", [("c", "changes"), ("m", ", with the diff if you want it")]),
+    ("What have I changed in web-storefront?", [("c", "changes"), ("m", ", with the diff if you want it")]),
     ("Where do we handle retries?", [("c", "search"), ("m", ", across every repo at once")]),
     ("Write my standup for this week.", [("c", "standup"), ("m", ", your commits by repo")]),
     ("Back up everything only on this laptop.", [("c", "push"), ("m", ", as a dry run first")]),
@@ -475,9 +475,9 @@ import sys
 CAPTURES = OUT / "captures"
 FLEET = Path("/tmp/cohors-demo")
 COMMANDS = {
-    "overview": ["cohors", "overview", "--root", "~/code"],
-    "dry-run": ["cohors", "push", "--select", "ahead", "--dry-run", "--root", "~/code"],
-    "launchpad": ["cohors", "launchpad", "--root", "~/code"],
+    "overview": ["cohors", "overview", "--root", "~/Developer"],
+    "dry-run": ["cohors", "push", "--select", "ahead", "--dry-run", "--root", "~/Developer"],
+    "launchpad": ["cohors", "launchpad", "--root", "~/Developer"],
 }
 
 
@@ -512,7 +512,10 @@ def run_in_terminal(argv, cols=72, rows=60):
 
 
 def capture():
-    subprocess.run(["bash", str(Path(__file__).parent / "demo-fleet.sh"), str(FLEET)], check=True)
+    # REUSE_FLEET=1 reads the fleet as it is (after scripts/studio/agents.sh
+    # has worked in it) instead of building a fresh one.
+    if os.environ.get("REUSE_FLEET") != "1":
+        subprocess.run(["bash", str(Path(__file__).parent / "demo-fleet.sh"), str(FLEET)], check=True)
     CAPTURES.mkdir(parents=True, exist_ok=True)
     for name, argv in COMMANDS.items():
         (CAPTURES / f"{name}.ansi").write_text(run_in_terminal(argv))
@@ -666,9 +669,9 @@ def launchpad_window(theme):
 
 # What Claude receives: the real overview JSON, trimmed, with its syntax coloured.
 CLAUDE_JSON = """{
-  "headline": "13 repositories. 6 have work at risk, 2 are clean.",
+  "headline": "24 repositories. 6 have work at risk, 15 are clean.",
   "actions": [
-    { "severity": "risk", "title": "Push 4 commits from 3 repositories" },
+    { "severity": "risk", "title": "Push 3 commits from 3 repositories" },
     { "severity": "warn", "title": "Reconcile 1 diverged branch" },
     { "severity": "warn", "title": "Publish 1 branch that has no upstream" },
     …
@@ -733,8 +736,78 @@ def tree(theme):
     return svg(h, "A repo's .cohors folder", desc, "".join(b), theme)
 
 
+# ── The links under the badges: one small button per section ───────────────
+#
+# GitHub drops styling, so <kbd> links come out as grey boxes with blue,
+# underlined text. Each link is a small button image instead, wrapped in a
+# link to its heading. The words are monospace, so a button's width can be
+# worked out from its label.
+
+NAV = [
+    ("Install", "install"),
+    ("Terminal", "use-it-in-the-terminal"),
+    ("Claude Code", "use-it-with-claude-code"),
+    ("Scripts", "use-it-from-scripts"),
+    ("VS Code & browser", "use-it-in-vs-code-and-the-browser"),
+    ("Launchpad", "the-launchpad"),
+]
+NAV_STYLE = "plum"  # "plum": a solid plum block with a pixel shadow; "cap": a lilac key cap
+
+
+# The buttons' own colours, (light, dark): on white a key cap needs a tint to
+# show at all, so it is the table band's lilac, not the keys table's white.
+NAV_COLOURS = {
+    "cap": {"face": ("#F3E8F1", "#2A1A27"), "edge": ("#D9C4D5", "#5A4A57"), "ink": ("#954688", "#D9A6CF")},
+    "plum": {"face": ("#954688", "#B55CA4"), "edge": ("#6E3365", "#7E3F72"), "ink": ("#FFFFFF", "#FFFFFF")},
+}
+
+
+def nav_css(style, theme):
+    rules = lambda i: "".join(f".n-{k}{{fill:{v[i]}}}" for k, v in NAV_COLOURS[style].items())
+    return {"light": rules(0), "dark": rules(1), "auto": rules(0) + "@media (prefers-color-scheme: dark){" + rules(1) + "}"}[theme]
+
+
+def nav_button(label, theme, style=NAV_STYLE):
+    fs, pad, h, edge = 14, 15, 30, 3
+    w = round(len(label) * 8.5 + pad * 2)
+    body = (notched(edge, edge, w, h, "x", 4).replace('class="f-x"', 'class="n-edge"')
+            + notched(0, 0, w, h, "x", 4).replace('class="f-x"', 'class="n-face"'))
+    body += (
+        f'<text x="{w / 2}" y="{h / 2 + fs * 0.36}" font-family="{MONO}" font-size="{fs}" font-weight="600" '
+        f'class="n-ink" text-anchor="middle">{escape(label)}</text>'
+    )
+    W2, H2 = w + edge, h + edge
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{W2}" height="{H2}" viewBox="0 0 {W2} {H2}" '
+        f'role="img" aria-label="{escape(label)}"><style>{nav_css(style, theme)}</style>{body}</svg>\n'
+    )
+
+
+def nav_slug(label):
+    return "nav-" + "".join(c if c.isalnum() else "-" for c in label.lower()).strip("-").replace("--", "-").replace("--", "-")
+
+
+def nav_html(base="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme"):
+    """The README's row of links, as HTML to paste in place of the old one.
+
+    Each button is a plain <img> in a link, never a <picture>: GitHub moves
+    a <picture>'s <img> out of the link around it, and the button would then
+    open the image instead of jumping to its section. So each button is the
+    "auto" SVG, which carries both colour sets and follows the reader's
+    system theme."""
+    links = [f'<a href="#{anchor}"><img src="{base}/{nav_slug(label)}.svg" alt="{escape(label)}" height="33"></a>' for label, anchor in NAV]
+    return "<p>\n" + "&nbsp;\n".join(links) + "\n</p>"
+
+
+def write_nav(out=OUT, style=NAV_STYLE):
+    # Only the "auto" form: a button is never in a <picture> (see nav_html).
+    for label, _ in NAV:
+        (out / f"{nav_slug(label)}.svg").write_text(nav_button(label, "auto", style))
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
+    write_nav()
     builders = {
         "answers": answers, "compare": compare, "keys": keys, "ask": ask,
         "permissions": permissions, "select": select, "update": update,
