@@ -21,7 +21,9 @@
   const ui = Object.assign(
     { page: "overview", q: "", view: "", pick: null, sel: null, runner: "", standupWindow: "week", showDone: false },
     saved.ui || {},
-    { standup: {}, devices: null },   // fetched on demand, never persisted
+    // Fetched on demand, never persisted. `shown` is the open repository's
+    // full detail (`cohors show`), by id: { sig, loading, data, error }.
+    { standup: {}, devices: null, shown: {} },
   );
   if (!V.PAGES.some((p) => p.id === ui.page)) ui.page = "overview";
   const selected = new Set(saved.selected || []);
@@ -106,6 +108,7 @@
     // Section ids are scoped to the page, so two pages never share a node.
     const scope = ok() ? ui.page : "status";
     paint($("main"), V.page(state, ui).map((s) => ({ id: `${scope}:${s.id}`, html: s.html })));
+    askForDetail();
     const d = ok() ? V.detail(state, ui) : [];
     $("detail").hidden = !d.length;
     app.classList.toggle("has-detail", d.length > 0);
@@ -122,7 +125,8 @@
     const n = selected.size;
     const count = $("selcount");
     if (count) count.textContent = n ? `${n} selected` : "None selected";
-    main.querySelectorAll('[data-do="bulk"]').forEach((b) => { b.disabled = !n; });
+    // A control the view disabled for an untrusted workspace stays disabled.
+    main.querySelectorAll('[data-do="bulk"]').forEach((b) => { b.disabled = !n || b.dataset.untrusted === "1"; });
     main.querySelectorAll('[data-do="act"]').forEach((b) => {
       const label = b.querySelector("span:not(.codicon)");
       if (label) label.textContent = n ? `Act on ${n} selected` : "Act on selected";
@@ -140,6 +144,23 @@
 
     const spin = document.querySelector('#rail [data-do="refresh"] .codicon');
     if (spin) spin.classList.toggle("spin", busy);
+  }
+
+  // The open repository's full detail comes from `cohors show`, asked for
+  // when its panel opens and again when cohors reports a change to that
+  // repository (its line in the overview is different). Only the open one is
+  // kept; what was read stays on screen while a newer read is on its way.
+  let live = false;   // the host has sent data since this page loaded
+  function askForDetail() {
+    // A state restored from before a reload is not the host's yet: wait for it.
+    if (!live || !ok() || !ui.sel) return;
+    const r = repos().find((x) => x.id === ui.sel);
+    if (!r || !r.path) return;
+    const sig = JSON.stringify(r);
+    const have = ui.shown[r.id];
+    if (have && have.sig === sig) return;
+    ui.shown = { [r.id]: { sig, loading: true, data: have ? have.data : null, error: null } };
+    send({ type: "repoDetail", id: r.id });
   }
 
   /* ───────── navigation ───────── */
@@ -356,6 +377,7 @@
     switch (m.type) {
       case "data": {
         state = m.state || null;
+        live = true;
         const known = new Set(repos().map((r) => r.id));
         for (const id of [...selected]) if (!known.has(id)) selected.delete(id);
         if (ok()) {
@@ -379,6 +401,14 @@
         ui.devices = m.data || null;
         if (ui.page === "devices") render();
         return;
+      case "repo-detail": {
+        // An answer for a panel that has since closed or moved on is dropped.
+        const have = ui.shown[m.id];
+        if (!have) return;
+        ui.shown[m.id] = { sig: have.sig, loading: false, data: m.error ? have.data : m.data, error: m.error || null };
+        if (ui.sel === m.id) render();
+        return;
+      }
       case "busy":
         busy = !!m.on;
         if (built) sync();

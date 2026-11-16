@@ -31,7 +31,9 @@
 //
 // cohors's own prompts (setup-repo, plan-day, …) and the bulk git verbs are
 // cohors's text and commands, not a repository's, and do not pass through
-// here.
+// here. The `run` verb does (see `command` below): the user types the
+// command, but it runs inside every selected repository, with whatever those
+// repositories contain.
 //
 // No `vscode` in this file: the host passes in how to read trust and how to
 // ask, so these rules can be checked from plain Node (dev/check.js).
@@ -183,9 +185,15 @@ function promptRequest(repoPath, kind, plan, text, runnerLabel) {
 function create(host) {
   const approved = new Map();   // repository root -> Set of approved keys
 
+  const DISABLED = {
+    flow: "flows are",
+    agent: "agents declared by a repository are",
+    task: "tasks declared by a repository are",
+    run: "running a command across repositories is",
+  };
   const untrusted = (kind) => ({
     ok: false, reason: "untrusted",
-    message: `This workspace is not trusted, so ${kind === "flow" ? "flows" : kind === "agent" ? "agents declared by a repository" : "tasks declared by a repository"} are disabled.`,
+    message: `This workspace is not trusted, so ${DISABLED[kind] || DISABLED.task} disabled.`,
   });
 
   // Ask once per repository and key; remember a yes for the session.
@@ -268,7 +276,27 @@ function create(host) {
     return { ok: true, asked: allowed.asked, plan };
   }
 
-  return { permit, flow, launch, approvedCount: () => [...approved.values()].reduce((n, s) => n + s.size, 0) };
+  /**
+   * May the `run` verb run `text` in the selected repositories? The user
+   * typed it, but it runs inside repositories this window's trust says
+   * nothing about (a `make` or `npm test` runs their code), so the rules of a
+   * flow hold: a trusted window, and a command that reads exactly as it runs
+   * (`unsafeRun`), so the confirmation shows what is sent. It is asked about
+   * every time, by the host; nothing is remembered here.
+   *
+   * With no `text` yet, only the trust is checked: an untrusted window is
+   * told so before it is asked to type anything.
+   *
+   * @returns {null | {ok: false, reason: string, message: string}} null when it may.
+   */
+  function command(text) {
+    if (!host.isTrusted()) return untrusted("run");
+    if (text === undefined) return null;
+    const bad = unsafeRun(text);
+    return bad ? { ok: false, reason: "unsafe", message: `Refusing to run that command: ${bad}.` } : null;
+  }
+
+  return { permit, flow, launch, command, approvedCount: () => [...approved.values()].reduce((n, s) => n + s.size, 0) };
 }
 
 module.exports = { create, findFlow, flowCwd, flowRequest, promptRequest, unsafeRun, isPlain, visible, excerpt, sha256, commandShape, MAX_RUN_LENGTH };

@@ -86,20 +86,36 @@ switch (command) {
   }
   case "watch": {
     // Like the real one: the fleet once, then a line per change, until its
-    // input closes. Here the "change" is a second line a moment later.
+    // input closes. Here the "change" is a second line a moment later, and
+    // with it news of a newer cohors (the real stream finds that in the
+    // background and carries it the same way).
     if (!rest.includes("--json")) unknown("watch");
     const o = fixture("overview");
     if (roots.length) o.roots = roots;
-    const line = (seq, reason, changed) => process.stdout.write(JSON.stringify({
-      type: "fleet", seq, reason, changed, overview: o, launchpad: fixture("launchpad"), suggestions: fixture("suggestions"),
+    const update = {
+      version: "0.9.0",
+      notice: "Update available: 0.9.0 — run brew upgrade cohors",
+      detail: { state: "available", version: "0.9.0", command: "brew upgrade cohors" },
+    };
+    const line = (seq, reason, changed, news) => process.stdout.write(JSON.stringify({
+      type: "fleet", seq, reason, changed, overview: o, launchpad: fixture("launchpad"), suggestions: fixture("suggestions"), update: news,
     }) + "\n");
-    line(1, "start", o.repos.map((r) => r.id));
-    setTimeout(() => line(2, "git", [o.repos[0].id]), 50);
+    line(1, "start", o.repos.map((r) => r.id), null);
+    setTimeout(() => line(2, "git", [o.repos[0].id], update), 50);
     process.stdin.on("end", () => process.exit(0));
     process.stdin.resume();
     break;
   }
-  case "fetch": case "pull": case "push": case "commit": case "stash":
+  case "show": {
+    // `cohors show --json -- <repo>`: the one fixture, as the repository named
+    // (by its id, name or path), so every row of the demo fleet has a detail.
+    const key = rest.filter((a) => a !== "--json" && a !== "--").pop();
+    const repo = fixture("overview").repos.find((r) => r.id === key || r.name === key || r.path === key);
+    if (!repo) fail(`no repository matches \`${key}\``);
+    print(Object.assign(fixture("show"), { id: repo.id, name: repo.name, path: repo.path }));
+    break;
+  }
+  case "fetch": case "pull": case "push": case "commit": case "stash": case "run":
     print(`\n  cohors (fixtures)\n  ${command} ${rest.join(" ")}\n\n  This stand-in does not touch any repository.\n\n`);
     break;
   default:

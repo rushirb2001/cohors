@@ -110,13 +110,14 @@ async function collect() {
     };
     return lastData;
   }
-  // One-off reads carry no suggestions: keep the stream's last ones.
-  return assemble(base, bin, overview, launchpad, lastSuggestions);
+  // One-off reads carry no suggestions or update news: keep the stream's last.
+  return assemble(base, bin, overview, launchpad, lastSuggestions, lastUpdate);
 }
 
 // The state the webviews draw, from one reading of the fleet (a one-off
-// `overview` + `launchpad`, or a `cohors watch` line).
-async function assemble(base, bin, overview, launchpad, suggestions) {
+// `overview` + `launchpad`, or a `cohors watch` line). `update` is a newer
+// cohors as the stream reports it ({version, notice, detail}), or null.
+async function assemble(base, bin, overview, launchpad, suggestions, update) {
   const [info, version] = await Promise.all([loadAgentInfo(), binaryVersion(bin.path)]);
 
   // Machine-local extras, only for repositories that opted in with a
@@ -138,6 +139,7 @@ async function assemble(base, bin, overview, launchpad, suggestions) {
     overview, launchpad,
     // null: this cohors cannot suggest (no `cohors watch`), so the pane says so.
     suggestions: suggestions || null,
+    update: update || null,
     agent: info,
     local: { threads, sessions },
   };
@@ -211,6 +213,7 @@ let streamLive = false;         // it has printed since it started
 let streamFailures = 0;
 let streamRetry = null, streamIdle = null;
 let lastSuggestions = null;     // from the last line, for one-off reads
+let lastUpdate = null;          // a newer cohors, from the last line
 let lineState = null, lineAt = 0;   // the state drawn from the last line, and when
 const noWatch = new Set();      // binaries without `cohors watch`
 const viewsVisible = () => !!(panel && panel.visible) || [...sides.values()].some((v) => v.visible);
@@ -229,8 +232,9 @@ async function startStream() {
         streamLive = true;
         streamFailures = 0;
         lastSuggestions = line.suggestions;
+        lastUpdate = line.update;
         // Draw it; one-off reads of the same moment are now redundant.
-        assemble(baseState(), bin, line.overview, line.launchpad, line.suggestions)
+        assemble(baseState(), bin, line.overview, line.launchpad, line.suggestions, line.update)
           .then((state) => { lineState = state; lineAt = Date.now(); post({ type: "data", state }); })
           .catch((e) => output.error(`could not draw a watch line: ${e.message}`));
       },
@@ -366,6 +370,7 @@ const VERB_INFO = {
   push:   { title: "Push",   detail: "Runs git push. It never force-pushes. A branch with no upstream is published.", confirm: true },
   commit: { title: "Commit", detail: "Stages everything (git add -A) and commits with one message in each repository.", confirm: true },
   stash:  { title: "Stash",  detail: "Runs git stash push for tracked changes.", confirm: true },
+  run:    { title: "Run a command", detail: "Runs one shell command in each selected repository's folder, at most two minutes in each. It can change whatever the command changes.", confirm: true },
 };
 
 function describe(selector) {
@@ -387,8 +392,9 @@ async function runVerb(verb, selector, opts = {}) {
   if (!bin.path) return void fail(new Error(bin.reason));
 
   const where = describe(selector);
+  const many = selector.all ? "all" : selector.ids.length;
   let dryRun = !!opts.dryRun;
-  let message;
+  let message, command;
 
   if (verb === "commit") {
     message = await vscode.window.showInputBox({
@@ -398,19 +404,45 @@ async function runVerb(verb, selector, opts = {}) {
     });
     if (!message) return;
   }
+  if (verb === "run") {
+    // A command run in every selected repository runs their code too (a
+    // `make`, an `npm test`), and this window's trust says nothing about
+    // them: so `run` passes the same gate as a repository's flows
+    // (src/gate.js). Trust first, before the user types anything; then only
+    // a command that reads exactly as it runs.
+    const closed = gate.command();
+    if (closed) return void refused(closed);
+    command = await vscode.window.showInputBox({
+      title: `Run a command in ${where}`,
+      prompt: "A shell command, run in each repository's folder. You are asked again before it runs.",
+      placeHolder: "npm test",
+      validateInput: (v) => { const bad = Gate.unsafeRun(v); return bad ? `cohors will not run this: ${bad}.` : null; },
+    });
+    if (!command) return;
+    const refusal = gate.command(command);
+    if (refusal) return void refused(refusal);
+  }
   if (info.confirm && !dryRun) {
-    const go = `${info.title} ${selector.all ? "all" : selector.ids.length}`;
+    // A command is shown JSON-quoted, as a flow is: every character visible
+    // and delimited, and that same string is what is sent.
+    const question = verb === "run" ? `Run ${JSON.stringify(command)} in ${where}?` : `${info.title} ${where}?`;
+    const go = verb === "run" ? `Run in ${many}` : `${info.title} ${many}`;
     const preview = "Preview (dry run)";
     const pick = await vscode.window.showWarningMessage(
-      `${info.title} ${where}?`,
+      question,
       { modal: true, detail: `${info.detail}\n\nIt runs in a terminal, so you can see exactly what happens. Preview lists the repositories without changing anything.` },
       go, preview);
     if (!pick) return;
     dryRun = pick === preview;
+    // Trust may have been withdrawn while the question was on screen.
+    if (verb === "run" && !dryRun) {
+      const late = gate.command(command);
+      if (late) return void refused(late);
+    }
   }
 
   let args;
-  try { args = cli.actionArgs(verb, selector, { dryRun, message }); }
+  try { args = cli.actionArgs(verb, selector, { dryRun, message, command }); }
   catch (e) { return void fail(e); }
   runVisible(`cohors ${verb}${dryRun ? " (dry run)" : ""}`, bin.path, args);
 }
@@ -715,6 +747,16 @@ async function onMessage(m) {
       const repo = repoWithPath(m.id);
       return repo ? void terminal(repo.path, "", repo.name) : undefined;
     }
+    case "repoDetail": {
+      // A repository's panel opened (or the repository changed while it is
+      // open): its changed files, branches, stashes, commits and GitHub
+      // state, from `cohors show`. Named by id, run on the path cohors gave.
+      const repo = repoWithPath(m.id);
+      if (!repo) return void post({ type: "repo-detail", id: String(m.id), error: "That repository is not in the fleet any more." });
+      try { post({ type: "repo-detail", id: repo.id, data: await cli.show(repo.path) }); }
+      catch (e) { post({ type: "repo-detail", id: repo.id, error: e.message }); }
+      return;
+    }
     case "verb":
       return runVerb(String(m.verb), m.all ? { all: true } : { ids: (m.ids || []).map(String) });
     case "act":
@@ -990,7 +1032,7 @@ function activate(context) {
       if (!e.affectsConfiguration("cohors")) return;
       cli.reset(); agentInfo = null; versionCache = null;
       // Another binary, other roots: a new stream.
-      stopStream(); noWatch.clear(); lastSuggestions = null; lineState = null; lineAt = 0;
+      stopStream(); noWatch.clear(); lastSuggestions = null; lastUpdate = null; lineState = null; lineAt = 0;
       armTimer();
       refresh(true);
       startStream();

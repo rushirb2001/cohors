@@ -93,7 +93,12 @@ function renderAll(state, uiExtra) {
     add(`page(${p.id})`, V.page(state, ui));
   }
   if (state && state.status === "ok") {
-    for (const r of state.overview.repos) add(`detail(${r.name})`, V.detail(state, demoUi({ sel: r.id })));
+    // `cohors show`'s answer for a repository (`uiExtra.showData` replaces the fixture).
+    const shown = (r) => ({ [r.id]: { data: Object.assign(clone((uiExtra && uiExtra.showData) || fixture("show")), { id: r.id, name: r.name }) } });
+    for (const r of state.overview.repos) {
+      add(`detail(${r.name})`, V.detail(state, demoUi({ sel: r.id })));
+      add(`detail+show(${r.name})`, V.detail(state, demoUi(Object.assign({}, uiExtra, { sel: r.id, shown: shown(r) }))));
+    }
     for (const v of V.VIEWS) add(`repos view ${v.id}`, V.page(state, demoUi({ page: "repos", view: v.id })));
     add("tasks with finished", V.page(state, demoUi({ page: "tasks", showDone: true })));
     add("standup today", V.page(state, demoUi({ page: "standup", standupWindow: "today" })));
@@ -175,6 +180,21 @@ async function wiring() {
     const hostCases = new Set([...host.matchAll(/case "([A-Za-z]+)":/g)].map((m) => m[1]));
     for (const t of sent) assert(hostCases.has(t), `the host has no case for ${t}`);
     assert(sent.size >= 8, "expected side.js to send its messages");
+  });
+
+  await check("every registry verb is wired: the adapter, the host, the picker and the bulk bar", () => {
+    // The verbs `cohors_actions::registry()` declares, in its order. The MCP
+    // server and the terminal UI have parity tests for the same list.
+    const registry = fs.readFileSync(path.join(EXT, "..", "crates", "cohors-actions", "src", "registry.rs"), "utf8");
+    const verbs = [...registry.matchAll(/^\s*verb: "([a-z]+)",/gm)].map((m) => m[1]);
+    assert(verbs.length >= 6, "expected the registry's verbs");
+    assert.deepStrictEqual(Cohors.VERBS, verbs, "src/cohors.js VERBS must match the registry");
+    // Every verb has its words in the host, and runs through runVerb.
+    const info = /const VERB_INFO = \{([\s\S]*?)\n\};/.exec(host)[1];
+    assert.deepStrictEqual([...info.matchAll(/^\s+([a-z]+):\s+\{ title:/gm)].map((m) => m[1]), verbs, "VERB_INFO covers every verb");
+    assert(/Cohors\.VERBS\.map\(\(v\) => \(\{ label: VERB_INFO\[v\]\.title/.test(host), "the picker offers every verb");
+    const bulk = V.page(demoState(), demoUi({ page: "repos" })).find((s) => s.id === "bulk").html;
+    for (const v of verbs) assert(bulk.includes(`data-verb="${v}"`), `the bulk bar has no ${v}`);
   });
 
   await check("an untrusted workspace cannot steer which folders are scanned", () => {
@@ -326,6 +346,70 @@ async function view() {
     assert.deepStrictEqual(V.detail(state, demoUi({ sel: "nope" })), []);
   });
 
+  await check("the detail panel adds what `cohors show` read: files, branches, stashes, commits, GitHub", () => {
+    const web = state.overview.repos.find((r) => r.name === "web-app");
+    const show = fixture("show");
+    const panel = (s) => V.detail(state, demoUi({ sel: web.id, shown: { [web.id]: s } }));
+    const ids = (secs) => secs.map((x) => x.id);
+
+    // Not asked yet (no path, or the host has not answered): nothing extra.
+    assert(!ids(V.detail(state, demoUi({ sel: web.id }))).some((id) => /^d-(files|branches|commits|github|more)$/.test(id)));
+    // Asked: a quiet line while it reads, the reason when it fails.
+    assert(text(panel({ loading: true }).map((x) => x.html).join("")).includes("Reading files, branches and commits"));
+    assert(text(panel({ error: "cohors show failed: boom" }).map((x) => x.html).join("")).includes("cohors show failed: boom"));
+
+    const secs = panel({ data: show });
+    assert.deepStrictEqual(ids(secs).filter((id) => /^d-(files|branches|stashes|commits|github)$/.test(id)), ["d-files", "d-branches", "d-commits", "d-github"], "no stash section without stashes");
+    const html = secs.map((x) => x.html).join("\n");
+    const t = text(html);
+    for (const f of show.detail.changed_files) assert(t.includes(f.path), f.path);
+    assert(html.includes('title="modified"') && html.includes('title="untracked"'), "each status code says what it means");
+    for (const b of show.detail.branches) assert(t.includes(b.name), b.name);
+    assert(t.includes("5 behind") && t.includes("Level with its upstream") && t.includes("No upstream") && t.includes("checked out"));
+    for (const c of show.detail.recent_commits) assert(t.includes(c.summary) && t.includes(c.short_id), c.summary);
+    assert(t.includes("#41 Checkout: cart drawer") && t.includes("draft") && t.includes("waiting on you"));
+    assert(t.includes("Latest run failing") && t.includes("4 open, 1 assigned to you") && t.includes("v2.3.0"));
+
+    // More files than the terminal lists: the rest are counted, with the command.
+    const many = clone(show);
+    many.detail.changed_files = Array.from({ length: 23 }, (_, i) => ({ status: "A ", path: `gen/f${i}.ts` }));
+    many.detail.stashes = ["WIP on main: 1a2b3c4 tidy", "On main: try the cache"];
+    const m2 = text(panel({ data: many }).map((x) => x.html).join(""));
+    assert(m2.includes("gen/f19.ts") && !m2.includes("gen/f20.ts") && m2.includes("3 more files") && m2.includes("cohors changes --select name:web-app"));
+    assert(m2.includes("stash@{1}") && m2.includes("On main: try the cache"));
+    // GitHub with no token: no pull requests to list, and why.
+    const local = clone(show);
+    local.remote_detail = null;
+    assert(!ids(panel({ data: local })).includes("d-github"), "a repository GitHub did not answer for has no GitHub section");
+    local.remote = { ci: "passing", ci_by_branch: { main: "pending" } };
+    const g = text(panel({ data: local }).map((x) => x.html).join(""));
+    assert(g.includes("CI passing") && g.includes("CI pending") && g.includes("gh auth login"));
+  });
+
+  await check("a newer cohors is announced in the rail and the sidebar, in cohors's words", () => {
+    const s = demoState();
+    assert(!V.rail(s, demoUi()).map((x) => x.html).join("").includes('class="update"'), "nothing without news");
+    s.update = { version: "0.9.0", notice: "Update available: 0.9.0 — run brew upgrade <cohors>", detail: { state: "available", version: "0.9.0", command: "brew upgrade cohors" } };
+    for (const html of [V.rail(s, demoUi()).map((x) => x.html).join(""), V.sidePart("fleet", s, {}).map((x) => x.html).join("")]) {
+      wellFormed(html, "update notice");
+      assert(html.includes('class="update"') && html.includes("Update available: 0.9.0 — run brew upgrade &lt;cohors&gt;"), "the notice is shown, escaped");
+      assert(/data-do="copy" data-text="brew upgrade cohors"/.test(html), "its command can be copied");
+    }
+    // An installing or failed update has no command of its own to copy.
+    s.update = { version: "0.9.0", notice: "Update available: 0.9.0 — updating…", detail: { state: "installing", version: "0.9.0" } };
+    const quiet = V.rail(s, demoUi()).map((x) => x.html).join("");
+    assert(quiet.includes("updating…") && !/class="update"[^]*data-do="copy"/.test(quiet));
+  });
+
+  await check("the bulk bar's Run needs a trusted workspace", () => {
+    const run = (st) => /<button[^>]*data-verb="run"[^>]*>/.exec(V.page(st, demoUi({ page: "repos" })).find((x) => x.id === "bulk").html)[0];
+    assert(!run(demoState()).includes("disabled") && !run(demoState()).includes("data-untrusted"));
+    const untrusted = demoState();
+    untrusted.trusted = false;
+    assert(run(untrusted).includes("disabled") && run(untrusted).includes('data-untrusted="1"'), "it stays disabled when rows are ticked");
+    assert(/b\.disabled = !n \|\| b\.dataset\.untrusted === "1"/.test(read("media/main.js")));
+  });
+
   await check("Tasks covers the board, tasks, flows, setup, activity, runners and the workspace", () => {
     const secs = V.page(state, demoUi({ page: "tasks" }));
     assert.deepStrictEqual(secs.map((s) => s.id), ["top", "focus", "tasks", "flows", "unset", "activity", "runners", "workspace"]);
@@ -423,7 +507,8 @@ async function view() {
     state2.agent.prompts.forEach((p) => { p.needs_repo = true; });
     state2.local = { threads: {}, sessions: { "id-4": [{ id: evil, title: evil, turns: 1, branch: evil, ts: 1 }] } };
     state2.binary = poison(state2.binary);
-    const ui = { standup: { week: { data: poison(fixture("standup-week")) }, today: { error: evil } }, devices: poison(fixture("devices")) };
+    state2.update = poison({ version: "x", notice: "x", detail: { command: "x" } });
+    const ui = { standup: { week: { data: poison(fixture("standup-week")) }, today: { error: evil } }, devices: poison(fixture("devices")), showData: poison(fixture("show")) };
     ui.devices.android.available = true; ui.devices.ios.available = true;
     const html = renderAll(state2, ui);
     assert(!/<img|<script/i.test(html), "markup from data reached the output");
@@ -528,6 +613,25 @@ async function adapter() {
     assert.throws(() => cli.actionArgs("rebase", { ids: ["a"] }), /Unknown action/);
   });
 
+  await check("run passes its command as one argument after --", () => {
+    assert.deepStrictEqual(cli.actionArgs("run", { ids: ["a"] }, { command: "npm test" }), ["run", "--select", '{"ids":["a"]}', "--", "npm test"]);
+    // A dry run previews; a command that looks like a flag is still the command.
+    assert.deepStrictEqual(cli.actionArgs("run", { all: true }, { command: "--version", dryRun: true }), ["run", "--select", '{"all":true}', "--dry-run", "--", "--version"]);
+    assert.throws(() => cli.actionArgs("run", { ids: ["a"] }), /needs a command/);
+    assert.throws(() => cli.actionArgs("run", { ids: ["a"] }, { command: "   " }), /needs a command/);
+  });
+
+  await check("cohors show reads one repository in detail", async () => {
+    const s = await cli.show("/home/dev/code/web-app");
+    assert.strictEqual(s.name, "web-app");
+    assert.strictEqual(s.detail.changed_files.length, 7);
+    assert(s.detail.branches.some((b) => b.is_current && b.name === "feat/checkout"));
+    assert(Array.isArray(s.detail.stashes) && s.detail.recent_commits.length === 5);
+    assert.strictEqual(s.remote_detail.prs.length, 2);
+    assert.strictEqual((await cli.show("payments")).path, "/home/dev/code/payments", "by name too");
+    await assert.rejects(cli.show("no-such-repo"), (e) => e.kind === "failed" && /no repository matches/.test(e.message));
+  });
+
   await check("cohors agent runners / prompts follow the contract", async () => {
     const runners = await agent.runners();
     assert.deepStrictEqual(runners.map((r) => r.id), ["claude-code", "codex", "gemini-cli", "agy"]);
@@ -621,6 +725,10 @@ async function adapter() {
     for (const l of lines) assertShapes(l.overview, l.launchpad, fixture("standup-week"));
     assert.strictEqual(lines[0].suggestions.length, 3);
     assert(lines[0].suggestions[0].session.id, "a resume carries its session");
+    // News of a newer cohors rides on a line; without any, it is null.
+    assert.strictEqual(lines[0].update, null);
+    assert.strictEqual(lines[1].update.version, "0.9.0");
+    assert(lines[1].update.notice.startsWith("Update available: 0.9.0") && lines[1].update.detail.command === "brew upgrade cohors");
     assert.strictEqual(exited.code, 0, `ended with ${JSON.stringify(exited)}`);
     assert.strictEqual(exited.unsupported, false);
   });
@@ -1014,7 +1122,33 @@ async function gateChecks() {
     assert.strictEqual(Gate.excerpt("a\r\nb"), "a\nb");
   });
 
+  await check("run: only in a trusted window, only a command that reads as it runs", async () => {
+    const closed = harness(false, true).gate.command();
+    assert(closed && closed.reason === "untrusted" && /running a command across repositories is disabled/.test(closed.message));
+    assert.strictEqual(harness(false, true).gate.command("npm test").reason, "untrusted", "a typed command does not get round trust");
+    const g = harness(true, true).gate;
+    assert.strictEqual(g.command(), null, "trusted, before anything is typed");
+    assert.strictEqual(g.command("npm test -- --watch=false"), null);
+    for (const bad of ["", "   ", "npm test\nrm -rf ~", "echo ‮oof", "a".repeat(401)]) {
+      const r = g.command(bad);
+      assert(r && r.reason === "unsafe" && /^Refusing to run that command: /.test(r.message), JSON.stringify(bad));
+    }
+    assert.strictEqual(g.approvedCount(), 0, "nothing is remembered: every run is asked about");
+  });
+
   /* the host and the view */
+
+  await check("the host runs a command across repositories only through the gate", () => {
+    const host = read("src/extension.js");
+    const runVerb = /async function runVerb[\s\S]*?\n}\n/.exec(host)[0];
+    const at = (re) => { const m = re.exec(runVerb); assert(m, `runVerb has no ${re}`); return m.index; };
+    // Trust before the question, the gate on what was typed, and again after the confirmation.
+    assert(at(/gate\.command\(\);/) < at(/showInputBox\(\{\s*title: `Run a command/));
+    assert(at(/showInputBox\(\{\s*title: `Run a command/) < at(/gate\.command\(command\)/));
+    assert.strictEqual((runVerb.match(/gate\.command\(command\)/g) || []).length, 2, "checked when typed and again after the confirmation");
+    assert(/Run \$\{JSON\.stringify\(command\)\} in/.test(runVerb), "the confirmation shows the command JSON-quoted");
+    assert(/cli\.actionArgs\(verb, selector, \{ dryRun, message, command \}\)/.test(runVerb));
+  });
 
   await check("the host runs flows, agents and tasks only through the gate", () => {
     const host = read("src/extension.js");
@@ -1077,6 +1211,19 @@ async function real(bin, roots) {
       binary: { path: bin, version: "" }, overview: o, launchpad: l, agent: fixture("agent"), local: { threads: {}, sessions: {} } };
     const html = renderAll(state, { standup: { week: { data: s }, today: { data: s } } });
     console.log(`        ${Math.round(html.length / 1024)} KB of HTML across all pages and ${o.repos.length} detail panels`);
+  });
+
+  await check("cohors show has the shape the detail panel depends on", async () => {
+    const first = o.repos.find((r) => r.path);
+    if (!first) return;
+    const s = await cli.show(first.path);
+    assert.strictEqual(s.name, first.name);
+    for (const k of ["changed_files", "branches", "stashes", "recent_commits"]) assert(Array.isArray(s.detail[k]), `detail.${k}`);
+    const state = { status: "ok", generatedAt: o.now, home: os.homedir(), here: [], trusted: true, rootsSetting: roots,
+      binary: { path: bin, version: "" }, overview: o, launchpad: l, agent: fixture("agent"), local: { threads: {}, sessions: {} } };
+    const html = V.detail(state, demoUi({ sel: first.id, shown: { [first.id]: { data: s } } })).map((x) => x.html).join("");
+    wellFormed(html, "detail with cohors show");
+    console.log(`        ${s.detail.changed_files.length} changed files, ${s.detail.branches.length} branches, ${s.detail.recent_commits.length} commits in one repository`);
   });
 
   await check("the standup markdown and the dry-run arguments work", async () => {

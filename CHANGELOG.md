@@ -26,6 +26,20 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.14] — 2026-11-16
+
+### Added
+
+- **Run one command in many repositories from VS Code.** Tick repositories
+  and choose Run…: the command is shown exactly as it will run before
+  anything starts, and it needs a trusted workspace.
+- **A repository's panel in VS Code shows it in full:** changed files, every
+  branch against its upstream, stashes, recent commits, and with a GitHub
+  token its open pull requests and CI.
+- **VS Code says when a newer cohors is out,** in the dashboard and the
+  sidebar, with the command to copy. `cohors watch --json` lines now carry
+  `update`, the shape the MCP server's `meta.update` has.
+
 ## [0.8.13] — 2026-11-16
 
 ### Changed

@@ -2,7 +2,7 @@
   "name": "cohors",
   "displayName": "cohors",
   "description": "Every git repository you own in the sidebar: what is unpushed, behind or at risk, and what to do next. Push, pull and start an agent on a task without leaving the editor. Uses the cohors command-line tool.",
-  "version": "0.8.13",
+  "version": "0.8.14",
   "publisher": "rushirb2001",
   "license": "MIT",
   "repository": {
@@ -50,7 +50,7 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "In an untrusted workspace cohors still shows your repositories and can run its own fetch, pull, push, commit and stash. Every flow is disabled, whether a repository declared it or it was detected from the repository's scripts, and so is every agent and task a repository declares. The workspace also cannot set which folders are scanned: its cohors.roots setting is ignored, and the open folder is not used to find your repositories.",
+      "description": "In an untrusted workspace cohors still shows your repositories and can run its own fetch, pull, push, commit and stash. Every flow is disabled, whether a repository declared it or it was detected from the repository's scripts, and so is every agent and task a repository declares, and running one command across repositories. The workspace also cannot set which folders are scanned: its cohors.roots setting is ignored, and the open folder is not used to find your repositories.",
       "restrictedConfigurations": [
         "cohors.roots"
       ]

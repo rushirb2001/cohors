@@ -59,26 +59,40 @@ impl Home {
         self.home.join("code").join(name)
     }
 
-    /// `cohors watch --json`, with its input and output piped to the test.
+    /// `cohors watch --json`, with its input and output piped to the test,
+    /// never looking for a newer cohors.
     fn spawn(&self) -> Child {
-        Command::new(assert_cmd::cargo::cargo_bin("cohors"))
-            .args(["watch", "--json"])
+        let mut cmd = self.command();
+        cmd.env("COHORS_NO_UPDATE", "1");
+        cmd.spawn().expect("cohors starts")
+    }
+
+    /// The command [`Home::spawn`] runs, before the update switch.
+    fn command(&self) -> Command {
+        let mut cmd = Command::new(assert_cmd::cargo::cargo_bin("cohors"));
+        cmd.args(["watch", "--json"])
             .current_dir(&self.home)
             .env("HOME", &self.home)
             .env_remove("XDG_CONFIG_HOME")
             .env_remove("XDG_CACHE_HOME")
             .env_remove("COHORS_HOME")
-            .env("COHORS_NO_UPDATE", "1")
+            .env_remove("COHORS_NO_UPDATE")
+            .env_remove("COHORS_DISABLE_UPDATES")
+            .env_remove("CI")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("cohors starts")
+            .stderr(Stdio::piped());
+        cmd
     }
 
     /// [`Home::spawn`], with every output line parsed on a reader thread.
     fn watch(&self) -> (Child, Receiver<Value>) {
-        let mut child = self.spawn();
+        let child = self.spawn();
+        Self::lines(child)
+    }
+
+    /// Every output line of `child`, parsed on a reader thread.
+    fn lines(mut child: Child) -> (Child, Receiver<Value>) {
         let stdout = child.stdout.take().unwrap();
         let (tx, rx) = mpsc::channel();
         std::thread::spawn(move || {
@@ -192,6 +206,39 @@ fn a_line_per_change_and_silence_in_between() {
     drop(child.stdin.take());
     let status = wait_for_exit(&mut child);
     assert!(status.success(), "{status}");
+}
+
+#[test]
+fn a_newer_cohors_rides_on_the_stream_in_the_words_every_surface_uses() {
+    let home = Home::new();
+    // The update source, pointed at a local file (the test seam), says a
+    // newer release is out. Without it the line carries `update: null`.
+    let latest = home.home.join("latest.txt");
+    std::fs::write(&latest, "99.0.0\n").unwrap();
+    let mut cmd = home.command();
+    cmd.env("COHORS_UPDATE_SOURCE", &latest);
+    let (mut child, rx) = Home::lines(cmd.spawn().expect("cohors starts"));
+
+    // The background look may land before or after the first line; either
+    // way a line carries it within seconds.
+    let line = until(&rx, |line| line["update"]["version"] == "99.0.0");
+    assert!(
+        line["update"]["notice"]
+            .as_str()
+            .unwrap()
+            .starts_with("Update available: 99.0.0"),
+        "{}",
+        line["update"]
+    );
+    assert_eq!(line["update"]["detail"]["state"], "available");
+    drop(child.stdin.take());
+    assert!(wait_for_exit(&mut child).success());
+
+    // Told not to look, it says nothing about updates.
+    let (mut child, rx) = home.watch();
+    assert!(next(&rx)["update"].is_null());
+    drop(child.stdin.take());
+    assert!(wait_for_exit(&mut child).success());
 }
 
 #[test]

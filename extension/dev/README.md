@@ -20,7 +20,7 @@ the extension host does. The bar at the top is the harness, not the extension:
 - **Scenario** switches the state the host reports: the demo fleet, no
   repositories, cohors not installed, a wrong `cohors.binaryPath`, a failed
   scan, a cohors with no `agent` command, no runner installed, an untrusted
-  workspace, and still loading.
+  workspace, a newer cohors out, and still loading.
 - The grey text shows the last message the webview sent to the host.
 
 Query parameters set the starting state, which is handy for screenshots:
@@ -94,6 +94,14 @@ something to draw:
 - `agent.json` (runners and prompts, in the shape of the `cohors agent`
   contract), `local.json` (a task's linked conversation and two sessions),
   `devices.json` and `host.json` (what the extension host adds).
+
+**Written by hand**, not by `capture-fixtures.js`:
+
+- `suggestions.json`, three lines of the `suggestions` a `cohors watch` line
+  carries;
+- `show.json`, `cohors show web-app --json` for the demo `web-app`
+  (changed files, three branches, five commits, two pull requests). The
+  preview and `fake-cohors.js show` hand it out for every repository, renamed.
 
 ## The mark
 

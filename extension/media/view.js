@@ -266,9 +266,19 @@
         : `<p class="hint">From your cohors config.</p>`}`));
 
     if (ok) {
-      out.push(sec("foot", `<p class="hint" title="${esc((state.binary && state.binary.path) || "")}">Scanned ${esc(clock(m.now))}${state.binary && state.binary.version ? `<br>${esc(state.binary.version)}` : ""}</p>`));
+      out.push(sec("foot", `<p class="hint" title="${esc((state.binary && state.binary.path) || "")}">Scanned ${esc(clock(m.now))}${state.binary && state.binary.version ? `<br>${esc(state.binary.version)}` : ""}</p>${updateNote(state)}`));
     }
     return out;
+  }
+
+  // A newer cohors, as `cohors watch` reports it, in the words every surface
+  // uses (the terminal dashboard's header, the MCP server, `cohors` itself),
+  // with its command to copy when there is one. Empty when there is none.
+  function updateNote(state) {
+    const u = state && state.update;
+    if (!u || typeof u.notice !== "string") return "";
+    const cmd = u.detail && typeof u.detail.command === "string" ? u.detail.command : "";
+    return `<p class="update" role="status">${ico("arrow-circle-up")}<span>${esc(u.notice)}</span>${cmd ? iconBtn("copy", "Copy the command", { do: "copy", text: cmd }) : ""}</p>`;
   }
 
   /* ───────── problems: missing binary, failed scan ───────── */
@@ -472,7 +482,12 @@
       <span class="selcount" id="selcount">None selected</span>
       ${btn("Select shown", { do: "select-shown" }, { link: true })}${btn("Clear", { do: "select-none" }, { link: true })}
       <span class="grow"></span>
-      ${btn("Fetch", { do: "bulk", verb: "fetch" }, { title: "git fetch. Never touches a working tree." })}${btn("Pull", { do: "bulk", verb: "pull" }, { title: "git pull --ff-only. Asks first." })}${btn("Push", { do: "bulk", verb: "push" }, { title: "git push, never forced. Asks first." })}${btn("Commit", { do: "bulk", verb: "commit" }, { title: "Stage everything and commit with one message. Asks first." })}${btn("Stash", { do: "bulk", verb: "stash" }, { title: "git stash push. Asks first." })}
+      ${btn("Fetch", { do: "bulk", verb: "fetch" }, { title: "git fetch. Never touches a working tree." })}${btn("Pull", { do: "bulk", verb: "pull" }, { title: "git pull --ff-only. Asks first." })}${btn("Push", { do: "bulk", verb: "push" }, { title: "git push, never forced. Asks first." })}${btn("Commit", { do: "bulk", verb: "commit" }, { title: "Stage everything and commit with one message. Asks first." })}${btn("Stash", { do: "bulk", verb: "stash" }, { title: "git stash push. Asks first." })}${
+      // A shell command in each repository runs their code too, so it honours
+      // Workspace Trust; `untrusted` keeps it disabled when rows are ticked.
+      btn("Run…", { do: "bulk", verb: "run", untrusted: m.trusted ? null : "1" }, m.trusted
+        ? { title: "Run one shell command in each selected repository. Asks for the command, then shows it before it runs." }
+        : { disabled: true, title: "Disabled because this workspace is not trusted." })}
     </div>`));
 
     out.push(sec("table", block(list.length
@@ -523,6 +538,91 @@
     }).join("");
   }
 
+  /* What `cohors show` adds to the panel: the changed files, the local
+   * branches, the stashes, the recent commits and GitHub's side. `s` is
+   * `ui.shown[id]`: { loading, data, error }, where `data` is the parsed
+   * `cohors show --json` (see src/cohors.js). The same limits as the
+   * terminal's `cohors show`. */
+  const SHOW_FILES = 20;
+  const SHOW_COMMITS = 10;
+  const CHANGE = { M: "modified", A: "added", D: "deleted", R: "renamed", C: "copied", T: "type changed" };
+  const CI_WORD = { passing: "passing", failing: "failing", pending: "pending", none: "no checks" };
+
+  // A two-letter porcelain status (` M`, `A `, `??`) in words, for its tooltip.
+  function changeWords(code) {
+    const s = String(code || "");
+    if (s.startsWith("??")) return "untracked";
+    if (s.includes("U") || s === "AA" || s === "DD") return "conflicted";
+    const staged = CHANGE[s[0]];
+    const unstaged = CHANGE[s[1]];
+    return [staged ? `${staged}, staged` : "", unstaged || ""].filter(Boolean).join("; ") || s.trim();
+  }
+
+  function fullDetail(m, r, s) {
+    if (!s) return [];
+    const data = s.data;
+    if (!data || !data.detail) {
+      return [sec("d-more", s.error
+        ? `<h3>Files, branches and commits</h3><p class="dim">${esc(s.error)}</p>`
+        : `<p class="dim">${ico("loading", "spin")} Reading files, branches and commits…</p>`)];
+    }
+    const d = data.detail;
+    const out = [];
+    const row = (title, facts) => `<div class="frow"><div class="tmain"><div class="t">${title}</div><div class="d">${facts.filter(Boolean).map((f) => `<span>${f}</span>`).join("")}</div></div></div>`;
+
+    const files = d.changed_files || [];
+    if (files.length) {
+      out.push(sec("d-files", `<h3>Changed files</h3><dl class="kv files">${files.slice(0, SHOW_FILES).map((f) =>
+        // The code as `git status -s` prints it; a space would collapse, so it shows as a dot.
+        `<dt class="mono" title="${esc(changeWords(f.status))}">${esc(String(f.status || "").replace(/ /g, "·"))}</dt><dd class="mono wrap">${esc(f.path)}</dd>`).join("")}</dl>${
+        files.length > SHOW_FILES ? `<p class="dim">${plural(files.length - SHOW_FILES, "more file")}. <code>cohors changes --select name:${esc(r.name)}</code> lists every one.</p>` : ""}`));
+    }
+
+    const ciByBranch = (data.remote && data.remote.ci_by_branch) || {};
+    const branches = d.branches || [];
+    if (branches.length) {
+      out.push(sec("d-branches", `<h3>Branches</h3>${branches.map((b) => {
+        const sync = !b.has_upstream ? "No upstream"
+          : !b.ahead && !b.behind ? "Level with its upstream"
+          : [b.ahead ? `${count(b.ahead)} ahead` : "", b.behind ? `${count(b.behind)} behind` : ""].filter(Boolean).join(", ");
+        const ci = ciByBranch[b.name];
+        return row(`${ico("git-branch")}<span class="mono">${esc(b.name)}</span>${b.is_current ? `<span class="dim"> · checked out</span>` : ""}`,
+          [esc(sync), b.last_commit ? `last commit ${esc(ago(b.last_commit.timestamp, m.now))}` : "", ci ? `CI ${esc(CI_WORD[ci] || ci)}` : ""]);
+      }).join("")}`));
+    }
+
+    const stashes = d.stashes || [];
+    if (stashes.length) {
+      out.push(sec("d-stashes", `<h3>Stashes</h3>${stashes.map((x, i) => row(esc(x), [`<span class="mono">stash@{${i}}</span>`])).join("")}`));
+    }
+
+    const commits = (d.recent_commits || []).slice(0, SHOW_COMMITS);
+    if (commits.length) {
+      out.push(sec("d-commits", `<h3>Recent commits</h3>${commits.map((c) =>
+        row(esc(c.summary), [`<span class="mono">${esc(c.short_id)}</span>`, esc(ago(c.timestamp, m.now)), c.author ? esc(c.author) : ""])).join("")}`));
+    }
+
+    // GitHub's side: CI and the open pull requests, when GitHub answered.
+    const rd = data.remote_detail;
+    const remote = data.remote;
+    if (rd || remote) {
+      const facts = [];
+      if (remote && remote.ci) facts.push(["CI", CI_WORD[remote.ci] || remote.ci]);
+      if (rd && rd.latest_run) facts.push(["Latest run", CI_WORD[rd.latest_run] || rd.latest_run]);
+      if (rd) facts.push(["Issues", rd.open_issues ? `${count(rd.open_issues)} open${rd.assigned_issues ? `, ${count(rd.assigned_issues)} assigned to you` : ""}` : "None open"]);
+      if (rd && rd.latest_release) facts.push(["Release", rd.latest_release]);
+      const prs = (rd && rd.prs) || [];
+      out.push(sec("d-github", `<h3>GitHub</h3>${facts.length ? `<dl class="kv">${facts.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : ""}${
+        rd ? (prs.length
+          ? prs.map((p) => row(`${ico("git-pull-request")}<span class="mono">#${esc(p.number)}</span> ${esc(p.title)}`,
+              [esc(p.author), p.draft ? "draft" : "", `<span class="mono">${esc(p.branch)}</span>`,
+                (p.requested_reviewers || []).length ? `waiting on ${esc(p.requested_reviewers.join(", "))}` : ""])).join("")
+          : `<p class="dim">No open pull requests.</p>`)
+        : `<p class="dim">Pull requests need a GitHub token: run <code>gh auth login</code>.</p>`}`));
+    }
+    return out;
+  }
+
   function detail(state, ui) {
     const m = model(state);
     const r = ui.sel && m.byId.get(ui.sel);
@@ -561,6 +661,8 @@
       reasons.length ? `<ul class="why">${reasons.map((x) => `<li>${mark(r.severity)}<span>${esc(cap(x))}</span></li>`).join("")}</ul>` : `<p class="dim">This repository is pushed, fetched and clean.</p>`}
       <div class="dacts">${r.action && r.action.verb ? btn(r.action.label, Object.assign({ do: "repo-action" }, id), { primary: true }) : ""}${
         ["fetch", "pull", "push", "commit", "stash"].filter((v) => !(r.action && r.action.verb === v)).map((v) => btn(cap(v), Object.assign({ do: "bulk-one", verb: v }, id), { link: true })).join("")}</div>`));
+
+    out.push(...fullDetail(m, r, ui.shown && ui.shown[r.id]));
 
     if (!e.configured) {
       out.push(sec("d-setup", `<h3>Launchpad</h3><p class="dim">${e.invalid
@@ -868,7 +970,7 @@
         sec("figs", m.repos.length ? figures(m) : noRepos(state, m)),
         sec("foot", `<footer class="sfoot">
           ${roots.length ? `<ul>${roots.map((r) => `<li title="${esc(r)}">${ico("folder")}<span class="clip">${esc(tilde(r, state.home))}</span></li>`).join("")}</ul>` : ""}
-          <p title="${esc((state.binary && state.binary.path) || "")}">Scanned ${esc(clock(m.now))}${state.binary && state.binary.version ? ` · ${esc(state.binary.version)}` : ""}${iconBtn("gear", "Change roots in settings", { do: "settings" })}</p></footer>`),
+          <p title="${esc((state.binary && state.binary.path) || "")}">Scanned ${esc(clock(m.now))}${state.binary && state.binary.version ? ` · ${esc(state.binary.version)}` : ""}${iconBtn("gear", "Change roots in settings", { do: "settings" })}</p>${updateNote(state)}</footer>`),
       ];
     }
 

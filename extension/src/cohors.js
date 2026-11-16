@@ -17,8 +17,9 @@ const HOME = os.homedir();
 const WINDOWS = process.platform === "win32";
 const BIN_NAME = WINDOWS ? "cohors.exe" : "cohors";
 
-// The registry verbs the CLI exposes as bulk actions.
-const VERBS = ["fetch", "pull", "push", "commit", "stash"];
+// The registry verbs the CLI exposes as bulk actions: every verb in
+// `cohors_actions::registry()`, in its order (dev/check.js compares them).
+const VERBS = ["fetch", "pull", "push", "commit", "stash", "run"];
 
 // A failure with a `kind` the UI can turn into the right empty state:
 //   missing      no binary found (or the configured path is wrong)
@@ -272,13 +273,47 @@ function create(getConfig, opts = {}) {
       && (s.kind !== "resume" || (isObj(s.session) && str(s.session.id) && str(s.session.repo) && str(s.session.runner))));
   }
 
+  // A newer cohors, as each watch line carries it (`{version, notice,
+  // detail}`, the shape the MCP server's `meta.update` has too), or null.
+  function checkUpdate(u) {
+    return isObj(u) && typeof u.version === "string" && typeof u.notice === "string"
+      ? { version: u.version, notice: u.notice, detail: isObj(u.detail) ? u.detail : {} }
+      : null;
+  }
+
   const overview = async () => checkOverview(await json(["overview", "--json"]), "overview");
   const launchpad = async () => checkLaunchpad(await json(["launchpad", "--json"]), "launchpad");
 
   /**
+   * One repository in detail: `cohors show <repo> --json`, what an agent's
+   * `get_repo` returns. `detail` holds the changed files, local branches,
+   * stashes and recent commits; `remote` (CI) and `remote_detail` (pull
+   * requests, issues, the latest release) are there when GitHub answered.
+   * The repository is passed after `--`, so a path can never read as a flag.
+   */
+  async function show(repo) {
+    const s = await json(["show", "--json", "--", String(repo)]);
+    expect(isObj(s) && typeof s.name === "string", "show");
+    const list = (v, keep) => (Array.isArray(v) ? v.filter(keep) : []);
+    const d = isObj(s.detail) ? s.detail : {};
+    s.detail = {
+      current_branch: typeof d.current_branch === "string" ? d.current_branch : null,
+      changed_files: list(d.changed_files, (f) => isObj(f) && typeof f.path === "string"),
+      branches: list(d.branches, (b) => isObj(b) && typeof b.name === "string"),
+      stashes: list(d.stashes, (x) => typeof x === "string"),
+      recent_commits: list(d.recent_commits, (c) => isObj(c) && typeof c.summary === "string"),
+    };
+    s.remote = isObj(s.remote) ? s.remote : null;
+    s.remote_detail = isObj(s.remote_detail) ? s.remote_detail : null;
+    if (s.remote_detail) s.remote_detail.prs = list(s.remote_detail.prs, (p) => isObj(p) && typeof p.title === "string");
+    return s;
+  }
+
+  /**
    * Follow the fleet: `cohors watch --json`, one long-lived process that
    * prints the fleet once, then one line per change. Returns at once.
-   *   onLine({ seq, reason, changed, overview, launchpad, suggestions })
+   *   onLine({ seq, reason, changed, overview, launchpad, suggestions, update })
+   *     update: a newer cohors ({version, notice, detail}) or null
    *   onExit({ code, signal, stderr, unsupported })  unsupported: this cohors
    *     has no `watch` (older than 0.8), so the caller should poll instead.
    * The child's input stays open; `stop()` closes it, which ends the child,
@@ -316,6 +351,7 @@ function create(getConfig, opts = {}) {
             seq: v.seq, reason: String(v.reason || ""), changed: Array.isArray(v.changed) ? v.changed : [],
             overview: checkOverview(v.overview, "watch"), launchpad: checkLaunchpad(v.launchpad, "watch"),
             suggestions: checkSuggestions(v.suggestions),
+            update: checkUpdate(v.update),
           };
         } catch (e) {
           log(`cohors watch printed a line this extension cannot read: ${e.message}`);
@@ -361,7 +397,12 @@ function create(getConfig, opts = {}) {
    * The argument array for a bulk action, e.g.
    *   actionArgs("fetch", { ids: ["/code/a"] }, { dryRun: true })
    *   -> [..global, "fetch", "--select", '{"ids":["/code/a"]}', "--dry-run"]
+   *   actionArgs("run", { ids: ["/code/a"] }, { command: "npm test" })
+   *   -> [..global, "run", "--select", '{"ids":["/code/a"]}', "--", "npm test"]
    * The selector travels as one argv element, so nothing is ever shell-quoted.
+   * A `run` command travels as ONE element after `--`: cohors hands that one
+   * string to the shell in each repository, exactly as the user typed and saw
+   * it, and nothing in it can be read as a cohors flag.
    */
   function actionArgs(verb, selector, opts = {}) {
     if (!VERBS.includes(verb)) throw new CohorsError("failed", `Unknown action "${verb}".`);
@@ -374,11 +415,15 @@ function create(getConfig, opts = {}) {
       if (!opts.message || !String(opts.message).trim()) throw new CohorsError("failed", "A commit needs a message.");
       args.push("-m", String(opts.message));
     }
+    if (verb === "run" && (!opts.command || !String(opts.command).trim())) {
+      throw new CohorsError("failed", "Run needs a command.");
+    }
     if (opts.dryRun) args.push("--dry-run");
+    if (verb === "run") args.push("--", String(opts.command));
     return args;
   }
 
-  return { locate, reset, globalArgs, run, json, overview, launchpad, watch, standup, standupMarkdown, contract, version, actionArgs };
+  return { locate, reset, globalArgs, run, json, overview, launchpad, show, watch, standup, standupMarkdown, contract, version, actionArgs };
 }
 
 module.exports = { create, CohorsError, VERBS, expandHome };

@@ -128,6 +128,7 @@ body.bare .detail { top: 0 !important; }
       <option value="noagent">cohors without `agent`</option>
       <option value="norunner">No runner installed</option>
       <option value="untrusted">Untrusted workspace</option>
+      <option value="update">Newer cohors out</option>
       <option value="loading">Still loading</option>
     </select>
   </label>
@@ -155,7 +156,7 @@ body.bare .detail { top: 0 !important; }
   if (params.get("scenario")) scenarioSelect.value = params.get("scenario");
 
   // Fixtures, loaded once. The webview's first "ready" waits for them.
-  const NAMES = ["host", "overview", "launchpad", "standup-week", "standup-today", "agent", "local", "devices"];
+  const NAMES = ["host", "overview", "launchpad", "standup-week", "standup-today", "agent", "local", "devices", "show"];
   const fixtures = {};
   // `?from=DIR/` reads the fleet from another directory of real
   // `cohors … --json` output (the marketing studio's captures of its made-up
@@ -212,6 +213,12 @@ body.bare .detail { top: 0 !important; }
         return s;
       }
       case "untrusted": { const s = full(); s.trusted = false; return s; }
+      case "update": {
+        // A newer cohors, as `cohors watch` carries it.
+        const s = full();
+        s.update = { version: "0.9.0", notice: "Update available: 0.9.0 — run brew upgrade cohors", detail: { state: "available", version: "0.9.0", command: "brew upgrade cohors" } };
+        return s;
+      }
       default: return full();
     }
   }
@@ -241,6 +248,14 @@ body.bare .detail { top: 0 !important; }
         return void loaded.then(() => setTimeout(() => toWebview({ type: "standup", window: m.window, data: clone(fixtures[`standup-${m.window}`]) }), 150));
       case "devices":
         return void loaded.then(() => setTimeout(() => toWebview({ type: "devices", data: clone(fixtures.devices) }), 150));
+      case "repoDetail":
+        // `cohors show`: the one fixture, as the repository asked for.
+        return void loaded.then(() => setTimeout(() => {
+          const repo = fixtures.overview.repos.find((r) => r.id === m.id);
+          toWebview(repo
+            ? { type: "repo-detail", id: m.id, data: Object.assign(clone(fixtures.show), { id: repo.id, name: repo.name, path: repo.path }) }
+            : { type: "repo-detail", id: m.id, error: "That repository is not in the fleet any more." });
+        }, 150));
       case "copy": return void toWebview({ type: "toast", text: "Copied" });
       case "copyStandup": return void toWebview({ type: "toast", text: "Standup copied as markdown" });
       default: return;

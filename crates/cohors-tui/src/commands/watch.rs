@@ -9,8 +9,14 @@
 //! {"type":"fleet","seq":3,"reason":"git","changed":["/code/api"],
 //!  "overview":{…what `cohors overview --json` prints…},
 //!  "launchpad":{…what `cohors launchpad --json` prints…},
-//!  "suggestions":[{"kind","title","why","command","repo","score","session"?}]}
+//!  "suggestions":[{"kind","title","why","command","repo","score","session"?}],
+//!  "update":{"version","notice","detail"} | null}
 //! ```
+//!
+//! `update` is a newer cohors, when one is known, in the words every surface
+//! uses (the MCP server's `meta.update` has the same shape). Like the MCP
+//! server, the stream looks for releases in the background and only reports
+//! them: installing is left to the dashboard or `cohors update`.
 //!
 //! The changes come from the fleet watch (`cohors_fleet::FleetWatch`), the
 //! same change source the dashboard and `cohors web` use, and a line is
@@ -31,6 +37,7 @@ use std::sync::mpsc::RecvTimeoutError;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use cohors_core::update::UpdateState;
 use cohors_fleet::{FleetState, FleetWatch, WatchOptions};
 use serde_json::{Value, json};
 
@@ -42,12 +49,28 @@ use crate::cli::Cli;
 /// same interval.
 const TIME_CHECK: Duration = Duration::from_secs(300);
 
+/// How often the stream looks whether the background look found a newer
+/// cohors meanwhile: it is written down in one small file, so this is cheap,
+/// and a release shows up in the stream within seconds of being found.
+const UPDATE_CHECK: Duration = Duration::from_secs(10);
+
 /// `cohors watch [--json]`.
 pub fn run(cli: &Cli, json: bool) -> Result<()> {
     let human = !json && std::io::stdout().is_terminal();
     let color = wants_color(human);
     let scanner = Arc::new(crate::scan::from_cli(cli)?);
     end_when_input_closes();
+
+    // Look for a newer cohors now and every few minutes, as the MCP server
+    // does, so an editor that only follows this stream hears about releases.
+    // Report only: a stream another program started never installs anything.
+    let mode = crate::update::effective_mode(scanner.updates_mode());
+    crate::update::watch(mode, false, |_| true);
+    let wait = if mode == cohors_config::UpdatesMode::Off {
+        TIME_CHECK
+    } else {
+        UPDATE_CHECK
+    };
 
     let watch = FleetWatch::start(scanner, WatchOptions::default());
     let subscription = watch.subscribe();
@@ -59,8 +82,12 @@ pub fn run(cli: &Cli, json: bool) -> Result<()> {
     let mut out = std::io::stdout().lock();
     let mut state: Option<Arc<FleetState>> = None;
     let mut printed: Option<Value> = None;
+    let mut update = crate::update::remembered(mode);
+    // When the line was last worked out; ages move with the clock, so it is
+    // worked out again at least every TIME_CHECK.
+    let mut worked_out = std::time::Instant::now();
     loop {
-        let fresh = match subscription.recv_timeout(TIME_CHECK) {
+        let fresh = match subscription.recv_timeout(wait) {
             Ok(newer) => {
                 state = Some(newer);
                 true
@@ -68,17 +95,43 @@ pub fn run(cli: &Cli, json: bool) -> Result<()> {
             Err(RecvTimeoutError::Timeout) => false,
             Err(RecvTimeoutError::Disconnected) => bail!("the fleet watch stopped"),
         };
+        let newest = crate::update::remembered(mode);
+        let update_moved = newest != update;
+        update = newest;
+        // Woken only to look at the update: nothing to do unless it moved or
+        // the clock is due.
+        if !fresh && !update_moved && worked_out.elapsed() < TIME_CHECK {
+            continue;
+        }
+        worked_out = std::time::Instant::now();
         let Some(state) = &state else { continue };
-        let line = Line::of(state, here.as_deref(), user_home.as_deref(), now_secs());
+        let line = Line::of(
+            state,
+            here.as_deref(),
+            user_home.as_deref(),
+            update.as_ref(),
+            now_secs(),
+        );
         // Only what a reader shows decides whether to print: not the clock,
         // and not which event happened to bring it.
         if printed.as_ref() == Some(&line.content) {
             continue;
         }
-        let text = if human {
-            line.human(state, fresh, color)
+        // Why this line is printed: the fleet changed (`None`, the watch says
+        // how), a newer cohors was found, or only the clock moved.
+        let why = if fresh {
+            None
+        } else if update_moved {
+            Some("update")
         } else {
-            let mut json = serde_json::to_string(&line.json(state, fresh))
+            Some("time")
+        };
+        let text = if human {
+            // The notice goes under the first line, and again when it changes.
+            let with_update = printed.is_none() || update_moved;
+            line.human(state, why, with_update, color)
+        } else {
+            let mut json = serde_json::to_string(&line.json(state, why))
                 .context("serializing a watch line")?;
             json.push('\n');
             json
@@ -98,12 +151,20 @@ struct Line {
     overview: Value,
     launchpad: Value,
     suggestions: Value,
+    /// A newer cohors (`{version, notice, detail}`), or `null`.
+    update: Value,
     /// What decides whether it is printed: everything above, minus the clock.
     content: Value,
 }
 
 impl Line {
-    fn of(state: &FleetState, here: Option<&Path>, user_home: Option<&Path>, now: i64) -> Self {
+    fn of(
+        state: &FleetState,
+        here: Option<&Path>,
+        user_home: Option<&Path>,
+        update: Option<&UpdateState>,
+        now: i64,
+    ) -> Self {
         let here = here.and_then(|dir| cohors_fleet::repo_containing(&state.snapshots, dir));
         let bundle = &state.launchpad;
         let view = cohors_fleet::live_view(
@@ -128,6 +189,7 @@ impl Line {
             "recent_activity": bundle.recent_activity,
         });
         let suggestions = json!(view.suggestions);
+        let update = update_json(update);
         let mut clockless = overview.clone();
         if let Value::Object(map) = &mut clockless {
             map.remove("now");
@@ -136,39 +198,49 @@ impl Line {
             "overview": clockless,
             "launchpad": launchpad,
             "suggestions": suggestions,
+            "update": update,
         });
         Self {
             overview,
             launchpad,
             suggestions,
+            update,
             content,
         }
     }
 
-    /// The NDJSON object. `fresh` is false when only the clock moved.
-    fn json(&self, state: &FleetState, fresh: bool) -> Value {
+    /// The NDJSON object. `why` is `None` when the fleet changed, else why
+    /// the line was printed without a change (`update`, `time`).
+    fn json(&self, state: &FleetState, why: Option<&str>) -> Value {
         json!({
             "type": "fleet",
             "seq": state.seq,
-            "reason": if fresh { json!(state.reason) } else { json!("time") },
-            "changed": if fresh { json!(state.changed) } else { json!([]) },
+            "reason": why.map_or_else(|| json!(state.reason), |w| json!(w)),
+            "changed": if why.is_none() { json!(state.changed) } else { json!([]) },
             "overview": self.overview,
             "launchpad": self.launchpad,
             "suggestions": self.suggestions,
+            "update": self.update,
         })
     }
 
     /// One or two lines for a person at a terminal: the headline, and which
-    /// repositories changed.
-    fn human(&self, state: &FleetState, fresh: bool, color: bool) -> String {
+    /// repositories changed; with `with_update`, a newer cohors too.
+    fn human(
+        &self,
+        state: &FleetState,
+        why: Option<&str>,
+        with_update: bool,
+        color: bool,
+    ) -> String {
+        let fresh = why.is_none();
         let headline = self.overview["headline"].as_str().unwrap_or_default();
-        let reason = if !fresh {
-            "time".to_string()
-        } else {
-            serde_json::to_value(state.reason)
+        let reason = match why {
+            Some(why) => why.to_string(),
+            None => serde_json::to_value(state.reason)
                 .ok()
                 .and_then(|v| v.as_str().map(str::to_string))
-                .unwrap_or_default()
+                .unwrap_or_default(),
         };
         let mut text = format!(
             "  {}  {}\n",
@@ -193,7 +265,23 @@ impl Line {
             let names = crate::ui::text::safe(&names.join(", "));
             text.push_str(&format!("  {:<9}  {}\n", "", dim(color, &names)));
         }
+        if with_update && let Some(notice) = self.update["notice"].as_str() {
+            text.push_str(&format!("  {:<9}  {}\n", "", bold(color, notice)));
+        }
         text
+    }
+}
+
+/// A newer cohors as the stream carries it: the same shape as the MCP
+/// server's `meta.update`, so a reader of either learns one form.
+fn update_json(update: Option<&UpdateState>) -> Value {
+    match update {
+        Some(update) => json!({
+            "version": update.version(),
+            "notice": update.notice(),
+            "detail": update,
+        }),
+        None => Value::Null,
     }
 }
 

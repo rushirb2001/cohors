@@ -1,0 +1,118 @@
+{
+  "id": "demo/web-app",
+  "name": "web-app",
+  "path": "/home/dev/code/web-app",
+  "branch": {
+    "kind": "named",
+    "value": "feat/checkout"
+  },
+  "upstream": {
+    "name": "origin/main",
+    "ahead": 0,
+    "behind": 5
+  },
+  "worktree": {
+    "staged": 0,
+    "modified": 6,
+    "untracked": 1,
+    "conflicted": 0
+  },
+  "last_commit": {
+    "short_id": "ccb053a",
+    "author": "you",
+    "timestamp": 1794293655,
+    "summary": "wip: cart drawer animation"
+  },
+  "stash_count": 0,
+  "stash_latest": null,
+  "remote": null,
+  "remote_url": "https://github.com/acme/web-app.git",
+  "operation": null,
+  "default_branch": "main",
+  "last_fetch": 1794197699,
+  "latest_tag": null,
+  "groups": [],
+  "error": null,
+  "assessment": {
+    "severity": "warn",
+    "needs_attention": true,
+    "reasons": [
+      "5 commits behind",
+      "7 uncommitted files"
+    ]
+  },
+  "detail": {
+    "current_branch": "feat/checkout",
+    "recent_commits": [
+      { "short_id": "ccb053a", "author": "you", "timestamp": 1794293655, "summary": "wip: cart drawer animation" },
+      { "short_id": "9d41e70", "author": "you", "timestamp": 1794279255, "summary": "Cart drawer opens from the header" },
+      { "short_id": "5b2a8c1", "author": "you", "timestamp": 1794207255, "summary": "Checkout summary shows the shipping estimate" },
+      { "short_id": "e07f3d9", "author": "sam", "timestamp": 1794120855, "summary": "Payment step validates the postcode" },
+      { "short_id": "71c9a04", "author": "sam", "timestamp": 1794034455, "summary": "Start the checkout flow" }
+    ],
+    "changed_files": [
+      { "status": " M", "path": "src/cart/Drawer.tsx" },
+      { "status": " M", "path": "src/cart/Drawer.css" },
+      { "status": " M", "path": "src/cart/useCart.ts" },
+      { "status": " M", "path": "src/checkout/Summary.tsx" },
+      { "status": " M", "path": "src/checkout/Payment.tsx" },
+      { "status": " M", "path": "package.json" },
+      { "status": "??", "path": "src/cart/Drawer.test.tsx" }
+    ],
+    "branches": [
+      {
+        "name": "feat/checkout",
+        "ahead": 0,
+        "behind": 5,
+        "has_upstream": true,
+        "is_current": true,
+        "last_commit": { "short_id": "ccb053a", "author": "you", "timestamp": 1794293655, "summary": "wip: cart drawer animation" }
+      },
+      {
+        "name": "main",
+        "ahead": 0,
+        "behind": 0,
+        "has_upstream": true,
+        "is_current": false,
+        "last_commit": { "short_id": "3e8d1b2", "author": "sam", "timestamp": 1793948055, "summary": "Release 2.3.0" }
+      },
+      {
+        "name": "spike/apple-pay",
+        "ahead": 0,
+        "behind": 0,
+        "has_upstream": false,
+        "is_current": false,
+        "last_commit": { "short_id": "0a6f4c8", "author": "you", "timestamp": 1793429655, "summary": "Try the Apple Pay button" }
+      }
+    ],
+    "stashes": []
+  },
+  "remote_detail": {
+    "prs": [
+      {
+        "number": 41,
+        "title": "Checkout: cart drawer",
+        "author": "you",
+        "draft": true,
+        "branch": "feat/checkout",
+        "url": "https://github.com/acme/web-app/pull/41",
+        "requested_reviewers": []
+      },
+      {
+        "number": 38,
+        "title": "Bump vite from 5.3 to 5.4",
+        "author": "dependabot[bot]",
+        "draft": false,
+        "branch": "dependabot/npm_and_yarn/vite-5.4",
+        "url": "https://github.com/acme/web-app/pull/38",
+        "requested_reviewers": ["you"]
+      }
+    ],
+    "contributors": [],
+    "open_issues": 4,
+    "latest_release": "v2.3.0",
+    "assigned_issues": 1,
+    "default_branch_protected": true,
+    "latest_run": "failing"
+  }
+}

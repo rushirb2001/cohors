@@ -25,13 +25,15 @@ code --install-extension rushirb2001.cohors
 
 **3. Click the cohors icon in the activity bar.** If it can't find `cohors`, run **cohors: How to install the cohors command-line tool**, or set `cohors.binaryPath`.
 
-The editor keeps the extension up to date. The command-line tool updates itself when it came from Homebrew, pip or the shell installer; from npm or Cargo it tells you when a release is out.
+The editor keeps the extension up to date. The command-line tool updates itself when it came from Homebrew, pip or the shell installer; from npm or Cargo it tells you when a release is out, and so does the sidebar.
 
 ## What you get
 
 - **The fleet in the sidebar**: what to do next, work at risk, open tasks, this week's commits and every repository, as native panes.
 - **The full dashboard in a tab**: **cohors: Open dashboard** (<kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd>, or <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd>).
 - **Act from where you are**: push, pull or fetch any step or repository, open it in a new window, or open a terminal there. Pull, push, commit and stash ask first and offer a dry-run preview, and every action runs in a terminal so you see exactly what happens.
+- **One command in many repositories**: tick repositories and choose **Run…** to run one shell command in each (a test suite, a check). It is shown exactly as it will run before anything starts, and it needs a trusted workspace.
+- **Each repository in full**: its panel lists the changed files, every local branch against its upstream, stashes, recent commits, and with a GitHub token its open pull requests and CI.
 - **Run a repo's commands**: the commands a repository declares (or that cohors detects from npm, Cargo, uv, Makefiles and Gradle) run in a VS Code terminal with one click.
 - **Start an agent on a task**: each task has a button that opens Claude Code (or Codex, Gemini CLI or agy) in a terminal, briefed on that task. Run it again and it resumes the same conversation.
 

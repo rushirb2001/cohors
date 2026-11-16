@@ -107,6 +107,12 @@ code { color: var(--vscode-textPreformat-foreground, inherit); }
 .rail .item.static { color: var(--fg-2); cursor: default; }
 .rail .hint { padding: 0 8px; font-size: 12px; color: var(--fg-2); }
 .rail .sec[data-sec="foot"] { margin-top: auto; }
+/* A newer cohors: the notice every surface words the same way. */
+.update { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--link); overflow-wrap: anywhere; }
+.rail .update { padding: 0 8px; }
+.update > .codicon { flex: none; margin-top: 2px; }
+.update > span:not(.codicon) { flex: 1; min-width: 0; }
+.update .ib { flex: none; }
 
 /* ── Controls ──────────────────────────────────────────────────────────── */
 
@@ -335,6 +341,9 @@ th.chk, td.chk { width: 30px; padding-right: 0; overflow: visible; }
 .why + .dacts, .detail p + .dacts { margin-top: 10px; }
 .kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 12px; }
 .kv dt { color: var(--fg-2); }
+/* Changed files: a two-letter status code, then the path. */
+.kv.files { grid-template-columns: 2.4em minmax(0, 1fr); }
+.detail .kv + p, .detail .kv + .frow { margin-top: 8px; }
 .why li { display: flex; align-items: baseline; padding: 2px 0; }
 
 /* ── Problems and waiting ──────────────────────────────────────────────── */
