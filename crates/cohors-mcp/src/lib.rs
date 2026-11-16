@@ -2604,6 +2604,63 @@ mod tests {
         assert!(find("ci_status").is_some());
     }
 
+    /// The plugin's agents reach this server's tools by the names Claude Code
+    /// gives a plugin's MCP tools, `mcp__plugin_<plugin>_<server>__<tool>`,
+    /// and only through their `tools:` allowlist. Every such name must be a
+    /// tool this server has, so renaming a tool cannot silently leave an
+    /// agent without it.
+    #[test]
+    fn plugin_agents_allow_only_tools_the_server_has() {
+        use std::fs;
+        let plugin = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugin");
+        let read = |rel: &str| fs::read_to_string(plugin.join(rel)).unwrap();
+        let manifest: Value = serde_json::from_str(&read(".claude-plugin/plugin.json")).unwrap();
+        let servers: Value = serde_json::from_str(&read(".mcp.json")).unwrap();
+        let server = servers["mcpServers"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .next()
+            .unwrap();
+        let prefix = format!(
+            "mcp__plugin_{}_{server}__",
+            manifest["name"].as_str().unwrap()
+        );
+        let catalog = tool_catalog();
+        let names: Vec<&str> = catalog
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
+
+        let mut agents = 0;
+        for entry in fs::read_dir(plugin.join("agents")).unwrap() {
+            let path = entry.unwrap().path();
+            let text = fs::read_to_string(&path).unwrap();
+            let line = text
+                .lines()
+                .find(|l| l.starts_with("tools:"))
+                .unwrap_or_else(|| panic!("{path:?} has no tools: line"));
+            let ours: Vec<&str> = line["tools:".len()..]
+                .trim()
+                .trim_matches(['[', ']'])
+                .split(',')
+                .map(str::trim)
+                .filter(|t| t.starts_with("mcp__"))
+                .collect();
+            assert!(!ours.is_empty(), "{path:?} allows no cohors tool");
+            for tool in ours {
+                let name = tool
+                    .strip_prefix(&prefix)
+                    .unwrap_or_else(|| panic!("{path:?}: `{tool}` is not `{prefix}<tool>`"));
+                assert!(names.contains(&name), "{path:?}: there is no `{name}` tool");
+            }
+            agents += 1;
+        }
+        assert!(agents >= 2, "both agents were read");
+    }
+
     #[test]
     fn a_plugin_server_names_the_setting_to_turn_on() {
         let plugin = Caps {

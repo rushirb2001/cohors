@@ -26,6 +26,16 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.12] — 2026-11-16
+
+### Fixed
+
+- **The plugin's agents can use cohors.** The `cohors-plan` and
+  `cohors-setup` agents were not allowed the cohors tools; now they are.
+- **The plugin runs the cohors that keeps itself up to date.** When cohors
+  installed itself (`~/.local/bin/cohors`), the plugin starts that copy
+  before a Homebrew or Cargo one that may be older.
+
 ## [0.8.11] — 2026-11-16
 
 ### Added

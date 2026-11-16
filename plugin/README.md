@@ -24,7 +24,7 @@ or from a shell: `claude plugin marketplace add rushirb2001/cohors && claude plu
 
 **3. Start a new session** and ask about your repos.
 
-Claude Code starts MCP servers with a stripped `PATH`, so the plugin looks for `cohors` itself: on the `PATH`, then where Homebrew, Cargo and the shell installer put it, `~/.local/bin` and Nix. If it finds none, the server does not start (`/mcp` shows it failed) and its message names the install commands. A pip install into a virtualenv, or an npm install, may not be found; Homebrew or the shell installer always is.
+Claude Code starts MCP servers with a stripped `PATH`, so the plugin looks for `cohors` itself: first cohors' own self-updating install (`cohors install`, the link `~/.local/bin/cohors`), then on the `PATH`, then where Homebrew, Cargo and the shell installer put it, `~/.local/bin` and Nix. If it finds none, the server does not start (`/mcp` shows it failed) and its message names the install commands. A pip install into a virtualenv, or an npm install, may not be found; Homebrew or the shell installer always is.
 
 ## What Claude may do
 

@@ -4,7 +4,8 @@
 # Why a launcher: an agent starts MCP servers with a stripped PATH, so
 # a bare `cohors` often resolves to nothing and the agent silently ends up with
 # no tools. This looks in the places every install channel puts the binary,
-# each spelled out, and runs the first one found.
+# each spelled out, and runs the first one found, cohors' own self-updating
+# install first.
 #
 #   sh cohors-launch.sh mcp    the MCP server (.mcp.json)
 #
@@ -23,7 +24,24 @@ if [ "${1:-}" = mcp ]; then
   export COHORS_MCP_FROM_PLUGIN=1
 fi
 
-# The first install found wins: on the PATH, then each channel's own place.
+# cohors' own install wins over every other copy, because it updates itself:
+# `cohors install` keeps each release under ~/.local/share/cohors/versions
+# and the link ~/.local/bin/cohors (or $XDG_BIN_HOME/cohors) on the active
+# one. A Homebrew or Cargo copy found first on the PATH would be stuck on
+# whatever version it was installed at. Only that link counts, not any file
+# at that place: a pipx or uv tool link there is a copy like the others.
+managed_bin="$HOME/.local/bin"
+case "${XDG_BIN_HOME:-}" in
+  /*) managed_bin="$XDG_BIN_HOME" ;; # only an absolute path counts, as in XDG
+esac
+if [ -L "$managed_bin/cohors" ] && [ -x "$managed_bin/cohors" ]; then
+  case "$(readlink "$managed_bin/cohors")" in
+    */cohors/versions/*) exec "$managed_bin/cohors" "$@" ;;
+  esac
+fi
+
+# Otherwise the first install found wins: on the PATH, then each channel's
+# own place.
 if command -v cohors >/dev/null 2>&1; then exec cohors "$@"; fi
 if [ -x "$HOME/.cargo/bin/cohors" ]; then exec "$HOME/.cargo/bin/cohors" "$@"; fi
 if [ -x /opt/homebrew/bin/cohors ]; then exec /opt/homebrew/bin/cohors "$@"; fi
