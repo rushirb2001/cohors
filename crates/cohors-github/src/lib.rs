@@ -41,6 +41,27 @@ fn cache() -> &'static Mutex<HashMap<String, (Instant, RemoteInfo)>> {
 /// With no `token`, or on network/rate-limit failure, snapshots are left
 /// untouched (the dashboard shows "—") — this never blocks or errors out.
 pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
+    enrich_with_progress(snapshots, token, &|_, _| {});
+}
+
+/// Whether `snap`'s remote is on GitHub, so [`enrich`] would ask about it.
+pub fn on_github(snap: &RepoSnapshot) -> bool {
+    snap.remote_url
+        .as_deref()
+        .and_then(url::parse_repo)
+        .is_some()
+}
+
+/// [`enrich`], calling `progress(done, total)` as answers come in: once with
+/// `done = 0` before the first request, then after each repository GitHub was
+/// asked about. `total` counts only those that need asking (fresh cache
+/// entries cost nothing), so a command can show it is working rather than
+/// sitting silent.
+pub fn enrich_with_progress(
+    snapshots: &mut [RepoSnapshot],
+    token: Option<&str>,
+    progress: &(dyn Fn(usize, usize) + Sync),
+) {
     // No token → nothing to do. Leave every `remote` as `None`.
     let Some(token) = token.filter(|t| !t.is_empty()) else {
         return;
@@ -73,8 +94,17 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
     // HTTP round-trips, so a sequential pass over a large fleet took minutes;
     // ENRICH_POOL_SIZE keeps it fast without hammering the API (which would
     // trip secondary rate limits — deliberately NOT one-task-per-repo).
+    let done = std::sync::atomic::AtomicUsize::new(0);
+    progress(0, pending.len());
     let fetch_one = |(owner, repo, key, ci_refs): &(String, String, String, Vec<String>)| {
+        // Counted however it ends (answered, failed, skipped after a rate
+        // limit), so the count always reaches the total.
+        let report = || {
+            let n = done.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            progress(n, pending.len());
+        };
         if rate_limited.load(std::sync::atomic::Ordering::Relaxed) {
+            report();
             return;
         }
         match fetch_remote(&agent, token, owner, repo, ci_refs) {
@@ -89,6 +119,7 @@ pub fn enrich(snapshots: &mut [RepoSnapshot], token: Option<&str>) {
                 tracing::debug!(repo = %key, error = %reason, "github enrich failed; leaving remote empty");
             }
         }
+        report();
     };
     match rayon::ThreadPoolBuilder::new()
         .num_threads(ENRICH_POOL_SIZE)
@@ -745,6 +776,28 @@ struct WorkflowRun {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Progress is reported only when GitHub would be asked: never without a
+    /// token, and as "nothing to do" when no repository is on GitHub, which
+    /// costs no request at all.
+    #[test]
+    fn progress_is_reported_only_for_what_github_is_asked() {
+        let mut snaps = cohors_core::demo::fleet(1_700_000_000);
+        let calls = Mutex::new(Vec::new());
+        let note = |done: usize, total: usize| calls.lock().unwrap().push((done, total));
+        enrich_with_progress(&mut snaps, None, &note);
+        assert!(calls.lock().unwrap().is_empty(), "no token, no asking");
+
+        for snap in &mut snaps {
+            snap.remote_url = Some("git@gitlab.com:team/app.git".into());
+        }
+        assert!(!snaps.iter().any(on_github));
+        enrich_with_progress(&mut snaps, Some("token"), &note);
+        assert_eq!(*calls.lock().unwrap(), [(0, 0)]);
+
+        snaps[0].remote_url = Some("https://github.com/rushirb2001/cohors.git".into());
+        assert!(on_github(&snaps[0]));
+    }
 
     fn check(status: &str, conclusion: Option<&str>) -> CheckRun {
         CheckRun {

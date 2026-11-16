@@ -1206,9 +1206,36 @@ pub fn prs(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
         return Ok(());
     };
 
-    let mut snapshots = scanner.scan();
-    cohors_fleet::enrich(&mut snapshots, Some(&token));
-    let selected = resolve_in_order(&snapshots, &selector, now_secs());
+    // This asks GitHub, which takes a while on a big fleet: at a terminal,
+    // say what is happening (only reading) and count the answers on stderr,
+    // rather than sitting silent.
+    let progress = human && std::io::stderr().is_terminal();
+    if progress {
+        eprint!("{}", progress_line("Reading your repositories…", color));
+    }
+    let snapshots = scanner.scan();
+    // Only the selected repositories are asked about.
+    let mut selected: Vec<RepoSnapshot> = resolve_in_order(&snapshots, &selector, now_secs())
+        .into_iter()
+        .cloned()
+        .collect();
+    let asking = selected
+        .iter()
+        .filter(|s| cohors_fleet::on_github(s))
+        .count();
+    let show = |done: usize, total: usize| {
+        if progress {
+            let what = format!(
+                "Asking GitHub about {} (read-only; Ctrl-C stops it)…  {done} of {total}",
+                plural_repos(asking)
+            );
+            eprint!("{}", progress_line(&what, color));
+        }
+    };
+    cohors_fleet::enrich_with_progress(&mut selected, Some(&token), &show);
+    if progress {
+        eprint!("\r\x1b[2K");
+    }
     let rows: Vec<PrRow> = selected
         .iter()
         .filter_map(|s| {
@@ -1236,6 +1263,22 @@ pub fn prs(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
     }
     print!("{}", prs_report(&rows, excluded, term_width(), color));
     Ok(())
+}
+
+/// `N repository` / `N repositories`.
+fn plural_repos(n: usize) -> String {
+    format!("{n} {}", if n == 1 { "repository" } else { "repositories" })
+}
+
+/// A line that says what a slow command is doing, written over itself on
+/// stderr (`\r`, then clear the line), dim when colour is on.
+fn progress_line(text: &str, color: bool) -> String {
+    let text = if color {
+        format!("\x1b[2m{text}\x1b[0m")
+    } else {
+        text.to_string()
+    };
+    format!("\r\x1b[2K{text}")
 }
 
 /// One repo in the shape of the MCP `list_prs` and `ci_status` rows, merged.

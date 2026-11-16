@@ -40,7 +40,9 @@ pub use watch::{FleetState, FleetWatch, Reason, Subscription, WatchOptions};
 pub use cohors_git::{
     ContentHit, collect_commits, repo_changes, repo_detail, search_content, snapshot_repo,
 };
-pub use cohors_github::{discover_token, enrich, fetch_repo_detail};
+pub use cohors_github::{
+    discover_token, enrich, enrich_with_progress, fetch_repo_detail, on_github,
+};
 
 // The launchpad (each repo's `.cohors/` contribution, the focus board, the
 // activity log) is reached through this facade too, so front-ends have one

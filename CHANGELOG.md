@@ -26,6 +26,17 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.17] — 2026-11-16
+
+### Fixed
+
+- **`cohors prs` says what it is doing instead of sitting silent.** At a
+  terminal it says it is reading your repositories, then that it is asking
+  GitHub about them, read-only, and counts the answers as they arrive
+  (`Asking GitHub about 27 repositories (read-only; Ctrl-C stops it)…
+  12 of 27`). It now asks only about the repositories you selected, not the
+  whole fleet.
+
 ## [0.8.16] — 2026-11-16
 
 ### Changed
