@@ -26,6 +26,15 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.7.10] — 2026-11-16
+
+### Fixed
+
+- **The headline counts every repository**, on every surface (dashboard, web,
+  editor, MCP): `29 repositories. 2 have work at risk, 6 need a look, 21 are
+  clean.` Before, the repositories that needed a look were left out, so the
+  numbers did not add up.
+
 ## [0.7.9] — 2026-11-16
 
 ### Fixed
