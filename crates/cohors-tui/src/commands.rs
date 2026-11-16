@@ -996,12 +996,14 @@ fn overview_report(
 
 /// A bulk git action issued from the CLI. Mirrors the TUI verbs and the MCP
 /// action tools — one core (`crate::action`), three surfaces.
+#[derive(Clone)]
 pub enum CliAction {
     Fetch,
     Pull,
     Push,
-    /// `None` means the message was omitted, which prints the guide.
-    Commit(Option<String>),
+    /// `None` means the message was omitted, which prints the guide. The
+    /// options say how to stage and whether secrets may go in.
+    Commit(Option<String>, cohors_actions::CommitOptions),
     Stash,
 }
 
@@ -1012,7 +1014,7 @@ impl CliAction {
             CliAction::Fetch => "fetch",
             CliAction::Pull => "pull",
             CliAction::Push => "push",
-            CliAction::Commit(_) => "commit",
+            CliAction::Commit(..) => "commit",
             CliAction::Stash => "stash",
         }
     }
@@ -1023,7 +1025,7 @@ impl CliAction {
             CliAction::Fetch => "fetching",
             CliAction::Pull => "pulling",
             CliAction::Push => "pushing",
-            CliAction::Commit(_) => "committing",
+            CliAction::Commit(..) => "committing",
             CliAction::Stash => "stashing",
         }
     }
@@ -1032,7 +1034,7 @@ impl CliAction {
     /// worked examples so the shape of a real invocation is obvious.
     fn arg_hint(&self) -> &'static str {
         match self {
-            CliAction::Commit(_) => "-m \"your message\"",
+            CliAction::Commit(..) => "-m \"your message\"",
             _ => "",
         }
     }
@@ -1040,7 +1042,7 @@ impl CliAction {
     /// Whether a required argument other than the selector is still missing, which
     /// (like a missing selector) sends the user to the guide rather than an error.
     fn missing_arg(&self) -> bool {
-        matches!(self, CliAction::Commit(None))
+        matches!(self, CliAction::Commit(None, _))
     }
 
     /// What the verb does, and why it is safe to run. Shown in the command's own
@@ -1059,7 +1061,7 @@ impl CliAction {
                 "git push across the repos you pick",
                 "never force-pushes, so remote history stays safe",
             ),
-            CliAction::Commit(_) => (
+            CliAction::Commit(..) => (
                 "git add -A and commit across the repos you pick",
                 "stages tracked and untracked files, and never amends",
             ),
@@ -1240,7 +1242,7 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
     // error: say what this verb does and how to choose repos, rather than failing
     // with a bare "required argument" message.
     // A selector but no usable message is a mistake, not a question: name it.
-    if let (Some(select), CliAction::Commit(message)) = (select, &action)
+    if let (Some(select), CliAction::Commit(message, _)) = (select, &action)
         && message.as_deref().is_none_or(|m| m.trim().is_empty())
     {
         eprintln!(
@@ -1289,6 +1291,10 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
                 "{}",
                 guide_row(&s.name, s.path.as_ref().unwrap().as_str(), w, color)
             );
+            // A commit's preview names the files, so nothing goes in unseen.
+            if let CliAction::Commit(_, opts) = &action {
+                print!("{}", commit_preview(s.path.as_ref().unwrap(), *opts, color));
+            }
         }
         println!();
         return Ok(());
@@ -1299,7 +1305,7 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
     // applies); fetch/push never touch the worktree.
     let guard_worktree = matches!(
         action,
-        CliAction::Pull | CliAction::Stash | CliAction::Commit(_)
+        CliAction::Pull | CliAction::Stash | CliAction::Commit(..)
     );
     print!(
         "{}",
@@ -1307,42 +1313,121 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
     );
     let mut ok = 0usize;
     let mut skipped = 0usize;
+    // Skips first (they need no git), then every repo at once on the shared
+    // bounded pool the MCP server and the web use (ADR-050), each line printed
+    // the moment its repo finishes, so a big fleet shows progress, not a pause.
+    let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+    let mut started = 0usize;
     for s in &targets {
-        let path = s.path.as_ref().unwrap();
         if guard_worktree && let Some(reason) = cohors_actions::worktree_block(s) {
             skipped += 1;
             println!("    {} {}: {reason}", dim(color, "·"), dim(color, &s.name));
             continue;
         }
-        let result = match &action {
-            CliAction::Fetch => crate::action::fetch(path, &s.name),
-            CliAction::Pull => crate::action::pull_ff(path, &s.name),
-            CliAction::Push => crate::action::push(path, &s.name),
-            // Guarded above: a commit with no message printed the guide and left.
-            CliAction::Commit(message) => {
-                crate::action::commit(path, &s.name, message.as_deref().unwrap_or_default())
-            }
-            CliAction::Stash => crate::action::stash_push(path, &s.name),
-        };
+        let path = s.path.clone().unwrap_or_default();
+        let name = s.name.clone();
+        let action = action.clone();
+        let tx = tx.clone();
+        started += 1;
+        cohors_actions::spawn_bounded(move || {
+            let result = match &action {
+                CliAction::Fetch => crate::action::fetch(&path, &name),
+                CliAction::Pull => crate::action::pull_ff(&path, &name),
+                CliAction::Push => crate::action::push(&path, &name),
+                // Guarded above: a commit with no message never gets here.
+                CliAction::Commit(message, opts) => cohors_actions::commit_with(
+                    &path,
+                    &name,
+                    message.as_deref().unwrap_or_default(),
+                    *opts,
+                ),
+                CliAction::Stash => crate::action::stash_push(&path, &name),
+            };
+            let _ = tx.send(result);
+        });
+    }
+    drop(tx);
+    let mut refused_secret = false;
+    for result in rx.iter().take(started) {
         match result {
             Ok(message) => {
                 ok += 1;
                 println!("    {} {message}", sgr(color, "32", "✓"));
             }
-            Err(message) => println!("    {} {message}", sgr(color, "31", "✗")),
+            Err(message) => {
+                refused_secret |= message.contains("looks like a secret");
+                println!("    {} {message}", sgr(color, "31", "✗"));
+            }
         }
+        let _ = std::io::stdout().flush();
     }
     let mut tail = format!("{ok} of {n} ok");
     if skipped > 0 {
         tail.push_str(&format!(", {skipped} skipped"));
     }
     println!("\n  {}\n", bold(color, &tail));
+    if refused_secret {
+        println!(
+            "  {}\n",
+            dim(
+                color,
+                "A repo was refused because a file looks like a secret. Ignore it in .gitignore, commit with --staged after staging by hand, or pass --allow-secrets."
+            )
+        );
+    }
     // Scripts and CI read the status: a repo that failed fails the command.
     // Skipped repos (conflicted, mid-operation) were left alone on purpose.
     if ok + skipped < n {
         return Err(ExitCode(1).into());
     }
     Ok(())
+}
+
+/// The files one repo's commit would include, under its row in a dry run:
+/// what `git add -A` would stage (or, `--staged`, the index), each with its
+/// porcelain status, and any that look like secrets marked as refused.
+fn commit_preview(path: &Utf8Path, opts: cohors_actions::CommitOptions, color: bool) -> String {
+    let files = match cohors_actions::paths_to_commit(path, opts.staged_only) {
+        Ok(files) => files,
+        Err(err) => return format!("        {}\n", dim(color, &err)),
+    };
+    if files.is_empty() {
+        return format!("        {}\n", dim(color, "nothing to commit"));
+    }
+    let secrets = cohors_actions::secret_paths(&files);
+    let status: HashMap<String, String> = cohors_fleet::repo_changes(path, false, 0)
+        .files
+        .into_iter()
+        .map(|f| (f.path, f.status))
+        .collect();
+    const SHOWN: usize = 12;
+    let mut out = String::new();
+    for file in files.iter().take(SHOWN) {
+        let code = status.get(file).map(String::as_str).unwrap_or("  ");
+        let shown = crate::ui::text::safe(file);
+        if secrets.contains(file) {
+            let note = if opts.allow_secrets {
+                "looks like a secret; --allow-secrets commits it"
+            } else {
+                "looks like a secret; the commit will be refused"
+            };
+            out.push_str(&format!(
+                "        {} {}  {}\n",
+                dim(color, code),
+                sgr(color, "1;31", &shown),
+                sgr(color, "31", note)
+            ));
+        } else {
+            out.push_str(&format!("        {} {}\n", dim(color, code), shown));
+        }
+    }
+    if files.len() > SHOWN {
+        out.push_str(&format!(
+            "        {}\n",
+            dim(color, &format!("and {} more", files.len() - SHOWN))
+        ));
+    }
+    out
 }
 
 /// The "your selector matched nothing" state: never a bare error, always a way

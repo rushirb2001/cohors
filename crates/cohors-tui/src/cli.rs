@@ -173,6 +173,13 @@ pub enum Command {
         /// this command does and how to pick repos.
         #[arg(short, long, value_name = "MSG")]
         message: Option<String>,
+        /// Commit only what is already staged in each repo (no `git add -A`).
+        #[arg(long)]
+        staged: bool,
+        /// Commit files that look like secrets (`.env`, private keys) too.
+        /// Without it, a repo where one would go in is refused.
+        #[arg(long)]
+        allow_secrets: bool,
     },
     /// git stash push (tracked changes) across the selected repos.
     Stash(ActionArgs),

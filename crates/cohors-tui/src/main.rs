@@ -77,9 +77,20 @@ fn main() -> anyhow::Result<()> {
             a.select.as_deref(),
             a.dry_run,
         ),
-        Some(Command::Commit { action, message }) => commands::run_action(
+        Some(Command::Commit {
+            action,
+            message,
+            staged,
+            allow_secrets,
+        }) => commands::run_action(
             &cli,
-            commands::CliAction::Commit(message.clone()),
+            commands::CliAction::Commit(
+                message.clone(),
+                cohors_actions::CommitOptions {
+                    staged_only: *staged,
+                    allow_secrets: *allow_secrets,
+                },
+            ),
             action.select.as_deref(),
             action.dry_run,
         ),
