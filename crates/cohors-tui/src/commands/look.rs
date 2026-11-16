@@ -38,8 +38,8 @@ pub enum Style {
 }
 
 impl Style {
-    /// Every style, in the order they are offered.
-    pub const ALL: [Style; 4] = [Style::Card, Style::Panel, Style::Quiet, Style::Classic];
+    /// Every style, the default first.
+    pub const ALL: [Style; 4] = [Style::Panel, Style::Card, Style::Quiet, Style::Classic];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -71,8 +71,10 @@ pub struct Look {
 /// reads as a few words lost in a long frame.
 const MAX_WIDTH: usize = 96;
 
-/// Until the user picks one, the look a screen gets when nothing says otherwise.
-pub const DEFAULT_STYLE: Style = Style::Classic;
+/// The look a screen gets when nothing says otherwise (ADR-060): the panel,
+/// whose header band and rules carry the dashboard's own chrome into the plain
+/// terminal. `COHORS_LOOK` still picks another.
+pub const DEFAULT_STYLE: Style = Style::Panel;
 
 thread_local! {
     static LOOK: Cell<Option<Look>> = const { Cell::new(None) };
@@ -119,6 +121,26 @@ pub fn get() -> Look {
         ascii: false,
         width: 80,
     })
+}
+
+/// While the returned guard lives, draw no wider than `width` (a report laid
+/// out for a given width passes it down to its rules and boxes this way).
+pub fn narrow_to(width: usize) -> WidthGuard {
+    let before = LOOK.with(|l| l.get());
+    let mut look = get();
+    look.width = look.width.min(width);
+    set(look);
+    WidthGuard(before)
+}
+
+/// Restores the look [`narrow_to`] changed, when dropped.
+pub struct WidthGuard(Option<Look>);
+
+impl Drop for WidthGuard {
+    fn drop(&mut self) {
+        let before = self.0;
+        LOOK.with(|l| l.set(before));
+    }
 }
 
 /// Run `f` under `look`, then restore the previous one (for tests).
@@ -399,29 +421,34 @@ pub fn section(heading: &str, descriptor: &str, color: bool) -> String {
             dim(color, descriptor)
         ),
         Style::Panel => {
-            // `── Do next ───────────── most urgent first ──`
-            let left = format!("{0}{0} ", ink.h);
-            let right = if descriptor.is_empty() {
-                format!(" {0}{0}", ink.h)
+            // `── Do next ───────────── most urgent first ──`, never wider than
+            // the look: a long descriptor is clipped, a hopeless one dropped.
+            let rule = |n: usize| ink.h.repeat(n);
+            let heading = clip(&heading, w.saturating_sub(10));
+            // indent, `── `, heading, ` `, at least `──`, then ` desc ──`.
+            let fixed = 2 + 3 + heading.chars().count() + 1;
+            let room = (w).saturating_sub(fixed + 2 + 4);
+            let desc = if descriptor.is_empty() || room < 8 {
+                String::new()
             } else {
-                format!(" {descriptor} {0}{0}", ink.h)
+                clip(descriptor, room)
             };
-            let used = left.chars().count() + heading.chars().count() + 1 + right.chars().count();
-            let fill = ink.h.repeat((w - 2).saturating_sub(used).max(2));
-            let right = if descriptor.is_empty() {
-                dim(color, &right)
+            let tail = if desc.is_empty() {
+                0
             } else {
-                format!(
-                    " {} {}",
-                    dim(color, descriptor),
-                    dim(color, &format!("{0}{0}", ink.h))
-                )
+                desc.chars().count() + 4
+            };
+            let fill = w.saturating_sub(fixed + tail).max(2);
+            let right = if desc.is_empty() {
+                String::new()
+            } else {
+                format!(" {} {}", dim(color, &desc), dim(color, &rule(2)))
             };
             format!(
-                "  {}{} {}{}\n",
-                dim(color, &left),
+                "  {} {} {}{}\n",
+                dim(color, &rule(2)),
                 brand(color, &heading),
-                dim(color, &fill),
+                dim(color, &rule(fill)),
                 right
             )
         }

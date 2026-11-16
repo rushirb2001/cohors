@@ -147,6 +147,7 @@ pub(crate) fn render_report(
     width: usize,
     color: bool,
 ) -> String {
+    let _width = super::look::narrow_to(width);
     let configured = entries.iter().filter(|e| e.configured).count();
     let open: usize = entries.iter().map(|e| e.open_tasks().len()).sum();
     let plural =

@@ -3,27 +3,24 @@ source: crates/cohors-tui/src/commands/launchpad.rs
 expression: "render_report(&fleet(), &board, 100, false)"
 ---
 
-  cohors
+  ── cohors vX.Y.Z ─────────────────────────────────────────────────────────────
   launchpad: flows, agents and tasks across your repos
   3 repositories, 1 set up, 3 open tasks
+  ──────────────────────────────────────────────────────────────────────────────
 
-  Focus
-  your cross-repo board, the short list you chose
+  ── Focus ────────────────── your cross-repo board, the short list you chose ──
     ◆ Ship retries  pay-api
 
-  Open tasks
-  ◆ doing, ✕ blocked, ○ to do; most urgent first
+  ── Open tasks ────────────── ◆ doing, ✕ blocked, ○ to do; most urgent first ──
     ▸ pay-api  3 open
       ◆ Task b  high  doing
       ✕ Task d  blocked
       ○ Task a  low
 
-  Needs fixing
-  a .cohors/repo.json that could not be read
-    ▸ infra  repo.json is not valid JSON
+  ── Needs fixing ──────────────── a .cohors/repo.json that could not be read ──
+    › infra  repo.json is not valid JSON
 
-  Not set up yet
-  1 repository with no launchpad file
+  ── Not set up yet ───────────────────── 1 repository with no launchpad file ──
     web
     ▸ cohors agent run setup-repo
       run it inside one; your agent writes the file

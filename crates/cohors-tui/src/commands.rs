@@ -627,6 +627,7 @@ fn scan_report(
     color: bool,
     selected: Option<(&str, usize)>,
 ) -> String {
+    let _width = look::narrow_to(width);
     let where_at = roots
         .iter()
         .map(|r| crate::ui::abbrev_home(r))
@@ -850,6 +851,7 @@ fn overview_report(
     width: usize,
     color: bool,
 ) -> String {
+    let _width = look::narrow_to(width);
     let where_at = roots
         .iter()
         .map(|r| crate::ui::abbrev_home(r))
@@ -2542,11 +2544,11 @@ mod tests {
             assert!(w.contains(&action.title), "{}", action.title);
         }
         assert!(w.find(&o.actions[0].title) < w.find(&o.actions[1].title));
-        assert!(w.contains(" RISK ")); // the severity block, as in the dashboard
+        assert!(w.contains("RISK")); // the severity block, as in the dashboard
         // …and the rest are counted, not dumped.
         let more = o.actions.len() - LAUNCH_STEPS;
         assert!(w.contains(&format!("and {more} more in the dashboard")));
-        assert!(w.contains("enter  open the dashboard") && w.contains("q  quit"));
+        assert!(w.contains("open the dashboard") && w.contains("quit"));
         assert!(!w.contains("Looking in")); // only the first run lists folders
         assert!(!w.contains('\x1b'));
         assert!(launch_screen(&o, &roots, false, true).contains('\x1b'));
@@ -2569,7 +2571,7 @@ mod tests {
         assert!(w.contains("Looking in"));
         assert!(w.contains("~/projects") && w.contains("~/code")); // each folder listed
         assert!(w.contains("cohors --root <dir>")); // the scoped alternative
-        assert!(w.contains("enter  open the dashboard"));
+        assert!(w.contains("enter") && w.contains("open the dashboard"));
     }
 
     /// A fleet with nothing to do still gets a launch screen that says so.
@@ -2578,7 +2580,7 @@ mod tests {
         let o = cohors_core::overview(&[], &[], &Default::default(), 0);
         let w = launch_screen(&o, &["~/code".to_string()], false, false);
         assert!(w.contains("nothing needs you right now"));
-        assert!(w.contains("enter  open the dashboard"));
+        assert!(w.contains("enter") && w.contains("open the dashboard"));
     }
 
     /// The report groups by urgency: anything wanting attention is listed by
