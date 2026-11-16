@@ -18,9 +18,13 @@ ARG COHORS_VERSION=latest
 # empty, and the machine's own architecture is used instead.
 ARG TARGETARCH
 
+# GHCR shows the description of this multi-platform image from the index
+# annotation that .github/workflows/docker.yml sets; keep the two the same.
 LABEL org.opencontainers.image.title="cohors" \
-      org.opencontainers.image.description="Every git repo you own, on one screen: a terminal dashboard and an MCP server for your coding agent" \
+      org.opencontainers.image.description="The cohors MCP server: mount the folder that holds your git repos at /repos and your coding agent sees every repo's status, a search across them and their tasks. Read-only unless you add --allow-writes. Any other cohors command runs too." \
+      org.opencontainers.image.documentation="https://github.com/rushirb2001/cohors/blob/main/packaging/docker/README.md" \
       org.opencontainers.image.source="https://github.com/rushirb2001/cohors" \
+      org.opencontainers.image.version="$COHORS_VERSION" \
       org.opencontainers.image.licenses="MIT" \
       io.modelcontextprotocol.server.name="io.github.rushirb2001/cohors"
 

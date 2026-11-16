@@ -1,0 +1,62 @@
+name: Release notes
+
+# Finishes the GitHub Release's notes. cargo-dist writes them from the
+# CHANGELOG's section for the tag and adds the installers it builds (shell,
+# Homebrew, npm) and the downloads; this appends the routes it does not know
+# about (PyPI and uv, crates.io, Docker, the VS Code extension, the Claude Code
+# plugin), from packaging/github-release/footer.md with the version filled in
+# by scripts/release-notes.py. It only ever appends, and only once: the footer
+# carries a marker, and notes that already have it are left alone.
+#
+# Like the PyPI, crates.io, Docker and VS Code workflows, it starts when the
+# cargo-dist Release workflow finishes on a version tag, and asks GitHub
+# whether the release is published instead of trusting that run's result.
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to finish the notes of (e.g. v0.7.7)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  footer:
+    name: list every install route
+    runs-on: ubuntu-latest
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.conclusion != 'cancelled' &&
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    permissions:
+      contents: write # edit the release's notes
+    steps:
+      # The newest footer on the default branch, so a fix to it also reaches a
+      # release that is already out (rerun by hand with the tag).
+      - uses: actions/checkout@v4
+      - name: Append the footer
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_TAG: ${{ github.event.workflow_run.head_branch }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-$RUN_TAG}"
+          if [ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft -q .isDraft 2>/dev/null)" != false ]; then
+            echo "No published release for $tag, so there are no notes to finish."
+            exit 0
+          fi
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body -q .body > notes.md
+          # Never replace notes that could not be read with the footer alone.
+          test -s notes.md || { echo "could not read the notes of $tag" >&2; exit 1; }
+          if grep -q 'cohors:install-footer' notes.md; then
+            echo "The notes of $tag already list every install route."
+            exit 0
+          fi
+          { echo; python3 scripts/release-notes.py footer "$tag"; } >> notes.md
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes-file notes.md

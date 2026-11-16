@@ -122,6 +122,13 @@ targets = [
 # Push the generated Homebrew formula to the tap and publish the npm package on
 # every release (the npm job needs the NPM_TOKEN secret).
 publish-jobs = ["homebrew", "npm"]
+# The files packed beside the binary in every archive and in the npm package.
+# dist would otherwise pick up the `cohors` crate's readme, which is written for
+# crates.io (crates/cohors-tui/README.md); npmjs.com shows this one instead.
+# Homebrew keeps these files as the formula's docs; the PyPI wheels and the
+# Docker image take only the binary.
+auto-includes = false
+include = ["packaging/npm/README.md", "LICENSE", "CHANGELOG.md"]
 pr-run-mode = "plan"
 # Install into the user's ~/.cargo/bin equivalent, adding it to PATH if needed.
 install-path = "CARGO_HOME"

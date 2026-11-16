@@ -82,6 +82,12 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           build-args: COHORS_VERSION=${{ steps.version.outputs.version }}
+          # GHCR takes a multi-platform image's description from the index
+          # manifest, not from the Dockerfile's labels; same text as the label.
+          annotations: |
+            index:org.opencontainers.image.description=The cohors MCP server: mount the folder that holds your git repos at /repos and your coding agent sees every repo's status, a search across them and their tasks. Read-only unless you add --allow-writes. Any other cohors command runs too.
+            index:org.opencontainers.image.source=https://github.com/rushirb2001/cohors
+            index:org.opencontainers.image.licenses=MIT
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/cohors:${{ steps.version.outputs.version }}

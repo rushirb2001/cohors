@@ -100,12 +100,14 @@ jobs:
           cp "$bin" packaging/pypi/src/cohors/cohors
           chmod +x packaging/pypi/src/cohors/cohors
 
-      - name: Stamp the version from the tag
+      - name: Stamp the version and its notes from the tag
         env:
           TAG: ${{ needs.release.outputs.tag }}
         run: |
           v="${TAG#v}"
           sed -i "s/^version = .*/version = \"$v\"/" packaging/pypi/pyproject.toml
+          # The README's "What's new" block, from this version's CHANGELOG section.
+          python scripts/release-notes.py stamp packaging/pypi/README.md "$v"
 
       - name: Build the platform wheel
         working-directory: packaging/pypi
