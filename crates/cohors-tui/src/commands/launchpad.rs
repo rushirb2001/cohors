@@ -30,7 +30,7 @@ pub fn run(
 ) -> Result<()> {
     match action {
         None => report(cli, select, json),
-        Some(LaunchpadCmd::Validate { path }) => validate(path.as_deref()),
+        Some(LaunchpadCmd::Validate { path, json }) => validate(path.as_deref(), *json),
         Some(LaunchpadCmd::Contract) => {
             let contract = cohors_core::launchpad::contract();
             println!("{}", serde_json::to_string_pretty(&contract)?);
@@ -96,7 +96,7 @@ fn report(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
     Ok(())
 }
 
-fn summary_counts(entries: &[LaunchpadEntry]) -> serde_json::Value {
+pub(super) fn summary_counts(entries: &[LaunchpadEntry]) -> serde_json::Value {
     json!({
         "repos": entries.len(),
         "configured": entries.iter().filter(|e| e.configured).count(),
@@ -279,7 +279,7 @@ pub(crate) fn render_report(
         out.push_str(&format!(
             "    {} {}\n      {}\n",
             dim(color, "▸"),
-            bold(color, "cohors agent run setup-repo"),
+            bold(color, "cohors agent setup-repo"),
             dim(color, "run it inside one; your agent writes the file"),
         ));
         out.push('\n');
@@ -296,28 +296,57 @@ pub(crate) fn render_report(
     out
 }
 
-fn validate(path: Option<&str>) -> Result<()> {
+fn validate(path: Option<&str>, json: bool) -> Result<()> {
     let root = PathBuf::from(path.unwrap_or("."));
-    let color = super::wants_color(std::io::stdout().is_terminal());
+    let color = !json && super::wants_color(std::io::stdout().is_terminal());
     let Some(validation) = lp::validate_repo(&root) else {
-        bail!(
-            "no .cohors/repo.json in {} — this repo has not been set up for the launchpad",
-            root.display()
-        );
+        if json {
+            println!(
+                "{}",
+                json!({ "path": root, "valid": false, "missing": true, "errors": [], "warnings": [] })
+            );
+            return Err(super::ExitCode(1).into());
+        }
+        let why = if !root.exists() {
+            "no such folder".to_string()
+        } else if repo_root(&root).is_none() {
+            "not inside a git repository".to_string()
+        } else {
+            "this repo has not been set up for the launchpad (cohors agent setup-repo)".to_string()
+        };
+        bail!("no .cohors/repo.json in {}: {why}", root.display());
     };
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "path": root,
+                "valid": validation.is_ok(),
+                "missing": false,
+                "errors": validation.errors,
+                "warnings": validation.warnings,
+            }))?
+        );
+        return if validation.is_ok() {
+            Ok(())
+        } else {
+            Err(super::ExitCode(1).into())
+        };
+    }
     for warning in &validation.warnings {
-        println!("  {} {warning}", dim(color, "warning"));
+        println!("  {} {warning}", dim(color, "warning:"));
     }
     if validation.is_ok() {
-        println!("  {} .cohors/repo.json is valid", bold(color, "ok"));
+        println!("  {} .cohors/repo.json is valid", bold(color, "ok:"));
         return Ok(());
     }
     for error in &validation.errors {
-        println!("  {} {error}", bold(color, "error"));
+        println!("  {} {error}", bold(color, "error:"));
     }
+    let n = validation.errors.len();
     bail!(
-        "{} problem(s) in .cohors/repo.json",
-        validation.errors.len()
+        "{n} {} in .cohors/repo.json",
+        if n == 1 { "problem" } else { "problems" }
     );
 }
 

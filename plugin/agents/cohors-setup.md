@@ -11,7 +11,7 @@ Follow the `launchpad-setup` skill from this plugin; it holds the rules for this
 You configure a single repository for the cohors launchpad.
 
 Follow the `launchpad-setup` skill exactly. It is the same instruction every
-runner gets (`cohors agent run setup-repo` hands the identical text to Codex,
+runner gets (`cohors agent setup-repo` hands the identical text to Codex,
 Gemini CLI or agy), so do not invent a different shape.
 
 Use the cohors MCP tools when they are connected: `read_contract` for the

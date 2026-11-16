@@ -276,20 +276,38 @@ fn init_writes_config_then_respects_force() {
         .success();
     assert!(cfg.exists());
 
-    // Second write without --force is refused.
-    cohors(cache.path())
+    // A second run without --force leaves the file alone and says where it is.
+    std::fs::write(&cfg, "roots = [\"/kept\"]\n").unwrap();
+    let out = cohors(cache.path())
         .args(["init", "--config"])
         .arg(&cfg)
         .assert()
-        .failure();
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let out = String::from_utf8_lossy(&out);
+    assert!(
+        out.contains("already exists") && out.contains("/kept"),
+        "{out}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&cfg).unwrap(),
+        "roots = [\"/kept\"]\n"
+    );
 
-    // With --force it overwrites.
+    // With --force it overwrites, keeping the old file beside it.
     cohors(cache.path())
         .args(["init", "--config"])
         .arg(&cfg)
         .arg("--force")
         .assert()
         .success();
+    let backup = dir.path().join("config.toml.bak");
+    assert_eq!(
+        std::fs::read_to_string(backup).unwrap(),
+        "roots = [\"/kept\"]\n"
+    );
 }
 
 /// A read-only command run against `root`, with an isolated config.

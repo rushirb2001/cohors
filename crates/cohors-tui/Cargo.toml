@@ -41,6 +41,7 @@ cohors-fleet = { workspace = true }
 cohors-mcp = { workspace = true }
 cohors-web = { workspace = true }
 clap = { workspace = true }
+clap_complete = "4.5"
 anyhow = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }

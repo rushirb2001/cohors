@@ -2,7 +2,7 @@
 
 Runner-agnostic. Claude Code, Codex, Gemini CLI, agy and anything else follow
 this same file. It is a focused pass over one part of the contract; the whole
-picture is in the `setup-repo` prompt (`cohors agent run setup-repo`), and
+picture is in the `setup-repo` prompt (`cohors agent setup-repo`), and
 the contract (`cohors launchpad contract`) wins over both.
 
 Your job: decide which flows this repo should **declare**, and write only those
@@ -43,7 +43,7 @@ them adds nothing and creates a file that goes stale. Do not write it.
 
 You are **updating** `.cohors/repo.json`, not replacing it. Preserve
 `agents`, `tasks`, and any key you do not understand. If the file does not
-exist, follow the `setup-repo` prompt first (`cohors agent run setup-repo`).
+exist, follow the `setup-repo` prompt first (`cohors agent setup-repo`).
 
 Rules the validator enforces:
 

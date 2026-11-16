@@ -324,7 +324,7 @@ pub enum ConfirmAction {
     /// `git add -A && git commit -m <message>` across these repos.
     BulkCommit { ids: Vec<RepoId>, message: String },
     /// Hand this repo to the user's coding agent with the `setup-repo` prompt
-    /// (`cohors agent run setup-repo`). Not destructive, but it starts an agent
+    /// (`cohors agent setup-repo`). Not destructive, but it starts an agent
     /// session with a prompt already submitted, so it asks first.
     AgentSetup(RepoId),
 }

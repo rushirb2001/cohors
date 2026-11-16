@@ -2,7 +2,7 @@
 
 Runner-agnostic. Every runner follows this same file. It is a focused pass over
 one part of the contract; the whole picture is in the `setup-repo` prompt
-(`cohors agent run setup-repo`), and the contract (`cohors launchpad contract`)
+(`cohors agent setup-repo`), and the contract (`cohors launchpad contract`)
 wins over both.
 
 Your job: find the work this repo actually has in flight, and record it in

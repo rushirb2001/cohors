@@ -220,7 +220,7 @@ const INSTRUCTIONS: &str = "cohors is the user's git repository fleet — every 
 
 /// The catalog returned by `prompts/list`: the prompts cohors ships (set up a
 /// repo, plan the day, …), so an MCP client can offer them as slash commands.
-/// They are the same text `cohors agent run <prompt>` hands to any runner.
+/// They are the same text `cohors agent <prompt>` hands to any runner.
 fn prompt_catalog() -> Value {
     let prompts: Vec<Value> = cohors_core::agents::PROMPTS
         .iter()

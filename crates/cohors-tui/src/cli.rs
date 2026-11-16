@@ -76,6 +76,10 @@ pub struct Cli {
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Write a starter config file and print its path.
+    #[command(
+        after_help = "Examples:\n  cohors init                       detect your repos and write a config\n  cohors init --root ~/code         seed it with one folder\n  cohors init --force               start over (the old file is kept as .bak)"
+    )]
+    #[command(display_order = 23)]
     Init {
         /// Overwrite an existing config file.
         #[arg(long)]
@@ -87,6 +91,10 @@ pub enum Command {
     /// dashboard will show. At a terminal it lists the repos under each root
     /// and marks those nested inside another repo; piped it prints one path per
     /// line (for `xargs` and friends); `--json` prints them as JSON.
+    #[command(
+        after_help = "Examples:\n  cohors discover                   the repos cohors will show\n  cohors discover --deep            look inside every repo, at any depth\n  cohors discover | head            one path per line, for scripts"
+    )]
+    #[command(display_order = 10)]
     Discover {
         /// Search every folder at any depth, inside repos too. Repos only this
         /// finds are remembered, so the dashboard shows them from now on.
@@ -101,6 +109,10 @@ pub enum Command {
     /// At a terminal this prints a grouped report: what needs you now, what is
     /// minor, what is calm, and the commands that clear it. Piped or redirected
     /// (or with `--json`) it prints the raw JSON snapshots instead.
+    #[command(
+        after_help = "Examples:\n  cohors scan                       what needs you, at a glance\n  cohors scan -s dirty              only repos with uncommitted work\n  cohors scan --json | jq '.[].name'   the raw snapshots"
+    )]
+    #[command(display_order = 3)]
     Scan {
         /// Search every folder at any depth, inside repos too. Repos only this
         /// finds are remembered, so the dashboard shows them from now on.
@@ -125,20 +137,37 @@ pub enum Command {
     /// model as JSON — the same one the web dashboard, the editor extension
     /// and the MCP `overview` tool use.
     #[command(visible_alias = "status")]
+    #[command(
+        after_help = "Examples:\n  cohors status                     the briefing (same as overview)\n  cohors overview --json            the overview model the web and editor use"
+    )]
+    #[command(display_order = 1)]
     Overview {
         /// Print JSON instead of the human report.
         #[arg(long)]
         json: bool,
+        /// Only these repos (the selector language of `scan --select`).
+        #[arg(short, long, value_name = "QUERY")]
+        select: Option<String>,
     },
     /// Your commits across every repo, as a paste-ready digest (no TUI).
     ///
     /// Lists the commits you authored (matched by `git config user.email`) in
     /// the last seven days, grouped by repo with the most active first, as
     /// markdown you can paste into a standup channel.
+    #[command(
+        after_help = "Examples:\n  cohors standup                    your commits this week, as markdown\n  cohors standup --today | pbcopy   today's, to paste"
+    )]
+    #[command(display_order = 9)]
     Standup {
         /// Only today's commits instead of the last seven days.
-        #[arg(long)]
+        #[arg(long, conflicts_with = "since")]
         today: bool,
+        /// From when: `yesterday`, `3d` (days back) or a date (`2026-11-01`).
+        #[arg(long, value_name = "WHEN")]
+        since: Option<String>,
+        /// Only these repos (the selector language of `scan --select`).
+        #[arg(short, long, value_name = "QUERY")]
+        select: Option<String>,
         /// Print the commits grouped by repo as JSON instead of markdown.
         #[arg(long)]
         json: bool,
@@ -147,6 +176,7 @@ pub enum Command {
     ///
     /// A zero-setup way to try cohors: every column and view is populated with
     /// privacy-safe demo data. Actions are stubbed (nothing touches your disk).
+    #[command(display_order = 20)]
     Demo,
     /// Update cohors to the newest release, the way this copy was installed.
     ///
@@ -154,21 +184,61 @@ pub enum Command {
     /// or the release's shell installer, whichever installed this copy. A
     /// build from source, or a copy run through `uvx`, only says how to get it.
     /// The dashboard does this by itself once a day (the `updates` setting).
+    #[command(
+        after_help = "Examples:\n  cohors update                     install the newest release the way this one was installed\n  cohors update --check             only say whether there is one"
+    )]
+    #[command(display_order = 24)]
     Update {
         /// Only say whether a newer release exists; install nothing.
         #[arg(long)]
         check: bool,
+        /// With --check: print the answer as JSON.
+        #[arg(long, requires = "check")]
+        json: bool,
     },
     /// git fetch across the selected repos (non-destructive).
-    Fetch(ActionArgs),
+    #[command(
+        after_help = "Examples:\n  cohors fetch -s all                 every repo\n  cohors fetch payments web           repos by name\n  cohors fetch -s stale-fetch --json  results as JSON"
+    )]
+    #[command(display_order = 12)]
+    Fetch {
+        #[command(flatten)]
+        action: ActionArgs,
+        #[command(flatten)]
+        names: RepoNames,
+    },
     /// git pull --ff-only across the selected repos, never merging or losing work.
-    Pull(ActionArgs),
+    #[command(
+        after_help = "Examples:\n  cohors pull -s 'behind,!diverged'   every repo a fast-forward can update\n  cohors pull payments                one repo, by name\n  cohors pull -s behind -n            preview the targets"
+    )]
+    #[command(display_order = 13)]
+    Pull {
+        #[command(flatten)]
+        action: ActionArgs,
+        #[command(flatten)]
+        names: RepoNames,
+    },
     /// git push across the selected repos, never force-pushing.
-    Push(ActionArgs),
+    #[command(
+        after_help = "Examples:\n  cohors push -s 'ahead,!diverged'    every repo with commits to send\n  cohors push -s unpublished          branches never pushed\n  cohors push payments --json         one repo, result as JSON"
+    )]
+    #[command(display_order = 14)]
+    Push {
+        #[command(flatten)]
+        action: ActionArgs,
+        #[command(flatten)]
+        names: RepoNames,
+    },
     /// git add -A + commit across the selected repos (stages tracked + untracked).
+    #[command(
+        after_help = "Examples:\n  cohors commit -m \"wip\" -s dirty -n     preview: every file, per repo\n  cohors commit -m \"docs: notes\" notes  one repo, by name\n  cohors commit -m \"fix\" -s dirty --staged  only what you staged"
+    )]
+    #[command(display_order = 15)]
     Commit {
         #[command(flatten)]
         action: ActionArgs,
+        #[command(flatten)]
+        names: RepoNames,
         /// Commit message (applied to every selected repo). Omit it to see what
         /// this command does and how to pick repos.
         #[arg(short, long, value_name = "MSG")]
@@ -182,15 +252,29 @@ pub enum Command {
         allow_secrets: bool,
     },
     /// git stash push (tracked changes) across the selected repos.
-    Stash(ActionArgs),
+    #[command(
+        after_help = "Examples:\n  cohors stash -s dirty -n            preview\n  cohors stash payments web           repos by name"
+    )]
+    #[command(display_order = 16)]
+    Stash {
+        #[command(flatten)]
+        action: ActionArgs,
+        #[command(flatten)]
+        names: RepoNames,
+    },
     /// Run a shell command in each selected repo (the fleet codemod/test primitive).
+    #[command(
+        after_help = "Examples:\n  cohors run -s dirty -- cargo test      no quoting needed after --\n  cohors run \"npm test\" -s name:web-*     one quoted command\n  cohors run -s all --json -- git status -s   per-repo output as JSON"
+    )]
+    #[command(display_order = 17)]
     Run {
         #[command(flatten)]
         action: ActionArgs,
-        /// The shell command to run in each repo. Omit it to see what this
-        /// command does and how to pick repos.
+        /// The shell command to run in each repo: one quoted string, or the
+        /// words after `--` (`cohors run -s dirty -- cargo test`). Omit it to
+        /// see what this command does and how to pick repos.
         #[arg(value_name = "COMMAND")]
-        command: Option<String>,
+        command: Vec<String>,
         /// Per-repo timeout in seconds.
         #[arg(long, default_value_t = 120)]
         timeout: u64,
@@ -204,6 +288,10 @@ pub enum Command {
     /// checkout has no page inside it: run it in that checkout and it builds the
     /// page with Trunk (installing Trunk the first time unless `--no-install`).
     /// Ctrl-C to stop.
+    #[command(
+        after_help = "Examples:\n  cohors web --root ~/code          serve one folder's repos and open the browser\n  cohors web --watch --no-open      keep it live, open it yourself"
+    )]
+    #[command(display_order = 21)]
     Web {
         /// Port to serve on.
         #[arg(long, default_value_t = 8080)]
@@ -230,6 +318,10 @@ pub enum Command {
     /// "set up this repo for the launchpad"). Bare, this reports the focus
     /// board and every open task across the fleet; piped or with `--json` it
     /// prints the same data as JSON.
+    #[command(
+        after_help = "Examples:\n  cohors launchpad                  focus board and open tasks\n  cohors launchpad validate .       check this repo's .cohors/repo.json\n  cohors launchpad --json           flows, agents and tasks per repo"
+    )]
+    #[command(display_order = 19)]
     Launchpad {
         #[command(subcommand)]
         action: Option<LaunchpadCmd>,
@@ -240,21 +332,73 @@ pub enum Command {
         #[arg(long)]
         json: bool,
     },
-    /// Start a coding agent on a repo, a task, or the whole fleet.
+    /// Start a coding agent: a session, a shipped prompt, a task, or one of the
+    /// repo's own agents.
     ///
-    /// `cohors agent run setup-repo` asks your agent (Claude Code, Codex,
-    /// Gemini CLI or agy, whichever is installed) to read the current repo and
-    /// write its launchpad file; `cohors agent run plan-day` plans your focus
-    /// across every repo. `cohors agent runners` shows what is installed.
-    Agent {
-        #[command(subcommand)]
-        action: AgentCmd,
+    /// Name what to start and cohors works out what it is. Bare, it starts a
+    /// session in the current repo; at a terminal it first offers the recent
+    /// sessions there to resume (Enter starts a new one).
+    #[command(
+        args_conflicts_with_subcommands = true,
+        after_help = "Examples:\n  cohors agent                                   start a session here (or pick one to resume)\n  cohors agent setup-repo                        run a shipped prompt in this repo\n  cohors agent plan-day                          plan your focus across the fleet\n  cohors agent rate-limit-backoff -r payments    work on a task in another repo\n  cohors agent --resume                          pick a recent session to resume\n  cohors agent setup-repo --print                the launch command as JSON, for editors\n  cohors agent ls                                runners, prompts, this repo's agents and tasks"
+    )]
+    #[command(display_order = 18)]
+    Agent(AgentArgs),
+    /// Print shell completions: `cohors completions zsh > ~/.zfunc/_cohors`.
+    #[command(
+        after_help = "Examples:\n  cohors completions bash > ~/.local/share/bash-completion/completions/cohors\n  cohors completions zsh  > ~/.zfunc/_cohors     (with fpath+=~/.zfunc)\n  cohors completions fish > ~/.config/fish/completions/cohors.fish"
+    )]
+    #[command(display_order = 25)]
+    Completions {
+        /// bash, zsh, fish, elvish or powershell.
+        #[arg(value_name = "SHELL")]
+        shell: clap_complete::Shell,
+    },
+    /// What to do now, each with its command: sessions to resume, next steps (no TUI).
+    ///
+    /// The fleet's "do next" steps and your focus board are in the list too.
+    /// Bare, it lists the suggestions, numbered; `cohors next 2` runs the
+    /// second one. The list ranks the agent conversations held in each repo
+    /// (Claude Code, Codex) with what needs doing, from the repo you are in.
+    #[command(
+        visible_alias = "suggest",
+        after_help = "Examples:\n  cohors next              what to do now, numbered\n  cohors next 1            do the first one\n  cohors next --json       the same list for scripts and agents"
+    )]
+    #[command(display_order = 2)]
+    Next {
+        /// Run this suggestion (its number in the list).
+        #[arg(value_name = "N")]
+        pick: Option<usize>,
+        /// How many suggestions to list.
+        #[arg(short = 'l', long, default_value_t = 6)]
+        limit: usize,
+        /// Print JSON instead of the human list.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Follow the fleet as it changes, one line per change (no TUI).
+    ///
+    /// Prints the fleet once it has been read, then again whenever something
+    /// changes: a commit, push, pull or fetch, a dirty or clean worktree, a
+    /// stash, a repo appearing or going, a launchpad task. Piped or with
+    /// `--json`, each line is one JSON object: the overview `cohors overview
+    /// --json` prints, the launchpad and the suggestions. Runs until stopped,
+    /// or until its input closes when another program started it.
+    #[command(display_order = 11)]
+    Watch {
+        /// Print JSON lines instead of the human summary.
+        #[arg(long)]
+        json: bool,
     },
     /// Serve your fleet to a coding agent over MCP (read-only by default).
     ///
     /// Speaks Model Context Protocol as a stdio server, so a client spawns it
     /// rather than you. Run it by hand and it prints how to register it and what
     /// an agent would get. Reads are always on; writes are opt-in per flag.
+    #[command(
+        after_help = "Examples:\n  claude mcp add cohors -- \"$(command -v cohors)\" mcp   register it with Claude Code\n  cohors mcp --allow-writes         let an agent fetch, pull, push, commit, stash"
+    )]
+    #[command(display_order = 22)]
     Mcp {
         /// Enable write tools (`fetch`, `pull`, `push`, `commit`, `stash`).
         #[arg(long)]
@@ -277,6 +421,10 @@ pub enum Command {
     /// then by a unique prefix in any case, then by a glob (`'pay*'`). No
     /// match exits 1 and suggests close names; several matches exit 2 and
     /// list them.
+    #[command(
+        after_help = "Examples:\n  cd \"$(cohors path payments)\"      jump to a repo by name\n  cohors path pay                   a unique prefix is enough"
+    )]
+    #[command(display_order = 5)]
     Path {
         /// The repo: a name, alias, id, path, unique prefix or glob.
         #[arg(value_name = "REPO")]
@@ -289,6 +437,10 @@ pub enum Command {
     /// commits, every local branch and stash, and (with a GitHub token) its
     /// open PRs. Names a repo like `cohors path`. Piped or with `--json` it
     /// prints what the MCP `get_repo` tool returns.
+    #[command(
+        after_help = "Examples:\n  cohors show payments              one repo in detail\n  cohors show . --json              the repo you are in, as JSON"
+    )]
+    #[command(display_order = 4)]
     Show {
         /// The repo: a name, alias, id, path, unique prefix or glob.
         #[arg(value_name = "REPO")]
@@ -304,6 +456,10 @@ pub enum Command {
     /// adds the diff, capped per repo. A secret file (`.env`, key material,
     /// credential stores) is named, but its contents are never shown. Piped
     /// or with `--json` it prints what the MCP `changes` tool returns.
+    #[command(
+        after_help = "Examples:\n  cohors changes                    every uncommitted file, by repo\n  cohors changes -s name:pay* --patch   with the diff"
+    )]
+    #[command(display_order = 6)]
     Changes {
         /// Only include repos matching a selector (same language as `scan`).
         #[arg(short, long, value_name = "QUERY")]
@@ -325,6 +481,10 @@ pub enum Command {
     /// (`.env`, key material, credential stores) are never searched. Covers
     /// the whole fleet unless `--select` says otherwise. Piped or with
     /// `--json` it prints what the MCP `search` tool returns.
+    #[command(
+        after_help = "Examples:\n  cohors search TODO                every match across the fleet\n  cohors search retry -s name:pay*   only some repos"
+    )]
+    #[command(display_order = 7)]
     Search {
         /// The text to look for.
         #[arg(value_name = "TEXT")]
@@ -347,6 +507,10 @@ pub enum Command {
     /// or `$GITHUB_TOKEN`); without one it says so and lists nothing. Piped
     /// or with `--json` it prints what the MCP `list_prs` and `ci_status`
     /// tools return.
+    #[command(
+        after_help = "Examples:\n  cohors prs                        open PRs and CI per repo\n  cohors prs -s ci:failing          only red builds"
+    )]
+    #[command(display_order = 8)]
     Prs {
         /// Only include repos matching a selector (same language as `scan`).
         #[arg(short, long, value_name = "QUERY")]
@@ -371,26 +535,90 @@ pub struct ActionArgs {
     /// Preview the matching repos without acting.
     #[arg(short = 'n', long)]
     pub dry_run: bool,
+    /// Print the per-repo results (or, with --dry-run, the targets) as JSON.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Repos named directly, as an alternative to `--select`.
+#[derive(Debug, clap::Args)]
+pub struct RepoNames {
+    /// Repos to act on, by name, unique prefix, glob or path (instead of
+    /// --select): `cohors pull payments web`.
+    #[arg(value_name = "REPO", conflicts_with = "select")]
+    pub repos: Vec<String>,
+}
+
+/// `cohors agent [WHAT]`: what to start, and how.
+#[derive(Debug, clap::Args)]
+pub struct AgentArgs {
+    #[command(subcommand)]
+    pub cmd: Option<AgentCmd>,
+    /// What to start: a shipped prompt (`setup-repo`, `plan-day`, …), a task
+    /// id, or an agent the repo declares. Omit it to start a session.
+    #[arg(value_name = "WHAT")]
+    pub what: Option<String>,
+    /// The repository: a path, or a repo name from your fleet (default: the
+    /// repo containing the current directory).
+    #[arg(short = 'r', long, value_name = "PATH|NAME")]
+    pub repo: Option<String>,
+    /// Which runner: `claude-code`, `codex`, `gemini-cli` or `agy` (default:
+    /// the first one installed; for --resume, the one that owns the session).
+    #[arg(
+        short = 'w',
+        long = "with",
+        visible_alias = "runner",
+        value_name = "RUNNER"
+    )]
+    pub runner: Option<String>,
+    /// Take WHAT as a task id (when a name could mean several things).
+    #[arg(long, conflicts_with_all = ["agent", "prompt"])]
+    pub task: bool,
+    /// Take WHAT as an agent the repo declares.
+    #[arg(long, conflicts_with = "prompt")]
+    pub agent: bool,
+    /// Take WHAT as a shipped prompt.
+    #[arg(long)]
+    pub prompt: bool,
+    /// Resume a session: its id, its number in the list, or nothing to pick
+    /// from the recent sessions in this repo.
+    #[arg(long, value_name = "ID|N", num_args = 0..=1, default_missing_value = "", conflicts_with = "what")]
+    pub resume: Option<String>,
+    /// Print the launch as JSON (for editors and scripts) instead of starting.
+    #[arg(long)]
+    pub print: bool,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum AgentCmd {
+    /// What you can start: runners (the default marked), prompts, and the
+    /// current repo's agents, tasks and recent sessions.
+    #[command(visible_alias = "list")]
+    Ls {
+        /// Print JSON instead of the human list.
+        #[arg(long)]
+        json: bool,
+    },
     /// Which agent runners are installed, and why one is not.
+    #[command(hide = true)]
     Runners {
         /// Print JSON instead of the human list.
         #[arg(long)]
         json: bool,
     },
     /// The prompts cohors ships (`setup-repo`, `plan-day`, …).
+    #[command(hide = true)]
     Prompts {
         /// Print JSON instead of the human list.
         #[arg(long)]
         json: bool,
     },
-    /// Start an agent in this terminal.
+    /// Start an agent in this terminal (the 0.7 form of `cohors agent WHAT`).
+    #[command(hide = true)]
     Run(AgentLaunch),
-    /// Print the command that would start an agent, as JSON (for editors and
-    /// scripts). Writes the prompt file and logs the launch, like `run`.
+    /// Print the command that would start an agent, as JSON (the 0.7 form of
+    /// `cohors agent WHAT --print`; the editor extension uses it).
+    #[command(hide = true)]
     Command(AgentLaunch),
     /// Start a runner on a prompt file cohors already wrote. This is what the
     /// printed command calls on shells that cannot pass a file's contents to
@@ -443,6 +671,9 @@ pub enum LaunchpadCmd {
         /// The repository to check (default: the current directory).
         #[arg(value_name = "PATH")]
         path: Option<String>,
+        /// Print the result as JSON (`valid`, `errors`, `warnings`).
+        #[arg(long)]
+        json: bool,
     },
     /// Print the contract a `.cohors/repo.json` must satisfy, as JSON.
     Contract,

@@ -17,7 +17,7 @@
 //!
 //! - [`Runner::argv`] — the argument list for spawning the runner directly,
 //!   with the prompt *text* as one argument. No shell is involved, so there is
-//!   nothing to quote. Used by `cohors agent run` in the current terminal.
+//!   nothing to quote. Used by `cohors agent` in the current terminal.
 //! - [`Runner::shell_command`] — one line to type into a terminal (an editor's
 //!   integrated terminal, or copied from the web page). The prompt is read from
 //!   a file at run time, so the line stays short and prompt text can never be

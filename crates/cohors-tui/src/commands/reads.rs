@@ -296,7 +296,7 @@ fn path_like(key: &str) -> bool {
 /// Resolve `key` to one repo, or say on stderr why not and fail with the
 /// status a script can act on: 1 when nothing matches (with close names), 2
 /// when several do (listing them).
-fn resolve_or_explain<'a>(
+pub(super) fn resolve_or_explain<'a>(
     snaps: &'a [RepoSnapshot],
     key: &str,
     roots: &[String],

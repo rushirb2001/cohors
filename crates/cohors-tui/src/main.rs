@@ -55,30 +55,44 @@ fn main() -> anyhow::Result<()> {
         Some(Command::Scan { deep, select, json }) => {
             commands::scan(&cli, select.as_deref(), *json, *deep)
         }
-        Some(Command::Overview { json }) => commands::overview(&cli, *json),
-        Some(Command::Standup { today, json }) => commands::standup(&cli, *today, *json),
+        Some(Command::Overview { json, select }) => {
+            commands::overview(&cli, select.as_deref(), *json)
+        }
+        Some(Command::Standup {
+            today,
+            since,
+            select,
+            json,
+        }) => commands::standup(&cli, *today, since.as_deref(), select.as_deref(), *json),
         Some(Command::Demo) => commands::run_demo(),
-        Some(Command::Update { check }) => update::run_command(*check),
-        Some(Command::Fetch(a)) => commands::run_action(
+        Some(Command::Update { check, json }) => update::run_command(*check, *json),
+        Some(Command::Fetch { action: a, names }) => commands::run_action(
             &cli,
             commands::CliAction::Fetch,
             a.select.as_deref(),
+            &names.repos,
             a.dry_run,
+            a.json,
         ),
-        Some(Command::Pull(a)) => commands::run_action(
+        Some(Command::Pull { action: a, names }) => commands::run_action(
             &cli,
             commands::CliAction::Pull,
             a.select.as_deref(),
+            &names.repos,
             a.dry_run,
+            a.json,
         ),
-        Some(Command::Push(a)) => commands::run_action(
+        Some(Command::Push { action: a, names }) => commands::run_action(
             &cli,
             commands::CliAction::Push,
             a.select.as_deref(),
+            &names.repos,
             a.dry_run,
+            a.json,
         ),
         Some(Command::Commit {
             action,
+            names,
             message,
             staged,
             allow_secrets,
@@ -92,13 +106,17 @@ fn main() -> anyhow::Result<()> {
                 },
             ),
             action.select.as_deref(),
+            &names.repos,
             action.dry_run,
+            action.json,
         ),
-        Some(Command::Stash(a)) => commands::run_action(
+        Some(Command::Stash { action: a, names }) => commands::run_action(
             &cli,
             commands::CliAction::Stash,
             a.select.as_deref(),
+            &names.repos,
             a.dry_run,
+            a.json,
         ),
         Some(Command::Run {
             action,
@@ -107,9 +125,10 @@ fn main() -> anyhow::Result<()> {
         }) => commands::run_command_action(
             &cli,
             action.select.as_deref(),
-            command.as_deref(),
+            commands::shell_line(command).as_deref(),
             *timeout,
             action.dry_run,
+            action.json,
         ),
         Some(Command::Web {
             port,
@@ -132,7 +151,15 @@ fn main() -> anyhow::Result<()> {
             select,
             json,
         }) => commands::launchpad::run(&cli, action.as_ref(), select.as_deref(), *json),
-        Some(Command::Agent { action }) => commands::agent::run(&cli, action),
+        Some(Command::Agent(args)) => commands::agent::run(&cli, args),
+        Some(Command::Completions { shell }) => {
+            let mut cmd = Cli::command();
+            clap_complete::generate(*shell, &mut cmd, "cohors", &mut std::io::stdout());
+            Ok(())
+        }
+        Some(Command::Next { pick, limit, json }) => {
+            commands::next::run(&cli, *pick, *limit, *json)
+        }
         Some(Command::Mcp {
             allow_writes,
             allow_run,
@@ -165,6 +192,7 @@ fn main() -> anyhow::Result<()> {
             json,
         }) => commands::reads::search(&cli, query, select.as_deref(), *max_results, *json),
         Some(Command::Prs { select, json }) => commands::reads::prs(&cli, select.as_deref(), *json),
+        Some(Command::Watch { json }) => commands::watch::run(&cli, *json),
         None => commands::run_tui(&cli),
     };
     // One-off commands end with a line about a newer cohors, when one is known.
@@ -178,13 +206,14 @@ fn main() -> anyhow::Result<()> {
                 | Command::Scan { .. }
                 | Command::Overview { .. }
                 | Command::Standup { .. }
-                | Command::Fetch(_)
-                | Command::Pull(_)
-                | Command::Push(_)
+                | Command::Fetch { .. }
+                | Command::Pull { .. }
+                | Command::Push { .. }
                 | Command::Commit { .. }
-                | Command::Stash(_)
+                | Command::Stash { .. }
                 | Command::Run { .. }
                 | Command::Launchpad { .. }
+                | Command::Next { .. }
                 | Command::Path { .. }
                 | Command::Show { .. }
                 | Command::Changes { .. }

@@ -1,7 +1,7 @@
 # Set up this repository for the cohors launchpad
 
 This is the canonical, runner-agnostic instruction. Claude Code, Codex, Gemini
-CLI, agy, and any future runner all follow this same file. `cohors agent run
+CLI, agy, and any future runner all follow this same file. `cohors agent
 setup-repo` hands it to whichever runner you use.
 
 Your job: read the repository you are in, then write `.cohors/repo.json` (and

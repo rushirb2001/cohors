@@ -3,7 +3,9 @@
 pub mod agent;
 pub mod launchpad;
 pub mod look;
+pub mod next;
 pub mod reads;
+pub mod watch;
 
 use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
@@ -38,15 +40,40 @@ pub fn init(cli: &Cli, force: bool) -> Result<()> {
         Some(p) => Utf8PathBuf::from(p),
         None => cohors_config::paths::config_file().context("resolving the config path")?,
     };
-    let home = cohors_config::paths::home_dir().ok();
-    let roots = cohors_fleet::detect_roots(home.as_deref());
-    cohors_config::write_starter(&path, force, &roots)
+    // Already set up: say where, and what it holds, rather than failing.
+    if path.exists() && !force {
+        let roots = cohors_config::Config::load(Some(&path))
+            .map(|c| c.roots)
+            .unwrap_or_default();
+        println!("A config already exists at {path}");
+        if !roots.is_empty() {
+            println!("Roots: {}", roots.join(", "));
+        }
+        println!(
+            "Edit it, or run `cohors init --force` to start over (the old one is kept as .bak)."
+        );
+        return Ok(());
+    }
+    // `--root` seeds the roots as given; otherwise detect where repos live.
+    let roots = if cli.root.is_empty() {
+        let home = cohors_config::paths::home_dir().ok();
+        cohors_fleet::detect_roots(home.as_deref())
+    } else {
+        cli.root.clone()
+    };
+    if path.exists() {
+        let backup = Utf8PathBuf::from(format!("{path}.bak"));
+        std::fs::copy(&path, &backup)
+            .with_context(|| format!("keeping the old config as {backup}"))?;
+        println!("Kept the old config as {backup}");
+    }
+    cohors_config::write_starter(&path, true, &roots)
         .with_context(|| format!("writing config to {path}"))?;
     println!("Wrote starter config to {path}");
     if roots.is_empty() {
         println!("No repos auto-detected — edit `roots` to point at your code, then run `cohors`.");
     } else {
-        println!("Detected roots: {}", roots.join(", "));
+        println!("Roots: {}", roots.join(", "));
         println!("Run `cohors` to see your fleet (edit `roots` to adjust).");
     }
     Ok(())
@@ -764,11 +791,11 @@ fn scan_report(
 /// facade): what to do next, the key figures, and the work at risk. A pipe, a
 /// redirect or `--json` gets the whole model as JSON, which is how the editor
 /// extension and scripts read it.
-pub fn overview(cli: &Cli, json: bool) -> Result<()> {
+pub fn overview(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
     let human = !json && std::io::stdout().is_terminal();
     let color = wants_color(human);
     let scanner = crate::scan::from_cli(cli)?;
-    let snapshots = scanner.scan();
+    let snapshots = selected(scanner.scan(), select)?;
     let home = cohors_fleet::launchpad::launchpad_home();
     let overview = cohors_fleet::overview(&snapshots, home.as_deref(), now_secs());
 
@@ -789,12 +816,67 @@ pub fn overview(cli: &Cli, json: bool) -> Result<()> {
     Ok(())
 }
 
+/// Keep the snapshots `select` matches (all of them without one).
+fn selected(
+    snapshots: Vec<cohors_core::RepoSnapshot>,
+    select: Option<&str>,
+) -> Result<Vec<cohors_core::RepoSnapshot>> {
+    let Some(query) = select else {
+        return Ok(snapshots);
+    };
+    let keep: std::collections::HashSet<String> = action_targets(&snapshots, query)?
+        .into_iter()
+        .map(|s| s.id.0.clone())
+        .collect();
+    Ok(snapshots
+        .into_iter()
+        .filter(|s| keep.contains(&s.id.0))
+        .collect())
+}
+
+/// `--since`: `yesterday`, `Nd` (N days back), or a date `YYYY-MM-DD` (UTC).
+fn parse_since(text: &str, now: i64) -> Result<i64> {
+    const DAY: i64 = 24 * 60 * 60;
+    let text = text.trim().to_ascii_lowercase();
+    let midnight = now - now.rem_euclid(DAY);
+    if text == "yesterday" {
+        return Ok(midnight - DAY);
+    }
+    if text == "today" {
+        return Ok(midnight);
+    }
+    if let Some(days) = text.strip_suffix('d').and_then(|n| n.parse::<i64>().ok()) {
+        return Ok(now - days.max(0) * DAY);
+    }
+    let parts: Vec<i64> = text.split('-').filter_map(|p| p.parse().ok()).collect();
+    if let [y, m, d] = parts[..]
+        && (1..=12).contains(&m)
+        && (1..=31).contains(&d)
+    {
+        // Days since 1970-01-01 for a civil date (Howard Hinnant's algorithm).
+        let y = if m <= 2 { y - 1 } else { y };
+        let era = y.div_euclid(400);
+        let yoe = y - era * 400;
+        let mp = (m + 9) % 12;
+        let doy = (153 * mp + 2) / 5 + d - 1;
+        let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        return Ok((era * 146_097 + doe - 719_468) * DAY);
+    }
+    bail!("--since takes `yesterday`, `3d` (days back) or a date like 2026-11-01, not `{text}`")
+}
+
 /// `cohors standup` — your commits across every repo, as a digest.
 ///
 /// At a terminal it prints the markdown digest (the one the dashboard copies);
 /// with `--json` it prints the commits grouped by repo. `today` narrows the
 /// window from the last seven days to today.
-pub fn standup(cli: &Cli, today: bool, json: bool) -> Result<()> {
+pub fn standup(
+    cli: &Cli,
+    today: bool,
+    since: Option<&str>,
+    select: Option<&str>,
+    json: bool,
+) -> Result<()> {
     use cohors_core::StandupWindow;
     let scanner = crate::scan::from_cli(cli)?;
     let Some(author) = scanner.author_email() else {
@@ -802,13 +884,18 @@ pub fn standup(cli: &Cli, today: bool, json: bool) -> Result<()> {
             "no git identity: set `git config --global user.email` so cohors knows which commits are yours"
         );
     };
-    let window = if today {
-        StandupWindow::Today
-    } else {
-        StandupWindow::Week
+    let now = now_secs();
+    let window = match since {
+        Some(text) => StandupWindow::Custom {
+            since: parse_since(text, now)?,
+            until: now,
+        },
+        None if today => StandupWindow::Today,
+        None => StandupWindow::Week,
     };
-    let (since, until) = window.range(now_secs());
-    let commits = cohors_fleet::fleet_commits(&scanner.scan(), &author, since, until);
+    let (since, until) = window.range(now);
+    let fleet = selected(scanner.scan(), select)?;
+    let commits = cohors_fleet::fleet_commits(&fleet, &author, since, until);
     if json {
         let groups: Vec<serde_json::Value> = cohors_core::group_commits(&commits)
             .into_iter()
@@ -1119,7 +1206,7 @@ pub fn help_decorations() -> (String, String) {
             "what to do next across every repo, and why, as a report",
         ),
         (
-            "cohors agent run setup-repo",
+            "cohors agent setup-repo",
             "have your coding agent set the current repo up for the launchpad",
         ),
     ];
@@ -1136,6 +1223,19 @@ pub fn help_decorations() -> (String, String) {
     ));
     for (cmd, why) in rows {
         after.push_str(&guide_row(cmd, why, w, color));
+    }
+    // Scripts and agents branch on these; every command keeps to them.
+    after.push_str(&section("exit codes", "what a script can branch on", color));
+    for (code, means) in [
+        ("0", "done"),
+        ("1", "something failed, or nothing matched a name"),
+        (
+            "2",
+            "usage: a missing argument, or a name that fits several repos",
+        ),
+        ("130", "interrupted (Ctrl-C)"),
+    ] {
+        after.push_str(&guide_row(code, means, 3, color));
     }
     (before, after)
 }
@@ -1235,46 +1335,100 @@ fn action_targets<'a>(
 /// `--dry-run` previews the targets without acting. Safety still holds in the
 /// action layer: pull is ff-only, push never force-pushes, stash/commit can't
 /// lose work.
-pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: bool) -> Result<()> {
-    let color = wants_color(std::io::stdout().is_terminal());
+pub fn run_action(
+    cli: &Cli,
+    action: CliAction,
+    select: Option<&str>,
+    repos: &[String],
+    dry_run: bool,
+    json: bool,
+) -> Result<()> {
+    let human = !json;
+    let color = human && wants_color(std::io::stdout().is_terminal());
     let verb = action.verb();
     let (does, safety) = action.blurb();
+    // What picked the repos, as the person typed it (for messages).
+    let picked = match select {
+        Some(s) => format!("--select {s}"),
+        None => repos.join(" "),
+    };
 
-    // A missing selector (or a commit with no message) is a question, not an
-    // error: say what this verb does and how to choose repos, rather than failing
-    // with a bare "required argument" message.
     // A selector but no usable message is a mistake, not a question: name it.
-    if let (Some(select), CliAction::Commit(message, _)) = (select, &action)
+    if (select.is_some() || !repos.is_empty())
+        && let CliAction::Commit(message, _) = &action
         && message.as_deref().is_none_or(|m| m.trim().is_empty())
     {
-        eprintln!(
-            "cohors: commit needs a message: cohors commit -m \"your message\" --select {select}"
-        );
+        eprintln!("cohors: commit needs a message: cohors commit -m \"your message\" {picked}");
         return Err(ExitCode(2).into());
     }
-    let select = match select {
-        Some(s) if !action.missing_arg() => s,
-        _ => {
-            print!(
-                "{}",
-                action_guide(verb, action.arg_hint(), does, safety, color)
-            );
-            return Ok(());
-        }
-    };
+    // No repos named at all is a question, not an error: say what this verb
+    // does and how to choose repos, rather than a bare "required argument".
+    if (select.is_none() && repos.is_empty()) || action.missing_arg() {
+        print!(
+            "{}",
+            action_guide(verb, action.arg_hint(), does, safety, color)
+        );
+        return Ok(());
+    }
 
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
-    let targets = action_targets(&snapshots, select)?;
-    print!("{}", masthead(&format!("{verb}: {does}"), safety, color));
+    let targets: Vec<&cohors_core::RepoSnapshot> = if repos.is_empty() {
+        action_targets(&snapshots, select.unwrap_or_default())?
+    } else {
+        // Repos named directly: each must name exactly one (a typo or an
+        // ambiguous name stops here, with close names or the candidates).
+        let roots = scanner.roots();
+        let mut picked: Vec<&cohors_core::RepoSnapshot> = Vec::new();
+        for key in repos {
+            let found = reads::resolve_or_explain(&snapshots, key, &roots)?;
+            if !picked.iter().any(|p| p.id == found.id) {
+                picked.push(found);
+            }
+        }
+        picked
+    };
+    if human {
+        print!("{}", masthead(&format!("{verb}: {does}"), safety, color));
+    }
 
     if targets.is_empty() {
-        out_nothing_matched(verb, select, color);
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({ "verb": verb, "dry_run": dry_run, "results": [], "ok": 0, "failed": 0, "skipped": 0 })
+            );
+        } else {
+            out_nothing_matched(verb, select.unwrap_or_default(), color);
+        }
         return Ok(());
     }
     let n = targets.len();
     let plural = if n == 1 { "" } else { "s" };
     if dry_run {
+        if json {
+            let rows: Vec<serde_json::Value> = targets
+                .iter()
+                .map(|s| {
+                    let mut row =
+                        serde_json::json!({ "repo": s.name, "id": s.id.0, "path": s.path });
+                    if let (CliAction::Commit(_, opts), Some(path)) = (&action, &s.path) {
+                        let files = cohors_actions::paths_to_commit(path, opts.staged_only)
+                            .unwrap_or_default();
+                        row["secrets"] = serde_json::json!(cohors_actions::secret_paths(&files));
+                        row["files"] = serde_json::json!(files);
+                    }
+                    row
+                })
+                .collect();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &serde_json::json!({ "verb": verb, "dry_run": true, "targets": rows })
+                )?
+            );
+            return Ok(());
+        }
         print!(
             "{}",
             section(
@@ -1309,25 +1463,31 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
         action,
         CliAction::Pull | CliAction::Stash | CliAction::Commit(..)
     );
-    print!(
-        "{}",
-        section(action.doing(), &format!("{n} repo{plural}"), color)
-    );
-    let mut ok = 0usize;
-    let mut skipped = 0usize;
+    if human {
+        print!(
+            "{}",
+            section(action.doing(), &format!("{n} repo{plural}"), color)
+        );
+    }
+    // One record per repo, for the summary and for --json.
+    let mut results: Vec<serde_json::Value> = Vec::new();
+    let (mut ok, mut skipped) = (0usize, 0usize);
     // Skips first (they need no git), then every repo at once on the shared
     // bounded pool the MCP server and the web use (ADR-050), each line printed
     // the moment its repo finishes, so a big fleet shows progress, not a pause.
-    let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+    let (tx, rx) = std::sync::mpsc::channel::<(String, String, Result<String, String>)>();
     let mut started = 0usize;
     for s in &targets {
         if guard_worktree && let Some(reason) = cohors_actions::worktree_block(s) {
             skipped += 1;
-            println!("    {} {}: {reason}", dim(color, "·"), dim(color, &s.name));
+            if human {
+                println!("    {} {}: {reason}", dim(color, "·"), dim(color, &s.name));
+            }
+            results.push(serde_json::json!({ "repo": s.name, "id": s.id.0, "ok": false, "skipped": true, "message": reason }));
             continue;
         }
         let path = s.path.clone().unwrap_or_default();
-        let name = s.name.clone();
+        let (name, id) = (s.name.clone(), s.id.0.clone());
         let action = action.clone();
         let tx = tx.clone();
         started += 1;
@@ -1345,41 +1505,60 @@ pub fn run_action(cli: &Cli, action: CliAction, select: Option<&str>, dry_run: b
                 ),
                 CliAction::Stash => crate::action::stash_push(&path, &name),
             };
-            let _ = tx.send(result);
+            let _ = tx.send((name, id, result));
         });
     }
     drop(tx);
     let mut refused_secret = false;
-    for result in rx.iter().take(started) {
-        match result {
-            Ok(message) => {
-                ok += 1;
-                println!("    {} {message}", sgr(color, "32", "✓"));
-            }
-            Err(message) => {
-                refused_secret |= message.contains("looks like a secret");
-                println!("    {} {message}", sgr(color, "31", "✗"));
-            }
+    for (name, id, result) in rx.iter().take(started) {
+        let (good, message) = match result {
+            Ok(m) => (true, m),
+            Err(m) => (false, m),
+        };
+        if good {
+            ok += 1;
+        } else {
+            refused_secret |= message.contains("looks like a secret");
         }
-        let _ = std::io::stdout().flush();
+        if human {
+            let mark = if good {
+                sgr(color, "32", "✓")
+            } else {
+                sgr(color, "31", "✗")
+            };
+            println!("    {mark} {message}");
+            let _ = std::io::stdout().flush();
+        }
+        results.push(serde_json::json!({ "repo": name, "id": id, "ok": good, "skipped": false, "message": message }));
     }
-    let mut tail = format!("{ok} of {n} ok");
-    if skipped > 0 {
-        tail.push_str(&format!(", {skipped} skipped"));
-    }
-    println!("\n  {}\n", bold(color, &tail));
-    if refused_secret {
+    let failed = n - ok - skipped;
+    if json {
         println!(
-            "  {}\n",
-            dim(
-                color,
-                "A repo was refused because a file looks like a secret. Ignore it in .gitignore, commit with --staged after staging by hand, or pass --allow-secrets."
-            )
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "verb": verb, "dry_run": false, "results": results,
+                "ok": ok, "failed": failed, "skipped": skipped,
+            }))?
         );
+    } else {
+        let mut tail = format!("{ok} of {n} ok");
+        if skipped > 0 {
+            tail.push_str(&format!(", {skipped} skipped"));
+        }
+        println!("\n  {}\n", bold(color, &tail));
+        if refused_secret {
+            println!(
+                "  {}\n",
+                dim(
+                    color,
+                    "A repo was refused because a file looks like a secret. Ignore it in .gitignore, commit with --staged after staging by hand, or pass --allow-secrets."
+                )
+            );
+        }
     }
     // Scripts and CI read the status: a repo that failed fails the command.
     // Skipped repos (conflicted, mid-operation) were left alone on purpose.
-    if ok + skipped < n {
+    if failed > 0 {
         return Err(ExitCode(1).into());
     }
     Ok(())
@@ -1471,14 +1650,42 @@ fn out_nothing_matched(verb: &str, select: &str, color: bool) {
 /// `cohors run <command> --select <q>` — run a shell command in each matching
 /// repo, bounded per-repo by `timeout` seconds, printing each repo's output and
 /// a pass/fail summary. `--dry-run` previews the targets without running.
+/// The command `run` was given, as one shell line: a single argument is
+/// already a shell string (`cohors run "npm test"`); several (the words after
+/// `--`) are quoted where a word needs it, so `-- git commit -m "two words"`
+/// reaches the shell intact. `None` when no command was given.
+pub fn shell_line(words: &[String]) -> Option<String> {
+    match words {
+        [] => None,
+        [one] => Some(one.clone()),
+        many => Some(
+            many.iter()
+                .map(|w| {
+                    let plain = !w.is_empty()
+                        && w.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || "-_./=:,@%+".contains(c));
+                    if plain {
+                        w.clone()
+                    } else {
+                        format!("'{}'", w.replace('\'', "'\\''"))
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" "),
+        ),
+    }
+}
+
 pub fn run_command_action(
     cli: &Cli,
     select: Option<&str>,
     command: Option<&str>,
     timeout: u64,
     dry_run: bool,
+    json: bool,
 ) -> Result<()> {
-    let color = wants_color(std::io::stdout().is_terminal());
+    let human = !json;
+    let color = human && wants_color(std::io::stdout().is_terminal());
     let does = "run a shell command in each repo you pick";
     let safety = "arbitrary shell, bounded by a per-repo timeout";
 
@@ -1499,14 +1706,36 @@ pub fn run_command_action(
     let scanner = crate::scan::from_cli(cli)?;
     let snapshots = scanner.scan();
     let targets = action_targets(&snapshots, select)?;
-    print!("{}", masthead(&format!("run: {does}"), safety, color));
+    if human {
+        print!("{}", masthead(&format!("run: {does}"), safety, color));
+    }
 
     if targets.is_empty() {
-        out_nothing_matched("run", select, color);
+        if json {
+            println!(
+                "{}",
+                serde_json::json!({ "command": command, "results": [], "ok": 0, "failed": 0 })
+            );
+        } else {
+            out_nothing_matched("run", select, color);
+        }
         return Ok(());
     }
     let n = targets.len();
     let plural = if n == 1 { "" } else { "s" };
+    if dry_run && json {
+        let rows: Vec<serde_json::Value> = targets
+            .iter()
+            .map(|s| serde_json::json!({ "repo": s.name, "id": s.id.0, "path": s.path }))
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(
+                &serde_json::json!({ "command": command, "dry_run": true, "targets": rows })
+            )?
+        );
+        return Ok(());
+    }
     if dry_run {
         print!(
             "{}",
@@ -1551,11 +1780,29 @@ pub fn run_command_action(
         eprintln!("\ncohors: interrupted; every running command was stopped.");
         return Err(ExitCode(130).into());
     }
-    let mut ok = 0usize;
-    for (s, r) in targets.iter().zip(&results) {
-        if r.ok {
-            ok += 1;
+    let ok = results.iter().filter(|r| r.ok).count();
+    if json {
+        let rows: Vec<serde_json::Value> = targets
+            .iter()
+            .zip(&results)
+            .map(|(s, r)| {
+                let mut row = serde_json::to_value(r).unwrap_or_default();
+                row["name"] = serde_json::json!(s.name);
+                row
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "command": command, "results": rows, "ok": ok, "failed": n - ok,
+            }))?
+        );
+        if ok < n {
+            return Err(ExitCode(1).into());
         }
+        return Ok(());
+    }
+    for (s, r) in targets.iter().zip(&results) {
         let (mark, tag) = if r.timed_out {
             (sgr(color, "33", "!"), "timed out".to_string())
         } else if r.ok {
@@ -2901,6 +3148,17 @@ mod tests {
         assert!(n.contains("cohors scan --deep"));
         assert!(deep_note(true, 0, "scan", false).contains("nothing a normal search misses"));
         assert!(deep_note(true, 3, "scan", false).contains("Remembered 3 repositories"));
+    }
+
+    #[test]
+    fn since_takes_yesterday_days_and_dates() {
+        let now = 1_700_000_000; // 2023-11-14T22:13:20Z
+        let midnight = 1_699_920_000; // 2023-11-14T00:00:00Z
+        assert_eq!(parse_since("yesterday", now).unwrap(), midnight - 86_400);
+        assert_eq!(parse_since("3d", now).unwrap(), now - 3 * 86_400);
+        assert_eq!(parse_since("2023-11-14", now).unwrap(), midnight);
+        assert_eq!(parse_since("1970-01-02", now).unwrap(), 86_400);
+        assert!(parse_since("last tuesday", now).is_err());
     }
 
     #[test]

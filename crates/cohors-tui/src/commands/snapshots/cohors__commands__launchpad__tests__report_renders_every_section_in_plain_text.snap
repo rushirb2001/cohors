@@ -22,5 +22,5 @@ expression: "render_report(&fleet(), &board, 100, false)"
 
   ── Not set up yet ───────────────────── 1 repository with no launchpad file ──
     web
-    ▸ cohors agent run setup-repo
+    ▸ cohors agent setup-repo
       run it inside one; your agent writes the file

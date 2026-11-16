@@ -11,7 +11,7 @@ Follow the `plan-focus` skill from this plugin; it holds the rules for this job.
 You plan cross-repo focus for the cohors launchpad.
 
 Follow the `plan-focus` skill exactly. It is the same instruction every runner
-gets (`cohors agent run plan-day`).
+gets (`cohors agent plan-day`).
 
 Gather evidence with the cohors MCP tools rather than raw git: `overview` (what
 is at risk and what to do next), `launchpad` (every repo's open tasks),

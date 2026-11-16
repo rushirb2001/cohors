@@ -503,12 +503,28 @@ impl Drop for Lock {
 
 /// `cohors update`: look now, and install a newer release unless `check_only`.
 /// Run by hand, so it ignores the `updates` setting.
-pub fn run_command(check_only: bool) -> Result<()> {
+pub fn run_command(check_only: bool, json: bool) -> Result<()> {
     let channel = channel();
-    println!("cohors {CURRENT}, installed with {}.", channel.label());
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
+    if json {
+        // `--check --json`: the answer for a script, nothing installed.
+        let latest = newer_release(true, now);
+        let reached = latest.is_some() || load_memo().checked_at == now;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "current": CURRENT,
+                "channel": channel.label(),
+                "newer": latest,
+                "reached_github": reached,
+                "command": channel.manual_command(),
+            }))?
+        );
+        return Ok(());
+    }
+    println!("cohors {CURRENT}, installed with {}.", channel.label());
     let Some(version) = newer_release(true, now) else {
         if load_memo().checked_at == now {
             println!("This is the newest release.");

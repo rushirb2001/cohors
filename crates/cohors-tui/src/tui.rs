@@ -39,6 +39,7 @@ use crate::cli::Cli;
 use crate::ground::{Fed, GroundReply};
 use crate::scan::Scanner;
 use crate::ui;
+use cohors_fleet::{FleetState, FleetWatch, Reason, WatchOptions};
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
 
@@ -230,11 +231,21 @@ pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Re
     result.map(|_| ())
 }
 
-/// How often `--watch` re-scans while the dashboard is idle.
-const WATCH_INTERVAL: Duration = Duration::from_secs(5);
+/// With `--watch`, the longest the dashboard goes without a full rescan,
+/// however large the fleet (the cadence `--watch` always had). Without it the
+/// fleet watch stretches that interval to fit what a scan costs.
+const WATCH_RESCAN_AT_MOST: Duration = Duration::from_secs(5);
 
-/// How often the dashboard checks whether a deep search remembered new repos.
-const KNOWN_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+/// How the dashboard's fleet watch looks. Live updates are always on: the
+/// probe costs well under a millisecond per tick, and git changes, new repos,
+/// deep searches run elsewhere and launchpad edits show within a second.
+fn watch_options(watch: bool) -> WatchOptions {
+    let mut options = WatchOptions::default();
+    if watch {
+        options.rescan_at_most = WATCH_RESCAN_AT_MOST.max(options.rescan_every);
+    }
+    options
+}
 
 /// Launch the dashboard on the built-in demo fleet. Mirrors [`run`] but seeds
 /// the app from `cohors_core::demo` and stubs every action, so nothing touches
@@ -449,8 +460,17 @@ fn run_loop(
         app.status = Some("refreshing…".to_string());
         spawn_overview(&app, &tx, &mut overview_seq);
     }
+    // The fleet watch does the first scan and every one after it that
+    // something set off: a commit, a fetch, a stash, a new repo, a deep
+    // search run elsewhere, a launchpad edit, or (on its own slower clock)
+    // an edited file. Its states arrive in `live`.
     app.scanning = true;
-    spawn_scan(&scanner, tx.clone());
+    let mut fleet = FleetWatch::start(scanner.clone(), watch_options(watch));
+    let mut live = fleet.subscribe();
+    // A state that arrived while the user was in the middle of something;
+    // only the newest is kept.
+    let mut held: Option<Arc<FleetState>> = None;
+    let mut watched = scanner.clone();
     spawn_update_check(&scanner, tx.clone());
 
     // An in-flight bulk batch (fetch-all / bulk stash), for aggregate progress.
@@ -464,15 +484,6 @@ fn run_loop(
     let mut toast_seen: Option<String> = None;
     let mut toast_since = Instant::now();
     const TOAST_TTL: Duration = Duration::from_secs(4);
-
-    // `--watch`: re-scan on an interval while idle, so the board stays current.
-    let mut last_watch = Instant::now();
-
-    // A deep search run elsewhere (`cohors scan --deep`, `cohors discover
-    // --deep`) remembers repos this dashboard should show. Watch when that
-    // memory last changed and rescan when it moves, with or without --watch.
-    let mut known_stamp = scanner.known_stamp();
-    let mut last_known_check = Instant::now();
 
     loop {
         app.now = now_secs();
@@ -556,6 +567,33 @@ fn run_loop(
             app.spinner = app.spinner.wrapping_add(1);
         }
 
+        // The empty-state rescue rebuilt the scanner (new roots): watch that.
+        if !Arc::ptr_eq(&scanner, &watched) {
+            fleet = FleetWatch::start(scanner.clone(), watch_options(watch));
+            live = fleet.subscribe();
+            held = None;
+            watched = scanner.clone();
+        }
+        // The fleet watch's newest state, applied unless the user is in the
+        // middle of something it would disturb (then it waits, newest only).
+        if let Some(state) = live.try_recv() {
+            held = Some(state);
+        }
+        if let Some(state) = held.take_if(|_| calm(&app)) {
+            if !Arc::ptr_eq(&state.scanner, &scanner) {
+                // The config was edited and read again: new roots, maybe.
+                scanner = state.scanner.clone();
+                watched = scanner.clone();
+                app.roots = scanner.roots();
+            }
+            // The warm-start cache follows every scan the dashboard shows.
+            crate::cache::save(&state.snapshots);
+            if state.reason == Reason::Remembered {
+                app.status = Some("a deep search found repos".to_string());
+            }
+            let _ = tx.send(BgMsg::Scanned(state.snapshots.clone()));
+        }
+
         drain_background(&mut app, &rx, &mut batch, &scanner, &tx, &mut overview_seq);
 
         // Auto-expire a result toast once nothing is in flight, so a stale
@@ -570,26 +608,21 @@ fn run_loop(
             app.status = None;
             toast_seen = None;
         }
-
-        // `--watch`: while idle and not mid-overlay, re-scan on the interval.
-        if watch && idle && app.mode == Mode::Normal && last_watch.elapsed() >= WATCH_INTERVAL {
-            start_refresh(&mut app, &scanner, &tx);
-            last_watch = Instant::now();
-        }
-
-        // New repos remembered by a deep search: pick them up now. Checked once
-        // a second (one `stat`); a change seen mid-scan waits for the next tick.
-        if last_known_check.elapsed() >= KNOWN_CHECK_INTERVAL {
-            last_known_check = Instant::now();
-            let stamp = scanner.known_stamp();
-            if stamp != known_stamp && !app.scanning {
-                known_stamp = stamp;
-                start_refresh(&mut app, &scanner, &tx);
-                app.status = Some("a deep search found repos — refreshing…".to_string());
-            }
-        }
     }
     Ok(restart)
+}
+
+/// Whether a new scan may replace the rows now. Not while the user is
+/// answering a question about them (a confirmation, a picker, the command
+/// line), nor while a command run or an action is in flight, whose results
+/// are about to land on those rows.
+fn calm(app: &App) -> bool {
+    app.busy.is_empty()
+        && !run_in_progress(app)
+        && !matches!(
+            app.mode,
+            Mode::Confirm | Mode::OpenWith | Mode::PushBranch | Mode::Command
+        )
 }
 
 /// Roots auto-detected elsewhere that aren't already being searched — the
@@ -1251,7 +1284,7 @@ fn open_lazygit(
 /// Hand the terminal to the user's coding agent with the `setup-repo` prompt,
 /// then come back and rescan.
 ///
-/// This runs `cohors agent run setup-repo --repo <path>` — this same binary —
+/// This runs `cohors agent setup-repo -r <path>` — this same binary —
 /// rather than calling the launch code directly, so the dashboard starts an
 /// agent exactly the way the command line does (runner choice, prompt file,
 /// activity log) with no second implementation to keep in step.
@@ -1280,7 +1313,7 @@ fn run_agent_setup(
     };
     suspend_terminal(terminal)?;
     let outcome = std::process::Command::new(exe)
-        .args(["agent", "run", "setup-repo", "--repo", path.as_str()])
+        .args(["agent", "setup-repo", "-r", path.as_str()])
         .status();
     let started = matches!(&outcome, Ok(status) if status.success());
     if !started {
@@ -1295,8 +1328,7 @@ fn run_agent_setup(
         Ok(_) if started => start_refresh(app, scanner, tx),
         Ok(_) => {
             app.status = Some(
-                "the agent did not start; `cohors agent runners` shows what is installed"
-                    .to_string(),
+                "the agent did not start; `cohors agent ls` shows what is installed".to_string(),
             );
         }
         Err(e) => app.status = Some(format!("could not start the agent: {e}")),

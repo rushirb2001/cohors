@@ -1,21 +1,22 @@
 //! `cohors agent` — start a coding agent on a repo, a task, or the whole fleet.
 //!
-//! cohors is built to be used *with* agents. These commands are the one place
-//! every surface (this CLI, the dashboard, the editor extension) gets an
-//! agent started, so they all behave identically:
+//! cohors is built to be used *with* agents. This is the one place every
+//! surface (this CLI, the dashboard, the editor extension) gets an agent
+//! started, so they all behave identically:
 //!
-//! - `cohors agent runners` — which agent tools are installed, and why one is not.
-//! - `cohors agent prompts` — the prompts cohors ships.
-//! - `cohors agent run <what>` — start an agent in this terminal.
-//! - `cohors agent command <what>` — print, as JSON, the command that would
-//!   start it. An editor reads this and types the command into its own
-//!   terminal.
+//! - `cohors agent [WHAT]` — start it in this terminal. WHAT is a shipped
+//!   prompt (`setup-repo`, `plan-day`, …), a task id, or an agent the repo
+//!   declares; cohors works out which. Bare, it starts a session, first
+//!   offering the recent sessions in the repo to resume at a terminal.
+//! - `cohors agent --resume [ID|N]` — reopen a session; with no value, pick
+//!   one from the recent sessions in this repo (ranked by `cohors_core::suggest`).
+//! - `cohors agent WHAT --print` — print the launch as JSON, for an editor that
+//!   types the command into its own terminal.
+//! - `cohors agent ls` — what you can start.
 //!
-//! `<what>` is a shipped prompt (`setup-repo`, `declare-flows`, `add-agent`,
-//! `track-tasks`, `plan-day`) or one of `agent` (a repo-declared agent, with
-//! `--agent`), `task` (a repo task, with `--task`; it resumes the task's
-//! conversation when there is one), `start` (just open a session in the repo)
-//! and `resume` (re-enter a session, with `--session`).
+//! The 0.7 forms (`agent run|command <what> --task/--agent/--session`,
+//! `agent runners`, `agent prompts`) still work, hidden: the editor extension
+//! and existing scripts use them.
 //!
 //! The runner table and prompts are pure data in `cohors_core::agents`; the
 //! planning (prompt file, conversation link, activity log) is in the launchpad
@@ -32,10 +33,14 @@ use serde_json::json;
 
 use super::launchpad::{head_branch, repo_root};
 use super::{bold, dim, guide_row, now_secs, section, sgr, wants_color};
-use crate::cli::{AgentCmd, AgentLaunch, Cli};
+use crate::cli::{AgentArgs, AgentCmd, AgentLaunch, Cli};
 
-pub fn run(cli: &Cli, action: &AgentCmd) -> Result<()> {
+pub fn run(cli: &Cli, args: &AgentArgs) -> Result<()> {
+    let Some(action) = &args.cmd else {
+        return launch_new(cli, args);
+    };
     match action {
+        AgentCmd::Ls { json } => ls(cli, args.repo.as_deref(), *json),
         AgentCmd::Runners { json } => runners(*json),
         AgentCmd::Prompts { json } => prompts(*json),
         AgentCmd::Command(launch) => {
@@ -139,7 +144,7 @@ fn runners_report(statuses: &[RunnerStatus], color: bool) -> String {
             "  {}\n\n",
             dim(
                 color,
-                "install any one of these, then run `cohors agent run setup-repo` in a repo"
+                "install any one of these, then run `cohors agent setup-repo` in a repo"
             )
         ));
     }
@@ -160,7 +165,7 @@ fn prompts(as_json: bool) -> Result<()> {
     let mut out = String::from("\n");
     out.push_str(&section(
         "prompts",
-        "start one with `cohors agent run <prompt>`",
+        "start one with `cohors agent <prompt>`",
         color,
     ));
     let width = PROMPTS.iter().map(|p| p.id.len()).max().unwrap_or(0);
@@ -247,12 +252,22 @@ fn resolve_repo(
     })))
 }
 
-/// Build the launch plan for `launch`.
+/// Build the launch plan for `launch` (the 0.7 form).
 fn plan(cli: &Cli, launch: &AgentLaunch) -> Result<LaunchPlan> {
-    let home = lp::launchpad_home().context("no home directory for the launchpad")?;
     let kind = launch_kind(launch)?;
     let fleet = crate::scan::from_cli(cli)?.scan();
     let repo = resolve_repo(launch.repo.as_deref(), &fleet)?;
+    plan_for(kind, launch.runner.as_deref(), repo, &fleet)
+}
+
+/// The launch plan for `kind` with `runner` in `repo`.
+fn plan_for(
+    kind: LaunchKind,
+    runner: Option<&str>,
+    repo: Option<(String, PathBuf, String)>,
+    fleet: &[RepoSnapshot],
+) -> Result<LaunchPlan> {
+    let home = lp::launchpad_home().context("no home directory for the launchpad")?;
     let listing: Vec<(String, String)> = fleet
         .iter()
         .filter_map(|s| Some((s.name.clone(), s.path.as_ref()?.to_string())))
@@ -260,7 +275,7 @@ fn plan(cli: &Cli, launch: &AgentLaunch) -> Result<LaunchPlan> {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     let request = LaunchRequest {
         kind,
-        runner: launch.runner.as_deref(),
+        runner,
         repo: repo
             .as_ref()
             .map(|(name, root, branch)| RepoTarget { name, root, branch }),
@@ -273,6 +288,406 @@ fn plan(cli: &Cli, launch: &AgentLaunch) -> Result<LaunchPlan> {
         &lp::detect_runners(),
         now_secs(),
     )?)
+}
+
+/// `cohors agent [WHAT] [--resume [ID|N]]`: work out what to start, then
+/// start it (or print it, with `--print`).
+fn launch_new(cli: &Cli, args: &AgentArgs) -> Result<()> {
+    let fleet = crate::scan::from_cli(cli)?.scan();
+    let repo = resolve_repo(args.repo.as_deref(), &fleet)?;
+    let interactive = std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    let mut runner = args.runner.clone();
+
+    let kind = if let Some(wanted) = &args.resume {
+        let session = pick_session(&fleet, repo.as_ref(), wanted, interactive)?;
+        // The runner that owns the session reopens it, unless one was named.
+        if runner.is_none() {
+            runner = Some(session.runner.clone());
+        }
+        LaunchKind::Resume(session.id)
+    } else {
+        match &args.what {
+            Some(what) => detect_kind(what, args, repo.as_ref())?,
+            // Bare: at a terminal, offer the recent sessions here first.
+            None if interactive && !args.print => match offer_resume(&fleet, repo.as_ref())? {
+                Offer::Resume(session) => {
+                    if runner.is_none() {
+                        runner = Some(session.runner.clone());
+                    }
+                    LaunchKind::Resume(session.id)
+                }
+                Offer::New => LaunchKind::Start,
+                Offer::Quit => return Ok(()),
+            },
+            None => LaunchKind::Start,
+        }
+    };
+    let plan = plan_for(kind, runner.as_deref(), repo, &fleet)?;
+    if args.print {
+        println!("{}", serde_json::to_string_pretty(&plan.to_json())?);
+        return Ok(());
+    }
+    start(&plan)
+}
+
+/// What WHAT names: a shipped prompt, a task in the repo, or one of the repo's
+/// agents. A flag (`--task`, `--agent`, `--prompt`) settles it outright; a name
+/// that fits several kinds asks for one; a name that fits none says what does.
+fn detect_kind(
+    what: &str,
+    args: &AgentArgs,
+    repo: Option<&(String, PathBuf, String)>,
+) -> Result<LaunchKind> {
+    if args.task {
+        return Ok(LaunchKind::Task(what.to_string()));
+    }
+    if args.agent {
+        return Ok(LaunchKind::Agent(what.to_string()));
+    }
+    if args.prompt {
+        return Ok(LaunchKind::Prompt(what.to_string()));
+    }
+    // The 0.7 keyword for a plain session still means that.
+    if what == "start" {
+        return Ok(LaunchKind::Start);
+    }
+    let (tasks, agents) = repo_offers(repo);
+    let is_prompt = PROMPTS.iter().any(|p| p.id == what);
+    let is_task = tasks.iter().any(|(id, _)| id == what);
+    let is_agent = agents.iter().any(|(id, _)| id == what);
+    let mut kinds: Vec<&str> = Vec::new();
+    if is_prompt {
+        kinds.push("a shipped prompt (--prompt)");
+    }
+    if is_task {
+        kinds.push("a task (--task)");
+    }
+    if is_agent {
+        kinds.push("one of the repo's agents (--agent)");
+    }
+    match kinds.len() {
+        1 if is_prompt => Ok(LaunchKind::Prompt(what.to_string())),
+        1 if is_task => Ok(LaunchKind::Task(what.to_string())),
+        1 => Ok(LaunchKind::Agent(what.to_string())),
+        0 => {
+            let prompts: Vec<&str> = PROMPTS.iter().map(|p| p.id).collect();
+            let place = repo
+                .map(|(name, ..)| format!("a task or agent in {name}"))
+                .unwrap_or_else(|| "a task or agent (no repo here: pass -r)".to_string());
+            bail!(
+                "`{what}` is not a shipped prompt ({}) or {place}.\n  See what you can start: cohors agent ls",
+                prompts.join(", ")
+            )
+        }
+        _ => bail!(
+            "`{what}` could be {}; say which with that flag",
+            kinds.join(" or ")
+        ),
+    }
+}
+
+/// An id and its title (a task's) or label (an agent's).
+type IdTitle = (String, String);
+
+/// The tasks and agents `repo` declares, as `(id, title)`.
+fn repo_offers(repo: Option<&(String, PathBuf, String)>) -> (Vec<IdTitle>, Vec<IdTitle>) {
+    let Some((_, root, _)) = repo else {
+        return (Vec::new(), Vec::new());
+    };
+    match lp::read_contribution(root) {
+        lp::ContributionState::Ok(doc) => (
+            doc.tasks
+                .iter()
+                .map(|t| (t.id.clone(), t.title.clone()))
+                .collect(),
+            doc.agents
+                .iter()
+                .map(|a| (a.id.clone(), a.label.clone()))
+                .collect(),
+        ),
+        _ => (Vec::new(), Vec::new()),
+    }
+}
+
+/// The recent agent sessions worth resuming, most likely first: in `repo`
+/// when there is one, else across the fleet.
+fn ranked_sessions(
+    fleet: &[RepoSnapshot],
+    repo: Option<&(String, PathBuf, String)>,
+) -> Vec<cohors_core::suggest::AgentSession> {
+    let now = now_secs();
+    let Ok(home) = cohors_config::paths::home_dir() else {
+        return Vec::new();
+    };
+    let sessions = cohors_fleet::agent_sessions(fleet, home.as_std_path(), now);
+    let overview = cohors_fleet::overview(fleet, lp::launchpad_home().as_deref(), now);
+    let here = repo.and_then(|(_, root, _)| cohors_fleet::repo_containing(fleet, root));
+    cohors_core::suggest::rank_sessions(&sessions, &overview, here.as_deref(), here.is_some(), now)
+        .into_iter()
+        .map(|(s, _)| s.clone())
+        .collect()
+}
+
+/// One line per session for a pick list: number, title, runner, age, branch.
+fn session_lines(sessions: &[cohors_core::suggest::AgentSession], color: bool) -> String {
+    let now = now_secs();
+    let width = sessions
+        .iter()
+        .map(|s| s.title.chars().count().min(56))
+        .max()
+        .unwrap_or(0);
+    let mut out = String::new();
+    for (i, s) in sessions.iter().enumerate() {
+        let title = super::clip(&crate::ui::text::safe(&s.title), 56);
+        let mut why = vec![
+            s.runner.clone(),
+            cohors_core::time::relative(s.last_active, now),
+        ];
+        if let Some(branch) = &s.branch {
+            why.push(crate::ui::text::safe(branch));
+        }
+        out.push_str(&format!(
+            "    {}  {}  {}\n",
+            bold(color, &format!("{:>2}", i + 1)),
+            format_args!("{title:<width$}"),
+            dim(color, &why.join(" · "))
+        ));
+    }
+    out
+}
+
+/// The session `--resume` names: an id, a number in the ranked list, or
+/// (empty) one the person picks at a terminal.
+fn pick_session(
+    fleet: &[RepoSnapshot],
+    repo: Option<&(String, PathBuf, String)>,
+    wanted: &str,
+    interactive: bool,
+) -> Result<cohors_core::suggest::AgentSession> {
+    let ranked = ranked_sessions(fleet, repo);
+    let wanted = wanted.trim();
+    if let Ok(n) = wanted.parse::<usize>()
+        && n >= 1
+        && n <= ranked.len()
+        && wanted.len() <= 3
+    {
+        return Ok(ranked[n - 1].clone());
+    }
+    if !wanted.is_empty() {
+        // An id: the owning runner comes from the stores, when found there.
+        let all = cohors_config::paths::home_dir()
+            .map(|h| cohors_fleet::agent_sessions(fleet, h.as_std_path(), now_secs()))
+            .unwrap_or_default();
+        if let Some(found) = all.into_iter().find(|s| s.id == wanted) {
+            return Ok(found);
+        }
+        return Ok(cohors_core::suggest::AgentSession {
+            runner: "claude-code".to_string(),
+            id: wanted.to_string(),
+            repo: String::new(),
+            cwd: String::new(),
+            branch: None,
+            title: String::new(),
+            last_active: 0,
+        });
+    }
+    if ranked.is_empty() {
+        bail!(
+            "no recent agent sessions {} (Claude Code and Codex sessions from the last 30 days are found)",
+            repo.map(|(n, ..)| format!("in {n}"))
+                .unwrap_or_else(|| "in your fleet".to_string())
+        );
+    }
+    let shown = &ranked[..ranked.len().min(9)];
+    let color = wants_color(std::io::stdout().is_terminal());
+    print!(
+        "\n{}",
+        section(
+            "resume a session",
+            &format!(
+                "{}, most likely first",
+                repo.map(|(n, ..)| n.clone())
+                    .unwrap_or_else(|| "your fleet".to_string())
+            ),
+            color
+        )
+    );
+    print!("{}", session_lines(shown, color));
+    if !interactive {
+        println!("\n  pick one: cohors agent --resume <N|ID>\n");
+        return Err(super::ExitCode(2).into());
+    }
+    print!(
+        "\n{}",
+        super::key_bar(
+            &[("enter", "resume 1"), ("1-9", "pick"), ("q", "quit")],
+            color
+        )
+    );
+    match read_choice(shown.len())? {
+        Choice::Enter => Ok(shown[0].clone()),
+        Choice::Pick(n) => Ok(shown[n - 1].clone()),
+        Choice::New | Choice::Quit => Err(super::ExitCode(0).into()),
+    }
+}
+
+/// What a bare `cohors agent` at a terminal should do.
+enum Offer {
+    Resume(cohors_core::suggest::AgentSession),
+    New,
+    Quit,
+}
+
+/// Bare `cohors agent` at a terminal: when there are recent sessions here,
+/// list them and let one key decide (Enter = a new session, the fast path).
+fn offer_resume(fleet: &[RepoSnapshot], repo: Option<&(String, PathBuf, String)>) -> Result<Offer> {
+    let Some(repo) = repo else {
+        return Ok(Offer::New);
+    };
+    let ranked = ranked_sessions(fleet, Some(repo));
+    if ranked.is_empty() {
+        return Ok(Offer::New);
+    }
+    let shown = &ranked[..ranked.len().min(5)];
+    let color = wants_color(true);
+    print!(
+        "\n{}",
+        section(
+            "recent sessions here",
+            &format!("{}, most likely first", repo.0),
+            color
+        )
+    );
+    print!("{}", session_lines(shown, color));
+    print!(
+        "\n{}",
+        super::key_bar(
+            &[("enter", "new session"), ("1-5", "resume"), ("q", "quit")],
+            color
+        )
+    );
+    Ok(match read_choice(shown.len())? {
+        Choice::Pick(n) => Offer::Resume(shown[n - 1].clone()),
+        Choice::Enter | Choice::New => Offer::New,
+        Choice::Quit => Offer::Quit,
+    })
+}
+
+enum Choice {
+    Enter,
+    Pick(usize),
+    New,
+    Quit,
+}
+
+/// One key, in raw mode: Enter, a digit within `max`, `n`, or q/Esc/Ctrl-C.
+fn read_choice(max: usize) -> Result<Choice> {
+    use ratatui::crossterm::event::{self, Event, KeyCode, KeyModifiers};
+    use ratatui::crossterm::terminal::{disable_raw_mode, enable_raw_mode};
+    enable_raw_mode().context("entering raw mode for the pick list")?;
+    let choice = loop {
+        match event::read() {
+            Ok(Event::Key(k)) => match k.code {
+                KeyCode::Enter => break Choice::Enter,
+                KeyCode::Char('n') | KeyCode::Char('N') => break Choice::New,
+                KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => break Choice::Quit,
+                KeyCode::Char('c') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                    break Choice::Quit;
+                }
+                KeyCode::Char(c) if c.is_ascii_digit() => {
+                    let n = c.to_digit(10).unwrap_or(0) as usize;
+                    if n >= 1 && n <= max {
+                        break Choice::Pick(n);
+                    }
+                }
+                _ => {}
+            },
+            Ok(_) => {}
+            Err(_) => break Choice::Quit,
+        }
+    };
+    let _ = disable_raw_mode();
+    println!();
+    Ok(choice)
+}
+
+/// `cohors agent ls`: runners (the default marked), prompts, and what the repo
+/// here declares and has recently worked on.
+fn ls(cli: &Cli, repo_arg: Option<&str>, as_json: bool) -> Result<()> {
+    let statuses = lp::detect_runners();
+    let default = statuses.iter().find(|s| s.available).map(|s| s.id.clone());
+    let fleet = crate::scan::from_cli(cli)?.scan();
+    let repo = resolve_repo(repo_arg, &fleet).ok().flatten();
+    let (tasks, agents) = repo_offers(repo.as_ref());
+    let sessions = ranked_sessions(&fleet, repo.as_ref());
+    let human = !as_json && std::io::stdout().is_terminal();
+    if !human {
+        let out = json!({
+            "default_runner": default,
+            "runners": statuses,
+            "prompts": PROMPTS,
+            "repo": repo.as_ref().map(|(name, root, _)| json!({
+                "name": name,
+                "path": root,
+                "tasks": tasks.iter().map(|(id, title)| json!({"id": id, "title": title})).collect::<Vec<_>>(),
+                "agents": agents.iter().map(|(id, label)| json!({"id": id, "label": label})).collect::<Vec<_>>(),
+            })),
+            "sessions": sessions.iter().take(10).collect::<Vec<_>>(),
+        });
+        println!("{}", serde_json::to_string_pretty(&out)?);
+        return Ok(());
+    }
+    let color = wants_color(true);
+    let mut out = runners_report(&statuses, color);
+    if let Some(id) = &default {
+        out.push_str(&format!(
+            "  {}\n\n",
+            dim(color, &format!("{id} is used unless you pass -w <runner>"))
+        ));
+    }
+    let width = PROMPTS.iter().map(|p| p.id.len()).max().unwrap_or(0);
+    out.push_str(&section("prompts", "cohors agent <prompt>", color));
+    for p in &PROMPTS {
+        out.push_str(&guide_row(p.id, p.summary, width, color));
+    }
+    out.push('\n');
+    if let Some((name, ..)) = &repo {
+        if !tasks.is_empty() {
+            out.push_str(&section(
+                &format!("tasks in {name}"),
+                "cohors agent <task>",
+                color,
+            ));
+            let w = tasks.iter().map(|(id, _)| id.len()).max().unwrap_or(0);
+            for (id, title) in &tasks {
+                out.push_str(&guide_row(id, &crate::ui::text::safe(title), w, color));
+            }
+            out.push('\n');
+        }
+        if !agents.is_empty() {
+            out.push_str(&section(
+                &format!("agents in {name}"),
+                "cohors agent <agent>",
+                color,
+            ));
+            let w = agents.iter().map(|(id, _)| id.len()).max().unwrap_or(0);
+            for (id, label) in &agents {
+                out.push_str(&guide_row(id, &crate::ui::text::safe(label), w, color));
+            }
+            out.push('\n');
+        }
+    }
+    if !sessions.is_empty() {
+        out.push_str(&section(
+            "recent sessions",
+            "cohors agent --resume <N>",
+            color,
+        ));
+        out.push_str(&session_lines(&sessions[..sessions.len().min(5)], color));
+        out.push('\n');
+    }
+    print!("{out}");
+    Ok(())
 }
 
 /// Run the plan in this terminal: spawn the runner directly (no shell), hand
