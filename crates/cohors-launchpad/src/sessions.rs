@@ -67,6 +67,11 @@ pub fn agent_sessions(repos: &[(String, PathBuf)], home: &Path, now: i64) -> Vec
             _ => parse_codex(&path),
         };
         let Some(found) = parsed else { continue };
+        // The id goes into a command line: only real session ids (hex and
+        // dashes, as Claude Code and Codex write them) are kept.
+        if !cohors_core::agents::is_session_id(&found.id) {
+            continue;
+        }
         let cwd = PathBuf::from(&found.cwd);
         let cwd = fs::canonicalize(&cwd).unwrap_or(cwd);
         let Some((repo, _)) = repos
@@ -373,7 +378,9 @@ mod tests {
         let projects = home.path().join(".claude").join("projects");
         // A session in the nested repo, renamed by the user.
         write(
-            &projects.join(claude_folder(&api)).join("aaaa-1111.jsonl"),
+            &projects
+                .join(claude_folder(&api))
+                .join("aaaa1111-2222-4333-8444-555566667777.jsonl"),
             &[
                 serde_json::json!({"type":"user","cwd": api, "gitBranch":"feat/x","message":{"content":"<command-name>/clear</command-name>"}}),
                 serde_json::json!({"type":"user","cwd": api, "gitBranch":"feat/x","message":{"content":[{"type":"text","text":"Fix the login\nredirect"}]}}),
@@ -382,7 +389,9 @@ mod tests {
         );
         // A session in the outer repo with only a last prompt.
         write(
-            &projects.join(claude_folder(&code)).join("bbbb-2222.jsonl"),
+            &projects
+                .join(claude_folder(&code))
+                .join("bbbb1111-2222-4333-8444-555566667777.jsonl"),
             &[
                 serde_json::json!({"type":"user","cwd": code, "message":{"content":"tidy notes"}}),
                 serde_json::json!({"type":"last-prompt","lastPrompt":"update the roadmap"}),
@@ -397,11 +406,16 @@ mod tests {
             ("code".to_string(), code.clone()),
             ("api".to_string(), api.clone()),
         ];
-        let now = mtime(&projects.join(claude_folder(&api)).join("aaaa-1111.jsonl")).unwrap();
+        let now = mtime(
+            &projects
+                .join(claude_folder(&api))
+                .join("aaaa1111-2222-4333-8444-555566667777.jsonl"),
+        )
+        .unwrap();
         let mut found = agent_sessions(&repos, home.path(), now);
         found.sort_by(|a, b| a.id.cmp(&b.id));
         assert_eq!(found.len(), 2, "{found:?}");
-        assert_eq!(found[0].id, "aaaa-1111");
+        assert_eq!(found[0].id, "aaaa1111-2222-4333-8444-555566667777");
         assert_eq!(found[0].repo, "api", "the deepest repo wins");
         assert_eq!(found[0].title, "Login redirect");
         assert_eq!(found[0].branch.as_deref(), Some("feat/x"));
@@ -424,7 +438,7 @@ mod tests {
         write(
             &file,
             &[
-                serde_json::json!({"type":"session_meta","payload":{"id":"cx-9","cwd":repo,"git":{"branch":"main"}}}),
+                serde_json::json!({"type":"session_meta","payload":{"id":"0c0dfeed-1234-4abc-8def-0123456789ab","cwd":repo,"git":{"branch":"main"}}}),
                 serde_json::json!({"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>…"}]}}),
                 serde_json::json!({"type":"event_msg","payload":{"type":"user_message","message":"add retries"}}),
             ],
@@ -432,9 +446,29 @@ mod tests {
         let found = agent_sessions(&[("app".into(), repo)], home.path(), now + 5);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].runner, "codex");
-        assert_eq!(found[0].id, "cx-9");
+        assert_eq!(found[0].id, "0c0dfeed-1234-4abc-8def-0123456789ab");
         assert_eq!(found[0].title, "add retries");
         assert_eq!(found[0].branch.as_deref(), Some("main"));
+    }
+
+    /// A session file whose id is not a session id (it would land in a
+    /// command line) is skipped.
+    #[test]
+    fn a_session_with_a_strange_id_is_skipped() {
+        let home = tempfile::tempdir().unwrap();
+        let repo = home.path().join("app");
+        fs::create_dir_all(&repo).unwrap();
+        let repo = fs::canonicalize(&repo).unwrap();
+        let folder = home
+            .path()
+            .join(".claude/projects")
+            .join(claude_folder(&repo));
+        write(
+            &folder.join("x;rm -rf ~.jsonl"),
+            &[serde_json::json!({"type":"user","cwd": repo,"message":{"content":"hi"}})],
+        );
+        let now = mtime(&folder.join("x;rm -rf ~.jsonl")).unwrap();
+        assert!(agent_sessions(&[("app".into(), repo)], home.path(), now).is_empty());
     }
 
     #[test]

@@ -59,8 +59,12 @@ pub struct Suggestion {
     pub title: String,
     /// Why it is suggested (where, how recent, what is left).
     pub why: String,
-    /// The command that carries it out.
+    /// The command that carries it out, for reading and copying (each
+    /// argument quoted for a POSIX shell where it needs it).
     pub command: String,
+    /// The same command as arguments to `cohors` (without the program name),
+    /// for running it without a shell.
+    pub args: Vec<String>,
     /// The repository it concerns, when it concerns one.
     pub repo: Option<String>,
     /// Higher comes first. Comparable across kinds.
@@ -74,23 +78,39 @@ pub const SESSION_HORIZON_SECS: i64 = 30 * 24 * 3600;
 /// How many sessions a suggestion list offers at most.
 const SESSIONS_SUGGESTED: usize = 3;
 
-/// The command that starts a "do next" step (the shortest one that does).
-pub fn action_command(kind: ActionKind) -> &'static str {
+/// The arguments to `cohors` that start a "do next" step (the shortest
+/// command that does).
+pub fn action_args(kind: ActionKind) -> &'static [&'static str] {
     use ActionKind as K;
     match kind {
-        K::Unreadable => "cohors scan --select error",
-        K::Resolve => "cohors scan --select conflicted",
+        K::Unreadable => &["scan", "--select", "error"],
+        K::Resolve => &["scan", "--select", "conflicted"],
         // Diverged branches are left out: a plain push would be rejected.
-        K::Push => "cohors push --select 'ahead,!diverged'",
-        K::Reconcile => "cohors scan --select diverged",
-        K::Publish => "cohors push --select unpublished",
-        K::ReviewStash => "cohors scan --select stash",
+        K::Push => &["push", "--select", "ahead,!diverged"],
+        K::Reconcile => &["scan", "--select", "diverged"],
+        K::Publish => &["push", "--select", "unpublished"],
+        K::ReviewStash => &["scan", "--select", "stash"],
         // Diverged branches are left out: a fast-forward pull cannot apply.
-        K::Pull => "cohors pull --select 'behind,!diverged'",
-        K::Commit => "cohors scan --select dirty",
-        K::Fetch => "cohors fetch --select stale-fetch",
-        K::StartTask => "cohors launchpad",
+        K::Pull => &["pull", "--select", "behind,!diverged"],
+        K::Commit => &["scan", "--select", "dirty"],
+        K::Fetch => &["fetch", "--select", "stale-fetch"],
+        K::StartTask => &["launchpad"],
     }
+}
+
+/// `cohors` and `args` as one line to read or paste, each argument quoted for
+/// a POSIX shell where it needs it.
+pub fn command_line(args: &[String]) -> String {
+    std::iter::once("cohors".to_string())
+        .chain(args.iter().map(|a| shell_word(a)))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The command line that starts a "do next" step.
+pub fn action_command(kind: ActionKind) -> String {
+    let args: Vec<String> = action_args(kind).iter().map(|a| a.to_string()).collect();
+    command_line(&args)
 }
 
 /// How likely `session` is the one to pick up, or `None` when it is too old.
@@ -116,8 +136,10 @@ pub fn session_score(
         a if a < 7 * 24 * HOUR => 35,
         _ => 15,
     };
+    // The repo you are in leads: within a day it outranks any other repo's
+    // session, however fresh.
     if here == Some(session.repo.as_str()) {
-        score += 40;
+        score += 60;
     }
     if let Some(line) = line {
         let dirty = line.staged + line.modified + line.untracked > 0;
@@ -160,13 +182,20 @@ pub fn rank_sessions<'a>(
     ranked
 }
 
-/// The command that reopens `session` (cohors finds the runner by the id).
+/// The arguments that reopen `session` (cohors finds the runner by the id).
+pub fn resume_args(session: &AgentSession, repo_name: &str) -> Vec<String> {
+    vec![
+        "agent".into(),
+        "--resume".into(),
+        session.id.clone(),
+        "-r".into(),
+        repo_name.to_string(),
+    ]
+}
+
+/// The command line that reopens `session`.
 pub fn resume_command(session: &AgentSession, repo_name: &str) -> String {
-    format!(
-        "cohors agent --resume {} -r {}",
-        session.id,
-        shell_word(repo_name)
-    )
+    command_line(&resume_args(session, repo_name))
 }
 
 /// Quote `word` for a POSIX shell when it needs it.
@@ -225,6 +254,7 @@ pub fn suggest(
             title: format!("Resume \u{201c}{}\u{201d}", session.title),
             why: why.join(" \u{b7} "),
             command: resume_command(session, &name),
+            args: resume_args(session, &name),
             repo: Some(session.repo.clone()),
             score,
         });
@@ -248,7 +278,11 @@ pub fn suggest(
             kind: SuggestionKind::Act,
             title: action.title.clone(),
             why: action.why.clone(),
-            command: action_command(action.kind).to_string(),
+            command: action_command(action.kind),
+            args: action_args(action.kind)
+                .iter()
+                .map(|a| a.to_string())
+                .collect(),
             repo: (action.repos.len() == 1).then(|| action.repos[0].clone()),
             score: weight + bonus,
         });
@@ -262,16 +296,18 @@ pub fn suggest(
             .as_deref()
             .filter(|r| is_kebab_id(r))
             .unwrap_or(item.id.as_str());
-        let command = if is_kebab_id(task) {
-            format!("cohors agent {task} -r {}", shell_word(repo))
+        let args: Vec<String> = if is_kebab_id(task) {
+            vec!["agent".into(), task.to_string(), "-r".into(), repo.clone()]
         } else {
-            "cohors launchpad".to_string()
+            vec!["launchpad".into()]
         };
+        let command = command_line(&args);
         out.push(Suggestion {
             kind: SuggestionKind::Focus,
             title: format!("Work on \u{201c}{}\u{201d}", item.title),
             why: format!("on your focus board \u{b7} {repo}"),
             command,
+            args,
             repo: Some(repo.clone()),
             score: 55,
         });
@@ -283,6 +319,7 @@ pub fn suggest(
             title: "Start an agent session".to_string(),
             why: "nothing is waiting on you".to_string(),
             command: "cohors agent".to_string(),
+            args: vec!["agent".into()],
             repo: here.map(str::to_string),
             score: 1,
         });
@@ -373,7 +410,7 @@ mod tests {
     fn suggestions_mix_sessions_and_steps_with_a_command_each() {
         let o = fleet();
         let here = o.repos[0].id.clone();
-        let sessions = vec![session("3f2a9c10-aaaa", &here, HOUR / 4)];
+        let sessions = vec![session("3f2a9c10-aaaa-4bbb", &here, HOUR / 4)];
         let list = suggest(&o, &sessions, Some(&here), NOW, 6);
         assert!(list.len() <= 6);
         assert!(list.iter().all(|s| s.command.starts_with("cohors ")));
@@ -384,9 +421,15 @@ mod tests {
         assert!(
             resume
                 .command
-                .starts_with("cohors agent --resume 3f2a9c10-aaaa -r ")
+                .starts_with("cohors agent --resume 3f2a9c10-aaaa-4bbb -r ")
         );
-        assert!(resume.title.contains("work 3f2a9c10-aaaa"));
+        assert_eq!(
+            &resume.args[..3],
+            ["agent", "--resume", "3f2a9c10-aaaa-4bbb"]
+        );
+        // The display line and the argument list say the same thing.
+        assert!(list.iter().all(|s| command_line(&s.args) == s.command));
+        assert!(resume.title.contains("work 3f2a9c10-aaaa-4bbb"));
         assert!(list.iter().any(|s| s.kind == SuggestionKind::Act));
         // Sorted by score.
         assert!(list.windows(2).all(|w| w[0].score >= w[1].score));
@@ -410,6 +453,10 @@ mod tests {
         assert_eq!(
             resume_command(&s, "it's mine"),
             "cohors agent --resume abc -r 'it'\\''s mine'"
+        );
+        assert_eq!(
+            action_command(ActionKind::Push),
+            "cohors push --select 'ahead,!diverged'"
         );
     }
 }
