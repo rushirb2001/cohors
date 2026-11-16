@@ -598,6 +598,9 @@ pub struct App {
     /// on the line under the header: `i` copies its command, `x` hides it for
     /// good and brings the next one up (ADR-065).
     pub tips: Vec<cohors_core::suggest::Suggestion>,
+    /// Where the last frame drew what a click can act on (see `mouse`).
+    /// Written by the renderer, which only has `&App`, hence the `RefCell`.
+    pub hits: std::cell::RefCell<Vec<crate::mouse::Hit>>,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -730,6 +733,7 @@ impl App {
             ground: None,
             update: None,
             tips: Vec::new(),
+            hits: Default::default(),
         }
     }
 
@@ -1230,14 +1234,47 @@ impl App {
     /// Move the focused card's cursor by `delta` rows, stopping at both ends.
     fn move_cursor(&mut self, delta: isize) {
         let last = self.focused_len().saturating_sub(1) as isize;
-        let cursor = match self.focus {
+        let cursor = self.cursor_mut(self.focus);
+        *cursor = (*cursor as isize).saturating_add(delta).clamp(0, last) as usize;
+    }
+
+    /// The row a card's cursor is on (card 5's is the table's, `selected`).
+    pub(crate) fn cursor(&self, card: Card) -> usize {
+        match card {
+            Card::DoNext => self.cursors.next,
+            Card::AtRisk => self.cursors.risk,
+            Card::Tasks => self.cursors.tasks,
+            Card::Commits => self.cursors.commits,
+            Card::Repos => self.selected,
+        }
+    }
+
+    fn cursor_mut(&mut self, card: Card) -> &mut usize {
+        match card {
             Card::DoNext => &mut self.cursors.next,
             Card::AtRisk => &mut self.cursors.risk,
             Card::Tasks => &mut self.cursors.tasks,
             Card::Commits => &mut self.cursors.commits,
             Card::Repos => &mut self.selected,
-        };
-        *cursor = (*cursor as isize).saturating_add(delta).clamp(0, last) as usize;
+        }
+    }
+
+    /// Put `card`'s cursor on row `index` (a click on that row), kept in range.
+    pub(crate) fn set_cursor(&mut self, card: Card, index: usize) {
+        let focus = std::mem::replace(&mut self.focus, card);
+        let last = self.focused_len().saturating_sub(1);
+        self.focus = focus;
+        *self.cursor_mut(card) = index.min(last);
+        if card == Card::Repos {
+            self.pane_scroll = 0;
+        }
+    }
+
+    /// Give a card of the detail view the focus.
+    pub(crate) fn set_pane(&mut self, pane: Pane) {
+        if self.pane != pane {
+            self.focus_pane(pane);
+        }
     }
 
     /// Card 1: Enter carries out the highlighted step; a step's own key

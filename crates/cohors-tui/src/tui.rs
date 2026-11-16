@@ -23,7 +23,7 @@ use cohors_core::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind, MouseEventKind,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -287,7 +287,7 @@ fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
         terminal.draw(|f| ui::render(f, &app, now))?;
 
         if event::poll(POLL)? {
-            match event::read()? {
+            match mouse_as_key(&mut app, event::read()?) {
                 // A late answer about the terminal's background arrives as
                 // keys; it is taken out here and never reaches the dashboard.
                 Event::Key(key)
@@ -353,11 +353,6 @@ fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
                     // The demo fleet is never empty, so the rescue can't trigger,
                     // and the demo shows no setup tips.
                     Cmd::UseSuggestedRoots | Cmd::CopyTip | Cmd::HideTip | Cmd::None => {}
-                },
-                Event::Mouse(m) => match m.kind {
-                    MouseEventKind::ScrollUp => app.on_mouse_scroll(true),
-                    MouseEventKind::ScrollDown => app.on_mouse_scroll(false),
-                    _ => {}
                 },
                 _ => {}
             }
@@ -495,7 +490,7 @@ fn run_loop(
         terminal.draw(|f| ui::render(f, &app, app.now))?;
 
         if event::poll(POLL)? {
-            match event::read()? {
+            match mouse_as_key(&mut app, event::read()?) {
                 // A late answer about the terminal's background arrives as
                 // keys; it is taken out here and never reaches the dashboard.
                 Event::Key(key)
@@ -559,12 +554,6 @@ fn run_loop(
                         }
                     }
                     Cmd::None => {}
-                },
-                // Mouse wheel / trackpad scroll (we capture the mouse).
-                Event::Mouse(m) => match m.kind {
-                    MouseEventKind::ScrollUp => app.on_mouse_scroll(true),
-                    MouseEventKind::ScrollDown => app.on_mouse_scroll(false),
-                    _ => {}
                 },
                 _ => {}
             }
@@ -1367,6 +1356,21 @@ fn run_interactive_then_refresh(
         Err(e) => app.status = Some(format!("{}: {e}", argv[0])),
     }
     Ok(())
+}
+
+/// The mouse (captured, so clicks and the wheel come to us): a click or a
+/// wheel turn acts on what it landed on right away, and when it means a key
+/// press (a key hint, or a second click on the row under the cursor) it goes
+/// on as that key, so the loop handles it exactly like one typed.
+fn mouse_as_key(app: &mut App, event: Event) -> Event {
+    match event {
+        Event::Mouse(mouse) => match app.on_mouse(mouse) {
+            Some(key) => Event::Key(key),
+            // Handled, or nothing there: an event the loop ignores.
+            None => Event::FocusGained,
+        },
+        other => other,
+    }
 }
 
 // ----- background workers ---------------------------------------------------

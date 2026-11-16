@@ -13,6 +13,7 @@ mod commands;
 mod glyphs;
 mod ground;
 mod logging;
+mod mouse;
 mod scan;
 mod tui;
 mod ui;

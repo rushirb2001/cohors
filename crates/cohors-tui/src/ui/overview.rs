@@ -53,10 +53,17 @@ pub(crate) fn render_overview(frame: &mut Frame, area: Rect, app: &App, now: i64
 
     render_header(frame, header, app, now, theme);
     if let Some(tip) = tip {
-        frame.render_widget(
-            Paragraph::new(tip_line(tip, tip_row.width as usize, theme)),
-            tip_row,
-        );
+        let width = tip_row.width as usize;
+        frame.render_widget(Paragraph::new(tip_line(tip, width, theme)), tip_row);
+        // `i copy` and `x hide` sit at the right end, when there is room.
+        if tip_keys_fit(width) {
+            use crate::mouse::{Target, record};
+            use ratatui::crossterm::event::KeyCode;
+            let i = tip_row.x + (width - TIP_KEYS_WIDTH - 2) as u16;
+            let one = |x: u16| Rect::new(x, tip_row.y, 6, 1);
+            record(one(i), Target::Key(KeyCode::Char('i')));
+            record(one(i + 9), Target::Key(KeyCode::Char('x')));
+        }
     }
     render_key_bar(frame, keys, app, theme);
 
@@ -761,17 +768,27 @@ fn do_next_line(
 /// and `x hide`. One line whatever the width: the title gives way to the
 /// tip's short name, then to nothing, before the command is clipped; on a
 /// very narrow screen the keys go too.
+/// `  Tip  ` before the tip's text.
+const TIP_LEAD: usize = 2 + 3 + 2;
+/// The keys at the tip line's right end.
+const TIP_KEYS_WIDTH: usize = "i copy   x hide".len();
+
+/// Does the tip line have room for its keys (beside at least 24 columns of
+/// text, three columns of gap and two at the end)?
+fn tip_keys_fit(width: usize) -> bool {
+    width >= TIP_LEAD + 24 + 3 + TIP_KEYS_WIDTH + 2
+}
+
 fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, theme: &Theme) -> Line<'static> {
-    /// `  Tip  ` before the text, two columns after the keys.
-    const LEAD: usize = 2 + 3 + 2;
-    const KEYS_WIDTH: usize = "i copy   x hide".len();
+    const LEAD: usize = TIP_LEAD;
+    const KEYS_WIDTH: usize = TIP_KEYS_WIDTH;
     let ell = theme.glyphs.ellipsis();
     let title = text::safe(&tip.title);
     let command = text::safe(&tip.command);
     let (title_len, command_len) = (title.chars().count(), command.chars().count());
 
     // With the keys, the text keeps a gap of three before them.
-    let keys = width >= LEAD + 24 + 3 + KEYS_WIDTH + 2;
+    let keys = tip_keys_fit(width);
     let room = if keys {
         width - LEAD - 3 - KEYS_WIDTH - 2
     } else {
@@ -1378,10 +1395,16 @@ pub(crate) fn render_key_bar(frame: &mut Frame, area: Rect, app: &App, theme: &T
     let (hints, gap) = fit_key_bar(key_bar_hints(app, theme), room);
 
     let mut spans = vec![Span::raw("  ")];
+    // Where each hint starts, so a click on one presses its key.
+    let mut slots = Vec::new();
+    let mut at = 2;
     for (i, hint) in hints.iter().enumerate() {
         if i > 0 {
             spans.push(Span::raw(" ".repeat(gap)));
+            at += gap;
         }
+        slots.push((at, hint));
+        at += hint.key.chars().count() + 2 + hint.label.chars().count();
         spans.push(Span::styled(
             hint.key.clone(),
             Style::new().add_modifier(Modifier::BOLD),
@@ -1389,6 +1412,7 @@ pub(crate) fn render_key_bar(frame: &mut Frame, area: Rect, app: &App, theme: &T
         spans.push(Span::styled(format!("  {}", hint.label), theme.dim()));
     }
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
+    super::cards::record_hints(area.x, area.y, &slots, theme);
     if let Some(toast) = toast {
         frame.render_widget(Paragraph::new(toast).alignment(Alignment::Right), area);
     }

@@ -356,6 +356,13 @@ pub fn render(frame: &mut Frame, app: &App, now: i64) {
 
 /// [`render`] with an explicit theme.
 pub(crate) fn render_with(frame: &mut Frame, app: &App, now: i64, theme: &Theme) {
+    crate::mouse::clear();
+    draw(frame, app, now, theme);
+    // What this frame drew where, for the next click (see `mouse`).
+    *app.hits.borrow_mut() = crate::mouse::take();
+}
+
+fn draw(frame: &mut Frame, app: &App, now: i64, theme: &Theme) {
     let area = frame.area();
     // Too small to lay anything out sensibly: say so, rather than garble.
     if !layout::fits(area.width, area.height) {
@@ -383,6 +390,8 @@ pub(crate) fn render_with(frame: &mut Frame, app: &App, now: i64, theme: &Theme)
     });
     if overlay_open {
         dim_area(frame.buffer_mut(), area, theme.ground());
+        // A click while an overlay is open is about the overlay alone.
+        crate::mouse::clear();
     }
 
     match app.mode {

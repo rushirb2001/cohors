@@ -169,6 +169,7 @@ fn render_repo_cards(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: 
             focused,
         };
         let inner = draw_card(frame, *cell, &card, theme).text;
+        crate::mouse::record(*cell, crate::mouse::Target::Pane(*pane));
         let width = inner.width as usize;
         let lines = match (pane, snap) {
             (_, None) => vec![Line::from(Span::styled(

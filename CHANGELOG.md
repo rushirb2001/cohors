@@ -26,6 +26,19 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.4] — 2026-11-16
+
+### Added
+
+- **The dashboard answers the mouse.** Click one of the cards 1–5 to give it
+  the focus, click a row to put the cursor on it, and click that row again to
+  open it, as Enter would. Every key shown on a card's bottom edge, on the key
+  bar and on the tip line is a button, and the wheel scrolls the card under
+  the pointer. In the detail view a click picks a repository or one of its
+  three cards; with an overlay open, clicks go to the overlay (a click closes
+  the help). A click never does more than a key would: anything that asks
+  before it acts still asks.
+
 ## [0.8.3] — 2026-11-16
 
 ### Fixed

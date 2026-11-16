@@ -9,6 +9,8 @@
 //! every list shares the same rules: a cursor mark in the gutter, a washed
 //! background on the cursor row, and an "N more" line when rows are hidden.
 
+use ratatui::crossterm::event::KeyCode;
+
 use super::layout::ListWindow;
 use super::*;
 
@@ -22,6 +24,47 @@ pub(crate) fn hint(key: &str, label: &str) -> Hint {
     Hint {
         key: key.to_string(),
         label: label.to_string(),
+    }
+}
+
+/// The key a hint stands for, when clicking the hint can press it: one
+/// character, Enter, Space, Esc or Tab. Not a range (`1-5`), the arrows
+/// (`↑↓`) or `type`, which are more than one key.
+pub(crate) fn hint_code(key: &str, theme: &Theme) -> Option<KeyCode> {
+    let glyphs = &theme.glyphs;
+    if key == glyphs.key_enter() || key == "enter" {
+        return Some(KeyCode::Enter);
+    }
+    if key == glyphs.key_space() || key == "space" {
+        return Some(KeyCode::Char(' '));
+    }
+    match key {
+        "esc" => Some(KeyCode::Esc),
+        "tab" => Some(KeyCode::Tab),
+        _ => {
+            let mut chars = key.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if c.is_ascii_graphic() => Some(KeyCode::Char(c)),
+                _ => None,
+            }
+        }
+    }
+}
+
+/// Note where each hint of a row of them was drawn, so a click on one
+/// presses its key. `slots` are the hints with their columns from `x`.
+pub(crate) fn record_hints(x: u16, y: u16, slots: &[(usize, &Hint)], theme: &Theme) {
+    for (offset, hint) in slots {
+        if let Some(code) = hint_code(&hint.key, theme) {
+            let width = hint.key.chars().count() + 2 + hint.label.chars().count();
+            let area = Rect {
+                x: x.saturating_add(*offset as u16),
+                y,
+                width: width as u16,
+                height: 1,
+            };
+            crate::mouse::record(area, crate::mouse::Target::Key(code));
+        }
     }
 }
 
@@ -101,6 +144,7 @@ pub(crate) fn draw_card_filled(
     theme: &Theme,
     fill: Option<Color>,
 ) -> CardArea {
+    record_card(area, card, theme);
     let content = CardArea {
         gutter_x: area.x.saturating_add(1),
         text: Rect {
@@ -138,6 +182,23 @@ pub(crate) fn draw_card_filled(
     }
     frame.render_widget(block, area);
     content
+}
+
+/// Note where a card was drawn (a numbered one takes the focus when
+/// clicked) and where its hints are (each presses its key). The hints sit on
+/// the bottom row, starting after the corner, in both of a card's styles.
+fn record_card(area: Rect, card: &CardFrame, theme: &Theme) {
+    if let Some(number) = card.number
+        && let Some(target) = crate::app::Card::ALL
+            .into_iter()
+            .find(|c| c.number() == number)
+    {
+        crate::mouse::record(area, crate::mouse::Target::Card(target));
+    }
+    if area.height >= 2 && !card.hints.is_empty() {
+        let slots = hint_slots(&card.hints, area.width);
+        record_hints(area.x + 1, area.y + area.height - 1, &slots, theme);
+    }
 }
 
 /// A card as a filled surface instead of a frame of lines.
@@ -256,33 +317,46 @@ fn hints_line(
     border: Style,
     theme: &Theme,
 ) -> Line<'static> {
-    // Corners (2), the leading rule (1), two spaces each side of the hints,
-    // and at least one rule before the right corner.
-    let mut room = (card_width as usize).saturating_sub(2 + 1 + 2 + 2 + 1);
     let key_style = Style::new().add_modifier(Modifier::BOLD);
     let label_style = theme.dim();
+    let slots = hint_slots(hints, card_width);
+    if slots.is_empty() {
+        // Not even one hint fits: leave the border plain.
+        return Line::from(Span::styled(rule.to_string(), border));
+    }
     let mut spans = vec![Span::styled(rule.to_string(), border), Span::raw("  ")];
-    let mut shown = 0;
-    for hint in hints {
-        let gap = if shown == 0 { 0 } else { 3 };
-        let width = gap + hint.key.chars().count() + 2 + hint.label.chars().count();
-        if width > room {
-            break;
-        }
-        room -= width;
-        if gap > 0 {
+    for (i, (_, hint)) in slots.iter().enumerate() {
+        if i > 0 {
             spans.push(Span::raw("   "));
         }
         spans.push(Span::styled(hint.key.clone(), key_style));
         spans.push(Span::styled(format!("  {}", hint.label), label_style));
-        shown += 1;
-    }
-    if shown == 0 {
-        // Not even one hint fits: leave the border plain.
-        return Line::from(Span::styled(rule.to_string(), border));
     }
     spans.push(Span::raw("  "));
     Line::from(spans)
+}
+
+/// The hints that fit on a card's bottom border, each with the column it
+/// starts at, counted from just after the left corner: the leading rule and
+/// two spaces, then the hints three apart.
+fn hint_slots(hints: &[Hint], card_width: u16) -> Vec<(usize, &Hint)> {
+    // Corners (2), the leading rule (1), two spaces each side of the hints,
+    // and at least one rule before the right corner.
+    let mut room = (card_width as usize).saturating_sub(2 + 1 + 2 + 2 + 1);
+    let mut at = 1 + 2;
+    let mut slots = Vec::new();
+    for hint in hints {
+        let gap = if slots.is_empty() { 0 } else { 3 };
+        let width = hint.key.chars().count() + 2 + hint.label.chars().count();
+        if gap + width > room {
+            break;
+        }
+        room -= gap + width;
+        at += gap;
+        slots.push((at, hint));
+        at += width;
+    }
+    slots
 }
 
 /// One entry of a list: its line(s) of text, and optionally a mark for the
@@ -323,6 +397,15 @@ pub(crate) fn draw_list(
             break; // never draw outside the card
         }
         let item = build(index);
+        crate::mouse::record(
+            Rect {
+                x: area.gutter_x,
+                y,
+                width: text.width + 2,
+                height: item_height,
+            },
+            crate::mouse::Target::Row(index),
+        );
         let on_cursor = cursor == Some(index);
         if on_cursor {
             // Wash the whole row, gutter and right padding included.

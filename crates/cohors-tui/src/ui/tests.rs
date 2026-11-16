@@ -1739,3 +1739,203 @@ fn every_update_state_shows_in_the_header() {
         }
     }
 }
+
+// ── The mouse ────────────────────────────────────────────────────────────────
+//
+// Each test draws a real frame, takes the position of what it clicks from
+// where that frame drew it, checks the text there is what a user would aim
+// at, and clicks it.
+
+mod mouse {
+    use super::*;
+    use crate::mouse::Target;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+    use ratatui::layout::Position;
+
+    /// Draw `app` at 120×40 and return the frame.
+    fn frame(app: &App) -> Terminal<TestBackend> {
+        draw(app, 120, 40, true)
+    }
+
+    /// The text the frame shows over `area`'s first row.
+    fn text_at(terminal: &Terminal<TestBackend>, area: Rect) -> String {
+        let buf = terminal.backend().buffer();
+        (area.x..area.x + area.width)
+            .filter_map(|x| buf.cell((x, area.y)).map(|c| c.symbol().to_string()))
+            .collect()
+    }
+
+    fn area_of(app: &App, target: Target) -> Rect {
+        let hits = app.hits.borrow();
+        hits.iter()
+            .find(|hit| hit.target == target)
+            .unwrap_or_else(|| panic!("{target:?} was not drawn: {hits:?}"))
+            .area
+    }
+
+    /// Where entry `index` of `card`'s list was drawn.
+    fn row_of(app: &App, card: Card, index: usize) -> Rect {
+        let card = area_of(app, Target::Card(card));
+        let hits = app.hits.borrow();
+        hits.iter()
+            .find(|hit| {
+                hit.target == Target::Row(index)
+                    && card.contains(Position::new(hit.area.x, hit.area.y))
+            })
+            .expect("the row was drawn in the card")
+            .area
+    }
+
+    /// A click in the middle of `area`'s first row.
+    fn click(app: &mut App, area: Rect) -> Option<KeyEvent> {
+        app.on_click(area.x + area.width / 2, area.y)
+    }
+
+    fn click_row(app: &mut App, card: Card, index: usize) -> Option<KeyEvent> {
+        let area = row_of(app, card, index);
+        click(app, area)
+    }
+
+    fn click_on(app: &mut App, target: Target) -> Option<KeyEvent> {
+        let area = area_of(app, target);
+        click(app, area)
+    }
+
+    fn key(code: KeyCode) -> Option<KeyEvent> {
+        Some(KeyEvent::new(code, KeyModifiers::NONE))
+    }
+
+    #[test]
+    fn a_click_on_any_card_gives_it_the_focus() {
+        let mut app = fleet_app();
+        for card in [
+            Card::Repos,
+            Card::Commits,
+            Card::Tasks,
+            Card::AtRisk,
+            Card::DoNext,
+        ] {
+            frame(&app);
+            // Its title row, where the number is.
+            let title = area_of(&app, Target::Card(card));
+            assert_eq!(app.on_click(title.x + 3, title.y), None);
+            assert_eq!(app.focus, card);
+        }
+    }
+
+    #[test]
+    fn a_click_on_a_row_moves_the_cursor_there_and_a_second_opens_it() {
+        let mut app = fleet_app();
+        assert_eq!(app.focus, Card::DoNext);
+        let screen = frame(&app);
+        let row = row_of(&app, Card::AtRisk, 1);
+        let name = text::safe(&app.at_risk()[1].name);
+        assert!(
+            text_at(&screen, row).contains(&name),
+            "{}",
+            text_at(&screen, row)
+        );
+
+        // The first click focuses the card and puts the cursor on the row.
+        assert_eq!(click(&mut app, row), None);
+        assert_eq!((app.focus, app.cursors.risk), (Card::AtRisk, 1));
+        // The second, on the row under the cursor, opens it: Enter.
+        frame(&app);
+        assert_eq!(click_row(&mut app, Card::AtRisk, 1), key(KeyCode::Enter));
+    }
+
+    #[test]
+    fn a_click_on_a_table_row_selects_that_repository() {
+        let mut app = fleet_app();
+        let screen = frame(&app);
+        let row = row_of(&app, Card::Repos, 3);
+        let name = text::safe(&app.repos[app.view()[3].index].name);
+        assert!(
+            text_at(&screen, row).contains(&name),
+            "{}",
+            text_at(&screen, row)
+        );
+        assert_eq!(click(&mut app, row), None);
+        assert_eq!((app.focus, app.selected), (Card::Repos, 3));
+    }
+
+    #[test]
+    fn a_click_on_a_key_hint_presses_that_key() {
+        let mut app = fleet_app();
+        let screen = frame(&app);
+        let help = area_of(&app, Target::Key(KeyCode::Char('?')));
+        assert_eq!(text_at(&screen, help), "?  help");
+        assert_eq!(click(&mut app, help), key(KeyCode::Char('?')));
+
+        // A focused card's own hints, on its bottom border.
+        app.focus = Card::AtRisk;
+        let screen = frame(&app);
+        let fetch = area_of(&app, Target::Key(KeyCode::Char('f')));
+        assert_eq!(text_at(&screen, fetch), "f  fetch");
+        assert_eq!(click(&mut app, fetch), key(KeyCode::Char('f')));
+        // A hint for more than one key (`1-5`) is not a button.
+        assert!(text_at(&screen, area_of(&app, Target::Card(Card::DoNext))).contains('1'));
+    }
+
+    #[test]
+    fn the_tip_keys_are_buttons() {
+        let mut app = fleet_app();
+        app.tips = setup_tips();
+        let screen = frame(&app);
+        let copy = area_of(&app, Target::Key(KeyCode::Char('i')));
+        let hide = area_of(&app, Target::Key(KeyCode::Char('x')));
+        assert_eq!(text_at(&screen, copy), "i copy");
+        assert_eq!(text_at(&screen, hide), "x hide");
+        assert_eq!(click(&mut app, hide), key(KeyCode::Char('x')));
+    }
+
+    #[test]
+    fn on_the_detail_view_a_click_selects_a_row_or_focuses_a_card() {
+        let mut app = fleet_app();
+        app.screen = Screen::Repos;
+        frame(&app);
+        assert_eq!(click_on(&mut app, Target::Pane(Pane::Signals)), None);
+        assert_eq!(app.pane, Pane::Signals);
+
+        frame(&app);
+        assert_eq!(click_row(&mut app, Card::Repos, 2), None);
+        assert_eq!((app.pane, app.selected), (Pane::List, 2));
+        frame(&app);
+        assert_eq!(click_row(&mut app, Card::Repos, 2), key(KeyCode::Enter));
+    }
+
+    #[test]
+    fn an_open_overlay_takes_the_clicks_and_help_closes_on_one() {
+        let mut app = fleet_app();
+        app.mode = Mode::Help;
+        frame(&app);
+        assert_eq!(app.on_click(5, 5), key(KeyCode::Esc));
+
+        // Behind any other overlay the cards do not answer.
+        let mut app = fleet_app();
+        frame(&app);
+        let row = row_of(&app, Card::AtRisk, 1);
+        app.mode = Mode::Standup;
+        frame(&app);
+        assert_eq!(click(&mut app, row), None);
+        assert_eq!((app.focus, app.cursors.risk), (Card::DoNext, 0));
+    }
+
+    #[test]
+    fn the_wheel_scrolls_the_card_under_the_pointer() {
+        let mut app = fleet_app();
+        frame(&app);
+        let row = row_of(&app, Card::Repos, 0);
+        let wheel = |kind| MouseEvent {
+            kind,
+            column: row.x + 2,
+            row: row.y,
+            modifiers: KeyModifiers::NONE,
+        };
+        // Reversed, as on a trackpad: scrolling up moves down the list.
+        assert_eq!(app.on_mouse(wheel(MouseEventKind::ScrollUp)), None);
+        assert_eq!((app.focus, app.selected), (Card::Repos, 1));
+        app.on_mouse(wheel(MouseEventKind::ScrollDown));
+        assert_eq!(app.selected, 0);
+    }
+}
