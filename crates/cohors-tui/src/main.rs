@@ -43,6 +43,11 @@ fn parse_cli() -> Cli {
 fn main() -> anyhow::Result<()> {
     let cli = parse_cli();
     logging::init();
+    // How the plain-terminal screens look (style, ASCII, width), chosen once.
+    let icons = cohors_config::Config::load(cli.config.as_deref().map(camino::Utf8Path::new))
+        .map(|c| c.icons)
+        .unwrap_or_default();
+    commands::look::init(icons);
 
     let result = match &cli.command {
         Some(Command::Init { force }) => commands::init(&cli, *force),

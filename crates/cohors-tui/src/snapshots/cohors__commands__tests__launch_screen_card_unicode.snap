@@ -1,0 +1,21 @@
+---
+source: crates/cohors-tui/src/commands.rs
+expression: screen
+---
+
+  ╭────────────────────────────────────────────────────────────────────────────╮
+  │ cohors                                                              vX.Y.Z │
+  │ 12 repositories. 6 have work at risk, 2 are clean.                         │
+  │ ~/Developer                                                                │
+  ╰────────────────────────────────────────────────────────────────────────────╯
+
+  ▌ Do next   most urgent first
+     RISK   Check 1 repository that could not be read
+     RISK   Push 4 commits from 3 repositories
+     WARN   Reconcile 1 diverged branch
+     NOTE   Pull 2 repositories that are behind
+            and 1 more in the dashboard
+
+  ╭─────────────────────────────────────────╮
+  │ enter  open the dashboard   ·   q  quit │
+  ╰─────────────────────────────────────────╯

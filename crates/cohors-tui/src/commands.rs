@@ -2,6 +2,7 @@
 
 pub mod agent;
 pub mod launchpad;
+pub mod look;
 
 use std::collections::HashMap;
 use std::io::{IsTerminal, Write};
@@ -486,61 +487,19 @@ fn action_command(action: &cohors_core::NextAction) -> &'static str {
 
 /// A key bar in the dashboard's grammar: `enter  open the dashboard    q  quit`.
 fn key_bar(keys: &[(&str, &str)], color: bool) -> String {
-    let parts: Vec<String> = keys
-        .iter()
-        .map(|(key, what)| format!("{}  {}", bold(color, key), dim(color, what)))
-        .collect();
-    format!("  {}\n", parts.join("    "))
+    look::key_bar(keys, color)
 }
 
 /// The report's masthead: the mark beside the wordmark, mirroring the launch
 /// screen so both surfaces open the same way.
 fn masthead(scanned: &str, where_at: &str, color: bool) -> String {
-    // Keep both lines inside the terminal: the mark and its gutter take 14
-    // columns when it is drawn, the plain form only the 2-column indent.
-    let room = term_width().saturating_sub(if color { 15 } else { 3 });
-    let (scanned, where_at) = (&clip(scanned, room), &clip(where_at, room));
-    let mut out = String::from("\n");
-    if color {
-        let m = &crate::ui::SPIDER_MARK;
-        out.push_str(&format!(
-            "  {}   {}\n",
-            brand(color, m[0]),
-            brand(color, "cohors")
-        ));
-        out.push_str(&format!(
-            "  {}   {}\n",
-            brand(color, m[1]),
-            dim(color, scanned)
-        ));
-        out.push_str(&format!(
-            "  {}   {}\n\n",
-            brand(color, m[2]),
-            dim(color, where_at)
-        ));
-    } else {
-        out.push_str("  cohors\n");
-        out.push_str(&format!("  {scanned}\n"));
-        out.push_str(&format!("  {where_at}\n\n"));
-    }
-    out
+    look::masthead(scanned, where_at, color)
 }
 
 /// One report section, in the launch screen's grammar: a brand-purple heading
 /// over a dim one-line descriptor.
 fn section(heading: &str, descriptor: &str, color: bool) -> String {
-    // Sentence case, like every heading in the dashboard and the browser.
-    let mut chars = heading.chars();
-    let heading: String = match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars).collect(),
-        None => String::new(),
-    };
-    let heading = heading.as_str();
-    format!(
-        "  {}\n  {}\n",
-        brand(color, heading),
-        dim(color, descriptor)
-    )
+    look::section(heading, descriptor, color)
 }
 
 /// How wide the terminal is, for reports that lay out columns. A report that
@@ -878,14 +837,7 @@ const BLOCK_W: usize = 6;
 /// whether the terminal is light or dark, so it uses the deeper pair with
 /// white text, which reads on both.
 fn severity_mark(severity: cohors_core::Severity, color: bool) -> String {
-    use cohors_core::Severity as S;
-    match severity {
-        S::Risk => sgr(color, "1;97;48;2;180;72;63", " RISK "),
-        S::Warn => sgr(color, "1;97;48;2;168;116;42", " WARN "),
-        S::Notice => dim(color, " NOTE "),
-        S::Info => dim(color, " INFO "),
-        S::Ok => " ".repeat(BLOCK_W),
-    }
+    look::severity_mark(severity, color)
 }
 
 /// The human-facing `cohors overview` report. Pure (given the model, the
@@ -1120,12 +1072,7 @@ impl CliAction {
 
 /// A guide row: `▸ command   what it does`, the launch screen's item grammar.
 fn guide_row(cmd: &str, why: &str, width: usize, color: bool) -> String {
-    format!(
-        "    {} {}  {}\n",
-        dim(color, "▸"),
-        bold(color, &format!("{cmd:<width$}")),
-        dim(color, why),
-    )
+    look::guide_row(cmd, why, width, color)
 }
 
 /// The masthead and footer clap wraps around `cohors --help`, so the help page
@@ -1933,14 +1880,15 @@ fn launch_screen(
             color,
         ));
         for root in roots {
-            out.push_str(&format!("    {} {}\n", dim(color, "▸"), bold(color, root)));
+            out.push_str(&guide_row(root, "", 0, color));
         }
-        out.push_str(&format!(
-            "    {} {}  {}\n\n",
-            dim(color, "▸"),
-            bold(color, "cohors --root <dir>"),
-            dim(color, "to look in one folder only"),
+        out.push_str(&guide_row(
+            "cohors --root <dir>",
+            "to look in one folder only",
+            0,
+            color,
         ));
+        out.push('\n');
     }
 
     out.push_str(&key_bar(
@@ -2451,6 +2399,46 @@ mod tests {
 
     /// The launch screen reports what the scan found and the first things
     /// worth doing, in the dashboard's own words, before any key is pressed.
+    /// The start screen in every look (ADR-060), Unicode and ASCII, colour off
+    /// so the snapshot shows the structure each look draws with characters.
+    #[test]
+    fn snapshot_launch_screen_in_every_look() {
+        let now = 1_700_000_000;
+        let fleet = cohors_core::demo::fleet(now);
+        let (entries, board) = cohors_core::launchpad::demo();
+        let o = cohors_core::overview(&fleet, &entries, &board, now);
+        let roots = ["~/Developer".to_string()];
+        for style in look::Style::ALL {
+            for ascii in [false, true] {
+                let current = look::Look {
+                    style,
+                    ascii,
+                    width: 80,
+                };
+                let screen = look::with(current, || launch_screen(&o, &roots, false, false));
+                let glyphs = if ascii { "ascii" } else { "unicode" };
+                insta::assert_snapshot!(format!("launch_screen_{}_{glyphs}", style.name()), screen);
+            }
+        }
+    }
+
+    /// The first-run start screen lists the folders it gathered, in a list
+    /// the look draws (a bullet per folder), in the default look.
+    #[test]
+    fn snapshot_first_run_launch_screen() {
+        let now = 1_700_000_000;
+        let fleet = cohors_core::demo::fleet(now);
+        let o = cohors_core::overview(&fleet, &[], &Default::default(), now);
+        let roots = ["~/code".to_string(), "~/work".to_string()];
+        let current = look::Look {
+            style: look::DEFAULT_STYLE,
+            ascii: false,
+            width: 80,
+        };
+        let screen = look::with(current, || launch_screen(&o, &roots, true, false));
+        insta::assert_snapshot!("launch_screen_first_run", screen);
+    }
+
     #[test]
     fn launch_screen_shows_the_headline_next_steps_and_keys() {
         let now = 1_700_000_000;
