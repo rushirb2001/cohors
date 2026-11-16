@@ -1,33 +1,120 @@
 # cohors
 
-**A governed control plane for all your git repositories: for you, and your coding agent.**
-
-Coding agents made single-repo work cheap. The bottleneck moved to the *fleet*: an agent is blind across your 20 repos, and so are you past `cd`-ing through a dozen terminal tabs. cohors is one fast view of every repo, a search that indexes the whole fleet, and bulk actions an agent can preview before you ever grant write access. In the terminal, in the browser, and over MCP. One Rust core.
+**Every git repo you own, on one screen, and an MCP server that gives your coding agent the same view.** This package installs the prebuilt `cohors` binary, so there is no Rust toolchain to set up.
 
 ## Install
 
 ```sh
-pip install cohors   # prebuilt binary, no Rust toolchain
-cohors               # auto-detects your repos and launches the dashboard
+pip install cohors          # or: pipx install cohors
+cohors                      # finds your repos and opens the dashboard
 ```
 
-With no config, `cohors` scans every folder it finds git repos in (your "super fleet"). Point it at a single folder with `cohors --root ~/code`, or run `cohors init` to save an editable config.
+Run it without installing, with [uv](https://docs.astral.sh/uv/):
 
-`pip install cohors` bundles a prebuilt binary for macOS (Apple Silicon / Intel) and Linux (x86_64 / ARM64). On other platforms, build from source: `cargo install cohors`.
+```sh
+uvx cohors@latest
+```
+
+Wheels exist for macOS (Apple Silicon and Intel) and Linux with glibc 2.35 or newer (x86_64 and ARM64). Elsewhere pip finds no wheel; build it with `cargo install cohors` instead. cohors needs `git`.
+
+With no config, `cohors` finds the folders that hold your repos by itself. Point it at one folder with `cohors --root ~/code`, or run `cohors init` to write a config you can edit. To try it on sample repositories first, run `cohors demo`.
+
+## Staying up to date
+
+| Installed with | What happens when a release comes out |
+|---|---|
+| `pip install cohors` | Once a day the dashboard asks GitHub for the newest release and installs it with the same Python's pip, then shows **Restart to update**. `cohors update` does it now. |
+| `pipx install cohors` | cohors sees a pip install, so the same applies; `pipx upgrade cohors` works too. |
+| `uvx` or `uv tool install` | Never changed in place. `uvx cohors@latest` always runs the newest release; `uv tool upgrade cohors` updates a tool install. |
+
+Turn the automatic install off with `updates = "notify"` (tell only) or `updates = "off"` in the config, or `COHORS_NO_UPDATE=1`.
+
+## Use it with your coding agent (MCP)
+
+`cohors mcp` is a stdio MCP server: your agent gets every repo's state, a search across all of them, your commits for a standup, and each repo's tasks. Run `cohors mcp` once in a terminal and it prints the exact lines to register it, with this install's absolute path filled in.
+
+Use absolute paths. Agents start MCP servers with a stripped `PATH`, so a bare `cohors` or `uvx` often resolves to nothing and the agent silently gets no tools. `which cohors` or `which uvx` prints the path to use.
+
+**Claude Code**
+
+```sh
+claude mcp add cohors -- "$(which cohors)" mcp
+```
+
+or, with nothing installed:
+
+```sh
+claude mcp add cohors -- "$(which uvx)" cohors@latest mcp
+```
+
+**Claude Desktop, Cursor and other clients** (`mcpServers` in `claude_desktop_config.json`, `~/.cursor/mcp.json`, …)
+
+```json
+{
+  "mcpServers": {
+    "cohors": {
+      "command": "/Users/you/.local/bin/uvx",
+      "args": ["cohors@latest", "mcp", "--root", "/Users/you/code"]
+    }
+  }
+}
+```
+
+With `pip install cohors`, use `"command": "/path/from/which/cohors"` and `"args": ["mcp"]`.
+
+**What the agent may change.** Reads are always on. Everything else is off until you add the flag after `mcp`:
+
+| Flag | Turns on |
+|---|---|
+| `--allow-writes` | `fetch`, `pull`, `push`, `commit`, `stash`. Pull is fast-forward only and push never forces. |
+| `--allow-run` | `run`: one shell command in many repos at once, capped by your config's run allowlist. |
+| `--allow-launchpad` | Writing a repo's `.cohors/repo.json`, your focus board and the activity log. Never git. |
+
+CI and pull-request status come from GitHub. cohors uses the GitHub CLI's token when `gh` is signed in, or `GITHUB_TOKEN` (add `"env": {"GITHUB_TOKEN": "…"}` to the block above).
 
 ## What you get
 
-- **Dashboard** (`cohors`): every repo on one screen (branch, ahead/behind, dirty state, stashes, CI, open PRs), sorted by what needs you. Bulk fetch / pull / run a command across the ones you pick, with a dry-run preview first.
-- **Browser** (`cohors web`): the same scan, in your browser. Try it instantly with `cohors web --demo`.
-- **MCP server** (`cohors mcp`): gives your coding agent (Claude Code, Cursor, ...) the same fleet-wide sight. Read-only by default; every write is gated and previewable, so it can't fan out across your machine on a fumbled command.
+- **`cohors`**: the dashboard. Branch, ahead/behind, uncommitted work, stashes, CI and pull requests for every repo, with what needs you first.
+- **`cohors overview`, `scan`, `standup`, `discover`**: the same answers as reports, or JSON when piped.
+- **`cohors fetch | pull | push | commit | stash | run --select dirty`**: act on many repos at once. Add `--dry-run` to see what would happen first.
+- **`cohors web`**: the dashboard in your browser. `cohors web --demo` shows it on sample data.
 
-One core powers all three, so the terminal, the browser, and your agent always agree.
+<!-- whats-new:start -->
+## What's new in 0.7.7
+
+### Added
+
+- **Repos nested inside a repo are found.**
+- **`cohors discover`** lists every repo a search finds without reading them.
+- **`--deep` on `cohors discover` and `cohors scan`** searches every folder at any depth, inside repos too.
+- **`commit` shows what it will commit and won't commit a secret.**
+- **A finished look for the start screen and every plain-terminal view**.
+- **A Docker image, `ghcr.io/rushirb2001/cohors`**, for linux/amd64 and linux/arm64.
+
+### Changed
+
+- **`fetch`, `pull`, `push`, `commit` and `stash` work on every selected repo at once** (the bounded pool the MCP server and the web already use), each line printed as its repo finishes.
+
+### Fixed
+
+- **Write commands report failure in their exit status.**
+- **A rejected push says why**.
+- **`run --timeout` stops the whole job**, including what the command started (`a; b`, `npm test`, a backgrounded process), and Ctrl-C stops every running job instead of leaving them behind.
+- **Config mistakes are no longer silent.**
+- **Selectors**: a typo lists the whole vocabulary, and `branch:` takes globs (`branch:feat/*`).
+- **`scan --select`** says how many repos were scanned and how many matched, and lists clean matches by name.
+- **`cohors agent command`** no longer edits the repo's tracked `.gitignore`.
+- `overview` figures read in the singular for one.
+- Discovery never lists a bare repository found inside another repo's working tree (a committed one is attacker-controlled), and `cohors discover` keeps control characters in folder names off the terminal.
+
+Full notes: [cohors 0.7.7 on GitHub](https://github.com/rushirb2001/cohors/releases/tag/v0.7.7).
+<!-- whats-new:end -->
 
 ## Links
 
-Full docs, the web dashboard, and MCP setup: **https://github.com/rushirb2001/cohors**
+[Documentation](https://github.com/rushirb2001/cohors#readme) · [Changelog](https://github.com/rushirb2001/cohors/blob/main/CHANGELOG.md) · [Issues](https://github.com/rushirb2001/cohors/issues) · [Privacy](https://github.com/rushirb2001/cohors/blob/main/PRIVACY.md) (no telemetry; the only connection cohors makes on its own is to GitHub's API)
 
 MIT licensed.
 
-<!-- Ownership marker for the official MCP Registry. -->
+<!-- Ownership marker for the official MCP Registry. Keep this line. -->
 mcp-name: io.github.rushirb2001/cohors

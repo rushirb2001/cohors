@@ -2,12 +2,20 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.rushirb2001/cohors",
   "title": "cohors",
-  "description": "Every git repo you own as one fleet: status, search, tasks, and gated bulk actions.",
+  "description": "Every git repo on your machine for your agent: status, cross-repo search, tasks, opt-in git actions",
   "version": "0.7.6",
   "repository": {
     "url": "https://github.com/rushirb2001/cohors",
     "source": "github"
   },
+  "websiteUrl": "https://pypi.org/project/cohors/",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/rushirb2001/cohors/main/plugin/.claude-plugin/icon.png",
+      "mimeType": "image/png",
+      "sizes": ["512x512"]
+    }
+  ],
   "packages": [
     {
       "registryType": "pypi",
@@ -21,6 +29,22 @@
         {
           "type": "positional",
           "value": "mcp"
+        },
+        {
+          "type": "named",
+          "name": "--root",
+          "description": "A folder that holds your git repositories; repeat it for several. Leave it out to use the roots in your cohors config, or the folders cohors detects.",
+          "format": "filepath",
+          "isRequired": false,
+          "isRepeated": true
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "GITHUB_TOKEN",
+          "description": "Optional. A GitHub token for CI and pull-request status. Not needed when the GitHub CLI (gh) is signed in.",
+          "isRequired": false,
+          "isSecret": true
         }
       ]
     }

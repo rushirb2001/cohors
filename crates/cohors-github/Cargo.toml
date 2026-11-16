@@ -1,6 +1,11 @@
 [package]
 name = "cohors-github"
-description = "Remote (GitHub) data source for cohors: PR and CI status via the REST API."
+description = "GitHub reader for cohors: CI and pull-request status via the REST API. Part of the cohors binary; install `cohors` to use it."
+readme = "README.md"
+# One shared keyword groups the cohors crates on crates.io without putting
+# this internal crate in front of people searching for a git tool.
+keywords = ["cohors"]
+categories = ["api-bindings"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

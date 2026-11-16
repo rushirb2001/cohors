@@ -1,6 +1,11 @@
 [package]
 name = "cohors-config"
-description = "Configuration and discovery settings for cohors (TOML)."
+description = "Configuration for cohors: the TOML config file, where it lives, and the COHORS_* environment overrides. Part of the cohors binary; install `cohors` to use it."
+readme = "README.md"
+# One shared keyword groups the cohors crates on crates.io without putting
+# this internal crate in front of people searching for a git tool.
+keywords = ["cohors"]
+categories = ["config"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

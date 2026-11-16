@@ -10,23 +10,34 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cohors"
 version = "0.0.0"
-description = "A fast git-fleet dashboard for you and your coding agent: terminal, browser, and MCP."
+description = "Every git repo you own on one screen: a terminal dashboard, a scriptable CLI and an MCP server for your coding agent. Prebuilt, no Rust needed."
+# README.md's "What's new" block is filled in from CHANGELOG.md by the publish
+# workflow (scripts/release-notes.py stamp), so pypi.org always describes the
+# release it serves.
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
 authors = [{ name = "Rushir Bhavsar" }]
-keywords = ["git", "tui", "dashboard", "cli", "developer-tools"]
+keywords = ["git", "multi-repo", "repositories", "dashboard", "tui", "cli", "mcp", "mcp-server", "claude-code", "developer-tools"]
 classifiers = [
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Rust",
     "Topic :: Software Development :: Version Control :: Git",
+    "Topic :: Utilities",
 ]
 
 [project.urls]
 Homepage = "https://github.com/rushirb2001/cohors"
+Documentation = "https://github.com/rushirb2001/cohors#readme"
 Repository = "https://github.com/rushirb2001/cohors"
 Changelog = "https://github.com/rushirb2001/cohors/blob/main/CHANGELOG.md"
+"Release notes" = "https://github.com/rushirb2001/cohors/releases"
+Issues = "https://github.com/rushirb2001/cohors/issues"
 
 # The `cohors` command is a tiny Python shim that execs the bundled binary.
 [project.scripts]

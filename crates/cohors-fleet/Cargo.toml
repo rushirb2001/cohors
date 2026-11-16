@@ -1,6 +1,11 @@
 [package]
 name = "cohors-fleet"
-description = "Fleet composition layer for cohors: config + git + github wired into one Scanner (discover → snapshot → groups/aliases) shared by every front-end."
+description = "Fleet composition for cohors: config, git and GitHub wired into one Scanner and the read facade every front-end uses. Part of the cohors binary."
+readme = "README.md"
+# One shared keyword groups the cohors crates on crates.io without putting
+# this internal crate in front of people searching for a git tool.
+keywords = ["cohors"]
+categories = ["development-tools"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

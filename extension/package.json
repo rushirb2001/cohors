@@ -1,7 +1,7 @@
 {
   "name": "cohors",
   "displayName": "cohors",
-  "description": "The state of every git repository you own, and what to do next, in one editor tab. Needs the cohors command-line tool.",
+  "description": "Every git repository you own in the sidebar: what is unpushed, behind or at risk, and what to do next. Push, pull and start an agent on a task without leaving the editor. Uses the cohors command-line tool.",
   "version": "0.7.6",
   "publisher": "rushirb2001",
   "license": "MIT",
@@ -20,19 +20,26 @@
   "categories": [
     "SCM Providers",
     "Visualization",
-    "AI",
-    "Other"
+    "AI"
   ],
   "keywords": [
     "git",
     "multi-repo",
-    "monorepo",
+    "multiple repositories",
+    "repositories",
     "dashboard",
+    "sidebar",
+    "unpushed",
+    "fetch all",
+    "pull all",
     "standup",
+    "worktree",
+    "launchpad",
+    "tasks",
     "agents",
     "claude",
+    "claude code",
     "mcp",
-    "worktree",
     "productivity"
   ],
   "main": "./src/extension.js",

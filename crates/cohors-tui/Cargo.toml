@@ -1,9 +1,12 @@
 [package]
 # Published as `cohors`, so every channel uses one name: `cargo install cohors`,
-# `brew install …/cohors`, `pip install cohors`, `npm install -g cohors`. The
-# folder keeps its old name, crates/cohors-tui.
+# `brew install …/cohors`, `pip install cohors`, `npm install -g @cohors/cli`
+# (npm refuses the bare name). The folder keeps its old name, crates/cohors-tui.
 name = "cohors"
-description = "Every git repo you own, on one screen: a terminal dashboard, CLI and MCP server for your whole fleet of repositories."
+# cargo-dist reuses this line as the Homebrew formula's `desc` and the npm
+# package's description, so it keeps to Homebrew's rules: under 80 characters,
+# no leading article, no full stop.
+description = "Every git repo you own on one screen: terminal dashboard, CLI and MCP server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,14 +14,17 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 homepage.workspace = true
-readme = "../../README.md"
-keywords = ["git", "tui", "dashboard", "mcp", "cli"]
+# Written for crates.io (`cargo install`); the npm package and the release
+# archives carry packaging/npm/README.md instead (see the dist config).
+readme = "README.md"
+# crates.io allows five. The categories already say "command-line utility".
+keywords = ["git", "multi-repo", "tui", "dashboard", "mcp"]
 categories = ["command-line-utilities", "development-tools"]
 # What goes into the crates.io package. `dist/` is the browser dashboard, built
 # by the publish workflow just before publishing (it is gitignored, which is why
 # it has to be listed): build.rs compiles it into the binary, so `cohors web`
 # works after `cargo install cohors` with no Trunk and no checkout.
-include = ["src/**/*.rs", "build.rs", "dist/**/*"]
+include = ["src/**/*.rs", "build.rs", "dist/**/*", "README.md"]
 # Declaring the bin explicitly and disabling auto-discovery avoids a duplicate
 # target from the same `src/main.rs`.
 autobins = false

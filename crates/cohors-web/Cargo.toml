@@ -19,7 +19,12 @@ license = "MIT"
 authors = ["Rushir Bhavsar"]
 repository = "https://github.com/rushirb2001/cohors"
 homepage = "https://github.com/rushirb2001/cohors"
-description = "cohors web dashboard — one Rust core; a native server half and a WASM (Leptos) browser half"
+description = "Browser dashboard of cohors: a native HTTP server half and a WebAssembly (Leptos) half. Part of the cohors binary; run it with `cohors web`."
+readme = "README.md"
+# One shared keyword groups the cohors crates on crates.io without putting
+# this internal crate in front of people searching for a git tool.
+keywords = ["cohors"]
+categories = ["web-programming::http-server", "wasm"]
 
 [lib]
 path = "src/lib.rs"

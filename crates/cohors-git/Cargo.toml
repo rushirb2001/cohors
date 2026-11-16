@@ -1,6 +1,11 @@
 [package]
 name = "cohors-git"
-description = "Local git data source for cohors: repo discovery and per-repo snapshots via gix."
+description = "Local git reader for cohors: repository discovery and per-repo snapshots via gix. Part of the cohors binary; install `cohors` to use it."
+readme = "README.md"
+# One shared keyword groups the cohors crates on crates.io without putting
+# this internal crate in front of people searching for a git tool.
+keywords = ["cohors"]
+categories = ["development-tools"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

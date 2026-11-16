@@ -1,6 +1,9 @@
 [package]
 name = "cohors-core"
-description = "Pure, WASM-safe domain logic for cohors: models, the RepoProvider trait, and sort/filter/fuzzy ranking."
+description = "Pure, WASM-safe domain logic of cohors, the multi-repo git dashboard: repo snapshots, the RepoProvider trait, a selector language, attention and overview."
+readme = "README.md"
+keywords = ["git", "multi-repo", "wasm", "selector", "cohors"]
+categories = ["development-tools", "wasm"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

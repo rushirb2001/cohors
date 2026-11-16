@@ -10,7 +10,9 @@
     {
       "name": "cohors",
       "source": "./plugin",
-      "description": "Every git repo you own as one fleet your agent can see, search, plan across, and (opt-in) act on."
+      "description": "Every git repo you own as one fleet Claude can see, search, plan across, and (opt-in) act on. Read-only by default; needs the cohors command (brew install rushirb2001/tap/cohors or pip install cohors).",
+      "category": "productivity",
+      "keywords": ["git", "multi-repo", "mcp", "standup", "tasks"]
     }
   ]
 }
