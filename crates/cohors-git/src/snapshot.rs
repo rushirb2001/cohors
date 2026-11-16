@@ -383,6 +383,16 @@ fn last_fetch_time(repo: &git2::Repository) -> Option<i64> {
 }
 
 #[cfg(feature = "git2-fallback")]
+/// Just the worktree's state (staged, modified, untracked, conflicted), for
+/// a caller that already knows nothing under `.git` moved and only needs to
+/// learn whether a file was edited. Much cheaper than [`snapshot_repo`]: one
+/// open and one status walk, no history, branches or stashes. `None` when
+/// the repository cannot be opened.
+pub fn worktree_state(path: &Utf8Path) -> Option<WorktreeStatus> {
+    let repo = git2::Repository::open(path.as_std_path()).ok()?;
+    Some(worktree_status(&repo))
+}
+
 fn worktree_status(repo: &git2::Repository) -> WorktreeStatus {
     use git2::Status;
     let mut opts = git2::StatusOptions::new();

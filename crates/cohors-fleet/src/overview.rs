@@ -22,7 +22,7 @@ const RECENT_ACTIVITY: usize = 20;
 
 /// What the launchpad knows about the fleet. Serializable as-is, so an HTTP
 /// surface or `--json` output can return it directly.
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct LaunchpadBundle {
     /// One entry per repository that exists on disk, sorted by name.
     pub entries: Vec<LaunchpadEntry>,

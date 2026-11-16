@@ -26,6 +26,14 @@ pub struct Scanner {
     config: Config,
     home: Option<Utf8PathBuf>,
     config_path: String,
+    /// The config file this scanner read (or would read: it may not exist).
+    /// `None` when no path could be resolved at all.
+    config_file: Option<Utf8PathBuf>,
+    /// What the scanner was built from, kept so [`Scanner::reload`] can read
+    /// the config again the same way (same `--config`, same `--root`s).
+    config_override: Option<Utf8PathBuf>,
+    root_overrides: Vec<String>,
+    allow_missing_config: bool,
     /// GitHub token (v0.2): `gh auth token` / `$GITHUB_TOKEN`, discovered once.
     token: Option<String>,
     /// The user's git email, for the standup (commits they authored).
@@ -64,7 +72,13 @@ impl Scanner {
         root_overrides: &[String],
     ) -> Result<Self, FleetError> {
         let config = Config::load(config_path_override).map_err(config_error)?;
-        Ok(Self::build(config, config_path_override, root_overrides))
+        Ok(Self::build(
+            config,
+            config_path_override,
+            root_overrides,
+            false,
+            Identity::discover(),
+        ))
     }
 
     /// [`Scanner::new`], except that a missing *explicit* config file yields
@@ -76,31 +90,88 @@ impl Scanner {
         root_overrides: &[String],
     ) -> Result<Self, FleetError> {
         let config = Config::load_or_default(config_path_override).map_err(config_error)?;
-        Ok(Self::build(config, config_path_override, root_overrides))
+        Ok(Self::build(
+            config,
+            config_path_override,
+            root_overrides,
+            true,
+            Identity::discover(),
+        ))
     }
 
     fn build(
         config: Config,
         config_path_override: Option<&Utf8Path>,
         root_overrides: &[String],
+        allow_missing_config: bool,
+        identity: Identity,
     ) -> Self {
         let home = cohors_config::paths::home_dir().ok();
         let options = discovery_options(&config, root_overrides, home.as_deref());
-        let config_path = match config_path_override {
-            Some(p) => p.to_string(),
-            None => cohors_config::paths::config_file()
-                .map(|p| p.to_string())
-                .unwrap_or_else(|_| "<unknown>".to_string()),
+        let config_file = match config_path_override {
+            Some(p) => Some(p.to_path_buf()),
+            None => cohors_config::paths::config_file().ok(),
         };
+        let config_path = config_file
+            .as_ref()
+            .map(|p| p.to_string())
+            .unwrap_or_else(|| "<unknown>".to_string());
         Self {
             provider: LocalGitProvider::new(options),
             config,
             home,
             config_path,
-            token: cohors_github::discover_token(),
-            author_email: git_user_email(),
+            config_file,
+            config_override: config_path_override.map(Utf8Path::to_path_buf),
+            root_overrides: root_overrides.to_vec(),
+            allow_missing_config,
+            token: identity.token,
+            author_email: identity.author_email,
             known_file: crate::known::default_path(),
         }
+    }
+
+    /// Read the config again, the way this scanner first read it (same
+    /// `--config`, same `--root`s, same memory of deep-searched repos), for a
+    /// long-lived surface whose user just edited the file. The GitHub token
+    /// and git identity are kept: they do not come from the config, and
+    /// finding them again means running `gh` and `git`.
+    ///
+    /// A config that no longer parses is an error, and the caller keeps the
+    /// scanner it has: a half-saved file must not empty the dashboard.
+    pub fn reload(&self) -> Result<Self, FleetError> {
+        let path = self.config_override.as_deref();
+        let config = if self.allow_missing_config {
+            Config::load_or_default(path)
+        } else {
+            Config::load(path)
+        }
+        .map_err(config_error)?;
+        let identity = Identity {
+            token: self.token.clone(),
+            author_email: self.author_email.clone(),
+        };
+        let mut reloaded = Self::build(
+            config,
+            path,
+            &self.root_overrides,
+            self.allow_missing_config,
+            identity,
+        );
+        reloaded.known_file = self.known_file.clone();
+        Ok(reloaded)
+    }
+
+    /// The config file this scanner reads (it may not exist yet), so a
+    /// long-lived surface can notice an edit. `None` when no location could be
+    /// resolved (no home directory).
+    pub fn config_file(&self) -> Option<&Utf8Path> {
+        self.config_file.as_deref()
+    }
+
+    /// The file a deep search remembers repos in, if this scanner uses one.
+    pub fn known_file(&self) -> Option<&Utf8Path> {
+        self.known_file.as_deref()
     }
 
     /// Keep the remembered repos somewhere else (`None`: remember nothing).
@@ -141,8 +212,16 @@ impl Scanner {
     /// (so a report can say which repos only a deep search reaches).
     pub fn scan_discovered(&self, deep: bool) -> (Vec<RepoSnapshot>, Discovery) {
         let found = self.discover(deep);
-        let refs: Vec<RepoRef> = found
-            .repos
+        let snapshots = self.snapshot_repos(&found.repos);
+        (snapshots, found)
+    }
+
+    /// Snapshot exactly these repos (in parallel, in this order), stamped with
+    /// groups and aliases like a full scan. The watcher uses it to re-read
+    /// only the repos whose git state moved, and to snapshot what it just
+    /// discovered without walking the roots twice.
+    pub fn snapshot_repos(&self, repos: &[Utf8PathBuf]) -> Vec<RepoSnapshot> {
+        let refs: Vec<RepoRef> = repos
             .iter()
             .cloned()
             .map(|path| RepoRef {
@@ -150,12 +229,41 @@ impl Scanner {
                 path: Some(path),
             })
             .collect();
-        let mut snapshots = cohors_git::snapshot_all(&refs);
-        // Groups first (match the raw directory name), then aliases
-        // (a cosmetic rename that must not change group membership).
+        let snapshots = cohors_git::snapshot_all(&refs);
+        self.stamp(snapshots)
+    }
+
+    /// [`snapshot_repos`](Self::snapshot_repos), one repository at a time on
+    /// the calling thread. It takes longer to finish but costs far less CPU:
+    /// the parallel pool's threads spin while they wait for work, which costs
+    /// more than it saves for a background rescan nobody is waiting on
+    /// (measured on 24 repos: 151 ms of CPU in parallel, 61 ms serially).
+    pub fn snapshot_repos_serially(&self, repos: &[Utf8PathBuf]) -> Vec<RepoSnapshot> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let snapshots = repos
+            .iter()
+            .map(|path| {
+                cohors_git::snapshot_repo(
+                    &RepoRef {
+                        id: cohors_core::RepoId(path.to_string()),
+                        path: Some(path.clone()),
+                    },
+                    now,
+                )
+            })
+            .collect();
+        self.stamp(snapshots)
+    }
+
+    /// Groups first (match the raw directory name), then aliases (a cosmetic
+    /// rename that must not change group membership).
+    fn stamp(&self, mut snapshots: Vec<RepoSnapshot>) -> Vec<RepoSnapshot> {
         apply_groups(&self.config, &mut snapshots);
         apply_aliases(&self.config, self.home.as_deref(), &mut snapshots);
-        (snapshots, found)
+        snapshots
     }
 
     /// Find the repos without reading them: the normal search plus the
@@ -288,6 +396,22 @@ fn config_error(e: cohors_config::ConfigError) -> FleetError {
         source = cause.source();
     }
     FleetError::Config(message)
+}
+
+/// Who the user is, as far as cohors needs: found once per scanner (it runs
+/// `gh` and `git`) and carried over when the config is reloaded.
+struct Identity {
+    token: Option<String>,
+    author_email: Option<String>,
+}
+
+impl Identity {
+    fn discover() -> Self {
+        Self {
+            token: cohors_github::discover_token(),
+            author_email: git_user_email(),
+        }
+    }
 }
 
 /// The user's configured git email (`git config user.email`), for the standup.

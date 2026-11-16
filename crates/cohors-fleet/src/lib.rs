@@ -13,16 +13,21 @@
 mod detail;
 mod detect;
 pub mod known;
+mod live;
 mod overview;
 mod scanner;
 mod suggest;
+pub mod watch;
 
 pub use detail::{DetailBundle, detail_bundle};
 pub use detect::detect_roots;
 pub use overview::{LaunchpadBundle, fleet_commits, launchpad_bundle, overview};
 pub use scanner::{Discovery, FleetError, Scanner};
-
 pub use suggest::{Suggestions, agent_sessions, repo_containing, suggestions};
+// Live updates: the one change source every front-end subscribes to (`watch`).
+pub use live::{LIVE_SUGGESTIONS, LiveView, SuggestionItem, live_view};
+pub use watch::{FleetState, FleetWatch, Reason, Subscription, WatchOptions};
+
 // ── The read facade ──────────────────────────────────────────────────────────
 // Front-ends read the fleet through THIS crate only — never `cohors-git` or
 // `cohors-github` directly (a discipline test in tests/ enforces it). That makes
