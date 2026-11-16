@@ -135,9 +135,52 @@ pub(crate) fn render_modal_hints(
             height: 1,
         },
     );
+    record_modal_hints(app, inner.x, hint_y, inner.width);
     Rect {
         height: inner.height - 2,
         ..inner
+    }
+}
+
+/// Note where each of an overlay's footer hints was drawn (the line is
+/// centered, hints ` · ` apart), so a click on `y copy` presses `y`.
+fn record_modal_hints(app: &App, x: u16, y: u16, width: u16) {
+    let hints = overlay_hints(app);
+    let lengths: Vec<usize> = hints
+        .iter()
+        .map(|(key, desc)| key.chars().count() + 1 + desc.chars().count())
+        .collect();
+    let total = lengths.iter().sum::<usize>() + 3 * hints.len().saturating_sub(1);
+    // Centered the way the paragraph centers it.
+    let mut at = x as usize + (width as usize).saturating_sub(total) / 2;
+    for ((key, _), len) in hints.iter().zip(lengths) {
+        if let Some(code) = modal_hint_code(key) {
+            crate::mouse::record(
+                Rect::new(at as u16, y, len as u16, 1),
+                crate::mouse::Target::Key(code),
+            );
+        }
+        at += len + 3;
+    }
+}
+
+/// The key an overlay hint stands for, when it is one key: `Esc` (also in
+/// `N / Esc`), `⏎` (also in `→/⏎`), `tab`, or one character. Not `↑/↓` or
+/// `g/G`.
+fn modal_hint_code(key: &str) -> Option<ratatui::crossterm::event::KeyCode> {
+    use ratatui::crossterm::event::KeyCode;
+    match key {
+        // `Esc`, and the pairs that end in it (`N / Esc`, `t / Esc`).
+        k if k.ends_with("Esc") => Some(KeyCode::Esc),
+        "⏎" | "→/⏎" => Some(KeyCode::Enter),
+        "tab" => Some(KeyCode::Tab),
+        _ => {
+            let mut chars = key.chars();
+            match (chars.next(), chars.next()) {
+                (Some(c), None) if c.is_ascii_graphic() => Some(KeyCode::Char(c)),
+                _ => None,
+            }
+        }
     }
 }
 
@@ -349,7 +392,7 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
 
     // +2 for the header (title + rule), +2 for the hint footer (rule + keys).
     let area = centered_modal(full, 74, rows.len() as u16 + 8);
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
     let title = if shell { "Shell command" } else { "Command" };
     let block = Block::bordered()
         .border_type(FRAME)

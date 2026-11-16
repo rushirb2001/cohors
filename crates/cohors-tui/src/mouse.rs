@@ -36,6 +36,10 @@ pub enum Target {
     Row(usize),
     /// A key hint: clicking it is pressing the key.
     Key(KeyCode),
+    /// An overlay's box: a click outside it closes the overlay.
+    Overlay,
+    /// Entry `n` of an overlay's side list (the standup's repositories).
+    Side(usize),
 }
 
 /// Where one [`Target`] was drawn.
@@ -114,8 +118,7 @@ impl App {
             Mode::Normal | Mode::Filter => {}
             // The help is read and dismissed: a click anywhere closes it.
             Mode::Help => return press(KeyCode::Esc),
-            // The other overlays answer to their keys (above) and the wheel.
-            _ => return None,
+            _ => return self.on_overlay_click(&under),
         }
         let row = under.iter().find_map(|target| match target {
             Target::Row(index) => Some(*index),
@@ -156,6 +159,68 @@ impl App {
                 None
             }
         }
+    }
+
+    /// A click while an overlay is open. Outside its box it closes the
+    /// overlay (a confirmation is cancelled, never accepted); on a row of
+    /// one of its lists it moves that list's cursor there, and a second
+    /// click on the row under the cursor presses Enter.
+    fn on_overlay_click(&mut self, under: &[Target]) -> Option<KeyEvent> {
+        if !under.contains(&Target::Overlay) {
+            // `q` closes the standup whichever pane has the focus (its Esc
+            // steps out of the commits first).
+            return press(match self.mode {
+                Mode::Standup => KeyCode::Char('q'),
+                _ => KeyCode::Esc,
+            });
+        }
+        let row = under.iter().find_map(|target| match target {
+            Target::Row(index) => Some(*index),
+            _ => None,
+        });
+        if let Some(Target::Side(index)) = under.iter().find(|t| matches!(t, Target::Side(_)))
+            && let Some(view) = &mut self.standup
+        {
+            // A repository in the standup's left column.
+            if view.focus != *index {
+                view.focus = *index;
+                view.commit_cursor = 0;
+                view.set_offset(0);
+            }
+            view.commits_focused = false;
+            return None;
+        }
+        let index = row?;
+        match self.mode {
+            Mode::OpenWith => {
+                let picker = self.open_with.as_mut()?;
+                if picker.cursor == index {
+                    return press(KeyCode::Enter);
+                }
+                picker.cursor = index;
+            }
+            Mode::PushBranch => {
+                let picker = self.push_pick.as_mut()?;
+                if picker.cursor == index {
+                    return press(KeyCode::Enter);
+                }
+                picker.cursor = index;
+            }
+            Mode::CommandRun => {
+                let run = self.run.as_mut()?;
+                if run.focus != index {
+                    run.focus = index;
+                    run.scroll = 0;
+                }
+            }
+            Mode::Standup => {
+                let view = self.standup.as_mut()?;
+                view.commits_focused = true;
+                view.commit_cursor = index;
+            }
+            _ => {}
+        }
+        None
     }
 
     /// Give the focus to the card under (`x`, `y`), if there is one.

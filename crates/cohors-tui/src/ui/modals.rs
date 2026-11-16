@@ -131,7 +131,7 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
         width: w,
         height: h,
     };
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
 
     let block = Block::bordered()
         .border_type(FRAME)
@@ -255,7 +255,7 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
         width: w,
         height: h,
     };
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
 
     let window = app.standup_window.label();
     // The outer frame. Title + hints ride inside the box (on their own rules), and
@@ -465,6 +465,13 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     let mut list_state = ListState::default();
     list_state.select(Some(view.focus));
     frame.render_stateful_widget(list, repos_list_area, &mut list_state);
+    // The left column: a click picks the repository.
+    record_list_rows(
+        repos_list_area,
+        list_state.offset(),
+        view.groups.len(),
+        crate::mouse::Target::Side,
+    );
 
     // Right column: a "{repo} · N commits" header, then the commit list with a
     // scrollbar. The cursor shows only when this column has focus.
@@ -523,6 +530,12 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     }
     *list_state.offset_mut() = offset as usize;
     frame.render_stateful_widget(list, text_area, &mut list_state);
+    record_list_rows(
+        text_area,
+        offset as usize,
+        view.focused_len(),
+        crate::mouse::Target::Row,
+    );
 
     if total > viewport {
         let mut sb = ScrollbarState::new(total as usize)
@@ -580,7 +593,7 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
     // Still loading: a small centred box, not a full-size empty one.
     let Some(d) = &dv.detail else {
         let area = detail_rect(full, 5); // 1 content row + 2 header + 2 hint footer
-        frame.render_widget(Clear, area);
+        clear_overlay(frame, area);
         let block = Block::bordered()
             .border_type(FRAME)
             .padding(Padding::new(1, 0, 0, 0));
@@ -692,7 +705,7 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
     // detail_rect's own border allowance); no inner pane borders any more.
     let content_rows = clines.len().max(lines.len()) as u16;
     let area = detail_rect(full, content_rows + 3);
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
     let block = Block::bordered()
         .border_type(FRAME)
         .padding(Padding::new(1, 0, 0, 0));
@@ -956,7 +969,7 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
         width: w,
         height: h,
     };
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
 
     let block = Block::bordered()
         .border_type(FRAME)
@@ -1047,6 +1060,12 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
         list_state.select(Some(run.focus));
     }
     frame.render_stateful_widget(list, repos_list_area, &mut list_state);
+    record_list_rows(
+        repos_list_area,
+        list_state.offset(),
+        run.results.len(),
+        crate::mouse::Target::Row,
+    );
 
     // Right column: the focused repo's output (stdout, then a dim stderr divider),
     // scrollable.
@@ -1142,7 +1161,7 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
         width: w,
         height: h,
     };
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
     let block = Block::bordered()
         .border_type(FRAME)
         .padding(Padding::horizontal(1));
@@ -1201,7 +1220,7 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
         width: w,
         height: h,
     };
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
 
     let block = Block::bordered()
         .border_type(FRAME)
@@ -1252,6 +1271,12 @@ pub(crate) fn render_open_with(frame: &mut Frame, full: Rect, app: &App, theme: 
     let mut state = ListState::default();
     state.select(Some(ow.cursor));
     frame.render_stateful_widget(list, list_area, &mut state);
+    record_list_rows(
+        list_area,
+        state.offset(),
+        ow.openers.len(),
+        crate::mouse::Target::Row,
+    );
 }
 
 /// The "push which branch?" picker for a repo with several local branches: each
@@ -1275,7 +1300,7 @@ pub(crate) fn render_push_branch(frame: &mut Frame, full: Rect, app: &App, theme
         width: w,
         height: h,
     };
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
     let block = Block::bordered()
         .border_type(FRAME)
         .padding(Padding::horizontal(1));
@@ -1318,4 +1343,10 @@ pub(crate) fn render_push_branch(frame: &mut Frame, full: Rect, app: &App, theme
     let mut state = ListState::default();
     state.select(Some(pick.cursor));
     frame.render_stateful_widget(list, inner, &mut state);
+    record_list_rows(
+        inner,
+        state.offset(),
+        pick.branches.len(),
+        crate::mouse::Target::Row,
+    );
 }

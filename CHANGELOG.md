@@ -26,6 +26,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.6] — 2026-11-16
+
+### Added
+
+- **The mouse works inside every overlay too.** A click outside one closes
+  it (a confirmation is cancelled, never accepted); a click picks a row in the
+  "Open with" and "push which branch" pickers (and a second click takes it),
+  a repository or a commit in the standup, and a repository in a command's
+  results; every key in an overlay's footer (`y copy`, `w window`,
+  `y confirm`, `Esc close`…) is a button; and the wheel scrolls a
+  repository's detail and the task board.
+
 ## [0.8.5] — 2026-11-16
 
 ### Added

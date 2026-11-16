@@ -408,6 +408,34 @@ fn draw(frame: &mut Frame, app: &App, now: i64, theme: &Theme) {
     }
 }
 
+/// Clear an overlay's box before drawing it, and note the box: a click
+/// outside it closes the overlay (see `mouse`).
+pub(crate) fn clear_overlay(frame: &mut Frame, area: Rect) {
+    frame.render_widget(Clear, area);
+    crate::mouse::record(area, crate::mouse::Target::Overlay);
+}
+
+/// Note where the visible rows of a list widget were drawn: one per line of
+/// `area`, from entry `offset` (where the list scrolled to), `len` entries in
+/// all. `target` names what a click on entry `n` lands on.
+pub(crate) fn record_list_rows(
+    area: Rect,
+    offset: usize,
+    len: usize,
+    target: impl Fn(usize) -> crate::mouse::Target,
+) {
+    for (line, index) in (offset..len).take(area.height as usize).enumerate() {
+        crate::mouse::record(
+            Rect {
+                y: area.y + line as u16,
+                height: 1,
+                ..area
+            },
+            target(index),
+        );
+    }
+}
+
 /// What a terminal too small for the dashboard shows instead of it.
 fn render_too_small(frame: &mut Frame, area: Rect, theme: &Theme) {
     let lines = vec![

@@ -1911,14 +1911,112 @@ mod mouse {
         frame(&app);
         assert_eq!(app.on_click(5, 5), key(KeyCode::Esc));
 
-        // Behind any other overlay the cards do not answer.
+        // Behind any other overlay the cards do not answer: a click outside
+        // the overlay's box closes it instead (the standup closes with `q`).
         let mut app = fleet_app();
         frame(&app);
         let row = row_of(&app, Card::AtRisk, 1);
         app.mode = Mode::Standup;
+        app.show_standup(cohors_core::demo::standup(NOW));
         frame(&app);
-        assert_eq!(click(&mut app, row), None);
+        let standup = area_of(&app, Target::Overlay);
+        assert!(
+            !standup.contains(Position::new(row.x, row.y)),
+            "{standup:?}"
+        );
+        // Its left end, outside the box.
+        assert_eq!(app.on_click(row.x, row.y), key(KeyCode::Char('q')));
         assert_eq!((app.focus, app.cursors.risk), (Card::DoNext, 0));
+    }
+
+    #[test]
+    fn a_confirmation_is_cancelled_by_a_click_outside_never_accepted() {
+        let mut app = fleet_app();
+        app.focus = Card::Repos;
+        app.on_key(KeyEvent::new(KeyCode::Char('S'), KeyModifiers::NONE));
+        assert_eq!(app.mode, Mode::Confirm);
+        frame(&app);
+        assert_eq!(app.on_click(0, 0), key(KeyCode::Esc));
+        // Its own buttons: `y confirm` and `N / Esc cancel` in its footer.
+        let screen = frame(&app);
+        let yes = area_of(&app, Target::Key(KeyCode::Char('y')));
+        assert_eq!(text_at(&screen, yes), "y confirm");
+        let no = area_of(&app, Target::Key(KeyCode::Esc));
+        assert_eq!(text_at(&screen, no), "N / Esc cancel");
+    }
+
+    #[test]
+    fn in_the_standup_a_click_picks_a_repository_or_a_commit() {
+        let mut app = fleet_app();
+        app.mode = Mode::Standup;
+        app.show_standup(cohors_core::demo::standup(NOW));
+        let screen = frame(&app);
+        let view = app.standup.as_ref().unwrap();
+        assert!(view.groups.len() > 1, "the demo standup has several repos");
+        let second = view.groups[1].0.clone();
+        let side = area_of(&app, Target::Side(1));
+        assert!(
+            text_at(&screen, side).contains(&second),
+            "{}",
+            text_at(&screen, side)
+        );
+        assert_eq!(click(&mut app, side), None);
+        assert_eq!(app.standup.as_ref().unwrap().focus, 1);
+
+        frame(&app);
+        assert_eq!(click_on(&mut app, Target::Row(1)), None);
+        let view = app.standup.as_ref().unwrap();
+        assert!(view.commits_focused && view.commit_cursor == 1);
+        // `y copy` in the footer is a button.
+        let screen = frame(&app);
+        let copy = area_of(&app, Target::Key(KeyCode::Char('y')));
+        assert_eq!(text_at(&screen, copy), "y copy");
+    }
+
+    #[test]
+    fn a_picker_row_is_chosen_by_one_click_and_taken_by_a_second() {
+        use crate::app::{OpenWith, Opener};
+        let mut app = fleet_app();
+        app.open_with = Some(OpenWith::new(
+            vec![
+                Opener::Editor {
+                    command: "code".into(),
+                    label: "VS Code".into(),
+                },
+                Opener::Reveal,
+                Opener::Lazygit,
+            ],
+            None,
+        ));
+        app.mode = Mode::OpenWith;
+        let screen = frame(&app);
+        let row = area_of(&app, Target::Row(1));
+        assert!(text_at(&screen, row).contains("Reveal in file manager"));
+        assert_eq!(click(&mut app, row), None);
+        assert_eq!(app.open_with.as_ref().unwrap().cursor, 1);
+        frame(&app);
+        assert_eq!(click_on(&mut app, Target::Row(1)), key(KeyCode::Enter));
+    }
+
+    #[test]
+    fn the_wheel_scrolls_a_repositorys_detail() {
+        use crate::app::DetailView;
+        let mut app = fleet_app();
+        let repo = &app.repos[0];
+        let mut view = DetailView::new(repo.id.clone(), repo.name.clone());
+        view.detail = Some(cohors_core::demo::detail(NOW));
+        app.detail = Some(view);
+        app.mode = Mode::Detail;
+        draw(&app, 120, 20, true); // short, so the detail scrolls
+        let wheel = MouseEvent {
+            kind: MouseEventKind::ScrollUp, // reversed: moves down
+            column: 60,
+            row: 10,
+            modifiers: KeyModifiers::NONE,
+        };
+        app.on_mouse(wheel);
+        // Three lines a notch (the demo detail is taller than this screen).
+        assert_eq!(app.detail.as_ref().unwrap().scroll, 3);
     }
 
     #[test]

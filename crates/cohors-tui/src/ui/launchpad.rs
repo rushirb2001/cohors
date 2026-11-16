@@ -185,7 +185,7 @@ pub(crate) fn render_launchpad(frame: &mut Frame, full: Rect, app: &App, theme: 
         width: w,
         height: h,
     };
-    frame.render_widget(Clear, area);
+    clear_overlay(frame, area);
     let outer = Block::bordered()
         .border_type(FRAME)
         .padding(Padding::new(1, 1, 0, 0));

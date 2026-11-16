@@ -2011,6 +2011,23 @@ impl App {
                     };
                 }
             }
+            // The rest move as their arrow keys do: the repository detail and
+            // the task board scroll three lines a notch, a picker one choice.
+            Mode::Detail | Mode::Launchpad | Mode::OpenWith | Mode::PushBranch => {
+                let code = if toward_top {
+                    KeyCode::Up
+                } else {
+                    KeyCode::Down
+                };
+                let notches = if matches!(self.mode, Mode::Detail | Mode::Launchpad) {
+                    3
+                } else {
+                    1
+                };
+                for _ in 0..notches {
+                    self.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+                }
+            }
             _ => {}
         }
     }
