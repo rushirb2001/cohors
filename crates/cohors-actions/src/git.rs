@@ -26,12 +26,49 @@ impl From<GitActionError> for String {
 
 /// Run `git -C <path> <args>`, capturing output.
 fn run_git(path: &Utf8Path, args: &[&str]) -> Result<std::process::Output, GitActionError> {
-    Command::new("git")
-        .arg("-C")
-        .arg(path.as_str())
-        .args(args)
+    git_command(path, args)
         .output()
         .map_err(GitActionError::SpawnFailed)
+}
+
+/// Set by a front-end that owns the terminal or has no person at it (see
+/// [`never_prompt`]).
+static NEVER_PROMPT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// From now on, no git command started here may ask a question on the
+/// terminal.
+///
+/// Git (for an HTTPS username or password) and ssh (for a key's passphrase,
+/// or to confirm a host it has not seen) do not ask on stdin: they open the
+/// terminal itself. Under the dashboard that wrote the question across the
+/// screen, usually in the header where the cursor rests, and then competed
+/// with the dashboard for every key. Under the MCP server it wrote into the
+/// agent's own screen. The dashboard, the MCP server and the web server call
+/// this once at startup; a fetch that cannot authenticate without a person
+/// then fails at once with git's own message, reported like any other
+/// failure. A one-off command at a terminal (`cohors push api`) is left
+/// alone, since there a person can answer.
+pub fn never_prompt() {
+    NEVER_PROMPT.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// `git -C <path> <args>`, not yet run.
+fn git_command(path: &Utf8Path, args: &[&str]) -> Command {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(path.as_str()).args(args);
+    if NEVER_PROMPT.load(std::sync::atomic::Ordering::Relaxed) {
+        // Git's own questions: fail ("terminal prompts disabled") instead.
+        command.env("GIT_TERMINAL_PROMPT", "0");
+        // ssh's: answer through an askpass program, never the terminal
+        // (OpenSSH 8.4 and later; older versions ignore the setting). A
+        // helper the user set up, such as a desktop dialog, is kept and is
+        // now what ssh uses. Without one, `false` answers "no".
+        command.env("SSH_ASKPASS_REQUIRE", "force");
+        if std::env::var_os("SSH_ASKPASS").is_none() {
+            command.env("SSH_ASKPASS", "false");
+        }
+    }
+    command
 }
 
 /// Fetch the repo's default remote. Returns a short status message.
@@ -625,6 +662,33 @@ mod tests {
     }
 
     #[cfg(unix)]
+    #[test]
+    fn once_told_git_is_set_up_to_never_ask_on_the_terminal() {
+        let env_of = |command: &Command, name: &str| {
+            command
+                .get_envs()
+                .find(|(key, _)| *key == std::ffi::OsStr::new(name))
+                .and_then(|(_, value)| value.map(|v| v.to_string_lossy().into_owned()))
+        };
+        // A one-off command at a terminal: nothing is changed.
+        let plain = git_command(Utf8Path::new("/repo"), &["fetch"]);
+        assert_eq!(env_of(&plain, "GIT_TERMINAL_PROMPT"), None);
+
+        never_prompt();
+        let quiet = git_command(Utf8Path::new("/repo"), &["fetch"]);
+        assert_eq!(env_of(&quiet, "GIT_TERMINAL_PROMPT").as_deref(), Some("0"));
+        assert_eq!(
+            env_of(&quiet, "SSH_ASKPASS_REQUIRE").as_deref(),
+            Some("force")
+        );
+        // The arguments are untouched.
+        let args: Vec<_> = quiet
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, ["-C", "/repo", "fetch"]);
+    }
+
     #[test]
     fn run_command_captures_exit_and_output() {
         let dir = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())

@@ -2028,6 +2028,9 @@ pub fn run_web(
     allow_run: bool,
     demo: bool,
 ) -> Result<()> {
+    // Actions here are started from a browser; nobody is at this terminal to
+    // answer a git or ssh question.
+    cohors_actions::never_prompt();
     // A release build has the page compiled in; anything else must build it,
     // which needs a checkout (the developer path, with Trunk).
     let built_in = !crate::web_assets::WEB_ASSETS.is_empty();
@@ -3151,6 +3154,9 @@ pub fn run_mcp(cli: &Cli, caps: cohors_mcp::Caps) -> Result<()> {
         return Ok(());
     }
 
+    // The client that started this server owns the terminal (an agent's own
+    // screen, usually): git must never write a question into it.
+    cohors_actions::never_prompt();
     let scanner = crate::scan::from_cli(cli)?;
     let roots = scanner.roots();
     let config_path = scanner.config_path();

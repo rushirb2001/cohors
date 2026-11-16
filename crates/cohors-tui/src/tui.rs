@@ -23,7 +23,8 @@ use cohors_core::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::crossterm::event::{
-    self, DisableMouseCapture, EnableMouseCapture, Event, KeyEvent, KeyEventKind,
+    self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEvent, KeyEventKind,
+    KeyModifiers,
 };
 use ratatui::crossterm::execute;
 use ratatui::crossterm::terminal::{
@@ -223,6 +224,9 @@ fn theme_from_env() -> cohors_config::ThemeMode {
 
 /// Run the dashboard to completion, always restoring the terminal afterward.
 pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Result<()> {
+    // The dashboard owns the screen from here on: a git or ssh question
+    // written to the terminal would land in the middle of it.
+    cohors_actions::never_prompt();
     let ground = ground_from_setting(scanner.theme_mode());
     let mut terminal = setup_terminal().context("setting up the terminal")?;
     let result = run_loop(&mut terminal, scanner, cli, use_cache, watch, ground);
@@ -282,8 +286,11 @@ fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
     let mut toast_since = Instant::now();
     const TOAST_TTL: Duration = Duration::from_secs(6);
 
+    let mut repaint = Repaint::new();
+
     loop {
         app.now = now;
+        repaint.before_draw(terminal);
         terminal.draw(|f| ui::render(f, &app, now))?;
 
         if event::poll(POLL)? {
@@ -293,6 +300,9 @@ fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
                 Event::Key(key)
                     if key.kind == KeyEventKind::Press
                         && took_ground_reply(&mut ground_reply, &key, &mut app) => {}
+                Event::Key(key) if key.kind == KeyEventKind::Press && is_redraw_key(&key) => {
+                    repaint.ask();
+                }
                 Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
                     Cmd::Quit => break,
                     // The demo never installs anything, so there is nothing to restart into.
@@ -485,8 +495,11 @@ fn run_loop(
     let mut toast_since = Instant::now();
     const TOAST_TTL: Duration = Duration::from_secs(4);
 
+    let mut repaint = Repaint::new();
+
     loop {
         app.now = now_secs();
+        repaint.before_draw(terminal);
         terminal.draw(|f| ui::render(f, &app, app.now))?;
 
         if event::poll(POLL)? {
@@ -496,6 +509,9 @@ fn run_loop(
                 Event::Key(key)
                     if key.kind == KeyEventKind::Press
                         && took_ground_reply(&mut ground_reply, &key, &mut app) => {}
+                Event::Key(key) if key.kind == KeyEventKind::Press && is_redraw_key(&key) => {
+                    repaint.ask();
+                }
                 Event::Key(key) if key.kind == KeyEventKind::Press => match app.on_key(key) {
                     Cmd::Quit => break,
                     Cmd::Restart => {
@@ -1687,6 +1703,79 @@ fn now_secs() -> i64 {
         .unwrap_or(0)
 }
 
+/// How often the whole screen is sent again, whether or not anything changed.
+///
+/// The dashboard normally sends only the cells that differ from the frame
+/// before, which is what keeps it cheap. That assumes the screen still shows
+/// what was last drawn, and a terminal breaks the assumption all the time
+/// without telling the program: the user clears it (Cmd+K), a pane is closed
+/// and reopened onto a session that kept running, a multiplexer re-attaches,
+/// another program writes a line into it. What is on screen is then wrong and
+/// stays wrong, except for the few cells that happen to change, which is why
+/// the header (its clock changes every minute) looked the most broken. Sending
+/// everything again every few seconds heals all of these without the user
+/// having to know a key; Ctrl+L does it at once.
+const REPAINT_EVERY: Duration = Duration::from_secs(10);
+
+/// A symbol the dashboard never draws. See [`forget_screen`].
+const NEVER_DRAWN: &str = "\u{2400}";
+
+/// Decides when the next frame is sent whole (see [`REPAINT_EVERY`]).
+struct Repaint {
+    last: Instant,
+    asked: bool,
+}
+
+impl Repaint {
+    fn new() -> Self {
+        Self {
+            last: Instant::now(),
+            asked: false,
+        }
+    }
+
+    /// Send the next frame whole (Ctrl+L).
+    fn ask(&mut self) {
+        self.asked = true;
+    }
+
+    /// Call before each draw.
+    fn before_draw<B: ratatui::backend::Backend>(&mut self, terminal: &mut Terminal<B>) {
+        if self.asked || self.last.elapsed() >= REPAINT_EVERY {
+            forget_screen(terminal);
+            self.asked = false;
+            self.last = Instant::now();
+        }
+    }
+}
+
+/// Whether `key` asks for the screen to be redrawn: Ctrl+L, as in a shell and
+/// nearly every full-screen terminal program.
+fn is_redraw_key(key: &KeyEvent) -> bool {
+    key.code == KeyCode::Char('l') && key.modifiers.contains(KeyModifiers::CONTROL)
+}
+
+/// Make the next draw send every cell, as if nothing were on screen.
+///
+/// ratatui keeps the previous frame and sends only what differs from it. This
+/// replaces that memory with a frame of [`NEVER_DRAWN`], which differs from
+/// every real cell, blank ones included, so the whole screen is written again
+/// and anything that got onto it from outside is overwritten.
+///
+/// It does not erase first. `Terminal::clear` would, which blinks, and it also
+/// asks the terminal where its cursor is and waits for the answer on the same
+/// stream the keys arrive on; neither is acceptable on a timer.
+fn forget_screen<B: ratatui::backend::Backend>(terminal: &mut Terminal<B>) {
+    // `swap_buffers` blanks the remembered frame and makes it the one to draw
+    // into. Filled with the sentinel and swapped back, it is the remembered
+    // frame again, and the buffer to draw into is blank, as before any draw.
+    terminal.swap_buffers();
+    for cell in &mut terminal.current_buffer_mut().content {
+        cell.set_symbol(NEVER_DRAWN);
+    }
+    terminal.swap_buffers();
+}
+
 fn setup_terminal() -> Result<Tui> {
     install_panic_hook();
     enable_raw_mode()?;
@@ -1740,4 +1829,107 @@ fn install_panic_hook() {
         let _ = execute!(std::io::stdout(), DisableMouseCapture, LeaveAlternateScreen);
         original(info);
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ratatui::backend::{Backend, TestBackend};
+    use ratatui::buffer::Cell;
+    use ratatui::widgets::Paragraph;
+
+    /// What the terminal is showing, row by row.
+    fn shown(terminal: &Terminal<TestBackend>) -> Vec<String> {
+        let buffer = terminal.backend().buffer();
+        (0..buffer.area.height)
+            .map(|y| {
+                (0..buffer.area.width)
+                    .map(|x| buffer[(x, y)].symbol().to_string())
+                    .collect()
+            })
+            .collect()
+    }
+
+    fn draw(terminal: &mut Terminal<TestBackend>) {
+        terminal
+            .draw(|f| f.render_widget(Paragraph::new("cohors\nyour git fleet"), f.area()))
+            .unwrap();
+    }
+
+    /// The bug a user reported as "the top strip is buggy": the terminal's
+    /// screen is wiped or written over from outside, and because nothing in
+    /// the frame changed, nothing is sent again.
+    #[test]
+    fn a_screen_damaged_from_outside_is_healed_by_the_next_full_repaint() {
+        let mut terminal = Terminal::new(TestBackend::new(16, 3)).unwrap();
+        draw(&mut terminal);
+        let good = shown(&terminal);
+        assert_eq!(good[0], "cohors          ");
+
+        // Wiped (Cmd+K, a pane reopened onto a running session).
+        terminal.backend_mut().clear().unwrap();
+        draw(&mut terminal);
+        assert_eq!(
+            shown(&terminal)[0].trim(),
+            "",
+            "an ordinary draw sends nothing"
+        );
+        forget_screen(&mut terminal);
+        draw(&mut terminal);
+        assert_eq!(shown(&terminal), good);
+
+        // Written over by another program, on a row the dashboard leaves blank.
+        let mut stray = Cell::default();
+        stray.set_symbol("X");
+        terminal
+            .backend_mut()
+            .draw([(3u16, 2u16, &stray), (0u16, 0u16, &stray)].into_iter())
+            .unwrap();
+        draw(&mut terminal);
+        assert_ne!(shown(&terminal), good, "an ordinary draw leaves it there");
+        forget_screen(&mut terminal);
+        draw(&mut terminal);
+        assert_eq!(shown(&terminal), good, "blank cells are sent again too");
+
+        // And the frame after a full repaint is an ordinary one again.
+        draw(&mut terminal);
+        assert_eq!(shown(&terminal), good);
+    }
+
+    #[test]
+    fn a_full_repaint_comes_on_ctrl_l_and_on_a_timer() {
+        let mut terminal = Terminal::new(TestBackend::new(16, 3)).unwrap();
+        draw(&mut terminal);
+        let good = shown(&terminal);
+        let mut repaint = Repaint::new();
+
+        // Nothing asked and no time passed: the damage stays.
+        terminal.backend_mut().clear().unwrap();
+        repaint.before_draw(&mut terminal);
+        draw(&mut terminal);
+        assert_ne!(shown(&terminal), good);
+
+        // Ctrl+L, and only Ctrl+L.
+        let ctrl_l = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::CONTROL);
+        assert!(is_redraw_key(&ctrl_l));
+        assert!(!is_redraw_key(&KeyEvent::new(
+            KeyCode::Char('l'),
+            KeyModifiers::NONE
+        )));
+        repaint.ask();
+        repaint.before_draw(&mut terminal);
+        draw(&mut terminal);
+        assert_eq!(shown(&terminal), good);
+
+        // The timer: once the interval has passed, without anyone asking.
+        terminal.backend_mut().clear().unwrap();
+        repaint.last = Instant::now() - REPAINT_EVERY;
+        repaint.before_draw(&mut terminal);
+        draw(&mut terminal);
+        assert_eq!(shown(&terminal), good);
+        assert!(
+            repaint.last.elapsed() < REPAINT_EVERY,
+            "the timer starts over"
+        );
+    }
 }

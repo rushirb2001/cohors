@@ -31,6 +31,28 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.25] — 2026-11-16
+
+### Fixed
+
+- **The dashboard repairs its own screen.** It sends the terminal only what
+  changed since the last frame, so when the screen was wiped or written over
+  from outside (Cmd+K, a pane closed and reopened onto a dashboard that kept
+  running, a multiplexer re-attaching, a line printed by another program) it
+  stayed broken: blank or garbled except for the few characters that happened
+  to change, most visibly the header, whose clock changes every minute. The
+  whole screen is now sent again every 10 seconds, with no erase first so
+  nothing blinks, and **Ctrl+L** redraws it at once, as in a shell.
+- **Git and ssh can no longer ask a question across the dashboard.** A fetch,
+  pull or push that needed an HTTPS password, a key's passphrase or a new
+  host confirmed wrote the question into the terminal, usually over the
+  header, and then took some of the keys typed at the dashboard. Started from
+  the dashboard, the MCP server or the web page, git now fails at once with
+  its own message instead (`terminal prompts disabled`), reported like any
+  other failure; a credential helper, an ssh agent or an askpass program you
+  set up keeps working. A command run at a terminal (`cohors push api`) can
+  still ask.
+
 ## [0.8.24] — 2026-11-16
 
 ### Added

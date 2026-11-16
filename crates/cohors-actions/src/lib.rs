@@ -26,8 +26,8 @@ mod runner;
 // crate-internal — only `dispatch` composes it, so it can change freely.
 pub use dispatch::{Caps, dispatch};
 pub use git::{
-    CommitOptions, commit, commit_with, fetch, interrupt_flag, paths_to_commit, pull_ff, push,
-    push_branch, run_command, secret_paths, stash_push,
+    CommitOptions, commit, commit_with, fetch, interrupt_flag, never_prompt, paths_to_commit,
+    pull_ff, push, push_branch, run_command, secret_paths, stash_push,
 };
 pub use orchestrate::worktree_block;
 pub use registry::{ActionDef, Tier, find as find_action, registry};
