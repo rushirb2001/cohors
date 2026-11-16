@@ -116,8 +116,8 @@ impl App {
         }
         match self.mode {
             Mode::Normal | Mode::Filter => {}
-            // The help is read and dismissed: a click anywhere closes it.
-            Mode::Help => return press(KeyCode::Esc),
+            // Outside an overlay's box closes it (the help included: a click
+            // inside may just be someone scrolling it).
             _ => return self.on_overlay_click(&under),
         }
         let row = under.iter().find_map(|target| match target {

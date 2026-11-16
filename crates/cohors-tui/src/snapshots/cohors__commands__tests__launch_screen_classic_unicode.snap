@@ -17,9 +17,10 @@ expression: screen
 
   Found
   12 repositories in 1 folder
-    ~/code  12 repositories · 6 at risk · 4 to look at
-      analytics ▲   legacy-billing ▲   design-system ▲   mobile-app ▲
-      payments ▲   web-app ▲   cli-tools   data-pipeline   experiments   infra
-      auth-service   marketing-site
+    ~/code  12 repositories
+      at risk      6   analytics  legacy-billing  design-system  mobile-app
+                       payments  web-app
+      to look at   4   cli-tools  data-pipeline  experiments  infra
+      clean        2   auth-service  marketing-site
 
   enter  open the dashboard    q  quit

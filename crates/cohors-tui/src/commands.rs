@@ -2257,35 +2257,22 @@ fn launch_screen(
         ),
         color,
     ));
-    let ascii = look::get().ascii;
     for group in &groups {
-        let at_risk = group.repos.iter().filter(|r| r.at_risk).count();
-        let look_at = group
-            .repos
-            .iter()
-            .filter(|r| !r.at_risk && !r.reasons.is_empty())
-            .count();
         let mut counts = vec![plural(group.repos.len(), "repository", "repositories")];
-        if at_risk > 0 {
-            counts.push(format!("{at_risk} at risk"));
-        }
-        if look_at > 0 {
-            counts.push(format!("{look_at} to look at"));
-        }
         if group.nested > 0 {
-            counts.push(format!("{} nested in another repo", group.nested));
+            counts.push(format!("{} inside another repository", group.nested));
         }
         out.push_str(&format!(
             "    {}  {}\n",
             bold(color, &group.label),
             dim(color, &counts.join(" · "))
         ));
-        out.push_str(&found_names(&group.repos, width, ascii, color));
+        out.push_str(&found_rows(&group.repos, width, color));
     }
-    if first_run {
+    if first_run && roots.len() > 1 {
         out.push_str(&guide_row(
             "cohors --root <dir>",
-            "to look in one folder only",
+            "next time, to show just one of these folders",
             0,
             color,
         ));
@@ -2312,7 +2299,10 @@ fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, color: bool) -
         crate::ui::text::safe(&tip.command)
     } else {
         // Keys: they work in the dashboard, which this screen opens.
-        format!("{} in the dashboard", crate::ui::text::safe(&tip.command))
+        match tip.action() {
+            action if action.is_empty() => "(in the dashboard)".to_string(),
+            action => format!("{} in the dashboard", crate::ui::text::safe(&action)),
+        }
     };
     let lead = 2 + "Tip: ".len() + title.chars().count() + 3;
     let (shown, room) = if lead + command.chars().count() <= width {
@@ -2404,58 +2394,97 @@ fn found_groups<'a>(
     groups
 }
 
-/// A folder's repos by name, wrapped to the width, at most three lines: at
-/// risk first and marked, then those to look at, then the clean ones dimmed.
-fn found_names(repos: &[&cohors_core::RepoLine], width: usize, ascii: bool, color: bool) -> String {
+/// A folder's repositories in labelled rows, the worst first, so what each
+/// name means is said in words and not only in colour:
+///
+/// ```text
+///       at risk      7   cohors  hybrid-flow  personal-website  +4 more
+///       to look at  20   bill-splitter  code-archive  cutroom  +17 more
+///       clean        2   alpha  gamma
+/// ```
+///
+/// A row with nobody in it is left out. Each row takes at most two lines of
+/// names; the rest are counted (`+4 more`), and all of them are in the
+/// dashboard.
+fn found_rows(repos: &[&cohors_core::RepoLine], width: usize, color: bool) -> String {
     const INDENT: usize = 6;
-    const MAX_LINES: usize = 3;
-    let room = width.saturating_sub(INDENT).max(20);
-    let mut lines: Vec<String> = Vec::new();
-    let mut line = String::new();
-    let mut used = 0usize;
-    let mut shown = 0usize;
-    for repo in repos {
-        let name = crate::ui::text::safe(&repo.name);
-        let (text, styled) = if repo.at_risk {
-            let mark = if ascii { "!" } else { "▲" };
-            let t = format!("{name} {mark}");
-            (t.clone(), sgr(color, "1;38;2;214;96;84", &t))
-        } else if !repo.reasons.is_empty() {
-            (name.clone(), name.clone())
-        } else {
-            (name.clone(), dim(color, &name))
-        };
-        let w = text.chars().count();
-        let gap = if used == 0 { 0 } else { 3 };
-        if used > 0 && used + gap + w > room {
-            lines.push(std::mem::take(&mut line));
-            used = 0;
-            if lines.len() == MAX_LINES {
-                break;
-            }
-        }
-        if used > 0 {
-            line.push_str("   ");
-            used += 3;
-        }
-        line.push_str(&styled);
-        used += w;
-        shown += 1;
-    }
-    if !line.is_empty() && lines.len() < MAX_LINES {
-        lines.push(line);
-    }
+    /// `to look at` is the longest label.
+    const LABEL: usize = 10;
+    const MAX_LINES: usize = 2;
+    let lead = LABEL + 1 + 3 + 3; // label, space, count, gap
+    let room = width.saturating_sub(INDENT + lead).max(20);
+    type Pick = fn(&cohors_core::RepoLine) -> bool;
+    let rows: [(&str, Pick); 3] = [
+        ("at risk", |r| r.at_risk),
+        ("to look at", |r| !r.at_risk && !r.reasons.is_empty()),
+        ("clean", |r| !r.at_risk && r.reasons.is_empty()),
+    ];
     let mut out = String::new();
-    for l in &lines {
-        out.push_str(&format!("{}{l}\n", " ".repeat(INDENT)));
-    }
-    let left = repos.len().saturating_sub(shown);
-    if left > 0 {
-        out.push_str(&format!(
-            "{}{}\n",
-            " ".repeat(INDENT),
-            dim(color, &format!("and {left} more in the dashboard"))
-        ));
+    for (label, pick) in rows {
+        let members: Vec<String> = repos
+            .iter()
+            .filter(|r| pick(r))
+            .map(|r| crate::ui::text::safe(&r.name))
+            .collect();
+        if members.is_empty() {
+            continue;
+        }
+        // The label in the row's colour: at risk in the risk red, clean dim.
+        let painted_label = match label {
+            "at risk" => sgr(color, "1;38;2;214;96;84", &format!("{label:<LABEL$}")),
+            "clean" => dim(color, &format!("{label:<LABEL$}")),
+            _ => bold(color, &format!("{label:<LABEL$}")),
+        };
+        let paint = |name: &str| match label {
+            "at risk" => sgr(color, "38;2;214;96;84", name),
+            "clean" => dim(color, name),
+            _ => name.to_string(),
+        };
+        // Lay the names out in up to MAX_LINES lines of `room` columns,
+        // keeping room on the last for `+N more` when some are left over.
+        let mut lines: Vec<(String, usize)> = vec![(String::new(), 0)];
+        let mut shown = 0;
+        for (i, name) in members.iter().enumerate() {
+            let w = name.chars().count();
+            let left_after = members.len() - i - 1;
+            let reserve = if left_after > 0 && lines.len() == MAX_LINES {
+                format!("  +{left_after} more").len()
+            } else {
+                0
+            };
+            let (_, used) = lines.last().unwrap();
+            let gap = if *used == 0 { 0 } else { 2 };
+            if *used + gap + w + reserve > room {
+                if lines.len() == MAX_LINES || *used == 0 {
+                    break;
+                }
+                lines.push((String::new(), 0));
+            }
+            let (line, used) = lines.last_mut().unwrap();
+            if *used > 0 {
+                line.push_str("  ");
+                *used += 2;
+            }
+            line.push_str(&paint(name));
+            *used += w;
+            shown += 1;
+        }
+        let left = members.len() - shown;
+        if left > 0 {
+            let (line, _) = lines.last_mut().unwrap();
+            line.push_str(&dim(color, &format!("  +{left} more")));
+        }
+        for (n, (line, _)) in lines.iter().enumerate() {
+            let head = if n == 0 {
+                format!(
+                    "{painted_label} {}   ",
+                    dim(color, &format!("{:>3}", members.len()))
+                )
+            } else {
+                " ".repeat(lead)
+            };
+            out.push_str(&format!("{}{head}{line}\n", " ".repeat(INDENT)));
+        }
     }
     out
 }
@@ -3137,7 +3166,7 @@ mod tests {
         let line = keys.lines().find(|l| l.contains("Tip:")).unwrap();
         assert_eq!(
             line,
-            "  Tip: Filter the repositories by name as you type   / in the dashboard"
+            "  Tip: Filter the repositories by name as you type   press / in the dashboard"
         );
     }
 
@@ -3183,13 +3212,14 @@ mod tests {
         let w = launch_screen(&o, &roots, false, None, false);
         assert!(w.contains("in 2 folders: ~/code, ~/work"), "{w}");
         assert!(
-            w.contains("2 repositories") && w.contains("1 nested in another repo"),
+            w.contains("2 repositories") && w.contains("1 inside another repository"),
             "{w}"
         );
         assert!(w.contains(&a) && w.contains(&b), "{w}");
-        // At-risk repos are marked (▲ in Unicode).
+        // At-risk repos are listed on a row that says so in words.
         let risky = o.repos.iter().find(|r| r.at_risk).expect("demo has risk");
-        assert!(w.contains(&format!("{} ▲", risky.name)), "{w}");
+        let row = w.lines().find(|l| l.contains(&risky.name)).unwrap();
+        assert!(row.trim_start().starts_with("at risk"), "{row}");
         // A step names its repos.
         let step = &o.actions[0];
         let first = o.repos.iter().find(|r| r.id == step.repos[0]).unwrap();

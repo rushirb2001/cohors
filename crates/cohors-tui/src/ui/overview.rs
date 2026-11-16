@@ -819,7 +819,7 @@ fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, theme: &Theme)
     const KEYS_WIDTH: usize = TIP_KEYS_WIDTH;
     let ell = theme.glyphs.ellipsis();
     let title = text::safe(&tip.title);
-    let command = text::safe(&tip.command);
+    let command = text::safe(&tip.action());
     let (title_len, command_len) = (title.chars().count(), command.chars().count());
 
     // With the keys, the text keeps a gap of three before them.
@@ -855,7 +855,9 @@ fn tip_line(tip: &cohors_core::suggest::Suggestion, width: usize, theme: &Theme)
     ];
     if !title.is_empty() {
         spans.push(Span::raw(title));
-        spans.push(Span::styled(": ", theme.dim()));
+        if !command.is_empty() {
+            spans.push(Span::styled(": ", theme.dim()));
+        }
     }
     spans.push(Span::styled(command, theme.accent()));
     let bold = Style::new().add_modifier(Modifier::BOLD);

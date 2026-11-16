@@ -1,0 +1,24 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 56, 20)"
+---
+ cohors  ~/code   12 repositories. 6 h…  scanned 2m ago 
+ 4 not backed up  3 stashes  26 uncommitted  0 stale    
+╭─  ╔═════════════════════════════════════════════╗────╮
+│▸ R║  payments  ·  main                          ║…   │
+│   ╟─────────────────────────────────────────────╢    │
+╰─  ║ Changes · branches · PRs                   █║────╯
+╭─  ║ Attention                                  █║────╮
+│  R║ ↑2 unpushed                                ║║ 4d │
+╰───║ 3 uncommitted changes                      ║║────╯
+╭─  ║                                            ║║────╮
+│ re║ Checks                                     ║║    │
+╰───║ CI passing  ·  2 open pull requests        ║║────╯
+╭─  ║                                            ║║────╮
+│ au║ Changes (3)                                ║║ 8  │
+╰───║  M src/charge.rs                           ║║────╯
+╭─  ╟─────────────────────────────────────────────╢────╮
+│   ║   ↑/↓ scroll · g/G top / bottom · Esc close ║age │
+│  R╚═════════════════════════════════════════════╝ 4d │
+╰──────────────────────────────────────────────────────╯
+  1-5  card  tab  next  ↑↓  move  ?  help  q  quit

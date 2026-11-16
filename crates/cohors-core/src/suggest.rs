@@ -113,6 +113,19 @@ impl Suggestion {
         self.program != KEYS
     }
 
+    /// What a tip asks you to do, in words: its command, or for a tip about
+    /// the dashboard's keys `press /` (nothing when the tip's own sentence
+    /// already says it, as the one about clicking does).
+    pub fn action(&self) -> String {
+        if self.copyable() {
+            self.command.clone()
+        } else if self.command.is_empty() {
+            String::new()
+        } else {
+            format!("press {}", self.command)
+        }
+    }
+
     /// Whether it is one of the first-run tips ([`LEARN_TIPS`]).
     pub fn is_first_run_tip(&self) -> bool {
         self.tip
@@ -515,7 +528,7 @@ pub const LEARN_TIPS: &[(&str, &str, &str, &str)] = &[
     (
         "learn-mouse",
         "Click a row to select it, click it again to open it",
-        "click",
+        "",
         KEYS,
     ),
     (

@@ -5,6 +5,14 @@ use super::cards::severity_style;
 use super::*;
 
 /// Truncate `s` to at most `max` characters, adding an ellipsis when cut.
+/// The narrowest an overlay's body gets with a list column beside its main
+/// column (the standup, a command's run); narrower, the list column goes.
+const TWO_COLUMNS_MIN: u16 = 66;
+
+/// The narrowest the repository detail keeps its two columns; narrower, it is
+/// one column that scrolls.
+const DETAIL_TWO_COLUMNS_MIN: u16 = 72;
+
 pub(crate) fn ellipsize(s: &str, max: usize) -> String {
     text::clip(s, max, '…')
 }
@@ -139,11 +147,38 @@ pub(crate) fn render_help(frame: &mut Frame, full: Rect, app: &App, theme: &Them
     let inner = block.inner(area);
     frame.render_widget(block, area);
     let inner = render_modal_header(frame, area, inner, theme, Line::from("Help").bold());
+    // On a screen shorter than the help, it scrolls (↑/↓, the wheel), with a
+    // scrollbar in the padding on the right to say there is more. How far is
+    // known before the footer is drawn, so the footer can offer `↑/↓ scroll`.
+    let help = Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false });
+    let rows = help.line_count(inner.width) as u16;
+    // The footer takes two rows when there is room for it.
+    let body = if inner.height < 3 {
+        inner.height
+    } else {
+        inner.height - 2
+    };
+    let max = rows.saturating_sub(body);
+    app.help_max.set(max);
     let inner = render_modal_hints(frame, area, inner, app, theme);
-    frame.render_widget(
-        Paragraph::new(Text::from(lines)).wrap(Wrap { trim: false }),
-        inner,
-    );
+    let offset = app.help_scroll.min(max);
+    frame.render_widget(help.scroll((offset, 0)), inner);
+    if max > 0 {
+        let mut bar = ScrollbarState::new(rows as usize)
+            .position(offset as usize)
+            .viewport_content_length(inner.height as usize);
+        frame.render_stateful_widget(
+            Scrollbar::new(ScrollbarOrientation::VerticalRight)
+                .begin_symbol(None)
+                .end_symbol(None),
+            Rect {
+                x: inner.x + inner.width + 1,
+                width: 1,
+                ..inner
+            },
+            &mut bar,
+        );
+    }
 }
 
 /// Count commits by their conventional-commit type (the word before the first
@@ -401,13 +436,16 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     };
 
     // repos column | 1-col divider | commits column, with a space either side of
-    // the divider (`.spacing(1)`).
+    // the divider (`.spacing(1)`). Too narrow for both, the repositories column
+    // goes and the commits keep the room; their header then says which
+    // repository of how many it is (↑/↓ still switches, as before).
+    let narrow = panes_area.width < TWO_COLUMNS_MIN;
     let [repos_col, divider_col, commits_col] = Layout::horizontal([
-        Constraint::Length(22),
-        Constraint::Length(1),
+        Constraint::Length(if narrow { 0 } else { 22 }),
+        Constraint::Length(u16::from(!narrow)),
         Constraint::Min(0),
     ])
-    .spacing(1)
+    .spacing(u16::from(!narrow))
     .areas(panes_area);
 
     // A solid rule between the description and the columns, plus a solid vertical
@@ -425,14 +463,16 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
             },
         )
     };
-    for y in divider_col.y..divider_col.y + divider_col.height {
-        let (p, r) = cell("│", divider_col.x, y);
+    if !narrow {
+        for y in divider_col.y..divider_col.y + divider_col.height {
+            let (p, r) = cell("│", divider_col.x, y);
+            frame.render_widget(p, r);
+        }
+        let (p, r) = cell("┬", divider_col.x, mid_rule_area.y);
+        frame.render_widget(p, r);
+        let (p, r) = cell("┴", divider_col.x, panes_area.y + panes_area.height);
         frame.render_widget(p, r);
     }
-    let (p, r) = cell("┬", divider_col.x, mid_rule_area.y);
-    frame.render_widget(p, r);
-    let (p, r) = cell("┴", divider_col.x, panes_area.y + panes_area.height);
-    frame.render_widget(p, r);
 
     // Each column is a header row, then its list below.
     let [repos_hdr, repos_list_area] =
@@ -479,8 +519,13 @@ pub(crate) fn render_standup(frame: &mut Frame, full: Rect, app: &App, theme: &T
     frame.render_widget(
         Paragraph::new(Span::styled(
             format!(
-                "{repo_name}  ·  {n} commit{}",
-                if n == 1 { "" } else { "s" }
+                "{repo_name}  ·  {n} commit{}{}",
+                if n == 1 { "" } else { "s" },
+                if narrow {
+                    format!("  ·  {} of {}", view.focus + 1, view.groups.len())
+                } else {
+                    String::new()
+                }
             ),
             active(view.commits_focused),
         )),
@@ -717,6 +762,23 @@ pub(crate) fn render_detail(frame: &mut Frame, full: Rect, app: &App, now: i64, 
     // Two columns split by a solid vertical divider that ties into the rules above
     // and below — no inner boxes, the outer frame is the only box — matching the
     // standup: repo state on the left, commits on the right.
+    // Too narrow for two readable columns: one column, the repository's state
+    // then its commits, scrolling as one.
+    if inner.width < DETAIL_TWO_COLUMNS_MIN {
+        let bold = Style::new().add_modifier(Modifier::BOLD);
+        let mut all = vec![Line::from(Span::styled("Changes · branches · PRs", bold))];
+        all.extend(lines);
+        all.push(Line::default());
+        all.push(Line::from(Span::styled(
+            format!("Commits ({})", d.recent_commits.len()),
+            bold,
+        )));
+        all.extend(clines);
+        let max = (all.len() as u16).saturating_sub(inner.height);
+        dv.set_max_scroll(max);
+        render_scrolling_pane(frame, inner, all, dv.scroll.min(max));
+        return;
+    }
     let header_rule_y = inner.y.saturating_sub(1);
     let footer_rule_y = inner.y + inner.height;
     let [left_col, divider_col, right_col] = Layout::horizontal([
@@ -987,14 +1049,17 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
     // standup: the repo list on the left, the focused repo's output on the right.
     let header_rule_y = inner.y.saturating_sub(1);
     let footer_rule_y = inner.y + inner.height;
+    // Too narrow for both columns, the repositories column goes and the
+    // output keeps the room; its header says which repository of how many.
+    let narrow = inner.width < TWO_COLUMNS_MIN;
     let [repos_col, divider_col, out_col] = Layout::horizontal([
-        Constraint::Length(22),
-        Constraint::Length(1),
+        Constraint::Length(if narrow { 0 } else { 22 }),
+        Constraint::Length(u16::from(!narrow)),
         Constraint::Min(0),
     ])
-    .spacing(1)
+    .spacing(u16::from(!narrow))
     .areas(inner);
-    for y in divider_col.y..divider_col.y + divider_col.height {
+    for y in (divider_col.y..divider_col.y + divider_col.height).filter(|_| !narrow) {
         frame.render_widget(
             Paragraph::new(Span::raw("│")),
             Rect {
@@ -1006,6 +1071,9 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
         );
     }
     for (ch, y) in [("┬", header_rule_y), ("┴", footer_rule_y)] {
+        if narrow {
+            break;
+        }
         frame.render_widget(
             Paragraph::new(Span::raw(ch)),
             Rect {
@@ -1029,10 +1097,16 @@ pub(crate) fn render_command_run(frame: &mut Frame, full: Rect, app: &App, theme
         Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(out_col);
     let bold = Style::new().add_modifier(Modifier::BOLD);
     frame.render_widget(Paragraph::new(Span::styled("Repos", bold)), repos_hdr);
-    frame.render_widget(
-        Paragraph::new(Span::styled(focused_name.to_string(), bold)),
-        out_hdr,
-    );
+    let out_title = if narrow && !run.results.is_empty() {
+        format!(
+            "{focused_name}  ·  {} of {}",
+            run.focus + 1,
+            run.results.len()
+        )
+    } else {
+        focused_name.to_string()
+    };
+    frame.render_widget(Paragraph::new(Span::styled(out_title, bold)), out_hdr);
 
     // Left column: status glyph + name; the focused row takes the soft wash.
     let spin = theme.glyphs.spinner(app.spinner);

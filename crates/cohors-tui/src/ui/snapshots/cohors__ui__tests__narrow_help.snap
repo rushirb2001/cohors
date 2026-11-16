@@ -1,0 +1,24 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 56, 20)"
+---
+ cohors  ~/code   12 repositories. 6 h…  scanned 2m ago 
+ 4╔══════════════════════════════════════════════════╗  
+╭─║                                                  ║─╮
+│▸║  Help                                            ║ │
+│ ╟──────────────────────────────────────────────────╢ │
+╰─║  Marks                                          █║─╯
+╭─║     RISK   WARN       work at risk: it exists   █║─╮
+│ ║  only on this machine                           ║║ │
+╰─║     NOTE   INFO       worth a look; a row with  ║║─╯
+╭─║  no block is clean                              ║║─╮
+│ ║    ●                  marked for a bulk action  ║║ │
+╰─║                                                 ║║─╯
+╭─║  Everywhere                                     ║║─╮
+│ ║    1-5                focus a card              ║║ │
+╰─║    tab / shift-tab    next / previous card      ║║─╯
+╭─╟──────────────────────────────────────────────────╢─╮
+│ ║            ↑/↓ scroll · ? / Esc close            ║ │
+│ ║                                                  ║ │
+╰─╚══════════════════════════════════════════════════╝─╯
+  1-5  card  tab  next  ↑↓  move  ?  help  q  quit

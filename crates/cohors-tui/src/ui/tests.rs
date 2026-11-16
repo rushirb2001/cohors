@@ -2054,7 +2054,7 @@ fn every_key_a_first_run_tip_names_works() {
             "enter" => KeyCode::Enter,
             "space" => KeyCode::Char(' '),
             // A range of keys and the mouse have tests of their own.
-            "1-5" | "click" => continue,
+            "1-5" | "" => continue,
             one if one.chars().count() == 1 => KeyCode::Char(one.chars().next().unwrap()),
             other => panic!("a first-run tip names an unknown key: {other}"),
         };
@@ -2090,7 +2090,7 @@ fn a_first_run_tip_shows_its_keys_and_offers_the_next() {
         .find(|l| l.contains("Tip"))
         .expect("a tip line");
     assert!(
-        line.contains("Tip  Filter the repositories by name as you type: /"),
+        line.contains("Tip  Filter the repositories by name as you type: press /"),
         "{line}"
     );
     assert!(line.trim_end().ends_with("x next"), "{line}");
@@ -2122,4 +2122,238 @@ fn a_first_run_tip_shows_its_keys_and_offers_the_next() {
         line.contains(": cohors next") && line.contains("i copy"),
         "{line}"
     );
+}
+
+// ── Every screen at every size ───────────────────────────────────────────────
+
+/// The dashboard in each of its states: both screens, the filter, and every
+/// overlay with real (demo) content in it.
+fn every_state() -> Vec<(&'static str, App)> {
+    use crate::app::{
+        CommandRun, DetailView, LaunchpadView, OpenWith, Opener, PushPick, RunResult, RunState,
+    };
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let press = |app: &mut App, code| {
+        app.on_key(KeyEvent::new(code, KeyModifiers::NONE));
+    };
+    let mut states = Vec::new();
+    states.push(("overview", fleet_app()));
+    let mut app = fleet_app();
+    app.tips = setup_tips();
+    states.push(("overview with a tip", app));
+    let mut app = fleet_app();
+    app.screen = Screen::Repos;
+    states.push(("detail view", app));
+    let mut app = fleet_app();
+    press(&mut app, KeyCode::Char('/'));
+    states.push(("filter", app));
+    let mut app = fleet_app();
+    press(&mut app, KeyCode::Char('?'));
+    states.push(("help", app));
+    let mut app = fleet_app();
+    press(&mut app, KeyCode::Char(':'));
+    states.push(("command line", app));
+    let mut app = fleet_app();
+    app.mode = Mode::Standup;
+    app.show_standup(cohors_core::demo::standup(NOW));
+    states.push(("standup", app));
+    let mut app = fleet_app();
+    let (entries, board) = cohors_core::launchpad::demo();
+    app.launchpad = Some(LaunchpadView::new(entries, board));
+    app.mode = Mode::Launchpad;
+    states.push(("task board", app));
+    let mut app = fleet_app();
+    let repo = &app.repos[0];
+    let mut view = DetailView::new(repo.id.clone(), repo.name.clone());
+    view.detail = Some(cohors_core::demo::detail(NOW));
+    app.detail = Some(view);
+    app.mode = Mode::Detail;
+    states.push(("repository detail", app));
+    let mut app = fleet_app();
+    let results = app
+        .repos
+        .iter()
+        .take(6)
+        .enumerate()
+        .map(|(i, r)| RunResult {
+            id: r.id.clone(),
+            name: r.name.clone(),
+            state: if i == 0 {
+                RunState::Running
+            } else {
+                RunState::Done {
+                    code: i32::from(i == 2),
+                    stdout: "line one\nline two\nline three\n".repeat(4),
+                    stderr: String::new(),
+                }
+            },
+        })
+        .collect();
+    app.run = Some(CommandRun::new(
+        1,
+        "cargo test --all --quiet".into(),
+        results,
+    ));
+    app.mode = Mode::CommandRun;
+    states.push(("command run", app));
+    let mut app = fleet_app();
+    app.focus = Card::Repos;
+    press(&mut app, KeyCode::Char('S'));
+    states.push(("confirm", app));
+    let mut app = fleet_app();
+    app.open_with = Some(OpenWith::new(
+        vec![
+            Opener::Editor {
+                command: "code".into(),
+                label: "VS Code".into(),
+            },
+            Opener::Editor {
+                command: "cursor".into(),
+                label: "Cursor".into(),
+            },
+            Opener::Reveal,
+            Opener::Lazygit,
+        ],
+        Some("code".into()),
+    ));
+    app.mode = Mode::OpenWith;
+    states.push(("open with", app));
+    let mut app = fleet_app();
+    let branch = |name: &str, current, ahead| cohors_core::BranchInfo {
+        name: name.into(),
+        ahead,
+        behind: 0,
+        has_upstream: ahead > 0,
+        is_current: current,
+        last_commit: None,
+    };
+    app.push_pick = Some(PushPick {
+        id: app.repos[0].id.clone(),
+        name: app.repos[0].name.clone(),
+        branches: vec![
+            branch("main", true, 2),
+            branch(
+                "feat/a-rather-long-branch-name-for-narrow-screens",
+                false,
+                1,
+            ),
+            branch("fix/b", false, 0),
+        ],
+        cursor: 0,
+    });
+    app.mode = Mode::PushBranch;
+    states.push(("push which branch", app));
+    states
+}
+
+/// The sizes a dashboard really runs at: the smallest it draws, common
+/// terminals and splits, and a big screen.
+const SIZES: [(u16, u16); 12] = [
+    (48, 12),
+    (52, 16),
+    (60, 18),
+    (64, 20),
+    (80, 24),
+    (90, 30),
+    (100, 26),
+    (120, 40),
+    (132, 43),
+    (160, 50),
+    (200, 60),
+    (240, 70),
+];
+
+#[test]
+#[ignore = "prints every state at the small sizes, for a person to look at"]
+fn print_every_state_at_small_sizes() {
+    for (name, app) in every_state() {
+        for (w, h) in [(48, 12), (60, 18), (80, 24)] {
+            println!("===== {name} at {w}x{h}\n{}", render_plain(&app, w, h));
+        }
+    }
+}
+
+/// Every screen and overlay draws at every size without panicking; every
+/// overlay fits on the screen; and however narrow it gets, the way out (its
+/// close or cancel key) is always shown whole in its footer, as a button.
+#[test]
+fn every_state_adapts_to_every_size() {
+    use crate::mouse::Target;
+    use ratatui::crossterm::event::KeyCode;
+    for (name, app) in every_state() {
+        for (w, h) in SIZES {
+            let terminal = draw(&app, w, h, true);
+            let hits = app.hits.borrow().clone();
+            let Some(overlay) = hits.iter().find(|h| h.target == Target::Overlay) else {
+                continue; // a screen, not an overlay
+            };
+            let frame = Rect::new(0, 0, w, h);
+            assert_eq!(
+                overlay.area.intersection(frame),
+                overlay.area,
+                "{name} at {w}x{h} spills off the screen"
+            );
+            let buf = terminal.backend().buffer();
+            let text: String = (overlay.area.y..overlay.area.bottom())
+                .flat_map(|y| {
+                    (overlay.area.x..overlay.area.right())
+                        .filter_map(move |x| buf.cell((x, y)).map(|c| c.symbol().to_string()))
+                        .chain(std::iter::once("\n".to_string()))
+                })
+                .collect();
+            if overlay.area.height >= 7 {
+                assert!(
+                    text.contains(" close") || text.contains(" cancel"),
+                    "{name} at {w}x{h} lost its way out:\n{text}"
+                );
+                let way_out = [KeyCode::Esc, KeyCode::Char('q'), KeyCode::Char('?')];
+                assert!(
+                    hits.iter()
+                        .any(|h| matches!(h.target, Target::Key(k) if way_out.contains(&k))),
+                    "{name} at {w}x{h}: its close key is not a button"
+                );
+            }
+        }
+    }
+}
+
+/// A narrow screen: the repository detail is one column (its state, then its
+/// commits), and the command run shows the focused repository's output with
+/// which one of how many it is.
+#[test]
+fn snapshot_overlays_on_a_narrow_screen() {
+    for (name, app) in every_state() {
+        if matches!(name, "repository detail" | "command run" | "help") {
+            insta::assert_snapshot!(
+                format!("narrow_{}", name.replace(' ', "_")),
+                render_to_string(&app, 56, 20)
+            );
+        }
+    }
+}
+
+/// A help taller than the screen scrolls with the keys and the wheel, and
+/// says so in its footer.
+#[test]
+fn the_help_scrolls_on_a_short_screen() {
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent, MouseEventKind};
+    let mut app = fleet_app();
+    app.on_key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+    let before = render_to_string(&app, 80, 20);
+    assert!(before.contains("↑/↓ scroll"), "{before}");
+    app.on_key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+    app.on_mouse(MouseEvent {
+        kind: MouseEventKind::ScrollUp, // reversed: moves down
+        column: 40,
+        row: 10,
+        modifiers: KeyModifiers::NONE,
+    });
+    assert_eq!(app.help_scroll, 4);
+    assert_ne!(render_to_string(&app, 80, 20), before);
+    // Closing starts it at the top again next time.
+    app.on_key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+    assert_eq!((app.mode, app.help_scroll), (Mode::Normal, 0));
+    // On a tall screen it fits, and says nothing about scrolling.
+    app.on_key(KeyEvent::new(KeyCode::Char('?'), KeyModifiers::NONE));
+    assert!(!render_to_string(&app, 200, 80).contains("↑/↓ scroll"));
 }

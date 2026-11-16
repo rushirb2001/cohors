@@ -50,6 +50,8 @@ pub(crate) fn overlay_hints(app: &App) -> Vec<(&'static str, &'static str)> {
             ("↑/↓", "earlier lines"),
             ("Esc", "cancel"),
         ],
+        // `↑/↓ scroll` only when the help is taller than the screen.
+        Mode::Help if app.help_max.get() > 0 => vec![("↑/↓", "scroll"), ("? / Esc", "close")],
         Mode::Help => vec![("? / Esc", "close")],
         Mode::Launchpad => vec![("↑/↓", "scroll"), ("t / Esc", "close")],
         Mode::Standup => {
@@ -92,10 +94,10 @@ pub(crate) fn overlay_hints(app: &App) -> Vec<(&'static str, &'static str)> {
 /// The current overlay's key hints as one styled line: keys accent-bold,
 /// descriptions dim, `·`-separated. Rendered *inside* an overlay, above its
 /// bottom border, by [`render_modal_hints`].
-pub(crate) fn modal_hint_line(app: &App, theme: &Theme) -> Line<'static> {
+pub(crate) fn modal_hint_line(app: &App, width: u16, theme: &Theme) -> Line<'static> {
     let key_style = theme.ahead().add_modifier(Modifier::BOLD);
     let mut spans: Vec<Span> = Vec::new();
-    for (key, desc) in overlay_hints(app) {
+    for (key, desc) in fitted_hints(app, width) {
         if !spans.is_empty() {
             spans.push(Span::styled(" · ", theme.dim()));
         }
@@ -103,6 +105,26 @@ pub(crate) fn modal_hint_line(app: &App, theme: &Theme) -> Line<'static> {
         spans.push(Span::styled(format!(" {desc}"), theme.dim()));
     }
     Line::from(spans)
+}
+
+/// Columns `hints` take on one line, ` · ` apart.
+fn hints_width(hints: &[(&str, &str)]) -> usize {
+    hints
+        .iter()
+        .map(|(key, desc)| key.chars().count() + 1 + desc.chars().count())
+        .sum::<usize>()
+        + 3 * hints.len().saturating_sub(1)
+}
+
+/// The overlay's hints that fit in `width` columns: whole hints only, never
+/// one cut in half. The last (how to close or cancel) always stays; the
+/// others go from the right, the way the dashboard's key bar does it.
+fn fitted_hints(app: &App, width: u16) -> Vec<(&'static str, &'static str)> {
+    let mut hints = overlay_hints(app);
+    while hints.len() > 1 && hints_width(&hints) > width as usize {
+        hints.remove(hints.len() - 2);
+    }
+    hints
 }
 
 /// Draw a modal's key-hint footer *inside* its box: a solid separator joined
@@ -127,7 +149,7 @@ pub(crate) fn render_modal_hints(
         modal_rule(frame, area, rule_y, theme);
     }
     frame.render_widget(
-        Paragraph::new(modal_hint_line(app, theme).centered()),
+        Paragraph::new(modal_hint_line(app, inner.width, theme).centered()),
         Rect {
             x: inner.x,
             y: hint_y,
@@ -145,12 +167,12 @@ pub(crate) fn render_modal_hints(
 /// Note where each of an overlay's footer hints was drawn (the line is
 /// centered, hints ` · ` apart), so a click on `y copy` presses `y`.
 fn record_modal_hints(app: &App, x: u16, y: u16, width: u16) {
-    let hints = overlay_hints(app);
+    let hints = fitted_hints(app, width);
     let lengths: Vec<usize> = hints
         .iter()
         .map(|(key, desc)| key.chars().count() + 1 + desc.chars().count())
         .collect();
-    let total = lengths.iter().sum::<usize>() + 3 * hints.len().saturating_sub(1);
+    let total = hints_width(&hints);
     // Centered the way the paragraph centers it.
     let mut at = x as usize + (width as usize).saturating_sub(total) / 2;
     for ((key, _), len) in hints.iter().zip(lengths) {
@@ -445,18 +467,20 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
     );
 
     // Commands column | descriptions column.
+    // Too narrow for the descriptions beside the commands: the commands alone.
+    let narrow = grid_area.width < 56;
     let [cmd_col, div_col, desc_col] = Layout::horizontal([
-        Constraint::Length(26),
-        Constraint::Length(1),
+        Constraint::Length(if narrow { grid_area.width } else { 26 }),
+        Constraint::Length(u16::from(!narrow)),
         Constraint::Min(0),
     ])
-    .spacing(1)
+    .spacing(u16::from(!narrow))
     .areas(grid_area);
 
     // The solid rule under the prompt, and the solid vertical divider joined into
     // it (`┬`) and the footer rule below (`┴`).
     modal_rule(frame, area, mid_rule_area.y, theme);
-    for y in div_col.y..div_col.y + div_col.height {
+    for y in (div_col.y..div_col.y + div_col.height).filter(|_| !narrow) {
         frame.render_widget(
             Paragraph::new(Span::raw("│")),
             Rect {
@@ -471,6 +495,9 @@ pub(crate) fn render_command_box(frame: &mut Frame, full: Rect, app: &App, theme
         ("┬", mid_rule_area.y),
         ("┴", grid_area.y + grid_area.height),
     ] {
+        if narrow {
+            break;
+        }
         frame.render_widget(
             Paragraph::new(Span::raw(ch)),
             Rect {

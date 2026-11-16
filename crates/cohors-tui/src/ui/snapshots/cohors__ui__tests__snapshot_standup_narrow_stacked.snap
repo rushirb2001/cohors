@@ -10,18 +10,18 @@ expression: "render_to_string(&app, 50, 24)"
 ╰─  ║ You authored 11 commits this week      ║───╯
 ╭─  ║ across 2 repos, shipping 8 features    ║───╮
 │  R║ and fixing 3 bugs.                     ║   │
-│   ╟────────────────────────┬───────────────╢   │
-╰───║ Repos                  │ payments  ·   ║───╯
-╭─  ║ payments             8 │ aa00000  fea  ║───╮
-│ No║ web-app              3 │ aa00001  fea  ║ce │
-│ a ║                        │ aa00002  fea  ║   │
-╰───║                        │ aa00003  fea  ║───╯
-╭─  ║                        │ aa00004  fea  ║───╮
-│ No║                        │ aa00005  fea  ║   │
-│   ║                        │ aa00006  fea  ║   │
-╰───║                        │ aa00007  fea  ║───╯
-╭─  ╟────────────────────────┴───────────────╢───╮
-│   ║ ↑/↓ repo · →/⏎ view commits · w window ║ge │
+│   ╟────────────────────────────────────────╢   │
+╰───║ payments  ·  8 commits  ·  1 of 2      ║───╯
+╭─  ║ aa00000  feat: payments work item 0    ║───╮
+│ No║ aa00001  feat: payments work item 1    ║ce │
+│ a ║ aa00002  feat: payments work item 2    ║   │
+╰───║ aa00003  feat: payments work item 3    ║───╯
+╭─  ║ aa00004  feat: payments work item 4    ║───╮
+│ No║ aa00005  feat: payments work item 5    ║   │
+│   ║ aa00006  feat: payments work item 6    ║   │
+╰───║ aa00007  feat: payments work item 7    ║───╯
+╭─  ╟────────────────────────────────────────╢───╮
+│   ║  ↑/↓ repo · →/⏎ view commits · q close ║ge │
 │  R╚════════════════════════════════════════╝   │
 │   ↓ 4 more                                     │
 ╰────────────────────────────────────────────────╯

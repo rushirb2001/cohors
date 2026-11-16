@@ -26,6 +26,24 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
 
 ## [Unreleased]
 
+## [0.8.16] — 2026-11-16
+
+### Changed
+
+- **Every overlay fits the screen it is on.** On a narrow terminal the
+  standup and a command's results drop their repository column (the header
+  then says which repository of how many it shows), a repository's detail
+  becomes one column that scrolls, and the command line drops its
+  descriptions. Footer keys that do not fit are left off whole, never cut in
+  half, and the one that closes always stays. The help scrolls (`↑/↓`, the
+  wheel) when it is taller than the screen, and a click inside it no longer
+  closes it. A test draws every screen and overlay at twelve sizes, from
+  48×12 to 240×70.
+- **The start screen says what each name means.** Each folder's
+  repositories are listed in rows labelled *at risk*, *to look at* and
+  *clean*, each with its count, instead of by colour alone, and a tip about
+  the dashboard's keys says what to press (`press / in the dashboard`).
+
 ## [0.8.15] — 2026-11-16
 
 ### Added

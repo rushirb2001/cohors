@@ -601,6 +601,10 @@ pub struct App {
     /// Where the last frame drew what a click can act on (see `mouse`).
     /// Written by the renderer, which only has `&App`, hence the `RefCell`.
     pub hits: std::cell::RefCell<Vec<crate::mouse::Hit>>,
+    /// How far the help is scrolled, and how far it can go (set each frame
+    /// by the renderer, which knows how many rows the wrapped text takes).
+    pub help_scroll: u16,
+    pub help_max: std::cell::Cell<u16>,
 }
 
 /// The per-repo detail pane: lazily-loaded git facts for one repo, scrollable.
@@ -734,6 +738,8 @@ impl App {
             update: None,
             tips: Vec::new(),
             hits: Default::default(),
+            help_scroll: 0,
+            help_max: Default::default(),
         }
     }
 
@@ -1739,11 +1745,26 @@ impl App {
     }
 
     fn on_key_help(&mut self, key: KeyEvent) {
-        if matches!(
-            key.code,
-            KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q')
-        ) {
-            self.mode = Mode::Normal;
+        let max = self.help_max.get();
+        match key.code {
+            KeyCode::Char('?') | KeyCode::Esc | KeyCode::Char('q') => {
+                self.mode = Mode::Normal;
+                self.help_scroll = 0;
+            }
+            // A help taller than the screen scrolls.
+            KeyCode::Down | KeyCode::Char('j') => {
+                self.help_scroll = (self.help_scroll + 1).min(max);
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                self.help_scroll = self.help_scroll.saturating_sub(1)
+            }
+            KeyCode::PageDown | KeyCode::Char(' ') => {
+                self.help_scroll = (self.help_scroll + 10).min(max);
+            }
+            KeyCode::PageUp => self.help_scroll = self.help_scroll.saturating_sub(10),
+            KeyCode::Home | KeyCode::Char('g') => self.help_scroll = 0,
+            KeyCode::End | KeyCode::Char('G') => self.help_scroll = max,
+            _ => {}
         }
     }
 
@@ -2013,13 +2034,13 @@ impl App {
             }
             // The rest move as their arrow keys do: the repository detail and
             // the task board scroll three lines a notch, a picker one choice.
-            Mode::Detail | Mode::Launchpad | Mode::OpenWith | Mode::PushBranch => {
+            Mode::Help | Mode::Detail | Mode::Launchpad | Mode::OpenWith | Mode::PushBranch => {
                 let code = if toward_top {
                     KeyCode::Up
                 } else {
                     KeyCode::Down
                 };
-                let notches = if matches!(self.mode, Mode::Detail | Mode::Launchpad) {
+                let notches = if matches!(self.mode, Mode::Help | Mode::Detail | Mode::Launchpad) {
                     3
                 } else {
                     1
