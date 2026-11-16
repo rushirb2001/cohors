@@ -124,6 +124,7 @@ pub enum Command {
     /// work could be lost. Piped or with `--json` it prints the full overview
     /// model as JSON — the same one the web dashboard, the editor extension
     /// and the MCP `overview` tool use.
+    #[command(visible_alias = "status")]
     Overview {
         /// Print JSON instead of the human report.
         #[arg(long)]
@@ -261,6 +262,91 @@ pub enum Command {
         /// `write_board`, `record_activity`): launchpad metadata only, never git.
         #[arg(long)]
         allow_launchpad: bool,
+    },
+    /// Print one repo's absolute path, and nothing else (no TUI).
+    ///
+    /// Made for the shell: `cd "$(cohors path payments)"`. A repo is named by
+    /// its exact name, alias, id or path first (`.` is the repo you are in),
+    /// then by a unique prefix in any case, then by a glob (`'pay*'`). No
+    /// match exits 1 and suggests close names; several matches exit 2 and
+    /// list them.
+    Path {
+        /// The repo: a name, alias, id, path, unique prefix or glob.
+        #[arg(value_name = "REPO")]
+        repo: String,
+    },
+    /// One repo in detail: sync, changes, commits, branches, stashes (no TUI).
+    ///
+    /// What the dashboard's detail pane shows, as a report: why the repo
+    /// needs you, its branch against its upstream, the working tree, recent
+    /// commits, every local branch and stash, and (with a GitHub token) its
+    /// open PRs. Names a repo like `cohors path`. Piped or with `--json` it
+    /// prints what the MCP `get_repo` tool returns.
+    Show {
+        /// The repo: a name, alias, id, path, unique prefix or glob.
+        #[arg(value_name = "REPO")]
+        repo: String,
+        /// Print JSON instead of the human report.
+        #[arg(long)]
+        json: bool,
+    },
+    /// The uncommitted files in each repo (no TUI).
+    ///
+    /// Lists every changed file, repo by repo, with git's two-letter status.
+    /// Covers every dirty repo unless `--select` says otherwise. `--patch`
+    /// adds the diff, capped per repo. A secret file (`.env`, key material,
+    /// credential stores) is named, but its contents are never shown. Piped
+    /// or with `--json` it prints what the MCP `changes` tool returns.
+    Changes {
+        /// Only include repos matching a selector (same language as `scan`).
+        #[arg(short, long, value_name = "QUERY")]
+        select: Option<String>,
+        /// Add each repo's diff against HEAD (staged, unstaged and untracked).
+        #[arg(long)]
+        patch: bool,
+        /// Cap each repo's diff at this many bytes.
+        #[arg(long, value_name = "BYTES", default_value_t = crate::commands::reads::DEFAULT_PATCH_BYTES)]
+        max_bytes: usize,
+        /// Print JSON instead of the human report.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Find text in every repo's files (no TUI).
+    ///
+    /// Matches a fixed string, case-sensitively, in the files git does not
+    /// ignore, and lists the hits by repo as `path:line`. Secret files
+    /// (`.env`, key material, credential stores) are never searched. Covers
+    /// the whole fleet unless `--select` says otherwise. Piped or with
+    /// `--json` it prints what the MCP `search` tool returns.
+    Search {
+        /// The text to look for.
+        #[arg(value_name = "TEXT")]
+        query: String,
+        /// Only search repos matching a selector (same language as `scan`).
+        #[arg(short, long, value_name = "QUERY")]
+        select: Option<String>,
+        /// Stop after this many matches across the fleet.
+        #[arg(long, value_name = "N", default_value_t = crate::commands::reads::DEFAULT_MAX_RESULTS)]
+        max_results: usize,
+        /// Print JSON instead of the human report.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Open pull requests and CI for each repo on GitHub (no TUI).
+    ///
+    /// For each repo: the checks on its default branch (and on each branch,
+    /// for repos with several), its open PRs by the branch they target, and
+    /// how many wait on your review. Needs a GitHub token (`gh auth login`,
+    /// or `$GITHUB_TOKEN`); without one it says so and lists nothing. Piped
+    /// or with `--json` it prints what the MCP `list_prs` and `ci_status`
+    /// tools return.
+    Prs {
+        /// Only include repos matching a selector (same language as `scan`).
+        #[arg(short, long, value_name = "QUERY")]
+        select: Option<String>,
+        /// Print JSON instead of the human report.
+        #[arg(long)]
+        json: bool,
     },
 }
 

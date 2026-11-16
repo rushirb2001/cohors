@@ -3,6 +3,7 @@
 pub mod agent;
 pub mod launchpad;
 pub mod look;
+pub mod reads;
 
 use std::collections::HashMap;
 use std::io::{IsTerminal, Write};

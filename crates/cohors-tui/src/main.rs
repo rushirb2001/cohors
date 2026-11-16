@@ -139,6 +139,21 @@ fn main() -> anyhow::Result<()> {
                 plugin: std::env::var("COHORS_MCP_FROM_PLUGIN").is_ok_and(|v| v == "1"),
             },
         ),
+        Some(Command::Path { repo }) => commands::reads::path(&cli, repo),
+        Some(Command::Show { repo, json }) => commands::reads::show(&cli, repo, *json),
+        Some(Command::Changes {
+            select,
+            patch,
+            max_bytes,
+            json,
+        }) => commands::reads::changes(&cli, select.as_deref(), *patch, *max_bytes, *json),
+        Some(Command::Search {
+            query,
+            select,
+            max_results,
+            json,
+        }) => commands::reads::search(&cli, query, select.as_deref(), *max_results, *json),
+        Some(Command::Prs { select, json }) => commands::reads::prs(&cli, select.as_deref(), *json),
         None => commands::run_tui(&cli),
     };
     // One-off commands end with a line about a newer cohors, when one is known.
@@ -159,6 +174,11 @@ fn main() -> anyhow::Result<()> {
                 | Command::Stash(_)
                 | Command::Run { .. }
                 | Command::Launchpad { .. }
+                | Command::Path { .. }
+                | Command::Show { .. }
+                | Command::Changes { .. }
+                | Command::Search { .. }
+                | Command::Prs { .. }
         )
     );
     if one_off {

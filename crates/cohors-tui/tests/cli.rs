@@ -291,3 +291,162 @@ fn init_writes_config_then_respects_force() {
         .assert()
         .success();
 }
+
+/// A read-only command run against `root`, with an isolated config.
+fn read_cmd(cache: &Path, root: &Path, args: &[&str]) -> Command {
+    let mut cmd = cohors(cache);
+    cmd.args(args)
+        .arg("--config")
+        .arg(empty_config(cache))
+        .arg("--root")
+        .arg(root);
+    cmd
+}
+
+fn stdout_of(assert: &assert_cmd::assert::Assert) -> String {
+    String::from_utf8(assert.get_output().stdout.clone()).unwrap()
+}
+
+fn stderr_of(assert: &assert_cmd::assert::Assert) -> String {
+    String::from_utf8(assert.get_output().stderr.clone()).unwrap()
+}
+
+#[test]
+fn path_prints_only_the_path_and_explains_a_miss_or_a_tie() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    for name in ["payments", "payroll", "web"] {
+        init_repo_with_commit(&root.path().join(name));
+    }
+    let payments = std::fs::canonicalize(root.path().join("payments")).unwrap();
+    let path = |args: &[&str]| read_cmd(cache.path(), root.path(), args).assert();
+
+    // Exact name: the path and a newline, nothing else, for `cd "$(…)"`.
+    let out = path(&["path", "payments"]).success();
+    assert_eq!(stdout_of(&out), format!("{}\n", payments.display()));
+    // A unique prefix, in any case.
+    let out = path(&["path", "PAYM"]).success();
+    assert_eq!(stdout_of(&out), format!("{}\n", payments.display()));
+    // A glob.
+    let out = path(&["path", "w*"]).success();
+    assert!(stdout_of(&out).trim_end().ends_with("web"));
+
+    // Two repos share the prefix: exit 2, both listed on stderr, stdout empty.
+    let out = path(&["path", "pay"]).code(2);
+    let err = stderr_of(&out);
+    assert!(err.contains("matches 2 repositories"), "stderr: {err}");
+    assert!(
+        err.contains("payments") && err.contains("payroll"),
+        "stderr: {err}"
+    );
+    assert!(stdout_of(&out).is_empty());
+
+    // Nothing matches: exit 1, with the close name.
+    let out = path(&["path", "paymnets"]).code(1);
+    let err = stderr_of(&out);
+    assert!(
+        err.contains("no repository matches `paymnets`"),
+        "stderr: {err}"
+    );
+    assert!(err.contains("did you mean: payments"), "stderr: {err}");
+    assert!(stdout_of(&out).is_empty());
+}
+
+#[test]
+fn show_json_reports_one_repo_like_the_mcp_tool() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let repo = root.path().join("myrepo");
+    init_repo_with_commit(&repo);
+    std::fs::write(repo.join("README.md"), "changed").unwrap();
+
+    let out = read_cmd(cache.path(), root.path(), &["show", "myrepo", "--json"])
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_str(&stdout_of(&out)).expect("valid JSON");
+    assert_eq!(json["name"], "myrepo");
+    assert_eq!(json["branch"]["value"], "main");
+    assert_eq!(json["worktree"]["modified"], 1);
+    assert_eq!(json["assessment"]["needs_attention"], true);
+    assert_eq!(json["detail"]["current_branch"], "main");
+    assert_eq!(json["detail"]["recent_commits"][0]["summary"], "init");
+    assert_eq!(json["detail"]["changed_files"][0]["path"], "README.md");
+}
+
+#[test]
+fn changes_lists_a_modified_file_and_withholds_a_secret() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let dirty = root.path().join("dirty");
+    init_repo_with_commit(&dirty);
+    init_repo_with_commit(&root.path().join("clean"));
+    std::fs::write(dirty.join("README.md"), "a visible change").unwrap();
+    std::fs::write(dirty.join(".env"), "API_KEY=SUPER_SECRET_VALUE\n").unwrap();
+
+    let out = read_cmd(cache.path(), root.path(), &["changes", "--patch", "--json"])
+        .assert()
+        .success();
+    let stdout = stdout_of(&out);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+    let repos = json["repos"].as_array().expect("repos");
+    // Only the dirty repo: the default selector is `dirty`.
+    assert_eq!(repos.len(), 1, "{stdout}");
+    assert_eq!(repos[0]["repo"], "dirty");
+    let files: Vec<&str> = repos[0]["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert!(files.contains(&"README.md"), "{stdout}");
+    // The secret file is named (it is uncommitted) but its contents never
+    // leave the disk, not even in the diff.
+    assert!(files.contains(&".env"), "{stdout}");
+    let patch = repos[0]["patch"].as_str().expect("patch requested");
+    assert!(patch.contains("a visible change"), "{stdout}");
+    assert!(!stdout.contains("SUPER_SECRET_VALUE"), "{stdout}");
+}
+
+#[test]
+fn search_finds_a_string_and_never_a_secret_file() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    let repo = root.path().join("myrepo");
+    init_repo_with_commit(&repo);
+    // Committed, so every search backend (rg, git grep, the walk) sees both.
+    std::fs::write(repo.join("notes.txt"), "first\nfind needle_42 here\n").unwrap();
+    std::fs::write(repo.join(".env"), "needle_42=SECRET\n").unwrap();
+    git(&repo, &["add", "-f", "."]);
+    git(&repo, &["commit", "-q", "-m", "add notes"]);
+
+    let out = read_cmd(
+        cache.path(),
+        root.path(),
+        &["search", "needle_42", "--json"],
+    )
+    .assert()
+    .success();
+    let stdout = stdout_of(&out);
+    let json: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+    let hits = json["hits"].as_array().expect("hits");
+    assert_eq!(hits.len(), 1, "{stdout}");
+    assert_eq!(hits[0]["name"], "myrepo");
+    assert_eq!(hits[0]["path"], "notes.txt");
+    assert_eq!(hits[0]["line"], 2);
+    assert_eq!(json["truncated"], false);
+    assert!(!stdout.contains("SECRET"), "{stdout}");
+}
+
+#[test]
+fn status_is_another_name_for_overview() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    init_repo_with_commit(&root.path().join("myrepo"));
+
+    let out = read_cmd(cache.path(), root.path(), &["status", "--json"])
+        .assert()
+        .success();
+    let json: serde_json::Value = serde_json::from_str(&stdout_of(&out)).expect("valid JSON");
+    assert!(json["roots"].is_array(), "the overview model: {json}");
+    assert!(json["headline"].is_string(), "the overview model: {json}");
+}
