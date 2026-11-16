@@ -1792,14 +1792,17 @@ pub fn run_web(
         demo,
         author_email: scanner.author_email(),
     };
-    let scan: std::sync::Arc<cohors_web::ScanFn> = if demo {
+    // A real fleet is live: the fleet watch keeps the scan current and the
+    // page hears about each change over `/api/events`.
+    let source = if demo {
         let now = now_secs();
-        std::sync::Arc::new(move || cohors_core::demo::fleet(now))
+        let scan: std::sync::Arc<cohors_web::ScanFn> =
+            std::sync::Arc::new(move || cohors_core::demo::fleet(now));
+        cohors_web::Source::from(scan)
     } else {
-        let scanner = scanner.clone();
-        std::sync::Arc::new(move || scanner.scan())
+        cohors_web::Source::live(scanner.clone())
     };
-    let result = cohors_web::serve(assets, scan, options);
+    let result = cohors_web::serve(assets, source, options);
     if let Some(mut watching) = watcher {
         let _ = watching.kill();
     }

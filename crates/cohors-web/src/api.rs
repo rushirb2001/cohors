@@ -5,6 +5,7 @@
 //! failed call is an `Err` with what went wrong, and the page shows it.
 
 use cohors_core::launchpad::{ActivityEvent, Board, LaunchpadEntry};
+use cohors_core::suggest::{AgentSession, Suggestion};
 use cohors_core::{Overview, RemoteDetail, RepoChanges, RepoDetail, RepoSnapshot, StandupCommit};
 use gloo_net::http::Request;
 use serde::Deserialize;
@@ -23,6 +24,27 @@ pub struct Meta {
     pub allow_writes: bool,
     /// Whether `run` (an arbitrary shell command) may run.
     pub allow_run: bool,
+    /// Whether `/api/events` announces each change (the fleet is live).
+    pub live: bool,
+}
+
+/// One suggestion from `/api/next`. A resume names the conversation it
+/// reopens. Its title came from that conversation: text, never markup.
+#[derive(Deserialize, Clone, PartialEq)]
+pub struct NextItem {
+    #[serde(flatten)]
+    pub suggestion: Suggestion,
+    #[serde(default)]
+    pub session: Option<AgentSession>,
+}
+
+/// What to pick up next, from `/api/next`: the ranked list, and every agent
+/// conversation found in the fleet's repositories.
+#[derive(Deserialize, Clone, Default, PartialEq)]
+#[serde(default)]
+pub struct Next {
+    pub list: Vec<NextItem>,
+    pub sessions: Vec<AgentSession>,
 }
 
 /// The launchpad from `/api/launchpad`: what each repository declares about
@@ -78,8 +100,20 @@ pub async fn fetch_meta() -> Result<Meta, String> {
 }
 
 /// The shared overview model: the page renders it and computes nothing itself.
-pub async fn fetch_overview() -> Result<Overview, String> {
-    get_json("/api/overview").await
+/// `fresh` asks the server to rescan first (a refresh the user asked for);
+/// otherwise it answers from its live scan at once.
+pub async fn fetch_overview(fresh: bool) -> Result<Overview, String> {
+    get_json(if fresh {
+        "/api/overview?fresh=1"
+    } else {
+        "/api/overview"
+    })
+    .await
+}
+
+/// The suggestions: what to pick up, each with the command that does it.
+pub async fn fetch_next() -> Result<Next, String> {
+    get_json("/api/next").await
 }
 
 /// The raw snapshots. `enrich` asks the server to add GitHub CI and pull

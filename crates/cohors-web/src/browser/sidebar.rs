@@ -221,7 +221,7 @@ pub fn sidebar(cx: Ctx) -> impl IntoView {
                         disabled=move || asked.get()
                         on:click=move |_| {
                             asked.set(true);
-                            cx.refresh();
+                            cx.rescan();
                         }
                     >
                         {ui::icon(Icon::Refresh)}

@@ -35,11 +35,17 @@ use wasm_bindgen_futures::spawn_local;
 use crate::api;
 use repos::{RepoView, Sort};
 
-/// How often the page asks the server for a fresh scan, in milliseconds.
+/// Without the event stream, how often the page asks for the fleet, in
+/// milliseconds. With it, the server says when something changed.
 const POLL_MS: u32 = 10_000;
 /// A scan identical to the last one still replaces it after this many seconds,
-/// so relative ages ("3h ago") do not go stale on a quiet fleet.
+/// so relative ages ("3h ago") do not go stale on a quiet fleet. With the
+/// event stream up, the page also reads the fleet this often, for the same
+/// reason.
 const REDRAW_SECS: i64 = 300;
+/// How often the page checks whether it owes a refresh (a change announced
+/// while a dialog was open or the tab was hidden), in milliseconds.
+const TICK_MS: u32 = 1_000;
 /// How long a toast stays up, in milliseconds.
 const TOAST_MS: u32 = 2_600;
 
@@ -98,6 +104,14 @@ pub struct Ctx {
     /// remote URL, CI, the newest tag).
     pub snapshots: RwSignal<Vec<RepoSnapshot>>,
     pub launchpad: RwSignal<api::Launchpad>,
+    /// What to pick up next (agent conversations, steps, focus items).
+    pub next: RwSignal<api::Next>,
+    /// Whether the event stream is up: the server announces each change, so
+    /// the page reads the fleet only then (and polls when it is down).
+    pub live: RwSignal<bool>,
+    /// A change was announced but not read yet (a refresh was already
+    /// running, a dialog was open, or the tab was hidden).
+    pub stale: RwSignal<bool>,
     /// Why the launchpad could not be read, when it could not.
     pub launchpad_error: RwSignal<Option<String>>,
     /// Why the latest refresh failed, when it did (the last good scan stays up).
@@ -139,6 +153,9 @@ impl Ctx {
             overview: RwSignal::new(cohors_core::overview(&[], &[], &Board::default(), 0)),
             snapshots: RwSignal::new(Vec::new()),
             launchpad: RwSignal::new(api::Launchpad::default()),
+            next: RwSignal::new(api::Next::default()),
+            live: RwSignal::new(false),
+            stale: RwSignal::new(false),
             launchpad_error: RwSignal::new(None),
             refresh_error: RwSignal::new(None),
             scanned_at: RwSignal::new(None),
@@ -250,18 +267,42 @@ impl Ctx {
 
     // ── Data ──
 
-    /// Ask the server for a fresh scan and replace whatever changed.
+    /// Read the fleet from the server and replace whatever changed. The
+    /// server answers from its live scan, so this is cheap.
     pub fn refresh(self) {
+        self.load(false);
+    }
+
+    /// [`Ctx::refresh`], but the server rescans the disk first: for the
+    /// buttons where the user asked for a new scan.
+    pub fn rescan(self) {
+        self.load(true);
+    }
+
+    /// Refresh now, or as soon as no dialog is open and the tab is visible.
+    fn refresh_when_idle(self) {
+        if self.dialog.get_untracked().is_none() && !tab_hidden() {
+            self.refresh();
+        } else {
+            self.stale.set(true);
+        }
+    }
+
+    fn load(self, fresh: bool) {
         if self.scanning.get_untracked() {
+            // A read is running; it may have started before this change, so
+            // read once more when it is done.
+            self.stale.set(true);
             return;
         }
         self.scanning.set(true);
+        self.stale.set(false);
         spawn_local(async move {
             if let Ok(meta) = api::fetch_meta().await {
                 set_if_changed(self.meta, meta);
             }
 
-            match api::fetch_overview().await {
+            match api::fetch_overview(fresh).await {
                 Ok(fresh) => {
                     let scanned = fresh.now;
                     // Redraw only when something other than the clock moved,
@@ -296,6 +337,12 @@ impl Ctx {
                     set_if_changed(self.launchpad_error, None);
                 }
                 Err(error) => set_if_changed(self.launchpad_error, Some(error)),
+            }
+
+            // A server without suggestions (an older cohors) leaves the
+            // panel empty rather than failing the page.
+            if let Ok(next) = api::fetch_next().await {
+                set_if_changed(self.next, next);
             }
 
             // Snapshots: the plain scan first (fast), then the same scan with
@@ -361,13 +408,28 @@ fn App() -> impl IntoView {
     let cx = Ctx::new();
     cx.apply_route();
     cx.refresh();
+    listen(cx);
 
-    // Keep the page current: re-scan on a timer, but not behind the user's
-    // back while a dialog is asking them something or the tab is hidden.
+    // Keep the page current. With the event stream up, the server says when
+    // something changed and this only reads what was announced while the
+    // page could not (and the clock, for ages); without it, poll. Never
+    // behind the user's back while a dialog is asking them something, nor
+    // while the tab is hidden.
     spawn_local(async move {
+        let mut waited: u32 = 0;
         loop {
-            gloo_timers::future::TimeoutFuture::new(POLL_MS).await;
-            if cx.dialog.get_untracked().is_none() && !tab_hidden() {
+            gloo_timers::future::TimeoutFuture::new(TICK_MS).await;
+            waited = waited.saturating_add(TICK_MS);
+            if cx.dialog.get_untracked().is_some() || tab_hidden() {
+                continue;
+            }
+            let every = if cx.live.get_untracked() {
+                REDRAW_SECS as u32 * 1_000
+            } else {
+                POLL_MS
+            };
+            if cx.stale.get_untracked() || waited >= every {
+                waited = 0;
                 cx.refresh();
             }
         }
@@ -415,6 +477,37 @@ fn App() -> impl IntoView {
     }
 }
 
+/// Follow the server's event stream (`/api/events`): each `fleet` event
+/// means the fleet changed, so read it again. The browser reconnects by
+/// itself when the connection drops; until then the page polls. A server
+/// without a stream (the demo) answers `204`, which ends it for good.
+fn listen(cx: Ctx) {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen::closure::Closure;
+
+    let Ok(source) = web_sys::EventSource::new("/api/events") else {
+        return;
+    };
+    let on_change = Closure::<dyn FnMut(web_sys::Event)>::new(move |_: web_sys::Event| {
+        cx.live.set(true);
+        cx.refresh_when_idle();
+    });
+    let on_open = Closure::<dyn FnMut(web_sys::Event)>::new(move |_: web_sys::Event| {
+        cx.live.set(true);
+    });
+    let on_error = Closure::<dyn FnMut(web_sys::Event)>::new(move |_: web_sys::Event| {
+        cx.live.set(false);
+    });
+    let _ = source.add_event_listener_with_callback("fleet", on_change.as_ref().unchecked_ref());
+    source.set_onopen(Some(on_open.as_ref().unchecked_ref()));
+    source.set_onerror(Some(on_error.as_ref().unchecked_ref()));
+    // The stream lives as long as the page: let go of the handles.
+    on_change.forget();
+    on_open.forget();
+    on_error.forget();
+    std::mem::forget(source);
+}
+
 /// The first scan is still running.
 fn loading() -> impl IntoView {
     view! {
@@ -443,7 +536,7 @@ fn failed(cx: Ctx, error: String) -> impl IntoView {
                 class="btn primary"
                 on:click=move |_| {
                     cx.load.set(Load::Loading);
-                    cx.refresh();
+                    cx.rescan();
                 }
             >
                 {ui::icon(ui::Icon::Refresh)}
@@ -506,7 +599,7 @@ fn no_repositories(cx: Ctx) -> impl IntoView {
             <p>{scanned}</p>
             <p>"Point it at the folder that holds your repositories:"</p>
             {ui::command(cx, "cohors web --root <folder>".to_string())}
-            <button class="btn" on:click=move |_| cx.refresh()>
+            <button class="btn" on:click=move |_| cx.rescan()>
                 {ui::icon(ui::Icon::Refresh)}
                 <span>"Scan again"</span>
             </button>

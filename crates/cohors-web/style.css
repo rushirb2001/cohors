@@ -277,6 +277,13 @@ main > section, main > .lead { margin-top: var(--s6); }
 .blk.warn { background: var(--warn); color: var(--on-fill); }
 .blk.note, .blk.info { border-color: var(--line); color: var(--ink-3); }
 .blk.none { visibility: hidden; }
+/* A suggestion's kind: a word wider than the severity words. */
+.blk.kind { width: 56px; border-color: var(--line); color: var(--ink-2); }
+.blk.kind.resume { border-color: var(--ink-3); color: var(--ink); }
+/* Pick up where you left off: what, why (who and when, for a resume), and
+   the command to copy on a line of its own. */
+.pick .c { grid-column: 2 / span 2; margin-top: var(--s2); }
+.pick .who { font-family: var(--mono); color: var(--ink); margin-right: var(--s2); }
 /* The line under a name starts where the name does, past the block. */
 .under-blk { padding-left: calc(42px + var(--s2)); }
 

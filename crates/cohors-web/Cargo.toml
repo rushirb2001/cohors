@@ -55,7 +55,8 @@ wasm-bindgen-futures = "0.4"   # spawn the async fetches; await the clipboard
 # The few browser APIs the page calls directly: the theme attribute and its
 # saved choice (Document, Element, Storage), the route in the URL hash
 # (Location), and copy-to-clipboard (Navigator, Clipboard).
-web-sys = { version = "0.3", features = ["Window", "Document", "Element", "Storage", "Location", "Navigator", "Clipboard"] }
+# The event stream (EventSource) tells the page when the fleet changed.
+web-sys = { version = "0.3", features = ["Window", "Document", "Element", "Storage", "Location", "Navigator", "Clipboard", "Event", "EventTarget", "EventSource"] }
 
 # ── Native server half (host target only) ────────────────────────────────────
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -64,6 +65,10 @@ cohors-actions = { workspace = true }
 anyhow = { workspace = true }
 camino = { workspace = true }
 tiny_http = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+# Throwaway git repos for the live-fleet (event stream) tests.
+tempfile = { workspace = true }
 
 # Not shipped as a standalone release binary: the web front-end is launched
 # via `cohors web` (the tui binary), which builds the WASM half from source.

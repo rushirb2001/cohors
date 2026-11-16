@@ -3,6 +3,7 @@
 //! repository. All of it is drawn straight from `cohors_core::Overview`.
 
 use cohors_core::attention::STALE_FETCH_SECS;
+use cohors_core::suggest::SuggestionKind;
 use cohors_core::{ActionKind, KeyFigures, NextAction, RepoLine};
 use leptos::prelude::*;
 
@@ -46,6 +47,8 @@ pub fn page(cx: Ctx) -> impl IntoView {
                 {figures(cx)}
             </div>
         </div>
+
+        {pick_up(cx)}
 
         {at_risk(cx)}
 
@@ -122,6 +125,83 @@ fn selection_menu(cx: Ctx) -> impl IntoView {
             </button>
             {menu}
         </span>
+    }
+}
+
+// ── Pick up where you left off ───────────────────────────────────────────────
+
+/// How many suggestions the panel shows.
+const PICK_UP: usize = 5;
+
+/// The top suggestions (`/api/next`): agent conversations to resume, steps
+/// to take and focus items, each with why and the command that carries it
+/// out, to copy into a terminal. Nothing runs from here. Titles come from
+/// repositories and agent conversations: Leptos writes them as text, so they
+/// can never become markup. Hidden when there is nothing to suggest.
+fn pick_up(cx: Ctx) -> impl IntoView {
+    move || {
+        let list = cx.next.with(|next| next.list.clone());
+        if list.is_empty() {
+            return ().into_any();
+        }
+        let now = cx.overview.with(|o| o.now);
+        let rows = list
+            .into_iter()
+            .take(PICK_UP)
+            .map(|item| {
+                let suggestion = item.suggestion;
+                // A resume says which agent and how long ago.
+                let session = item.session.map(|session| {
+                    format!(
+                        "{} \u{b7} {}",
+                        runner_name(&session.runner),
+                        ui::ago(session.last_active, now)
+                    )
+                });
+                let (class, word) = kind_block(suggestion.kind);
+                view! {
+                    <div class="todo pick">
+                        <span class=format!("blk kind {class}")>{word}</span>
+                        <span class="t">{suggestion.title}</span>
+                        <span class="d">
+                            {session.map(|s| view! { <span class="who">{s}</span> })}
+                            {suggestion.why}
+                        </span>
+                        <div class="c">{ui::command(cx, suggestion.command)}</div>
+                    </div>
+                }
+            })
+            .collect::<Vec<_>>();
+        view! {
+            <section>
+                <div class="sechead">
+                    <h2>{ui::icon(Icon::Clock)} "Pick up where you left off"</h2>
+                    <span>"Copy a command into a terminal to carry it out"</span>
+                </div>
+                <div class="block">{rows}</div>
+            </section>
+        }
+        .into_any()
+    }
+}
+
+/// The word that leads a suggestion, and its block style.
+fn kind_block(kind: SuggestionKind) -> (&'static str, &'static str) {
+    match kind {
+        SuggestionKind::Resume => ("resume", "RESUME"),
+        SuggestionKind::Act => ("note", "STEP"),
+        SuggestionKind::Focus => ("note", "FOCUS"),
+        SuggestionKind::Start => ("info", "START"),
+    }
+}
+
+/// A runner's name as people say it.
+fn runner_name(runner: &str) -> String {
+    match runner {
+        "claude-code" => "Claude Code".to_string(),
+        "codex" => "Codex".to_string(),
+        "gemini-cli" => "Gemini CLI".to_string(),
+        other => other.to_string(),
     }
 }
 

@@ -82,7 +82,7 @@ mod shell_quote_tests {
 #[cfg(not(target_arch = "wasm32"))]
 mod server;
 #[cfg(not(target_arch = "wasm32"))]
-pub use server::{Assets, Caps, ScanFn, ServeOptions, serve};
+pub use server::{Assets, Caps, ScanFn, ServeOptions, Source, serve};
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod standalone {
@@ -97,7 +97,7 @@ pub mod standalone {
     use camino::Utf8PathBuf;
     use cohors_fleet::Scanner;
 
-    use crate::{Caps, ServeOptions, serve};
+    use crate::{Caps, ServeOptions, Source, serve};
 
     /// Parse `args` (everything after argv[0]) and run the server.
     ///
@@ -154,7 +154,8 @@ pub mod standalone {
             demo: false,
             author_email: scanner.author_email(),
         };
-        let scan = Arc::new(move || scanner.scan());
-        serve(crate::Assets::Dir(dist), scan, options)
+        // Live: the fleet watch keeps the scan current and the page hears
+        // about each change over `/api/events`.
+        serve(crate::Assets::Dir(dist), Source::live(scanner), options)
     }
 }

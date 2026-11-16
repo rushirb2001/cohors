@@ -48,7 +48,7 @@ pub fn priority_label(priority: Option<&str>) -> AnyView {
 /// [`cohors_web::shell_quote`].
 pub fn setup_command(path: &str) -> String {
     format!(
-        "cohors agent run setup-repo --repo {}",
+        "cohors agent setup-repo -r {}",
         cohors_web::shell_quote(path)
     )
 }
@@ -513,7 +513,7 @@ fn not_set_up(cx: Ctx) -> impl IntoView {
                                 "Set up with an agent. It reads the repository and writes the \
                                  file. Run this with the repository's path:"
                             </span>
-                            <code>"cohors agent run setup-repo --repo <path>"</code>
+                            <code>"cohors agent setup-repo -r <path>"</code>
                         </div>
                         <div class="setup-grid">{rows}</div>
                     </div>
