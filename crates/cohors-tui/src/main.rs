@@ -46,7 +46,10 @@ fn main() -> anyhow::Result<()> {
 
     let result = match &cli.command {
         Some(Command::Init { force }) => commands::init(&cli, *force),
-        Some(Command::Scan { select, json }) => commands::scan(&cli, select.as_deref(), *json),
+        Some(Command::Discover { deep, json }) => commands::discover(&cli, *deep, *json),
+        Some(Command::Scan { deep, select, json }) => {
+            commands::scan(&cli, select.as_deref(), *json, *deep)
+        }
         Some(Command::Overview { json }) => commands::overview(&cli, *json),
         Some(Command::Standup { today, json }) => commands::standup(&cli, *today, *json),
         Some(Command::Demo) => commands::run_demo(),
@@ -140,6 +143,7 @@ fn main() -> anyhow::Result<()> {
         cli.command,
         Some(
             Command::Init { .. }
+                | Command::Discover { .. }
                 | Command::Scan { .. }
                 | Command::Overview { .. }
                 | Command::Standup { .. }

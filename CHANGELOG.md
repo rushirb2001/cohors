@@ -28,6 +28,18 @@ source of truth and is bumped in a dedicated `chore(release)` commit.
   binary after checking its checksum, and is published with every release.
 
 ## [0.7.6] — 2026-11-12
+- **Repos nested inside a repo are found.** When a folder you point cohors at
+  is itself a git repo (say `~/code`, tracked for your own notes), it is now
+  searched too, so `~/code/projects/api-dashboard` and the rest show up beside
+  it. Inside a repo, build output and dependency folders (`target`,
+  `node_modules`, `vendor`, …) are skipped, and a repo's own submodules and
+  inner worktrees are not listed a second time.
+- **`cohors discover`** lists every repo a search finds without reading them:
+  by folder at a terminal (nested ones marked), one path per line in a pipe,
+  and `--json` for scripts.
+- **`--deep` on `cohors discover` and `cohors scan`** searches every folder at
+  any depth, inside repos too. What only it finds is remembered, and a running
+  dashboard, the web page and the MCP server pick it up without a restart.
 
 A distribution and documentation release: cohors now installs from every
 common place, including your editor's extension store. The `cohors` binary

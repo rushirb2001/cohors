@@ -233,6 +233,9 @@ pub fn run(scanner: Arc<Scanner>, cli: &Cli, use_cache: bool, watch: bool) -> Re
 /// How often `--watch` re-scans while the dashboard is idle.
 const WATCH_INTERVAL: Duration = Duration::from_secs(5);
 
+/// How often the dashboard checks whether a deep search remembered new repos.
+const KNOWN_CHECK_INTERVAL: Duration = Duration::from_secs(1);
+
 /// Launch the dashboard on the built-in demo fleet. Mirrors [`run`] but seeds
 /// the app from `cohors_core::demo` and stubs every action, so nothing touches
 /// the disk or network — a zero-config way to try cohors.
@@ -465,6 +468,12 @@ fn run_loop(
     // `--watch`: re-scan on an interval while idle, so the board stays current.
     let mut last_watch = Instant::now();
 
+    // A deep search run elsewhere (`cohors scan --deep`, `cohors discover
+    // --deep`) remembers repos this dashboard should show. Watch when that
+    // memory last changed and rescan when it moves, with or without --watch.
+    let mut known_stamp = scanner.known_stamp();
+    let mut last_known_check = Instant::now();
+
     loop {
         app.now = now_secs();
         terminal.draw(|f| ui::render(f, &app, app.now))?;
@@ -566,6 +575,18 @@ fn run_loop(
         if watch && idle && app.mode == Mode::Normal && last_watch.elapsed() >= WATCH_INTERVAL {
             start_refresh(&mut app, &scanner, &tx);
             last_watch = Instant::now();
+        }
+
+        // New repos remembered by a deep search: pick them up now. Checked once
+        // a second (one `stat`); a change seen mid-scan waits for the next tick.
+        if last_known_check.elapsed() >= KNOWN_CHECK_INTERVAL {
+            last_known_check = Instant::now();
+            let stamp = scanner.known_stamp();
+            if stamp != known_stamp && !app.scanning {
+                known_stamp = stamp;
+                start_refresh(&mut app, &scanner, &tx);
+                app.status = Some("a deep search found repos — refreshing…".to_string());
+            }
         }
     }
     Ok(restart)

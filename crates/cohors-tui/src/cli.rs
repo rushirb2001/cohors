@@ -71,12 +71,31 @@ pub enum Command {
         #[arg(long)]
         force: bool,
     },
+    /// List every repo cohors finds, without reading them (no TUI).
+    ///
+    /// Only walks the folders, so it is the quick way to check what the
+    /// dashboard will show. At a terminal it lists the repos under each root
+    /// and marks those nested inside another repo; piped it prints one path per
+    /// line (for `xargs` and friends); `--json` prints them as JSON.
+    Discover {
+        /// Search every folder at any depth, inside repos too. Repos only this
+        /// finds are remembered, so the dashboard shows them from now on.
+        #[arg(long)]
+        deep: bool,
+        /// Print JSON instead of the human list.
+        #[arg(long)]
+        json: bool,
+    },
     /// Discover and snapshot every repo, then report what needs you (no TUI).
     ///
     /// At a terminal this prints a grouped report: what needs you now, what is
     /// minor, what is calm, and the commands that clear it. Piped or redirected
     /// (or with `--json`) it prints the raw JSON snapshots instead.
     Scan {
+        /// Search every folder at any depth, inside repos too. Repos only this
+        /// finds are remembered, so the dashboard shows them from now on.
+        #[arg(long)]
+        deep: bool,
         /// Only include repos matching a selector: JSON (`'{"behind":true}'`)
         /// or shorthand (`dirty`, `behind`, `ahead`, `attention`, `name:pay*`,
         /// `ci:failing`, comma-separated to AND them). Results print in

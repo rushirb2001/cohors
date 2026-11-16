@@ -45,7 +45,7 @@ pub fn init(cli: &Cli, force: bool) -> Result<()> {
 /// With `--select`, only the matching repos are printed, in dirty-first order,
 /// using the same [`cohors_core::resolve`] the dashboard and (later) the MCP
 /// server use — so `scan --select behind` and `list_repos({behind:true})` agree.
-pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
+pub fn scan(cli: &Cli, select: Option<&str>, json: bool, deep: bool) -> Result<()> {
     // Decide the surface up front: only a human at a terminal gets the progress
     // note and the styled report.
     let human = !json && std::io::stdout().is_terminal();
@@ -63,11 +63,16 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
             .map(|r| crate::ui::abbrev_home(r))
             .collect::<Vec<_>>()
             .join(", ");
-        eprint!("  {} {where_at}…", dim(color, "scanning"));
+        let doing = if deep {
+            "searching deep in"
+        } else {
+            "scanning"
+        };
+        eprint!("  {} {where_at}…", dim(color, doing));
         let _ = std::io::stderr().flush();
     }
     let started = std::time::Instant::now();
-    let mut snapshots = scanner.scan();
+    let (mut snapshots, found) = scanner.scan_discovered(deep);
     let took = started.elapsed();
     if announce {
         eprint!("\r\x1b[2K"); // carriage return, then erase the line
@@ -111,7 +116,243 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool) -> Result<()> {
         "{}",
         scan_report(&snapshots, &roots, took, now_secs(), term_width(), color)
     );
+    print!("{}", deep_note(deep, found.deep_only.len(), "scan", color));
     Ok(())
+}
+
+/// The line under a `scan`/`discover` report about the search's reach: what a
+/// deep search found and kept, what an earlier one left remembered, or how to
+/// search deeper. `cmd` is the command to suggest `--deep` on.
+fn deep_note(deep: bool, deep_only: usize, cmd: &str, color: bool) -> String {
+    let text = match (deep, deep_only) {
+        (true, 0) => "The deep search found nothing a normal search misses.".to_string(),
+        (true, 1) => "Remembered 1 repository only a deep search reaches: the dashboard shows it from now on.".to_string(),
+        (true, n) => format!(
+            "Remembered {n} repositories only a deep search reaches: the dashboard shows them from now on."
+        ),
+        (false, 0) => {
+            return format!(
+                "  {}  {}\n\n",
+                bold(color, &format!("cohors {cmd} --deep")),
+                dim(color, "also looks inside every repo, at any depth")
+            );
+        }
+        (false, n) => format!(
+            "Includes {} remembered from an earlier --deep search.",
+            plural(n, "repository", "repositories")
+        ),
+    };
+    format!("  {}\n\n", dim(color, &text))
+}
+
+/// `cohors discover` — list the repos a search finds, without reading them.
+///
+/// At a terminal: the repos under each root, nested ones marked. Piped: one
+/// absolute path per line. `--json`: `[{path, name, nested_in, deep_only}]`.
+pub fn discover(cli: &Cli, deep: bool, json: bool) -> Result<()> {
+    let human = !json && std::io::stdout().is_terminal();
+    let color = wants_color(human);
+    let scanner = crate::scan::from_cli(cli)?;
+    let roots = scanner.root_dirs();
+
+    let announce = human && std::io::stderr().is_terminal();
+    if announce {
+        let where_at = roots
+            .iter()
+            .map(|r| crate::ui::abbrev_home(r.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let doing = if deep {
+            "searching deep in"
+        } else {
+            "looking in"
+        };
+        eprint!("  {} {where_at}…", dim(color, doing));
+        let _ = std::io::stderr().flush();
+    }
+    let started = std::time::Instant::now();
+    let found = scanner.discover(deep);
+    let took = started.elapsed();
+    if announce {
+        eprint!("\r\x1b[2K");
+        let _ = std::io::stderr().flush();
+    }
+
+    if found.repos.is_empty() {
+        let shown: Vec<String> = if roots.is_empty() {
+            scanner.roots()
+        } else {
+            roots.iter().map(|r| r.to_string()).collect()
+        };
+        eprintln!(
+            "cohors: no git repositories found under {}.\n  Run `cohors init` to detect your repos, or pass --root <dir>.",
+            shown.join(", ")
+        );
+    }
+
+    if json {
+        let rows: Vec<serde_json::Value> = found
+            .repos
+            .iter()
+            .map(|path| {
+                serde_json::json!({
+                    "path": path,
+                    "name": path.file_name().unwrap_or(path.as_str()),
+                    "nested_in": nested_in(path, &found.repos),
+                    "deep_only": found.deep_only.contains(path),
+                })
+            })
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&rows)?);
+        return Ok(());
+    }
+    if !human {
+        for path in &found.repos {
+            println!("{path}");
+        }
+        return Ok(());
+    }
+    print!("{}", discover_report(&found, &roots, took, deep, color));
+    Ok(())
+}
+
+/// The repo that encloses `path` most closely among `repos`, if any.
+fn nested_in<'a>(path: &Utf8Path, repos: &'a [Utf8PathBuf]) -> Option<&'a Utf8PathBuf> {
+    repos
+        .iter()
+        .filter(|other| other.as_path() != path && path.starts_with(other))
+        .max_by_key(|other| other.as_str().len())
+}
+
+/// The human `cohors discover` list: each root as a section, its repos by
+/// path relative to it, nested and deep-only ones marked. Pure (the paths come
+/// in) so it's unit-testable; `color` gates the ANSI.
+fn discover_report(
+    found: &cohors_fleet::Discovery,
+    roots: &[Utf8PathBuf],
+    took: std::time::Duration,
+    deep: bool,
+    color: bool,
+) -> String {
+    let where_at = roots
+        .iter()
+        .map(|r| crate::ui::abbrev_home(r.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut out = masthead(
+        &format!(
+            "found {} in {}{}",
+            plural(found.repos.len(), "repository", "repositories"),
+            took_label(took),
+            if deep { ", searching deep" } else { "" }
+        ),
+        &where_at,
+        color,
+    );
+    if found.repos.is_empty() {
+        out.push_str(&format!("  {}\n\n", dim(color, "nothing found")));
+        return out;
+    }
+
+    // Each repo belongs to the closest root that holds it (roots may overlap).
+    let home_of = |path: &Utf8Path| -> Option<usize> {
+        roots
+            .iter()
+            .enumerate()
+            .filter(|(_, root)| path.starts_with(root))
+            .max_by_key(|(_, root)| root.as_str().len())
+            .map(|(i, _)| i)
+    };
+    let width = found
+        .repos
+        .iter()
+        .map(|p| match home_of(p).map(|i| &roots[i]) {
+            Some(root) => relative_label(p, root).chars().count(),
+            None => crate::ui::abbrev_home(p.as_str()).chars().count(),
+        })
+        .max()
+        .unwrap_or(0)
+        .min(term_width().saturating_sub(30).max(20));
+
+    let mut groups: Vec<(String, Vec<&Utf8PathBuf>)> = roots
+        .iter()
+        .map(|r| (crate::ui::abbrev_home(r.as_str()), Vec::new()))
+        .collect();
+    let mut elsewhere: Vec<&Utf8PathBuf> = Vec::new();
+    for path in &found.repos {
+        match home_of(path) {
+            Some(i) => groups[i].1.push(path),
+            None => elsewhere.push(path),
+        }
+    }
+    for (i, (label, paths)) in groups.iter().enumerate() {
+        if paths.is_empty() {
+            continue;
+        }
+        out.push_str(&section(
+            label,
+            &plural(paths.len(), "repository", "repositories"),
+            color,
+        ));
+        for path in paths {
+            let shown = relative_label(path, &roots[i]);
+            out.push_str(&discover_row(&shown, path, found, width, color));
+        }
+        out.push('\n');
+    }
+    if !elsewhere.is_empty() {
+        out.push_str(&section("elsewhere", "outside every root", color));
+        for path in elsewhere {
+            let shown = crate::ui::abbrev_home(path.as_str());
+            out.push_str(&discover_row(&shown, path, found, width, color));
+        }
+        out.push('\n');
+    }
+    out.push_str(&deep_note(deep, found.deep_only.len(), "discover", color));
+    out
+}
+
+/// `path` relative to `root`; the root itself reads `.` (the folder is a repo).
+fn relative_label(path: &Utf8Path, root: &Utf8Path) -> String {
+    match path.strip_prefix(root) {
+        Ok(rel) if rel.as_str().is_empty() => ".".to_string(),
+        Ok(rel) => rel.to_string(),
+        Err(_) => crate::ui::abbrev_home(path.as_str()),
+    }
+}
+
+/// One `discover` row: the path, then what is notable about it.
+fn discover_row(
+    shown: &str,
+    path: &Utf8Path,
+    found: &cohors_fleet::Discovery,
+    width: usize,
+    color: bool,
+) -> String {
+    let mut notes: Vec<String> = Vec::new();
+    if shown == "." {
+        notes.push("this folder is a repo".to_string());
+    }
+    if let Some(outer) = nested_in(path, &found.repos) {
+        let name = outer.file_name().unwrap_or(outer.as_str());
+        notes.push(format!("inside {name}"));
+    }
+    let mut tail: Vec<String> = Vec::new();
+    if found.deep_only.iter().any(|p| p == path) {
+        tail.push(brand(color, "deep"));
+    }
+    if !notes.is_empty() {
+        tail.push(dim(color, &notes.join(" · ")));
+    }
+    let name = clip(shown, width);
+    if tail.is_empty() {
+        return format!("    {}\n", bold(color, &name));
+    }
+    format!(
+        "    {}  {}\n",
+        bold(color, &format!("{name:<width$}")),
+        tail.join("  ")
+    )
 }
 
 /// How long the scan took, in the coarsest unit that still reads honestly.
@@ -2285,5 +2526,67 @@ mod tests {
         assert!(r.contains("nothing to report"));
         assert!(!r.contains("Do next")); // no sections at all for an empty fleet
         assert!(!r.contains('\x1b'));
+    }
+
+    /// `cohors discover` (ADR-058): repos listed under their root, the root
+    /// itself when it is a repo, nested and deep-only ones marked, plain text
+    /// with color off.
+    #[test]
+    fn discover_report_lists_repos_by_root_and_marks_nested_ones() {
+        let p = |s: &str| Utf8PathBuf::from(s);
+        let found = cohors_fleet::Discovery {
+            repos: vec![
+                p("/home/me/code"),
+                p("/home/me/code/archive/old-site"),
+                p("/home/me/code/archive/old-site/tools/linter"),
+                p("/home/me/code/projects/api-dashboard"),
+                p("/home/me/oss/rg"),
+            ],
+            deep_only: vec![p("/home/me/code/archive/old-site/tools/linter")],
+        };
+        let roots = [p("/home/me/code"), p("/home/me/oss")];
+        let took = std::time::Duration::from_millis(4);
+        let r = discover_report(&found, &roots, took, false, false);
+        assert!(!r.contains('\x1b'), "no ANSI with color off");
+        assert!(r.contains("found 5 repositories in 4ms"), "{r}");
+        assert!(r.contains("4 repositories"), "{r}");
+        assert!(
+            r.contains(". ") && r.contains("this folder is a repo"),
+            "{r}"
+        );
+        assert!(
+            r.contains("projects/api-dashboard") && r.contains("inside code"),
+            "{r}"
+        );
+        assert!(r.contains("deep  inside old-site"), "{r}");
+        assert!(r.contains("Includes 1 repository remembered"), "{r}");
+
+        let deep = discover_report(&found, &roots, took, true, false);
+        assert!(deep.contains(", searching deep"), "{deep}");
+        assert!(
+            deep.contains("the dashboard shows it from now on"),
+            "{deep}"
+        );
+    }
+
+    #[test]
+    fn deep_note_suggests_the_deep_search_when_nothing_is_remembered() {
+        let n = deep_note(false, 0, "scan", false);
+        assert!(n.contains("cohors scan --deep"));
+        assert!(deep_note(true, 0, "scan", false).contains("nothing a normal search misses"));
+        assert!(deep_note(true, 3, "scan", false).contains("Remembered 3 repositories"));
+    }
+
+    #[test]
+    fn nested_in_names_the_closest_enclosing_repo() {
+        let p = |s: &str| Utf8PathBuf::from(s);
+        let repos = [p("/c"), p("/c/a"), p("/c/a/b"), p("/c/ab")];
+        assert_eq!(nested_in(&p("/c/a/b"), &repos), Some(&p("/c/a")));
+        assert_eq!(
+            nested_in(&p("/c/ab"), &repos),
+            Some(&p("/c")),
+            "a/ab is not nesting"
+        );
+        assert_eq!(nested_in(&p("/c"), &repos), None);
     }
 }
