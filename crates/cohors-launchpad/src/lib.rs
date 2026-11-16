@@ -24,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 mod agents;
+pub mod sessions;
 
 pub use agents::{
     LaunchKind, LaunchPlan, LaunchRequest, RepoTarget, detect_runners, find_on_path,

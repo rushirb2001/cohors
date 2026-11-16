@@ -34,6 +34,7 @@ pub mod search;
 pub mod select;
 pub mod sort;
 pub mod standup;
+pub mod suggest;
 pub mod time;
 pub mod update;
 pub mod view;

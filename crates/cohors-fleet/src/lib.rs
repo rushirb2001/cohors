@@ -15,12 +15,14 @@ mod detect;
 pub mod known;
 mod overview;
 mod scanner;
+mod suggest;
 
 pub use detail::{DetailBundle, detail_bundle};
 pub use detect::detect_roots;
 pub use overview::{LaunchpadBundle, fleet_commits, launchpad_bundle, overview};
 pub use scanner::{Discovery, FleetError, Scanner};
 
+pub use suggest::{Suggestions, agent_sessions, repo_containing, suggestions};
 // ── The read facade ──────────────────────────────────────────────────────────
 // Front-ends read the fleet through THIS crate only — never `cohors-git` or
 // `cohors-github` directly (a discipline test in tests/ enforces it). That makes
