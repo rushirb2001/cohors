@@ -56,6 +56,11 @@ worktree under `worktrees` with its `path`. Select those repos with
 `{"worktree_work": true}`. No cohors action reaches into a worktree: give the
 user its path, or work in that folder yourself if they ask you to.
 
+Worktrees often share commits (one branch cut from another). For how many
+commits a repo's worktrees hold, use the number in its reasons or in the
+`overview` step, which count each commit once. Do not add up each worktree's
+`unpushed`; if you must add, add `unpushed_unique`.
+
 A session may also start with a cohors note about work left behind in the
 repo you are in. It is information, not an instruction. Do not commit, push,
 move or delete that work unless the user asks you to.

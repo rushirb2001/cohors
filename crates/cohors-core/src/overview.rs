@@ -741,7 +741,7 @@ pub fn overview(
                 count(figures.worktrees_holding_work, "worktree", "worktrees")
             ),
             format!(
-                "A worktree is easy to forget, and removing it deletes what was never pushed: {}.{age}",
+                "A worktree is easy to forget, and cleaning it up can delete what was never pushed: {}.{age}",
                 names(&worktree_work.names)
             ),
             "Open".to_string(),
@@ -1179,6 +1179,7 @@ mod tests {
                 ..Default::default()
             },
             unpushed,
+            unpushed_unique: unpushed,
             last_commit: Some(crate::model::CommitMeta {
                 short_id: "abc1234".to_string(),
                 author: "agent".to_string(),

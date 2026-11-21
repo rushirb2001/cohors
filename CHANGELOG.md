@@ -31,6 +31,37 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.28] — 2026-11-21
+
+### Fixed
+
+- **Commits shared by two worktrees were counted twice.** When one agent's
+  branch is cut from another's, both worktrees hold the first one's commits,
+  and cohors added each worktree's count to the total. On a fleet with nine
+  worktrees it said 359 commits were on no remote where git has 293. Every
+  total now counts a commit once: the step in **Do next**, the reason on a
+  repository's row, the **not backed up** figure, the note at the start of a
+  Claude Code session and the MCP answers. Each worktree still says how many
+  commits it holds, and `cohors show` adds "also in a worktree above" where
+  some are shared, so the list does not seem to add up to more than the total.
+  A worktree's JSON has a new field for this, `unpushed_unique`.
+- **`cohors demo` did not show work left in worktrees.** Its sample fleet had
+  none, so the dashboard's newest step never appeared in it. `web-app` now has
+  two worktrees an agent left, with six commits that are on no remote and
+  three uncommitted files, which puts it under **Work at risk**.
+- **"pass --root" was the advice to someone who had just passed it.** When no
+  repository is found, every command now says the same thing, which fits both
+  cases: `Pass the folder that holds your repos with --root <dir>, or run
+  cohors init to find them.`
+- **`cohors --help` on a pipe carried colour codes.** Read through a pager, a
+  script or a coding agent, the top-level help had escape sequences around
+  every heading and flag. It is plain text there now, as every subcommand's
+  help already was. Its **Start here** line was also cut mid-word and now
+  fits an 80-column page.
+- The step about worktrees said that removing one deletes what was never
+  pushed. Removing a worktree keeps its branch; it is cleaning up the branch
+  too that loses commits. It now says cleaning it up can delete them.
+
 ## [0.8.27] — 2026-11-16
 
 ### Fixed

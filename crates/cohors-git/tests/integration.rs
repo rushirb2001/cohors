@@ -285,6 +285,72 @@ fn repo_with_remote(tmp: &Path) -> std::path::PathBuf {
     work
 }
 
+/// One agent's branch cut from another's: both worktrees reach the first
+/// agent's commit. Each says how many commits it holds, and a total over the
+/// repo counts that shared commit once, as `git rev-list` over both does.
+#[test]
+fn a_commit_two_worktrees_share_is_counted_once_in_the_total() {
+    let tmp = TempDir::new().unwrap();
+    let work = repo_with_remote(tmp.path());
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            ".claude/worktrees/agent-a",
+            "-b",
+            "agent-a",
+        ],
+    );
+    let first = work.join(".claude/worktrees/agent-a");
+    write(&first, "a.txt", "first agent");
+    git(&first, &["add", "."]);
+    git(&first, &["commit", "-q", "-m", "first agent's work"]);
+    // The second agent starts from where the first one stopped.
+    git(
+        &work,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            ".claude/worktrees/agent-b",
+            "-b",
+            "agent-b",
+            "agent-a",
+        ],
+    );
+    let second = work.join(".claude/worktrees/agent-b");
+    write(&second, "b.txt", "second agent");
+    git(&second, &["add", "."]);
+    git(&second, &["commit", "-q", "-m", "second agent's work"]);
+
+    let snap = snapshot_repo(&repo_ref(&work), COMMIT_TS);
+    let counts: Vec<(&str, u32, u32)> = snap
+        .worktrees
+        .iter()
+        .map(|w| (w.name.as_str(), w.unpushed, w.unpushed_unique))
+        .collect();
+    // agent-b holds two commits, one of them agent-a's.
+    assert_eq!(counts, [("agent-a", 1, 1), ("agent-b", 2, 1)]);
+    let total = cohors_core::LinkedWorktree::unpushed_across(&snap.worktrees);
+    assert_eq!(total, 2);
+    // Git's own answer for the same question.
+    let in_git = git_output(
+        &work,
+        &[
+            "rev-list",
+            "--count",
+            "agent-a",
+            "agent-b",
+            "--not",
+            "--remotes",
+            "HEAD",
+        ],
+    );
+    assert_eq!(in_git.trim(), "2");
+}
+
 #[test]
 fn a_worktree_inside_the_repo_is_read_with_its_own_work() {
     let tmp = TempDir::new().unwrap();

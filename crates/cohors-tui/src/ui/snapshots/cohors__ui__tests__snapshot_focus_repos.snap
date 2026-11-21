@@ -9,23 +9,24 @@ expression: "render_to_string(&app, 120, 45)"
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─────────────────╮ ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮ ╭─────────────────╮ ╭─────────────────╮
 │ Not backed up   │ │ Stashes         │ │ Uncommitted      │ │ Stale fetch     │ │ Open tasks      │ │ Commits 7d      │
-│ 4               │ │ 3               │ │ 26               │ │ 0               │ │ 5               │ │ 44              │
-│ 8 commits       │ │ in 2 repos      │ │ in 6 repos       │ │ all recent      │ │ 3 high, 1 doing │ │ prev week 61    │
+│ 5               │ │ 3               │ │ 26               │ │ 0               │ │ 5               │ │ 44              │
+│ 14 commits      │ │ in 2 repos      │ │ in 6 repos       │ │ all recent      │ │ 3 high, 1 doing │ │ prev week 61    │
 ╰─────────────────╯ ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  RISK      Check 1 repository that could not be read    Nothing else is known about legacy-billing.                  │
-│  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: payments, design-system an… │
-│  WARN      Reconcile 1 diverged branch                  Local and remote both moved, so neither a push nor a fast-f… │
-│  NOTE   p  Pull 2 repositories that are behind          A fast-forward pull cannot lose work: web-app and data-pipe… │
-│  NOTE      Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app with 7.                  │
+│  RISK      Check 1 repository that could not be read                           Nothing else is known about legacy-b… │
+│  RISK   P  Push 4 commits from 3 repositories                                  They exist only on this machine: pay… │
+│  RISK      Back up 6 commits and 3 uncommitted files sitting in 2 worktrees    A worktree is easy to forget, and cl… │
+│  WARN      Reconcile 1 diverged branch                                         Local and remote both moved, so neit… │
+│  NOTE   p  Pull 2 repositories that are behind                                 A fast-forward pull cannot lose work… │
+│  NOTE      Commit or discard 26 uncommitted files                              In 6 repositories. Largest: web-app … │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────────────────────────────────────────────────────────────────╮
-│  RISK  analytics             main           1 commit not pushed, older than 2 days, 2 stashes          4d  Push      │
+│  RISK  analytics             main           1 commit not pushed, older than 2 days, 2 stashes    4d  Push            │
 │  RISK  legacy-billing        (no commits)   Could not be read                                                        │
-│  WARN  design-system         main           1 commit not pushed, 1 stash                               6h  Push      │
-│  WARN  mobile-app            release/2.0    Diverged, 4 ahead and 1 behind, 4 uncommitted files        9h  Reconcile │
-│  WARN  payments              main           2 commits not pushed, 3 uncommitted files                  2h  Push      │
-│  WARN  web-app               feat/checkout  5 commits behind, 7 uncommitted files                     20m  Pull      │
+│  RISK  web-app               feat/checkout  6 commits not pushed in 2 worktrees, older than …   20m  Review worktree │
+│  WARN  design-system         main           1 commit not pushed, 1 stash                         6h  Push            │
+│  WARN  mobile-app            release/2.0    Diverged, 4 ahead and 1 behind, 4 uncommitted fi…    9h  Reconcile       │
+│  WARN  payments              main           2 commits not pushed, 3 uncommitted files            2h  Push            │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─  3  ✓ Open tasks  5 ──────────────────────────╮ ╭─  4  ● Commits, last 7 days  44 ──────────────────────────────────╮
 │ repository                open  high  focus    │ │ auth-service          ███████████████████████████████████      8  │
@@ -38,12 +39,11 @@ expression: "render_to_string(&app, 120, 45)"
 ╰────────────────────────────────────────────────╯ ╰───────────────────────────────────────────────────────────────────╯
 ╭─  5  ▤ Repositories  12 ─────────────────────────────────────────────────────────────────────────────────────────────╮
 │        repository              branch         upstream      stg  mod  new  stash  tasks   age  last commit           │
-│  NOTE  cli-tools               main                           ·    ·    1      ·      ·   12h  docs: add shell-comp… │
 │  NOTE  data-pipeline           main           ↓3              ·    ·    ·      ·      1    5h  fix: backfill job of… │
 │  NOTE  experiments             @9f8e7d6 (det… no remote       ·    4    3      ·      ·    1y  spike: try wgpu for … │
 │  NOTE  infra                   @a1b2c3d (det… no remote       ·    2    2      ·      ·    1w  build: pin terraform… │
 │        auth-service            main                           ·    ·    ·      ·      ·    3d  chore: bump jsonwebt… │
 │▸       marketing-site          main                           ·    ·    ·      ·      ·   1mo  content: Q2 launch l… │
-│   ↑ 6 above                                                                                                          │
+│   ↑ 7 above                                                                                                          │
 ╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open   /  filter   >  sort  ──────╯
   1-5  card    tab  next    ↑↓  move    s  standup    t  tasks    :  command    r  rescan    ?  help    q  quit

@@ -43,7 +43,16 @@ fn parse_cli() -> Cli {
         // `cohors --help` (and `cohors help`): the commands by what they are
         // for, each group with a line that says so, instead of one flat list.
         Err(e) if e.kind() == clap::error::ErrorKind::DisplayHelp => {
-            let help = e.render().ansi().to_string();
+            // Colour only for a terminal that wants it: `cohors --help` on a
+            // pipe (a pager, a script, an agent reading it) gets plain text,
+            // as every subcommand's help already does.
+            let rendered = e.render();
+            let help =
+                if commands::wants_color(std::io::IsTerminal::is_terminal(&std::io::stdout())) {
+                    rendered.ansi().to_string()
+                } else {
+                    rendered.to_string()
+                };
             match commands::regroup_help(&help, &grouped) {
                 Some(regrouped) => {
                     print!("{regrouped}");

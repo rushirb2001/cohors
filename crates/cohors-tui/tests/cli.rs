@@ -89,6 +89,21 @@ fn help_opens_with_the_wordmark_and_closes_with_next_steps() {
         stdout.contains("cohors demo"),
         "the footer should offer a zero-setup first step: {stdout}"
     );
+    // This output is a pipe, as it is for a pager, a script or an agent
+    // reading the help: no colour codes, in any part of it.
+    assert!(
+        !stdout.contains('\x1b'),
+        "help on a pipe must be plain text: {stdout:?}"
+    );
+    // The footer's heading fits the page whole, not cut mid-word.
+    let start_here = stdout
+        .lines()
+        .find(|line| line.contains("Start here"))
+        .expect("the footer has a Start here section");
+    assert!(
+        start_here.contains("work on every command") && !start_here.contains('…'),
+        "{start_here}"
+    );
 }
 
 #[test]

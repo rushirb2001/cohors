@@ -924,11 +924,19 @@ mod tests {
     #[test]
     fn work_left_after_a_session_raises_it() {
         let o = fleet();
+        // Dirty, and last committed before the session ended: what is
+        // uncommitted there was left after it. (Whichever repo the fleet
+        // happens to list first may have been committed to since.)
         let dirty = o
             .repos
             .iter()
-            .find(|r| r.staged + r.modified + r.untracked > 0)
-            .expect("the demo fleet has a dirty repo");
+            .find(|r| {
+                r.staged + r.modified + r.untracked > 0
+                    && r.commit
+                        .as_ref()
+                        .is_some_and(|c| c.timestamp <= NOW - 2 * HOUR)
+            })
+            .expect("the demo fleet has a dirty repo committed to before the session");
         let clean = o
             .repos
             .iter()

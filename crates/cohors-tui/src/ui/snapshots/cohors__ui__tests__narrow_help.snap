@@ -3,7 +3,7 @@ source: crates/cohors-tui/src/ui/tests.rs
 expression: "render_to_string(&app, 56, 20)"
 ---
  cohors  ~/code   12 repositories. 6 h…  scanned 2m ago 
- 4╔══════════════════════════════════════════════════╗  
+ 5╔══════════════════════════════════════════════════╗  
 ╭─║                                                  ║─╮
 │▸║  Help                                            ║ │
 │ ╟──────────────────────────────────────────────────╢ │

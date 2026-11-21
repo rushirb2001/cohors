@@ -129,7 +129,8 @@ pub fn session_start_note(
         // For the person: how much, in how many places, and for how long.
         // The worktrees' names (an agent's are long and random) are for the
         // model, which can say them when asked.
-        let commits: u32 = left.iter().map(|w| w.unpushed).sum();
+        // Each commit once, however many of these worktrees share it.
+        let commits = crate::model::LinkedWorktree::unpushed_across(left.iter().copied());
         let files: u32 = left.iter().map(|w| w.status.total()).sum();
         let mut held = Vec::new();
         if commits > 0 {
@@ -338,6 +339,7 @@ mod tests {
                 ..Default::default()
             },
             unpushed,
+            unpushed_unique: unpushed,
             last_commit: Some(CommitMeta {
                 short_id: "abc1234".to_string(),
                 author: "agent".to_string(),

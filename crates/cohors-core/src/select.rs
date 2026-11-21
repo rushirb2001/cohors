@@ -1130,6 +1130,7 @@ mod parse_tests {
                 ..Default::default()
             },
             unpushed,
+            unpushed_unique: unpushed,
             last_commit: None,
             touched: None,
             locked: false,

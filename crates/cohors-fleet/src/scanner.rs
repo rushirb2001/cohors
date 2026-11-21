@@ -602,6 +602,7 @@ mod tests {
             branch: cohors_core::Branch::Named(name.to_string()),
             status: cohors_core::WorktreeStatus::default(),
             unpushed: 0,
+            unpushed_unique: 0,
             last_commit: None,
             touched: None,
             locked: false,

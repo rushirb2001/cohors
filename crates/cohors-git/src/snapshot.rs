@@ -510,11 +510,17 @@ fn linked_worktrees(repo: &git2::Repository, has_remote: bool) -> Vec<LinkedWork
     // What the main checkout has checked out. Commits it reaches are its own
     // to report (as "ahead"), so no worktree counts them a second time.
     let main_head = repo.head().ok().and_then(|head| head.target());
-    names
-        .into_iter()
-        .take(MAX_WORKTREES)
-        .filter_map(|name| linked_worktree(repo, name, has_remote, main_head))
-        .collect()
+    // The tips already counted. Worktrees often share history (one agent's
+    // branch cut from another's); a later worktree hides these to find the
+    // commits that are new with it, so a total counts each commit once.
+    let mut counted: Vec<git2::Oid> = Vec::new();
+    let mut found = Vec::new();
+    for name in names.into_iter().take(MAX_WORKTREES) {
+        if let Some(worktree) = linked_worktree(repo, name, has_remote, main_head, &mut counted) {
+            found.push(worktree);
+        }
+    }
+    found
 }
 
 /// Read one linked worktree. `None` only when git cannot find it by the name
@@ -526,6 +532,7 @@ fn linked_worktree(
     name: &str,
     has_remote: bool,
     main_head: Option<git2::Oid>,
+    counted: &mut Vec<git2::Oid>,
 ) -> Option<LinkedWorktree> {
     let worktree = repo.find_worktree(name).ok()?;
     let raw = worktree.path();
@@ -542,6 +549,7 @@ fn linked_worktree(
         branch: Branch::Unborn,
         status: WorktreeStatus::default(),
         unpushed: 0,
+        unpushed_unique: 0,
         last_commit: None,
         touched: None,
         locked: matches!(
@@ -575,7 +583,18 @@ fn linked_worktree(
             ),
         };
         if has_remote && let Some(commit) = &commit {
-            found.unpushed = unpushed_commits(repo, commit.id(), main_head);
+            let tip = commit.id();
+            found.unpushed = unpushed_commits(repo, tip, main_head, &[]);
+            // The same walk again, stopping at what earlier worktrees hold.
+            // Skipped when there is nothing it could take away.
+            found.unpushed_unique = if found.unpushed == 0 || counted.is_empty() {
+                found.unpushed
+            } else {
+                unpushed_commits(repo, tip, main_head, counted)
+            };
+            if found.unpushed > 0 {
+                counted.push(tip);
+            }
         }
     }
     Some(found)
@@ -647,13 +666,19 @@ pub fn owning_repo(_path: &Utf8Path) -> Option<(camino::Utf8PathBuf, Option<Stri
 /// worktree, on this machine. Counted this way, rather than against the
 /// branch's own upstream, so it also covers a branch that was never pushed
 /// and a detached `HEAD`, which is what an agent's worktree usually is.
-/// Stops at [`UNPUSHED_CAP`].
+/// Stops at [`UNPUSHED_CAP`]. `counted` are tips whose commits are counted
+/// already (earlier worktrees of the same repo) and are left out here.
 ///
 /// It cannot tell that a commit's changes reached the remote some other way
 /// (a squash merge, a rebase): those commits still count, since git has no
 /// record that they are the same work.
 #[cfg(feature = "git2-fallback")]
-fn unpushed_commits(repo: &git2::Repository, tip: git2::Oid, main_head: Option<git2::Oid>) -> u32 {
+fn unpushed_commits(
+    repo: &git2::Repository,
+    tip: git2::Oid,
+    main_head: Option<git2::Oid>,
+    counted: &[git2::Oid],
+) -> u32 {
     let Ok(mut walk) = repo.revwalk() else {
         return 0;
     };
@@ -662,6 +687,9 @@ fn unpushed_commits(repo: &git2::Repository, tip: git2::Oid, main_head: Option<g
     }
     if let Some(main_head) = main_head {
         let _ = walk.hide(main_head);
+    }
+    for earlier in counted {
+        let _ = walk.hide(*earlier);
     }
     // Everything a remote-tracking branch reaches is on a remote already. No
     // such branch (a remote added but never fetched or pushed to) hides

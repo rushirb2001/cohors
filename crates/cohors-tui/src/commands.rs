@@ -128,7 +128,7 @@ pub fn scan(cli: &Cli, select: Option<&str>, json: bool, deep: bool) -> Result<(
     // guessing why nothing came back. Scripts piping `scan` ignore stderr.
     if snapshots.is_empty() {
         eprintln!(
-            "cohors: no git repositories found under {}.\n  Run `cohors init` to detect your repos, or pass --root <dir>.",
+            "cohors: no git repositories found under {}.\n  {NO_REPOS_ADVICE}",
             roots.join(", ")
         );
     }
@@ -239,7 +239,7 @@ pub fn discover(cli: &Cli, deep: bool, json: bool) -> Result<()> {
             roots.iter().map(|r| r.to_string()).collect()
         };
         eprintln!(
-            "cohors: no git repositories found under {}.\n  Run `cohors init` to detect your repos, or pass --root <dir>.",
+            "cohors: no git repositories found under {}.\n  {NO_REPOS_ADVICE}",
             shown.join(", ")
         );
     }
@@ -528,6 +528,11 @@ fn section(heading: &str, descriptor: &str, color: bool) -> String {
 /// is wider than the terminal wraps, and a wrapped table cannot be read, so
 /// every column report sizes itself to this. Falls back to 100 when the width
 /// cannot be read (output piped into a pager, say).
+/// What to try when a scan found no repositories. Worded for both cases: the
+/// folders came from the config, or from a `--root` that was the wrong one.
+pub(crate) const NO_REPOS_ADVICE: &str =
+    "Pass the folder that holds your repos with --root <dir>, or run `cohors init` to find them.";
+
 fn term_width() -> usize {
     ratatui::crossterm::terminal::size()
         .map(|(cols, _)| cols as usize)
@@ -940,13 +945,7 @@ fn overview_report(
         .join(", ");
     let mut out = masthead(&o.headline, &where_at, color);
     if o.repos.is_empty() {
-        out.push_str(&format!(
-            "  {}\n\n",
-            dim(
-                color,
-                "run `cohors init` to detect your repos, or pass --root <dir>"
-            )
-        ));
+        out.push_str(&format!("  {}\n\n", dim(color, NO_REPOS_ADVICE)));
         return out;
     }
 
@@ -1347,7 +1346,9 @@ pub fn help_decorations() -> (String, String) {
     let mut after = String::new();
     after.push_str(&section(
         "start here",
-        "--root and --config work on every command, and nothing writes without a selector",
+        // Short enough for an 80-column page: a longer line is cut mid-word.
+        // (That actions ask first is said where they are listed.)
+        "--root and --config work on every command",
         color,
     ));
     for (cmd, why) in rows {
@@ -2233,7 +2234,7 @@ pub fn run_web(
 // redirects, and `NO_COLOR` degrade to clean plain text.
 
 /// True when `is_tty` and `NO_COLOR` is unset — the rule for emitting ANSI.
-fn wants_color(is_tty: bool) -> bool {
+pub(crate) fn wants_color(is_tty: bool) -> bool {
     is_tty && std::env::var_os("NO_COLOR").is_none() && !report_on_a_pipe()
 }
 

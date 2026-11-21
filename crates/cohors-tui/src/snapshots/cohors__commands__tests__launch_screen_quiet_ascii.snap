@@ -11,14 +11,14 @@ expression: screen
   D O   N E X T  .  most urgent first
     ! RISK  Check 1 repository that could not be read  legacy-billing
     ! RISK  Push 4 commits from 3 repositories  payments, design-system, analy…
+    ! RISK  Back up 6 commits and 3 uncommitted files sitting in 2 worktrees
     * WARN  Reconcile 1 diverged branch  mobile-app
-    o NOTE  Pull 2 repositories that are behind  web-app, data-pipeline
-            and 1 more in the dashboard
+            and 2 more in the dashboard
 
   F O U N D  .  12 repositories in 1 folder
     ~/code  12 repositories
-      at risk      6   analytics  legacy-billing  design-system  mobile-app
-                       payments  web-app
+      at risk      6   analytics  legacy-billing  web-app  design-system
+                       mobile-app  payments
       to look at   4   cli-tools  data-pipeline  experiments  infra
       clean        2   auth-service  marketing-site
 

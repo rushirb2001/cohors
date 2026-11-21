@@ -5,7 +5,8 @@
 //! the same instant, zero-config dashboard: the caller injects `now` and gets a
 //! varied set of [`RepoSnapshot`]s exercising every state the UI renders —
 //! ahead/behind, dirty, stashed, CI pass/fail/pending, open PRs, a detached
-//! HEAD, an off-remote repo, and one unreadable repo.
+//! HEAD, an off-remote repo, one unreadable repo, and one repo with work left
+//! in linked worktrees, the way coding agents leave it.
 
 use std::collections::HashMap;
 
@@ -13,8 +14,8 @@ use camino::Utf8PathBuf;
 
 use crate::detail::{BranchInfo, ChangedFile, RepoDetail};
 use crate::model::{
-    Branch, CiStatus, CommitMeta, RemoteInfo, RepoId, RepoSnapshot, TagInfo, Upstream,
-    WorktreeStatus,
+    Branch, CiStatus, CommitMeta, LinkedWorktree, RemoteInfo, RepoId, RepoSnapshot, TagInfo,
+    Upstream, WorktreeStatus,
 };
 use crate::standup::StandupCommit;
 
@@ -251,8 +252,50 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         activity: demo_activity(s.name, s.error.is_some()),
         groups: Vec::new(),
         branches: demo_branches(s.name, now),
-        worktrees: Vec::new(),
+        worktrees: demo_worktrees(s.name, now),
     }
+}
+
+/// Demo worktrees: `web-app` has two that coding agents worked in and left,
+/// where Claude Code puts them (`.claude/worktrees/`). One holds commits that
+/// were never pushed, the other commits and files that were never committed.
+/// Its main checkout is only behind with a few uncommitted files, so
+/// `cohors demo` shows the point of reading worktrees: a repo that looks
+/// like it needs a pull is the one holding work that could be lost.
+fn demo_worktrees(name: &str, now: i64) -> Vec<LinkedWorktree> {
+    if name != "web-app" {
+        return Vec::new();
+    }
+    // (name, commits not pushed, uncommitted files, days since it was touched)
+    let left = [
+        ("cart-drawer", 4, 0, 3, "feat: slide the cart drawer in"),
+        ("empty-cart", 2, 3, 2, "wip: empty-cart illustration"),
+    ];
+    left.into_iter()
+        .map(|(worktree, commits, files, days, summary)| LinkedWorktree {
+            name: worktree.to_string(),
+            path: Utf8PathBuf::from(format!("~/code/{name}/.claude/worktrees/{worktree}")),
+            branch: Branch::Named(format!("worktree-{worktree}")),
+            status: WorktreeStatus {
+                staged: 0,
+                modified: files,
+                untracked: 0,
+                conflicted: 0,
+            },
+            unpushed: commits,
+            // The two branches share nothing, so every commit is counted.
+            unpushed_unique: commits,
+            last_commit: Some(CommitMeta {
+                short_id: "abc1234".into(),
+                author: "you".into(),
+                timestamp: now - days * DAY,
+                summary: summary.to_string(),
+            }),
+            touched: (files > 0).then_some(now - days * DAY + HOUR),
+            locked: false,
+            missing: false,
+        })
+        .collect()
 }
 
 /// Demo branches for the showcase: most repos are single-branch (an empty list
@@ -436,6 +479,38 @@ mod tests {
         // Commit ages are relative to the injected now (no clock in core).
         let p = f.iter().find(|r| r.name == "payments").unwrap();
         assert_eq!(p.last_commit.as_ref().unwrap().timestamp, now - 2 * HOUR);
+    }
+
+    /// The demo shows what a main checkout hides: work left in worktrees.
+    #[test]
+    fn the_demo_fleet_has_work_left_in_agent_worktrees() {
+        let now = 1_700_000_000;
+        let fleet = fleet(now);
+        let holding: Vec<_> = fleet
+            .iter()
+            .flat_map(|r| &r.worktrees)
+            .filter(|w| w.holds_work())
+            .collect();
+        assert_eq!(holding.len(), 2);
+        assert!(
+            holding
+                .iter()
+                .all(|w| w.path.as_str().contains(".claude/worktrees/"))
+        );
+        let o = crate::overview(&fleet, &[], &Default::default(), now);
+        let step = o
+            .actions
+            .iter()
+            .find(|a| a.kind == crate::ActionKind::Worktrees)
+            .expect("the overview has a step for the worktrees");
+        assert_eq!(
+            step.title,
+            "Back up 6 commits and 3 uncommitted files sitting in 2 worktrees"
+        );
+        assert_eq!(
+            (o.figures.worktree_commits, o.figures.worktree_files),
+            (6, 3)
+        );
     }
 
     #[test]

@@ -92,8 +92,9 @@ fn missing_message(key: &str, close: &[String], roots: &[String], fleet_empty: b
     if fleet_empty {
         let roots: Vec<String> = roots.iter().map(|r| abbrev_home(r)).collect();
         return format!(
-            "cohors: no repositories found under {}\n  run `cohors init` to detect your repos, or pass --root <dir>\n",
-            roots.join(", ")
+            "cohors: no git repositories found under {}.\n  {}\n",
+            roots.join(", "),
+            super::NO_REPOS_ADVICE
         );
     }
     let mut out = format!("cohors: no repository matches `{}`\n", safe(key));
@@ -501,11 +502,19 @@ fn show_report(
             } else {
                 state.push(format!("on {}", safe(&w.branch.label())));
                 if w.unpushed > 0 {
-                    state.push(plural(
+                    let mut held = plural(
                         w.unpushed as usize,
                         "commit not pushed",
                         "commits not pushed",
-                    ));
+                    );
+                    // Some of them are in a worktree listed above too (one
+                    // branch cut from another). Said here, so the list does
+                    // not seem to add up to more than the repo's total.
+                    let shared = w.unpushed.saturating_sub(w.unpushed_unique);
+                    if shared > 0 {
+                        held.push_str(&format!(" ({shared} also in a worktree above)"));
+                    }
+                    state.push(held);
                 }
                 if w.status.is_dirty() {
                     state.push(plural(
@@ -1601,7 +1610,7 @@ mod tests {
         assert!(msg.contains("cohors scan"), "{msg}");
         let msg = missing_message("x", &[], &["/nowhere".into()], true);
         assert!(
-            msg.contains("no repositories found under /nowhere"),
+            msg.contains("no git repositories found under /nowhere"),
             "{msg}"
         );
     }
@@ -1720,6 +1729,7 @@ mod tests {
                     ..Default::default()
                 },
                 unpushed,
+                unpushed_unique: unpushed,
                 last_commit: Some(CommitMeta {
                     short_id: "abc1234".into(),
                     author: "agent".into(),
@@ -1755,6 +1765,24 @@ mod tests {
             assert!(r.contains(want), "missing {want:?} in:\n{r}");
         }
         assert!(fits(&r, 100), "{r}");
+
+        // A second agent's branch cut from the first: three of its five
+        // commits are agent-a's. The total counts them once, and the row
+        // says so, so the list does not add up to more than the total.
+        let mut second = linked("agent-b", "/code/payments/.claude/worktrees/agent-b", 5, 0);
+        second.unpushed_unique = 2;
+        s.worktrees = vec![
+            linked("agent-a", "/code/payments/.claude/worktrees/agent-a", 3, 0),
+            second,
+        ];
+        let r = show_report(&s, None, None, false, NOW, 120, false);
+        for want in [
+            "5 commits not pushed in 2 worktrees",
+            "on worktree-agent-a, 3 commits not pushed, last commit",
+            "on worktree-agent-b, 5 commits not pushed (3 also in a worktree above), last commit",
+        ] {
+            assert!(r.contains(want), "missing {want:?} in:\n{r}");
+        }
 
         // A repo with no linked worktrees has no such section.
         let plain = show_report(

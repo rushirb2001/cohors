@@ -9,8 +9,8 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 ╰──────────────────────────────────────────────────────────╯
 ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮
 │ Not backed up   │ │ Stashes          │ │ Uncommitted     │
-│ 4               │ │ 3                │ │ 26              │
-│ 8 commits       │ │ in 2 repos       │ │ in 6 repos      │
+│ 5               │ │ 3                │ │ 26              │
+│ 14 commits      │ │ in 2 repos       │ │ in 6 repos      │
 ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯
 ╭─────────────────╮ ╭──────────────────╮ ╭─────────────────╮
 │ Stale fetch     │ │ Open tasks       │ │ Commits 7d      │
@@ -20,15 +20,15 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 ╭─  1  ▶ Do next ──────────────────────────────────────────╮
 │▸ RISK      Check 1 repository that could not be read     │
 │  RISK   P  Push 4 commits from 3 repositories            │
+│  RISK      Back up 6 commits and 3 uncommitted files …   │
 │  WARN      Reconcile 1 diverged branch                   │
-│  NOTE   p  Pull 2 repositories that are behind           │
-│  NOTE      Commit or discard 26 uncommitted files        │
+│   ↓ 2 more                                               │
 ╰─  ⏎  do the highlighted step   P  push 3   p  pull 2  ───╯
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────╮
 │  RISK  analytics         1 commit not pushed, old…    4d │
 │  RISK  legacy-billing    Could not be read               │
+│  RISK  web-app           6 commits not pushed in …   20m │
 │  WARN  design-system     1 commit not pushed, 1 s…    6h │
-│  WARN  mobile-app        Diverged, 4 ahead and 1 …    9h │
 │   ↓ 2 more                                               │
 ╰──────────────────────────────────────────────────────────╯
 ╭─  3  ✓ Open tasks  5 ────────────────────────────────────╮
@@ -48,7 +48,7 @@ expression: "render_to_string(&fleet_app(), 60, 50)"
 │        repository        branch      stg  mod  new   age │
 │  RISK  analytics         main          ·    ·    ·    4d │
 │  RISK  legacy-billing    unreadable                      │
-│  WARN  design-system     main          ·    ·    ·    6h │
+│  RISK  web-app           feat/che…     ·    6    1   20m │
 │   ↓ 9 more                                               │
 ╰──────────────────────────────────────────────────────────╯
   1-5  card  tab  next  ↑↓  move  ?  help  q  quit

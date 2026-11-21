@@ -383,7 +383,8 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
         if !unpushed.is_empty() {
             reasons.push(AttentionReason::WorktreeUnpushed {
                 worktrees: unpushed.len() as u32,
-                commits: unpushed.iter().map(|w| w.unpushed).sum(),
+                // Each commit once, however many worktrees share it.
+                commits: crate::model::LinkedWorktree::unpushed_across(unpushed.iter().copied()),
                 aging: unpushed.iter().any(|w| {
                     w.last_commit
                         .as_ref()
@@ -965,6 +966,7 @@ mod tests {
                 ..Default::default()
             },
             unpushed,
+            unpushed_unique: unpushed,
             last_commit: Some(CommitMeta {
                 short_id: "abc1234".into(),
                 author: "agent".into(),
@@ -1027,6 +1029,22 @@ mod tests {
         r.stash_count = 1;
         r.stash_latest = Some(NOW - 30 * DAY);
         assert_eq!(assess(&r, NOW).severity, Severity::Risk);
+    }
+
+    /// Two agents' branches, the second cut from the first: three of its five
+    /// commits are the first one's. The repo holds five commits, not eight.
+    #[test]
+    fn commits_shared_between_worktrees_are_not_counted_twice() {
+        let mut r = clean_repo();
+        let mut second = linked("b", 5, 0, 3600);
+        second.unpushed_unique = 2;
+        r.worktrees = vec![linked("a", 3, 0, 3600), second];
+        let phrases: Vec<String> = assess(&r, NOW)
+            .reasons
+            .iter()
+            .map(AttentionReason::phrase)
+            .collect();
+        assert_eq!(phrases, ["5 commits not pushed in 2 worktrees"]);
     }
 
     #[test]

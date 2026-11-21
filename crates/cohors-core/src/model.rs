@@ -142,6 +142,13 @@ pub struct LinkedWorktree {
     /// is local on purpose (as with an unpublished branch).
     #[serde(default)]
     pub unpushed: u32,
+    /// Of `unpushed`, the commits that no worktree listed before this one
+    /// also holds. Worktrees often share history (one agent's branch cut
+    /// from another's), so adding up `unpushed` over a repo counts those
+    /// commits once per worktree. Adding up this field counts each once:
+    /// see [`LinkedWorktree::unpushed_across`].
+    #[serde(default)]
+    pub unpushed_unique: u32,
     /// The commit it has checked out.
     #[serde(default)]
     pub last_commit: Option<CommitMeta>,
@@ -165,6 +172,22 @@ impl LinkedWorktree {
     /// files, or commits that were never pushed.
     pub fn holds_work(&self) -> bool {
         self.status.is_dirty() || self.unpushed > 0
+    }
+
+    /// How many unpushed commits these worktrees of one repo hold, each
+    /// counted once however many of them it is checked out in.
+    ///
+    /// Over all of a repo's worktrees this is exact. Over some of them it is
+    /// the least it can be (a commit shared with a worktree left out is
+    /// credited to that one), and never less than the most any single
+    /// worktree holds: it may say too few, never too many.
+    pub fn unpushed_across<'a>(worktrees: impl IntoIterator<Item = &'a LinkedWorktree>) -> u32 {
+        let (mut unique, mut most) = (0u32, 0u32);
+        for worktree in worktrees {
+            unique = unique.saturating_add(worktree.unpushed_unique);
+            most = most.max(worktree.unpushed);
+        }
+        unique.max(most)
     }
 }
 
@@ -588,6 +611,40 @@ pub(crate) fn sample(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A linked worktree holding `unpushed` commits, `unique` of them in no
+    /// worktree listed before it.
+    fn holding(unpushed: u32, unique: u32) -> LinkedWorktree {
+        LinkedWorktree {
+            name: "agent".into(),
+            path: Utf8PathBuf::from("/code/repo/.claude/worktrees/agent"),
+            branch: Branch::Named("agent".into()),
+            status: WorktreeStatus::default(),
+            unpushed,
+            unpushed_unique: unique,
+            last_commit: None,
+            touched: None,
+            locked: false,
+            missing: false,
+        }
+    }
+
+    #[test]
+    fn commits_two_worktrees_share_are_counted_once() {
+        // Three worktrees: 38, 37 and 41 commits, most of them the same ones.
+        let all = [holding(38, 38), holding(37, 4), holding(41, 16)];
+        assert_eq!(LinkedWorktree::unpushed_across(&all), 58);
+        // Some of them: a commit shared with one left out is credited to that
+        // one, so the count is the least it can be, never less than the most
+        // one worktree holds, and never the plain sum.
+        assert_eq!(LinkedWorktree::unpushed_across(&all[1..]), 41);
+        assert_eq!(LinkedWorktree::unpushed_across(&all[..2]), 42);
+        // A snapshot saved before the once-each count existed reads as 0
+        // there; the total is then the most one worktree holds, not zero.
+        let old = [holding(38, 0), holding(37, 0)];
+        assert_eq!(LinkedWorktree::unpushed_across(&old), 38);
+        assert_eq!(LinkedWorktree::unpushed_across(&[]), 0);
+    }
 
     #[test]
     fn worktree_is_dirty_only_when_counts_present() {
