@@ -31,6 +31,18 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.30] — 2026-11-21
+
+### Fixed
+
+- **`cohors next` broke its lines in the middle of words.** A reason longer
+  than the terminal was printed as one line, so the terminal cut it wherever
+  it ran out ("neither a push nor a fast-forw" / "ard pull will work") and the
+  rest started at the left edge. A long title or reason is now broken between
+  words and continues under its title. A command is still left whole, so it
+  copies as one line. Read by a program (`--report` on a pipe), nothing is
+  wrapped.
+
 ## [0.8.29] — 2026-11-21
 
 ### Fixed

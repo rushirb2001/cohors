@@ -80,6 +80,9 @@ pub fn run(
         return Ok(());
     }
     let color = wants_color(true);
+    // A person's page has a width to fit. A program reading the report
+    // (`--report` on a pipe) has none, and gets each line whole.
+    let width = (!super::report_on_a_pipe()).then(|| super::look::get().width.max(40));
     let here_name = here
         .as_ref()
         .and_then(|id| found.overview.repos.iter().find(|r| &r.id == id))
@@ -87,7 +90,7 @@ pub fn run(
         .unwrap_or_else(|| "across your fleet".to_string());
     print!(
         "{}",
-        report(&list, &found.overview.headline, &here_name, color)
+        report(&list, &found.overview.headline, &here_name, width, color)
     );
     // Only a person reading the list counts as having seen a tip.
     if let Some(env) = &env {
@@ -124,9 +127,36 @@ fn dismiss_tip(id: &str) -> Result<()> {
     }
 }
 
-/// The numbered list. Pure, so it is unit-testable.
-fn report(list: &[Suggestion], headline: &str, here: &str, color: bool) -> String {
+/// Where an item's text starts: under its title, past the number and the tag.
+const TEXT_COLUMN: usize = 14;
+
+/// `text` as the lines of an item's text column. On a page `width` columns
+/// wide, text too long for one line is broken between words; each line is
+/// then printed at the text column (a hanging indent), so a long reason stays
+/// under its title. Without this the terminal breaks the line wherever it
+/// runs out, in the middle of a word, and the rest starts at the left edge.
+/// Text that fits is returned as it is, and so is all of it when there is no
+/// page to fit (`None`: a program is reading).
+fn lines_under(text: &str, width: Option<usize>) -> Vec<String> {
+    // One column to spare, so the last character never touches the edge.
+    let room = width.map(|width| width.saturating_sub(TEXT_COLUMN + 1));
+    match room {
+        Some(room) if text.chars().count() > room => super::wrap(text, room),
+        _ => vec![text.to_string()],
+    }
+}
+
+/// The numbered list, for a page `width` columns wide (`None` when a program
+/// reads it: nothing is wrapped). Pure, so it is unit-testable.
+fn report(
+    list: &[Suggestion],
+    headline: &str,
+    here: &str,
+    width: Option<usize>,
+    color: bool,
+) -> String {
     let mut out = masthead(headline, &format!("what to do next, {here}"), color);
+    let indent = " ".repeat(TEXT_COLUMN);
     for (i, s) in list.iter().enumerate() {
         let tag = match s.kind {
             SuggestionKind::Resume => "resume",
@@ -135,29 +165,35 @@ fn report(list: &[Suggestion], headline: &str, here: &str, color: bool) -> Strin
             SuggestionKind::Start => "start",
             SuggestionKind::Setup => "tip",
         };
+        // The number and the tag lead the title's first line; the rest of a
+        // long title continues under it.
+        let title = lines_under(&crate::ui::text::safe(&s.title), width);
+        let (first, rest) = title.split_first().map_or(("", &[][..]), |(f, r)| (f, r));
         out.push_str(&format!(
             "  {}  {}  {}\n",
             bold(color, &format!("{:>2}", i + 1)),
             dim(color, &format!("{tag:<6}")),
-            bold(color, &crate::ui::text::safe(&s.title)),
+            bold(color, first),
         ));
+        for line in rest {
+            out.push_str(&format!("{indent}{}\n", bold(color, line)));
+        }
+        for line in lines_under(&crate::ui::text::safe(&s.why), width) {
+            out.push_str(&format!("{indent}{}\n", dim(color, &line)));
+        }
+        // The command is never broken. A terminal that wraps one long line
+        // still copies it as one line; a command cohors had split in two
+        // would not paste.
         out.push_str(&format!(
-            "              {}\n",
-            dim(color, &crate::ui::text::safe(&s.why))
-        ));
-        out.push_str(&format!(
-            "              {}\n",
+            "{indent}{}\n",
             brand(color, &crate::ui::text::safe(&s.command))
         ));
         // A tip says how to be rid of it, so it never has to be put up with.
         if let Some(id) = &s.tip {
-            out.push_str(&format!(
-                "              {}\n",
-                dim(
-                    color,
-                    &format!("cohors next --dismiss {id}  hides this tip")
-                )
-            ));
+            let hide = format!("cohors next --dismiss {id}  hides this tip");
+            for line in lines_under(&hide, width) {
+                out.push_str(&format!("{indent}{}\n", dim(color, &line)));
+            }
         }
     }
     out.push('\n');
@@ -236,7 +272,7 @@ mod tests {
             last_active: now - 600,
         }];
         let list = cohors_core::suggest::suggest(&o, &sessions, Some(&o.repos[0].id), now, 4);
-        let r = report(&list, &o.headline, "from here", false);
+        let r = report(&list, &o.headline, "from here", Some(96), false);
         assert!(r.contains(" 1  resume  Resume"), "{r}");
         assert!(
             r.contains("cohors agent --resume 3f2a9c10-1111-4222-8333-444455556666"),
@@ -248,6 +284,99 @@ mod tests {
             "control characters never reach the terminal"
         );
         assert!(r.contains("cohors next <N>"));
+    }
+
+    /// A reason too long for the page is broken between words and continues
+    /// under its title. It used to be printed as one line, which the terminal
+    /// broke mid-word ("fast-forw" / "ard pull") with the rest at the left
+    /// edge.
+    #[test]
+    fn a_long_reason_wraps_between_words_under_its_title() {
+        use super::super::look;
+        let now = 1_700_000_000;
+        let o = cohors_core::overview(
+            &cohors_core::demo::fleet(now),
+            &[],
+            &Default::default(),
+            now,
+        );
+        let list = cohors_core::suggest::suggest(&o, &[], None, now, 6);
+        let long = list
+            .iter()
+            .map(|s| s.why.clone())
+            .max_by_key(|why| why.chars().count())
+            .unwrap();
+        assert!(
+            long.chars().count() > 96 - TEXT_COLUMN,
+            "the sample fleet has a reason too long for any page: {long}"
+        );
+        let words = long.split_whitespace().count();
+        let opening = long
+            .split_whitespace()
+            .take(3)
+            .collect::<Vec<_>>()
+            .join(" ");
+        let commands: Vec<&str> = list.iter().map(|s| s.command.as_str()).collect();
+
+        for width in [60, 76, 96] {
+            let page = look::Look {
+                style: look::DEFAULT_STYLE,
+                ascii: false,
+                width,
+            };
+            let r = look::with(page, || {
+                report(&list, &o.headline, "across your fleet", Some(width), false)
+            });
+            // No line of the list runs past the page (a command is the one
+            // thing left whole, so that it can be copied). The list's lines
+            // are the numbered titles and everything at the text column.
+            let of_the_list = |l: &&str| {
+                l.starts_with(&" ".repeat(TEXT_COLUMN))
+                    || l.trim_start().starts_with(|c: char| c.is_ascii_digit())
+            };
+            for line in r
+                .lines()
+                .filter(of_the_list)
+                .filter(|l| !commands.contains(&l.trim()))
+            {
+                assert!(
+                    line.chars().count() <= width,
+                    "{} columns on a {width}-column page: {line:?}",
+                    line.chars().count()
+                );
+            }
+            // The long reason is all there, on several lines that each start
+            // at the text column, and broken only where there was a space:
+            // put back together with spaces, it is the reason again.
+            let lines: Vec<&str> = r.lines().collect();
+            let start = lines
+                .iter()
+                .position(|l| l.trim_start().starts_with(&opening))
+                .unwrap_or_else(|| panic!("the reason is missing at {width}:\n{r}"));
+            let mut joined = String::new();
+            let mut at = start;
+            while joined.split_whitespace().count() < words {
+                let line = lines[at];
+                let text = line
+                    .strip_prefix(&" ".repeat(TEXT_COLUMN))
+                    .unwrap_or_else(|| panic!("not under the title at {width}: {line:?}"));
+                assert!(!text.starts_with(' '), "{line:?}");
+                if !joined.is_empty() {
+                    joined.push(' ');
+                }
+                joined.push_str(text);
+                at += 1;
+            }
+            assert_eq!(joined, long, "at {width}");
+            assert!(
+                at - start > 1,
+                "it should take more than one line at {width}"
+            );
+        }
+
+        // A program reading the report gets every reason on one line.
+        let piped = report(&list, &o.headline, "across your fleet", None, false);
+        assert!(piped.lines().any(|l| l.trim() == long), "{piped}");
     }
 
     #[test]
@@ -270,7 +399,7 @@ mod tests {
             ..Default::default()
         };
         list.extend(setup_tips(&facts));
-        let r = report(&list, &o.headline, "across your fleet", false);
+        let r = report(&list, &o.headline, "across your fleet", Some(96), false);
         assert!(
             r.contains(" 4  tip     Open your fleet in the browser"),
             "{r}"
