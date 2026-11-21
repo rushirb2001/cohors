@@ -664,6 +664,7 @@ fn draw_rows(
         Item {
             lines: vec![row_line(&row, columns, now, theme)],
             gutter: gutter(&row, app, theme),
+            below: Vec::new(),
         }
     });
 }

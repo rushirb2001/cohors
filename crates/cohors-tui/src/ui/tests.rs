@@ -1448,6 +1448,96 @@ fn one_repositorys_checkouts_are_the_rows() {
     assert!(header.contains("checkout"), "{header}");
 }
 
+/// On a fleet, the repository under the cursor in the list opens in place
+/// (ADR-077): its linked worktrees are listed under its row, in the table's
+/// own columns, and every other repository stays one line. Moving the cursor
+/// closes it.
+#[test]
+fn the_selected_repository_opens_its_worktrees_in_place() {
+    let select = |app: &mut App, name: &str| {
+        app.selected = app
+            .view()
+            .iter()
+            .position(|row| app.repos[row.index].name == name)
+            .unwrap();
+    };
+    let column_of = |line: &str, what: &str| {
+        line.chars().count() - line[line.find(what).unwrap()..].chars().count()
+    };
+    let mut app = detail_app();
+    select(&mut app, "web-app");
+    let screen = render_to_string(&app, 119, 40);
+    let lines: Vec<&str> = screen.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("web-app") && l.contains("feat/checkout"))
+        .expect("web-app's row");
+    // Its two worktrees, right under it: the branch, what each holds that is
+    // on no remote, and the files nobody committed.
+    let (first, second) = (lines[at + 1], lines[at + 2]);
+    assert!(
+        first.contains("cart-drawer") && first.contains("worktree-cart") && first.contains("↑4"),
+        "{first}"
+    );
+    assert!(
+        second.contains("empty-cart") && second.contains("↑2"),
+        "{second}"
+    );
+    // Indented under the repository's name, in the same columns.
+    assert_eq!(
+        column_of(first, "cart-drawer"),
+        column_of(lines[at], "web-app") + 2
+    );
+    assert_eq!(
+        column_of(first, "worktree-cart"),
+        column_of(lines[at], "feat/checkout")
+    );
+    // The next repository follows them, on one line as before.
+    assert!(
+        !lines[at + 3].contains("worktree-") && lines[at + 3].contains("main"),
+        "{}",
+        lines[at + 3]
+    );
+    // Every repository still has its row.
+    for repo in &app.repos {
+        assert!(screen.contains(&repo.name), "{} lost its row", repo.name);
+    }
+
+    // The cursor on another repository: web-app is one line again.
+    select(&mut app, "payments");
+    let closed = render_to_string(&app, 119, 40);
+    assert!(!closed.contains("worktree-cart"), "{closed}");
+    assert_eq!(
+        closed.lines().filter(|l| l.contains("cart-drawer")).count(),
+        0
+    );
+
+    // A repository with more worktrees than there is room for lists some and
+    // counts the rest, and nothing is drawn outside the card at any height.
+    select(&mut app, "web-app");
+    let index = app.view()[app.selected].index;
+    let one = app.repos[index].worktrees[0].clone();
+    app.repos[index].worktrees = (0..9)
+        .map(|n| cohors_core::LinkedWorktree {
+            name: format!("agent-{n}"),
+            ..one.clone()
+        })
+        .collect();
+    let many = render_to_string(&app, 119, 40);
+    assert!(
+        many.contains("agent-4") && !many.contains("agent-5"),
+        "{many}"
+    );
+    assert!(many.contains("and 4 more worktrees"), "{many}");
+    for height in [14, 18, 22, 26, 30, 53] {
+        let screen = render_to_string(&app, 119, height);
+        assert_eq!(screen.lines().count(), height as usize);
+        // The key bar is still the last line, and the cursor's row is shown.
+        assert!(screen.lines().last().unwrap().contains("quit"), "{screen}");
+        assert!(screen.contains("web-app"), "at {height}:\n{screen}");
+    }
+}
+
 /// A worktree's row says which agent session ran there, and `a` asks to
 /// reopen it. On the main checkout `a` still offers to set the repository up.
 #[test]

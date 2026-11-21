@@ -143,6 +143,8 @@ More to ask:
 
 <br>
 
+**In a fleet, a repository opens where it is.** In the repository list, the one under the cursor shows its worktrees beneath its row, each with what it holds; the rest stay one line.
+
 **One repository works too.** Run `cohors --root .` inside a repository and its checkouts are the rows: the main one and each worktree, with what each holds that is on no remote, the agent session that ran there, and `P` to push its branch. On a first run, plain `cohors` typed inside such a repository opens it.
 
 **Agent worktrees are covered.** When a coding agent works in a git worktree (Claude Code keeps them under `.claude/worktrees/`), cohors reads it as part of its repo: commits that were never pushed and files that were never committed show up as work at risk, with the folder to go to. `cohors scan --select worktree-work` lists the repos that have any.

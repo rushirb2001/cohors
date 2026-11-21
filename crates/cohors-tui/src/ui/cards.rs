@@ -364,6 +364,10 @@ fn hint_slots(hints: &[Hint], card_width: u16) -> Vec<(usize, &Hint)> {
 pub(crate) struct Item {
     pub lines: Vec<Line<'static>>,
     pub gutter: Option<Span<'static>>,
+    /// Lines drawn under the entry: what it opens into (a repository's
+    /// worktrees under its row). They belong to the entry for a click, but
+    /// are not washed by the cursor, and the entries after them move down.
+    pub below: Vec<Line<'static>>,
 }
 
 impl Item {
@@ -371,6 +375,7 @@ impl Item {
         Self {
             lines: vec![line],
             gutter: None,
+            below: Vec::new(),
         }
     }
 }
@@ -379,7 +384,9 @@ impl Item {
 ///
 /// `window` says which entries are visible, `item_height` how many lines each
 /// takes, and `cursor` which entry (if any) the cursor is on. `build` is only
-/// called for the entries that are actually drawn.
+/// called for the entries that are actually drawn. An entry may bring lines
+/// of its own to draw under it ([`Item::below`]); whoever worked out `window`
+/// has to have left room for them.
 pub(crate) fn draw_list(
     frame: &mut Frame,
     area: CardArea,
@@ -390,10 +397,14 @@ pub(crate) fn draw_list(
     mut build: impl FnMut(usize) -> Item,
 ) {
     let text = area.text;
+    let bottom = text.y + text.height;
+    // Where the next entry goes: entries are `item_height` apart, except
+    // after one that drew lines of its own beneath it.
+    let mut next_y = text.y;
     for slot in 0..window.shown {
         let index = window.offset + slot;
-        let y = text.y + slot as u16 * item_height;
-        if y + item_height > text.y + text.height {
+        let y = next_y;
+        if y + item_height > bottom {
             break; // never draw outside the card
         }
         let item = build(index);
@@ -452,10 +463,32 @@ pub(crate) fn draw_list(
             };
             frame.render_widget(Paragraph::new(mark), cell);
         }
+        next_y = y + item_height;
+        for line in item.below {
+            if next_y >= bottom {
+                break;
+            }
+            let line_area = Rect {
+                y: next_y,
+                height: 1,
+                ..text
+            };
+            // A click on what an entry opened into is a click on the entry.
+            crate::mouse::record(
+                Rect {
+                    x: area.gutter_x,
+                    width: text.width + 2,
+                    ..line_area
+                },
+                crate::mouse::Target::Row(index),
+            );
+            frame.render_widget(Paragraph::new(line), line_area);
+            next_y += 1;
+        }
     }
     if window.clipped() {
-        let y = text.y + window.shown as u16 * item_height;
-        if y < text.y + text.height {
+        let y = next_y;
+        if y < bottom {
             let note = Rect {
                 y,
                 height: 1,

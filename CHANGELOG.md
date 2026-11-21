@@ -31,6 +31,20 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-11-21
+
+### Added
+
+- **On a fleet, the repository under the cursor opens in place.** In the
+  repository list (Enter from the Repositories card), the repository the
+  cursor is on now lists its linked worktrees under its row, in the table's
+  own columns: each one's branch, the commits it holds that are on no remote,
+  its uncommitted files, its age and its last commit. Every other repository
+  stays one line, and moving the cursor closes the one you left. A repository
+  with many worktrees lists the first few and counts the rest. The lines are
+  for reading: to push a worktree's branch or resume its agent session, open
+  that repository by itself with `cohors --root <its folder>`.
+
 ## [0.9.0] — 2026-11-21
 
 ### Added

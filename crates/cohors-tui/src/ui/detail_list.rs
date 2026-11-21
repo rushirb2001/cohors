@@ -91,10 +91,19 @@ fn render_list(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
         return;
     }
 
+    // The repository under the cursor opens in place (ADR-077): its linked
+    // worktrees are listed under its row, and every other repository stays
+    // one line. Their lines come out of the list's own room, never more than
+    // half of it, so the list around them is still a list.
+    let lines = body.text.height as usize;
+    let opened = view
+        .get(app.selected)
+        .map(|row| opened_rows(&app.repos[row.index], &columns, lines / 2, now, theme))
+        .unwrap_or_default();
     let window = list_window(
         app.scrolls.list.get(),
         app.selected,
-        body.text.height as usize,
+        lines.saturating_sub(opened.len()),
         view.len(),
     );
     app.scrolls.list.set(window.offset);
@@ -104,8 +113,105 @@ fn render_list(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
         Item {
             lines: vec![row_line(&row, &columns, now, theme)],
             gutter: gutter(&row, app, theme),
+            below: if index == app.selected {
+                opened.clone()
+            } else {
+                Vec::new()
+            },
         }
     });
+}
+
+/// The most worktrees an opened repository lists. One with more says how
+/// many are left, on the last line.
+const OPENED_ROWS: usize = 6;
+
+/// What a repository's row opens into: one line per linked worktree, in the
+/// table's own columns (its branch, the commits it holds that are on no
+/// remote, its uncommitted files, its age), indented under the repository's
+/// name. At most `room` lines. Empty for a repository with no worktree of
+/// its own to list, which is most of them, and for one whose worktrees are
+/// rows themselves (one repository's checkouts).
+fn opened_rows(
+    repo: &RepoSnapshot,
+    columns: &[super::repos_table::Column],
+    room: usize,
+    now: i64,
+    theme: &Theme,
+) -> Vec<Line<'static>> {
+    let worktrees = &repo.worktrees;
+    let room = room.min(OPENED_ROWS);
+    if worktrees.is_empty() || room == 0 {
+        return Vec::new();
+    }
+    // All of them when they fit; otherwise one fewer, and a line that says
+    // how many more there are.
+    let shown = if worktrees.len() <= room {
+        worktrees.len()
+    } else {
+        room - 1
+    };
+    let mut lines: Vec<Line<'static>> = worktrees
+        .iter()
+        .take(shown)
+        .map(|worktree| {
+            let as_row = worktree_as_row(repo, worktree);
+            let row = RepoRow {
+                snap: &as_row,
+                // Not judged on its own: its repository's row carries the
+                // severity for all of them.
+                line: None,
+                highlights: &[],
+                marked: false,
+                busy: false,
+            };
+            row_line(&row, columns, now, theme)
+        })
+        .collect();
+    let more = worktrees.len() - shown;
+    if more > 0 {
+        let indent = " ".repeat(super::cards::BLOCK_WIDTH + 1 + WORKTREE_INDENT.len());
+        let noun = if more == 1 { "worktree" } else { "worktrees" };
+        lines.push(Line::from(Span::styled(
+            format!("{indent}and {more} more {noun}"),
+            theme.dim(),
+        )));
+    }
+    lines
+}
+
+/// How far a worktree's name is set in under its repository's.
+const WORKTREE_INDENT: &str = "  ";
+
+/// A linked worktree as the table draws a row, so its line is laid out in the
+/// same columns as the repositories around it. It borrows from its repository
+/// what the two share (the remote, and when it was last fetched).
+fn worktree_as_row(repo: &RepoSnapshot, worktree: &cohors_core::LinkedWorktree) -> RepoSnapshot {
+    let mut row = RepoSnapshot::errored(
+        cohors_core::RepoId(worktree.path.to_string()),
+        format!("{WORKTREE_INDENT}{}", worktree.name),
+        Some(worktree.path.clone()),
+        "",
+    );
+    row.error = None;
+    row.branch = if worktree.missing {
+        // Git still lists it, but there is nothing left to read.
+        cohors_core::Branch::Named("folder is gone".to_string())
+    } else {
+        worktree.branch.clone()
+    };
+    row.worktree = worktree.status;
+    row.last_commit = worktree.last_commit.clone();
+    row.remote_url = repo.remote_url.clone();
+    row.last_fetch = repo.last_fetch;
+    if let Some(main) = &repo.path {
+        row.linked = Some(cohors_core::LinkedRow {
+            main: main.clone(),
+            unpushed: worktree.unpushed,
+            unpushed_unique: worktree.unpushed_unique,
+        });
+    }
+    row
 }
 
 /// Which of the three repository cards are drawn. All three when there is
