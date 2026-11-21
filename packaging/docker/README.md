@@ -70,10 +70,14 @@ Without `-t`, reports print JSON, ready for `jq`.
 | Tag | Follows |
 |---|---|
 | `latest` | the newest release |
-| `0.7` | the newest 0.7.x |
-| `0.7.7` | exactly that release |
+| `0.9` | the newest 0.9.x |
+| `0.9.2` | exactly that release |
 
 The container never updates itself. `docker pull ghcr.io/rushirb2001/cohors` gets the newest `latest`; pin an exact tag for a setup that should not move.
+
+## New in 0.9
+
+Answers are brief by default and several times smaller (`detail: "full"` gives every field). Work a coding agent left in a linked worktree is reported with its repository: it counts as work at risk and has a step of its own in `overview`. When the mounted folder holds a single repository, its worktrees are listed as rows themselves, each with a `linked` field.
 
 ## New in 0.8
 

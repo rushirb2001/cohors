@@ -68,6 +68,15 @@ With updates turned off (`updates = "off"` or `"notify"`, or `COHORS_DISABLE_UPD
 
 CI and pull-request status come from GitHub, through the GitHub CLI's token when `gh` is signed in, or `GITHUB_TOKEN`.
 
+## New in 0.9
+
+- **One repository, with its worktrees as the rows.** Inside a repository, `cohors --root .` lists its checkouts: the main one and each linked worktree, with what each holds that is on no remote, the agent session that ran there, and `P` to push its branch. A first run typed inside such a repository opens it.
+- **Work a coding agent left in a worktree counts.** Commits and files sitting in a linked worktree are read with their repository, count as work at risk, and get a step of their own. In a fleet, the repository under the cursor lists its worktrees beneath its row.
+- **In the dashboard, fetch, pull and push ask before they run**, as commit and stash do: what will happen, to how many repositories, and `y` to go ahead.
+- **Smaller answers for a coding agent.** The MCP tools answer in brief by default (`detail: "full"` for every field), and `--report` prints the plain report to a pipe, with nothing cut.
+- **A note when a Claude Code session starts** in a repository with work left behind, from the plugin's one hook. One setting turns it off.
+- **Opening the dashboard installs a newer release first**, and the notice about one shows on every screen.
+
 ## New in 0.8
 
 - **cohors keeps itself up to date, however you installed it.** Its first run sets up cohors' own copy in `~/.local/share/cohors`, with `~/.local/bin/cohors` linked to it; that copy looks for a release when it starts and every few minutes, checks its SHA-256 and switches to it. `cohors doctor` says how your copy is set up, and `cohors install` sets it up by hand.

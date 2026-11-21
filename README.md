@@ -92,7 +92,7 @@ cohors
 
 <img src="assets/terminal.png" alt="The cohors terminal dashboard" width="100%">
 
-**Do next** lists what to do, most urgent first. Press a step's letter to act on every repo in it, or mark repos with <kbd>Space</kbd> and press the letter yourself.
+**Do next** lists what to do, most urgent first. Press a step's letter to act on every repo in it, or mark repos with <kbd>Space</kbd> and press the letter yourself. Either way cohors says what it is about to do and waits for <kbd>y</kbd>.
 
 The mouse works too: click a card to focus it, a row to select it and the same row again to open it, and any key shown on screen is a button. New to it? The line under the header teaches one thing a day; <kbd>x</kbd> shows the next.
 
@@ -278,7 +278,7 @@ Check a file with `cohors launchpad validate .`. The format is an open spec: [sp
 
 - `pull` is fast-forward only, and nothing force-pushes.
 - No action runs without `--select` or repository names, and every one takes `--dry-run`.
-- Nothing changes unseen. At a terminal every command that changes repositories lists them and asks first; in the dashboard no single key can destroy work, and commit and stash ask first.
+- Nothing changes unseen. At a terminal every command that changes repositories lists them and asks first. In the dashboard nothing reaches a remote or changes a repository on one key: fetch, pull, push, commit and stash each say what they will do and wait for <kbd>y</kbd>.
 - The MCP server and the browser dashboard start read-only.
 - One unreadable repo is reported, never fatal.
 - No account, no telemetry. It talks only to GitHub. See the [privacy policy](PRIVACY.md).

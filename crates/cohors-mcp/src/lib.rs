@@ -1747,13 +1747,18 @@ const BRIEF_LIST_LIMIT: usize = 50;
 /// stands against its remote, what is uncommitted, and why it needs a look.
 /// A list of what to keep (not what to drop), so a field added to the model
 /// later does not quietly grow every brief answer.
-const BRIEF_REPO_KEYS: [&str; 12] = [
+const BRIEF_REPO_KEYS: [&str; 13] = [
     "id",
     "name",
     "branch",
     "upstream",
     "worktree",
     "worktrees",
+    // Only on a row that is itself a linked worktree (one repository's
+    // checkouts, ADR-077): where it belongs and what it holds on no remote.
+    // Its branch usually has no upstream, so without this the row would not
+    // say how much is in it.
+    "linked",
     "stash_count",
     "operation",
     "remote",
@@ -2664,6 +2669,57 @@ mod tests {
         // A typo never quietly returns the other size.
         let resp = call(act("list_repos", json!({ "detail": "everything" })));
         assert!(is_error(&resp) && err_text(&resp).contains("unknown detail"));
+    }
+
+    /// One repository's checkouts as rows (ADR-077): a worktree's row keeps
+    /// `linked` in a brief answer, since that is where its commits are
+    /// counted; a main checkout has no such key.
+    #[test]
+    fn a_brief_list_keeps_what_a_worktrees_row_holds() {
+        let fleet = || {
+            let mut shop = RepoSnapshot::errored(
+                cohors_core::RepoId("/code/shop".into()),
+                "shop",
+                Some("/code/shop".into()),
+                "",
+            );
+            shop.error = None;
+            let mut row = RepoSnapshot::errored(
+                cohors_core::RepoId("/code/shop/.claude/worktrees/agent-a".into()),
+                "agent-a",
+                Some("/code/shop/.claude/worktrees/agent-a".into()),
+                "",
+            );
+            row.error = None;
+            row.remote_url = Some("git@example.com:shop/shop.git".into());
+            row.linked = Some(cohors_core::LinkedRow {
+                main: "/code/shop".into(),
+                unpushed: 5,
+                unpushed_unique: 3,
+            });
+            vec![shop, row]
+        };
+        let brief = payload(&call_with(act("list_repos", json!({})), &fleet, None));
+        let rows = brief["repos"].as_array().unwrap();
+        let of = |name: &str| rows.iter().find(|r| r["name"] == name).unwrap();
+        assert!(of("shop").get("linked").is_none(), "{}", of("shop"));
+        let linked = &of("agent-a")["linked"];
+        assert_eq!(linked["main"], "/code/shop");
+        assert_eq!(
+            (
+                linked["unpushed"].as_u64(),
+                linked["unpushed_unique"].as_u64()
+            ),
+            (Some(5), Some(3))
+        );
+        // And its reason counts the same commits.
+        assert!(
+            of("agent-a")["assessment"]
+                .to_string()
+                .contains("5 unpushed"),
+            "{}",
+            of("agent-a")
+        );
     }
 
     #[test]

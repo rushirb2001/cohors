@@ -31,6 +31,23 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-11-21
+
+### Fixed
+
+- **A brief MCP answer left out what a worktree's row holds.** When one
+  repository is the whole fleet, each worktree is a row with a `linked` field
+  (its repository's main checkout, and its commits on no remote). The brief
+  form of `list_repos` dropped that field, so an agent saw the row without
+  its count. It is kept now.
+- **The package pages say what is new in 0.9**, on npm, PyPI, crates.io, the
+  container registry, the editor extension's page and the Claude Code
+  plugin's. The container page listed 0.7 tags and the extension's page still
+  described 0.7.7.
+- The README said a step's letter acts on every repository in it, and that
+  only commit and stash ask first in the dashboard. Fetch, pull and push ask
+  too, and it says so.
+
 ## [0.9.1] — 2026-11-21
 
 ### Added
@@ -145,8 +162,8 @@ source of truth.
   path, and three reasons pushed the path off the bottom. The card now closes
   up first (no blank lines, then label and value on one line), which fits six
   reasons with the last commit and the path still showing.
-- `cohors doctor` said "Set up: not by a first run". It says "not yet" and
-  points at the section that explains it.
+- **`cohors doctor` had a line nobody could read.** "Set up: not by a first
+  run" now says "not yet" and points at the section that explains it.
 
 ## [0.8.28] — 2026-11-21
 

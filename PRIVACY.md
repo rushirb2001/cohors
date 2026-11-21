@@ -24,10 +24,11 @@ the Claude Code plugin, the browser dashboard and the VS Code extension.
 - **Each repository's `.cohors/` launchpad file**, if it has one.
 - **Its own config**, at `~/.config/cohors/config.toml` (or your platform's
   equivalent).
-- **Your coding agents' recent sessions**, to suggest which one to resume:
-  Claude Code's `~/.claude/projects` and Codex's `~/.codex/sessions`, only
-  for sessions in the repositories cohors shows (their folder, branch, title
-  and when they were last active).
+- **Your coding agents' recent sessions**, to suggest which one to resume
+  and, when the dashboard shows one repository's worktrees, to say which
+  session ran in each: Claude Code's `~/.claude/projects` and Codex's
+  `~/.codex/sessions`, only for sessions in the repositories cohors shows
+  (their folder, branch, title and when they were last active).
 - **Whether the rest of cohors is set up**, for setup tips: whether VS Code,
   Cursor or Windsurf is installed and has the cohors extension (their
   programs and `~/.vscode/extensions`-style folders), and whether Claude Code

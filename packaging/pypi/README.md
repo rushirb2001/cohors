@@ -79,6 +79,15 @@ CI and pull-request status come from GitHub. cohors uses the GitHub CLI's token 
 - **`cohors fetch | pull | push | commit | stash | run --select dirty`**: act on many repos at once. Add `--dry-run` to see what would happen first.
 - **`cohors web`**: the dashboard in your browser. `cohors web --demo` shows it on sample data.
 
+## New in 0.9
+
+- **One repository, with its worktrees as the rows.** Inside a repository, `cohors --root .` lists its checkouts: the main one and each linked worktree, with what each holds that is on no remote, the agent session that ran there, and `P` to push its branch. A first run typed inside such a repository opens it.
+- **Work a coding agent left in a worktree counts.** Commits and files sitting in a linked worktree are read with their repository, count as work at risk, and get a step of their own. In a fleet, the repository under the cursor lists its worktrees beneath its row.
+- **In the dashboard, fetch, pull and push ask before they run**, as commit and stash do: what will happen, to how many repositories, and `y` to go ahead.
+- **Smaller answers for a coding agent.** The MCP tools answer in brief by default (`detail: "full"` for every field), and `--report` prints the plain report to a pipe, with nothing cut.
+- **A note when a Claude Code session starts** in a repository with work left behind, from the plugin's one hook. One setting turns it off.
+- **Opening the dashboard installs a newer release first**, and the notice about one shows on every screen.
+
 ## New in 0.8
 
 - **cohors keeps itself up to date, however you installed it.** Its first run sets up cohors' own copy in `~/.local/share/cohors`, with `~/.local/bin/cohors` linked to it; that copy looks for a release when it starts and every few minutes, checks its SHA-256 and switches to it. `cohors doctor` says how your copy is set up, and `cohors install` sets it up by hand.
@@ -91,15 +100,57 @@ CI and pull-request status come from GitHub. cohors uses the GitHub CLI's token 
 Every change: [the release notes](https://github.com/rushirb2001/cohors/releases).
 
 <!-- whats-new:start -->
-## What's new in 0.8.21
+## What's new in 0.9.2
 
 ### Fixed
 
-- **The package pages say what is new in 0.8**, not 0.7.7, on npm, PyPI, crates.io and the Claude Code plugin's page.
-- **Every page's MCP setup points at the copy that keeps itself up to date** (`~/.local/bin/cohors`, registered for every folder with `--scope user`), with each channel's own path for when updates are off.
-- **Two names in this changelog read right again**.
+- **A brief MCP answer left out what a worktree's row holds.**
+- **The package pages say what is new in 0.9**, on npm, PyPI, crates.io, the container registry, the editor extension's page and the Claude Code plugin's.
+- The README said a step's letter acts on every repository in it, and that only commit and stash ask first in the dashboard.
+- A linked worktree listed as a row read "never fetched" beside a main checkout fetched a minute earlier.
+- A session held in a worktree kept outside its repository's folder matched no repository and was left out of `cohors next`.
+- **`cohors next` broke its lines in the middle of words.**
+- **A report read through a pipe lost reasons.**
+- **Failures did not all look like cohors'.**
+- **One long step squeezed every step's reason.**
+- **A repository with several reasons lost its path.**
+- **`cohors doctor` had a line nobody could read.**
+- **Commits shared by two worktrees were counted twice.**
+- **`cohors demo` did not show work left in worktrees.**
+- **"pass --root" was the advice to someone who had just passed it.**
+- **`cohors --help` on a pipe carried colour codes.**
+- The step about worktrees said that removing one deletes what was never pushed.
+- **The dashboard opened on the old version when a newer one was out.**
+- **The notice about a newer cohors was missing from two screens.**
+- **An update being installed took up to five minutes to offer the restart.**
+- The notice in the header uses plain characters on a plain-text terminal.
+- **The dashboard repairs its own screen.**
+- **Git and ssh can no longer ask a question across the dashboard.**
 
-Full notes: [cohors 0.8.21 on GitHub](https://github.com/rushirb2001/cohors/releases/tag/v0.8.21).
+### Added
+
+- **On a fleet, the repository under the cursor opens in place.**
+- **One repository, with its worktrees as the rows.**
+- **A first run inside a repository opens that repository.**
+- **The agent session behind a worktree.**
+- **A note when a session starts where work was left behind.**
+- **"Session notes"** in the plugin's settings turns it off (`claude plugin configure cohors@cohors`).
+- **`touched`** on each linked worktree in the scan JSON.
+- **cohors sees the work left in linked worktrees.**
+- **`cohors show`** lists a repo's worktrees with what each holds and its folder.
+- **`--report` prints the report a person reads even when the output is piped**, as plain text with no colour codes.
+
+### Changed
+
+- When the rows are one repository's checkouts, every surface reads them that way.
+- A worktree's row does not repeat what belongs to its repository.
+- **In the dashboard, fetch, pull and push ask before they run.**
+- **A worktree's folder is no longer counted as an uncommitted file of the repo around it.**
+- **A worktree stays a part of its repo**, not a repo of its own.
+- **What `cohors mcp` tells an agent is several times smaller.**
+- **`detail: "full"` on `list_repos`, `overview`, `standup` and `next` returns everything**, field for field what `cohors scan --json` and `cohors overview --json` print, and `fields` on `list_repos` now takes `branches`.
+
+Full notes: [cohors 0.9.2 on GitHub](https://github.com/rushirb2001/cohors/releases/tag/v0.9.2).
 <!-- whats-new:end -->
 
 ## Links

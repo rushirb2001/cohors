@@ -63,6 +63,13 @@ claude plugin update cohors@cohors
 
 updates the plugin. The `cohors` command keeps itself up to date however you installed it: its first run sets up cohors' own copy, which updates itself.
 
+## New in 0.9
+
+- **Answers are brief by default**, several times smaller, so a question about your repos costs Claude far less to read. `detail: "full"` gives every field when it is needed.
+- **Work left in worktrees is part of the answer.** Commits and files a coding agent left in a linked worktree are reported with their repository, count as work at risk, and get a step of their own.
+- **One repository works too.** When cohors is pointed at a single repository, its worktrees are rows themselves, each with what it holds that is on no remote.
+- **Totals count a commit once**, however many worktrees share it.
+
 ## New in 0.8
 
 - **A session can start with a note about work left behind.** When the repository has commits or files in a linked worktree that are on no remote, or commits unpushed for days, you and Claude get one short note. Turn it off with the **Session notes** setting.

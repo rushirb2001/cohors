@@ -88,14 +88,14 @@ It starts read-only. Add `--allow-writes` (fetch, pull, push, commit, stash), `-
 
 `pull` is fast-forward only and nothing force-pushes. In an untrusted workspace the extension still shows your repositories but runs nothing a repository supplies (no flows, agents or tasks), and the workspace cannot change which folders are scanned. cohors has no telemetry: see the [privacy policy](https://github.com/rushirb2001/cohors/blob/main/PRIVACY.md).
 
-## New in 0.7.7
+## New in 0.9
 
+- **Work a coding agent left in a worktree shows up.** Commits and files sitting in a linked git worktree count as work at risk, are part of "not backed up", and get a step of their own under what to do next.
+- **The counts are right.** A commit two worktrees share is counted once.
 - **Repos nested inside a repo show up** in the sidebar. To reach ones buried deeper, run `cohors scan --deep` once in a terminal; the extension picks up what it finds.
-- **Fetch every repository is faster**: fetch, pull, push, commit and stash run on every selected repository at once.
 - **Commit won't commit a secret**: the preview lists each repository's files, and a repository where a file that looks like a secret (`.env`, a private key) would go in is refused.
-- **A rejected push says why** in the terminal (`rejected (pull first)`).
 
-Update the command-line tool to 0.7.7 too; the extension relies on it for all of these.
+Update the command-line tool to 0.9.2 too; the extension relies on it for all of these.
 
 ## More
 
