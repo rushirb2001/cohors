@@ -31,6 +31,51 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-11-21
+
+### Added
+
+- **One repository, with its worktrees as the rows.** Pointed at a single
+  repository (`cohors --root .`), cohors used to show a dashboard with one
+  row. Now its checkouts are the rows: the main one and each linked worktree,
+  with its branch, the commits it holds that are on no remote, its uncommitted
+  files and its age. Everything the dashboard does for a repository it does
+  for a worktree's row: its changed files, `o` to open it, and `P` to push its
+  branch, which is how the work in it gets backed up (it asks first, and
+  publishes a branch that was never pushed). The words follow: "5 checkouts",
+  "Push 68 commits from 5 checkouts".
+- **A first run inside a repository opens that repository.** With no config
+  yet, `cohors` typed inside a repository that has worktrees (from its main
+  checkout or from inside one of them) shows that repository and says how to
+  see every repo. Once a config exists, plain `cohors` is your fleet as
+  before.
+- **The agent session behind a worktree.** In the one-repository view the
+  selected worktree's card says which agent session ran there and when, and
+  `a` asks to reopen it in that folder. On the main checkout `a` is the
+  launchpad setup it always was.
+
+### Changed
+
+- When the rows are one repository's checkouts, every surface reads them that
+  way: `cohors overview`, `cohors scan` and the MCP tools list a worktree as a
+  row with a `linked` field (its repository's main checkout, and its commits
+  on no remote), and the `ahead` selector matches a worktree that has commits
+  to push. A fleet of several repositories is unchanged: there a worktree
+  stays in its repository's own list.
+- A worktree's row does not repeat what belongs to its repository: the stash
+  list is reported once, by the main checkout, and a worktree counts as its
+  commits only what the main checkout does not already have, in the weekly
+  chart and in the standup.
+
+### Fixed
+
+- A linked worktree listed as a row read "never fetched" beside a main
+  checkout fetched a minute earlier. Git keeps that stamp per checkout; what a
+  fetch brings in is shared, so the newer of the two is used.
+- A session held in a worktree kept outside its repository's folder matched
+  no repository and was left out of `cohors next`. It belongs to that
+  worktree's repository.
+
 ## [0.8.31] — 2026-11-21
 
 ### Changed

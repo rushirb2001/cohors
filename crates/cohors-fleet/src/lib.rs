@@ -22,7 +22,7 @@ mod suggest;
 pub mod tips;
 pub mod watch;
 
-pub use checkout::{Checkout, checkout_at};
+pub use checkout::{Checkout, checkout_at, repository_with_worktrees_at};
 pub use detail::{DetailBundle, detail_bundle};
 pub use detect::detect_roots;
 pub use overview::{LaunchpadBundle, fleet_commits, launchpad_bundle, overview};

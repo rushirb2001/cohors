@@ -44,6 +44,11 @@ pub fn collect_commits(
         // No HEAD (e.g. an unborn branch) → nothing to collect.
         return Vec::new();
     }
+    // A linked worktree lists only what its main checkout does not have, or
+    // the same commits would appear once under every worktree's row.
+    if let Some(main) = crate::snapshot::main_head_of_linked(&repo) {
+        let _ = revwalk.hide(main);
+    }
 
     let mut out = Vec::new();
     for oid in revwalk {

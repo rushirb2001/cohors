@@ -62,6 +62,7 @@ fn snap(
         groups: Vec::new(),
         branches: Vec::new(),
         worktrees: Vec::new(),
+        linked: None,
     }
 }
 
@@ -1346,6 +1347,230 @@ fn snapshot_detail_with_remote() {
     });
     app.detail = Some(dv);
     insta::assert_snapshot!(render_to_string(&app, 100, 28));
+}
+
+/// One repository with worktrees (ADR-077): the rows are its checkouts, the
+/// table and the headline say so, and a worktree's row shows what it holds
+/// that is on no remote the way any row shows what it is ahead by.
+fn checkouts_app() -> App {
+    let mut app = App::new(
+        vec!["~/code/shop".to_string()],
+        "~/.config/cohors/config.toml".to_string(),
+    );
+    let worktree = |name: &str, unpushed: u32, files: u32| {
+        let mut row = snap(
+            name,
+            Branch::Named(format!("worktree-{name}")),
+            None,
+            (0, files, 0),
+            0,
+            Some((NOW - 3 * 86_400, "feat: agent work")),
+            None,
+        );
+        row.remote_url = Some("git@example.com:shop/shop.git".to_string());
+        // Every checkout of a repository lists the repository's branches.
+        row.branches = ["main", "worktree-cart-drawer", "worktree-empty-cart"]
+            .iter()
+            .map(|branch| cohors_core::BranchInfo {
+                name: branch.to_string(),
+                ahead: 0,
+                behind: 0,
+                has_upstream: *branch == "main",
+                is_current: *branch == format!("worktree-{name}"),
+                last_commit: None,
+            })
+            .collect();
+        row.linked = Some(cohors_core::LinkedRow {
+            main: "/repos/shop".into(),
+            unpushed,
+            unpushed_unique: unpushed,
+        });
+        row
+    };
+    let mut main = snap(
+        "shop",
+        Branch::Named("main".into()),
+        Some(("origin/main", 2, 0)),
+        (0, 0, 0),
+        0,
+        Some((NOW - 7200, "fix: retry charge")),
+        None,
+    );
+    main.remote_url = Some("git@example.com:shop/shop.git".to_string());
+    app.set_repos(vec![
+        main,
+        worktree("cart-drawer", 4, 0),
+        worktree("empty-cart", 2, 3),
+        worktree("spike", 0, 0),
+    ]);
+    with_overview(app)
+}
+
+#[test]
+fn one_repositorys_checkouts_are_the_rows() {
+    let app = checkouts_app();
+    let screen = render_to_string(&app, 119, 40);
+    // The words: checkouts, not repositories.
+    assert!(screen.contains("4 checkouts."), "{screen}");
+    assert!(screen.contains("Checkouts  4"), "{screen}");
+    assert!(!screen.contains("Repositories"), "{screen}");
+    let header = screen
+        .lines()
+        .find(|l| l.contains("branch") && l.contains("upstream"))
+        .unwrap();
+    assert!(
+        header.contains("checkout") && !header.contains("repository"),
+        "{header}"
+    );
+    // A worktree's row: its branch, and its commits drawn as ahead, though
+    // its branch has no upstream.
+    let row = screen.lines().rfind(|l| l.contains("cart-drawer")).unwrap();
+    assert!(row.contains("worktree-cart") && row.contains("↑4"), "{row}");
+    assert!(!row.contains("no upstream"), "{row}");
+    // One with nothing in it says so plainly.
+    let idle = screen.lines().rfind(|l| l.contains("spike")).unwrap();
+    assert!(idle.contains("no upstream"), "{idle}");
+    // The step and the reasons use the same count.
+    assert!(
+        screen.contains("Push 8 commits from 3 checkouts"),
+        "{screen}"
+    );
+    assert!(screen.contains("4 commits not pushed"), "{screen}");
+    // The detail list says "checkout" too.
+    let mut list = checkouts_app();
+    list.screen = Screen::Repos;
+    list.focus = Card::Repos;
+    let header = render_to_string(&list, 119, 40);
+    let header = header
+        .lines()
+        .find(|l| l.contains("branch") && l.contains("upstream"))
+        .unwrap();
+    assert!(header.contains("checkout"), "{header}");
+}
+
+/// A worktree's row says which agent session ran there, and `a` asks to
+/// reopen it. On the main checkout `a` still offers to set the repository up.
+#[test]
+fn a_worktrees_row_shows_its_agent_session_and_a_resumes_it() {
+    use crate::app::ConfirmAction;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let press =
+        |app: &mut App, c: char| app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    let select = |app: &mut App, name: &str| {
+        app.selected = app
+            .view()
+            .iter()
+            .position(|row| app.repos[row.index].name == name)
+            .unwrap();
+    };
+    let mut app = checkouts_app();
+    app.screen = Screen::Repos;
+    app.focus = Card::Repos;
+    app.sessions = vec![
+        cohors_core::suggest::AgentSession {
+            runner: "claude-code".into(),
+            id: "3f2a9c10-1111-4222-8333-444455556666".into(),
+            repo: "cart-drawer".into(),
+            cwd: "/repos/cart-drawer".into(),
+            branch: Some("worktree-cart-drawer".into()),
+            title: "Slide the cart drawer in".into(),
+            last_active: NOW - 3 * 86_400,
+        },
+        // An older conversation in the same worktree: the newest is the one.
+        cohors_core::suggest::AgentSession {
+            runner: "claude-code".into(),
+            id: "0000aaaa-1111-4222-8333-444455556666".into(),
+            repo: "cart-drawer".into(),
+            cwd: "/repos/cart-drawer".into(),
+            branch: None,
+            title: "An earlier try".into(),
+            last_active: NOW - 9 * 86_400,
+        },
+    ];
+    select(&mut app, "cart-drawer");
+    let screen = render_to_string(&app, 119, 40);
+    assert!(screen.contains("agent session"), "{screen}");
+    assert!(
+        screen.contains("3d ago: Slide the cart drawer in"),
+        "{screen}"
+    );
+    assert!(screen.contains("a  resume"), "{screen}");
+
+    // `a` asks, naming the checkout and what the session was about.
+    press(&mut app, 'a');
+    let pending = app.confirm.take().expect("resuming asks first");
+    assert_eq!(
+        pending.prompt,
+        "Resume the agent session in cart-drawer? “Slide the cart drawer in”"
+    );
+    assert_eq!(
+        pending.action,
+        ConfirmAction::ResumeAgent {
+            repo: RepoId("cart-drawer".to_string()),
+            session: "3f2a9c10-1111-4222-8333-444455556666".to_string(),
+        }
+    );
+    app.mode = Mode::Normal;
+
+    // A worktree no session is known for says so, and asks nothing.
+    select(&mut app, "empty-cart");
+    press(&mut app, 'a');
+    assert!(app.confirm.is_none());
+    assert_eq!(
+        app.status.as_deref(),
+        Some("no agent session found for empty-cart")
+    );
+    // (The message itself says "agent session"; its card does not.)
+    app.status = None;
+    assert!(!render_to_string(&app, 119, 40).contains("agent session"));
+
+    // The main checkout: `a` is the launchpad setup it always was.
+    select(&mut app, "shop");
+    press(&mut app, 'a');
+    assert!(matches!(
+        app.confirm.as_ref().map(|p| &p.action),
+        Some(ConfirmAction::AgentSetup(_))
+    ));
+}
+
+/// `P` on a worktree's row asks about that row: its branch is pushed (and
+/// published, when it has no upstream), which is how its work is backed up.
+#[test]
+fn pushing_a_worktrees_row_asks_about_that_row() {
+    use crate::app::ConfirmAction;
+    use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+    let mut app = checkouts_app();
+    app.focus = Card::Repos;
+    app.selected = app
+        .view()
+        .iter()
+        .position(|row| app.repos[row.index].name == "cart-drawer")
+        .unwrap();
+    app.on_key(KeyEvent::new(KeyCode::Char('P'), KeyModifiers::NONE));
+    // Not the "which branch?" picker, though the row lists several branches:
+    // a worktree's row pushes the branch it has checked out.
+    assert_eq!(app.mode, Mode::Confirm);
+    assert!(app.push_pick.is_none());
+    let pending = app.confirm.as_ref().expect("a push asks first");
+    assert_eq!(
+        pending.prompt,
+        "Push 4 commits from 1 checkout? 1 branch reaches its remote for the first time."
+    );
+    assert!(matches!(
+        &pending.action,
+        ConfirmAction::Remote { ids, .. } if ids == &[RepoId("cart-drawer".to_string())]
+    ));
+    // Marking every row and pushing leaves out the one with nothing in it.
+    let mut app = checkouts_app();
+    app.focus = Card::Repos;
+    for c in ['*', 'P'] {
+        app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    let Some(ConfirmAction::Remote { ids, .. }) = app.confirm.as_ref().map(|p| &p.action) else {
+        panic!("a push of every row asks");
+    };
+    assert_eq!(ids.len(), 3, "{ids:?}");
+    assert!(!ids.contains(&RepoId("spike".to_string())));
 }
 
 /// What a push asks before anything leaves the machine: how many commits,

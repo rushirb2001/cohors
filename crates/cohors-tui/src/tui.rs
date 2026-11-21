@@ -76,6 +76,9 @@ struct Batch {
 /// Messages from background threads to the loop.
 enum BgMsg {
     Scanned(Vec<RepoSnapshot>),
+    /// The agent sessions that ran in the rows' folders (one repository's
+    /// checkouts only).
+    Sessions(Vec<cohors_core::suggest::AgentSession>),
     /// Snapshots with GitHub `remote` info filled in (v0.2). Merged by id.
     RemoteEnriched(Vec<RepoSnapshot>),
     /// The user's commits for the current standup window (grouped in the view).
@@ -541,6 +544,9 @@ fn run_loop(
                                 ConfirmAction::AgentSetup(id) => {
                                     run_agent_setup(terminal, &mut app, &scanner, &tx, &id)?
                                 }
+                                ConfirmAction::ResumeAgent { repo, session } => run_agent_resume(
+                                    terminal, &mut app, &scanner, &tx, &repo, &session,
+                                )?,
                                 // Fetch, pull and push start nowhere else:
                                 // only an accepted dialog reaches a remote.
                                 ConfirmAction::Remote { verb, ids } => {
@@ -692,6 +698,7 @@ fn drain_background(
         match msg {
             BgMsg::Update(state) => app.update = Some(state),
             BgMsg::Tips(tips) => app.tips = tips,
+            BgMsg::Sessions(sessions) => app.sessions = sessions,
             BgMsg::Scanned(mut repos) => {
                 // Carry over already-fetched remote info so the Remote column
                 // stays put across a refresh instead of blanking to "—" until
@@ -704,6 +711,7 @@ fn drain_background(
                     }
                 }
                 app.set_repos(repos);
+                spawn_sessions(app, tx);
                 app.scanning = false;
                 app.scanned_at = Some(now_secs());
                 if app.status.as_deref() == Some("refreshing…") {
@@ -1213,6 +1221,60 @@ fn open_lazygit(
     run_interactive_then_refresh(terminal, app, scanner, tx, &argv)
 }
 
+/// Read the agent sessions that ran in the rows' folders, off the loop (it
+/// reads the agents' own session files). Only when the rows are one
+/// repository's checkouts: there a row is a worktree an agent worked in, and
+/// which conversation that was is the thing to know about it. A fleet's
+/// sessions are `cohors next`'s to list.
+fn spawn_sessions(app: &mut App, tx: &Sender<BgMsg>) {
+    if cohors_core::lone_repository(&app.repos).is_none() {
+        app.sessions.clear();
+        return;
+    }
+    let Ok(home) = cohors_config::paths::home_dir() else {
+        return;
+    };
+    let (repos, tx) = (app.repos.clone(), tx.clone());
+    std::thread::spawn(move || {
+        let sessions = cohors_fleet::agent_sessions(&repos, home.as_std_path(), now_secs());
+        let _ = tx.send(BgMsg::Sessions(sessions));
+    });
+}
+
+/// Hand the terminal to the agent session that ran in a checkout, then come
+/// back and rescan. Like [`run_agent_setup`] it runs this same binary
+/// (`cohors agent --resume <session> -r <folder>`), told to look at the same
+/// repository this dashboard is looking at, so the session is found the way
+/// the command line finds it and the agent starts in that checkout's folder.
+fn run_agent_resume(
+    terminal: &mut Tui,
+    app: &mut App,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
+    id: &RepoId,
+    session: &str,
+) -> Result<()> {
+    let Some(row) = app.repos.iter().find(|r| &r.id == id) else {
+        app.status = Some("that checkout is no longer listed".to_string());
+        return Ok(());
+    };
+    let (Some(folder), Some(main)) = (row.path.clone(), row.main_checkout()) else {
+        app.status = Some("that checkout has no local path".to_string());
+        return Ok(());
+    };
+    let args = [
+        "--root",
+        main.as_str(),
+        "agent",
+        "--resume",
+        session,
+        "-r",
+        folder.as_str(),
+    ]
+    .map(String::from);
+    run_cohors_agent(terminal, app, scanner, tx, &args)
+}
+
 /// Hand the terminal to the user's coding agent with the `setup-repo` prompt,
 /// then come back and rescan.
 ///
@@ -1236,6 +1298,19 @@ fn run_agent_setup(
         app.status = Some("that repo has no local path".to_string());
         return Ok(());
     };
+    let args = ["agent", "setup-repo", "-r", path.as_str()].map(String::from);
+    run_cohors_agent(terminal, app, scanner, tx, &args)
+}
+
+/// Suspend the dashboard, run `cohors <args>` (an agent launch) in the plain
+/// terminal, then come back and rescan.
+fn run_cohors_agent(
+    terminal: &mut Tui,
+    app: &mut App,
+    scanner: &Arc<Scanner>,
+    tx: &Sender<BgMsg>,
+    args: &[String],
+) -> Result<()> {
     let exe = match std::env::current_exe() {
         Ok(exe) => exe,
         Err(e) => {
@@ -1244,9 +1319,7 @@ fn run_agent_setup(
         }
     };
     suspend_terminal(terminal)?;
-    let outcome = std::process::Command::new(exe)
-        .args(["agent", "setup-repo", "-r", path.as_str()])
-        .status();
+    let outcome = std::process::Command::new(exe).args(args).status();
     let started = matches!(&outcome, Ok(status) if status.success());
     if !started {
         // The reason (no runner installed, say) is on the plain screen right

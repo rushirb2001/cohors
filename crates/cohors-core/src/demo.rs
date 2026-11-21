@@ -253,6 +253,7 @@ fn build(s: Spec, now: i64) -> RepoSnapshot {
         groups: Vec::new(),
         branches: demo_branches(s.name, now),
         worktrees: demo_worktrees(s.name, now),
+        linked: None,
     }
 }
 

@@ -324,7 +324,7 @@ impl Scanner {
                 }
             }
             return Ok(Discovery {
-                repos: all.into_iter().collect(),
+                repos: with_a_lone_repositorys_worktrees(all.into_iter().collect()),
                 deep_only: extra,
             });
         }
@@ -340,7 +340,7 @@ impl Scanner {
             .filter(|p| !walked.contains(p))
             .collect();
         Ok(Discovery {
-            repos: walked.union(&remembered).cloned().collect(),
+            repos: with_a_lone_repositorys_worktrees(walked.union(&remembered).cloned().collect()),
             deep_only: remembered.into_iter().collect(),
         })
     }
@@ -498,6 +498,49 @@ fn discovery_options(
     }
 }
 
+/// When everything the search found is one repository, its linked worktrees
+/// become rows too (ADR-077).
+///
+/// A fleet of one repository is a dashboard with one row, and for someone who
+/// works in a single large repository with an agent in each of several
+/// worktrees, those worktrees are what there is to see. So when every found
+/// folder is a checkout of the same repository (the main one, a worktree of
+/// it, or both), the list becomes all of that repository's checkouts: the
+/// main one and every linked worktree still on disk. Each is then read like
+/// any row, and [`dedupe_worktrees`] takes them off the repository's own
+/// list, so nothing is counted twice.
+///
+/// A fleet of several repositories is returned as it is: there a worktree
+/// stays with its repository (ADR-071).
+fn with_a_lone_repositorys_worktrees(found: Vec<Utf8PathBuf>) -> Vec<Utf8PathBuf> {
+    // Only worth asking of a short list: a long one is a fleet.
+    const MOST: usize = 64;
+    if found.is_empty() || found.len() > MOST {
+        return found;
+    }
+    let mut mains = found
+        .iter()
+        .map(|path| cohors_git::owning_repo(path).map(|(main, _)| main));
+    let Some(Some(main)) = mains.next() else {
+        return found;
+    };
+    if !mains.all(|other| other.as_ref() == Some(&main)) {
+        return found;
+    }
+    let worktrees = cohors_git::linked_worktree_paths(&main);
+    if worktrees.is_empty() {
+        return found;
+    }
+    // The main checkout first, then its worktrees in git's own (name) order.
+    let mut rows = vec![main];
+    for worktree in worktrees {
+        if !rows.contains(&worktree) {
+            rows.push(worktree);
+        }
+    }
+    rows
+}
+
 /// Stamp each repo with the config groups whose name globs match it (matched
 /// against the repo's directory name, using the same glob matcher selectors use).
 /// Runs before aliasing so a cosmetic rename can't change membership.
@@ -520,9 +563,25 @@ pub(crate) fn dedupe_worktrees(snapshots: &mut [RepoSnapshot]) {
         .iter()
         .filter_map(|snap| snap.path.clone())
         .collect();
-    for snap in snapshots {
-        snap.worktrees
-            .retain(|worktree| !rows.contains(&worktree.path));
+    // What each dropped entry knew that its row cannot work out alone: how
+    // many of its commits no sibling worktree already counts.
+    let mut once_each: std::collections::HashMap<Utf8PathBuf, u32> =
+        std::collections::HashMap::new();
+    for snap in snapshots.iter_mut() {
+        snap.worktrees.retain(|worktree| {
+            let is_row = rows.contains(&worktree.path);
+            if is_row {
+                once_each.insert(worktree.path.clone(), worktree.unpushed_unique);
+            }
+            !is_row
+        });
+    }
+    for snap in snapshots.iter_mut() {
+        if let (Some(path), Some(linked)) = (&snap.path, &mut snap.linked)
+            && let Some(unique) = once_each.get(path)
+        {
+            linked.unpushed_unique = (*unique).min(linked.unpushed);
+        }
     }
 }
 

@@ -373,3 +373,137 @@ fn checkout_at_reads_the_whole_repo_from_inside_a_linked_worktree() {
     assert!(checkout_at(&plain, 1_700_000_000).is_none());
     assert!(checkout_at(&root.join("gone"), 1_700_000_000).is_none());
 }
+
+/// One repository is the whole fleet: its linked worktrees are rows of their
+/// own (ADR-077), each saying what it holds that is on no remote, and a
+/// commit two of them share counted once in the total. With a second
+/// repository beside it, they are that repository's own list again (ADR-071).
+#[test]
+fn a_lone_repositorys_worktrees_are_rows_and_a_fleets_are_not() {
+    let (_t, root) = tmp();
+    let git = |dir: &Utf8Path, args: &[&str]| {
+        let out = Command::new("git")
+            .arg("-C")
+            .arg(dir.as_str())
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "git {args:?}: {out:?}");
+    };
+    let main = root.join("code/shop");
+    make_repo(&main);
+    // A remote, so "not pushed" means something.
+    let remote = root.join("remote.git");
+    std::fs::create_dir_all(remote.as_std_path()).unwrap();
+    git(&remote, &["init", "-q", "--bare", "-b", "main"]);
+    git(&main, &["remote", "add", "origin", remote.as_str()]);
+    git(&main, &["push", "-q", "-u", "origin", "main"]);
+    // A stash: it belongs to the repository, whichever checkout lists it.
+    std::fs::write(main.join("f.txt").as_std_path(), "changed").unwrap();
+    git(&main, &["stash", "-q"]);
+
+    // One agent's worktree with a commit and a file it never committed, and
+    // a second agent's, cut from the first, with one commit more.
+    let commit = |dir: &Utf8Path, file: &str| {
+        std::fs::write(dir.join(file).as_std_path(), "work").unwrap();
+        git(dir, &["add", "-A"]);
+        git(dir, &["commit", "-q", "-m", file]);
+    };
+    let first = main.join(".claude/worktrees/agent-a");
+    let second = main.join(".claude/worktrees/agent-b");
+    git(
+        &main,
+        &["worktree", "add", "-q", first.as_str(), "-b", "agent-a"],
+    );
+    commit(&first, "a.txt");
+    git(
+        &main,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            second.as_str(),
+            "-b",
+            "agent-b",
+            "agent-a",
+        ],
+    );
+    commit(&second, "b.txt");
+    std::fs::write(first.join("left.txt").as_std_path(), "never committed").unwrap();
+
+    let cfg = write_config(&root, &format!("roots = [\"{root}/code\"]\n"));
+    let real = |path: &Utf8Path| {
+        Utf8PathBuf::from_path_buf(path.as_std_path().canonicalize().unwrap()).unwrap()
+    };
+    let check = |rows: &[cohors_core::RepoSnapshot]| {
+        let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["shop", "agent-a", "agent-b"]);
+        assert_eq!(
+            cohors_core::lone_repository(rows),
+            Some(real(&main).as_path())
+        );
+        let (shop, a, b) = (&rows[0], &rows[1], &rows[2]);
+        // The main checkout: its worktrees are rows now, not its own list.
+        assert!(shop.linked.is_none() && shop.worktrees.is_empty());
+        assert_eq!(shop.stash_count, 1);
+        // Each worktree's row: what it holds, and what only it holds.
+        let held = |row: &cohors_core::RepoSnapshot| {
+            let linked = row.linked.as_ref().expect("a linked worktree's row");
+            assert_eq!(linked.main, real(&main));
+            (linked.unpushed, linked.unpushed_unique)
+        };
+        assert_eq!(held(a), (1, 1));
+        assert_eq!(held(b), (2, 1), "one of its two commits is agent-a's");
+        assert_eq!((a.unpushed(), b.unpushed()), (1, 2));
+        assert_eq!(a.worktree.untracked, 1);
+        // The repository's one stash is reported once, by the main checkout.
+        assert_eq!((a.stash_count, b.stash_count), (0, 0));
+        // This week's commits: a worktree counts what the main checkout does
+        // not already have (two worktrees can still share one between them).
+        let this_week = |row: &cohors_core::RepoSnapshot| row.activity.last().copied();
+        assert_eq!(
+            (this_week(shop), this_week(a), this_week(b)),
+            (Some(1), Some(1), Some(2))
+        );
+    };
+
+    // Pointed at the folder that holds the repository, at the repository
+    // itself, or at one of its worktrees: the same three checkouts.
+    let rows = Scanner::new(Some(&cfg), &[]).unwrap().scan();
+    check(&rows);
+    for at in [&main, &second] {
+        check(&Scanner::new(Some(&cfg), &[at.to_string()]).unwrap().scan());
+    }
+
+    // The words say "checkout", and the total counts the shared commit once.
+    let overview = cohors_core::overview(&rows, &[], &Default::default(), 0);
+    assert!(
+        overview.headline.starts_with("3 checkouts."),
+        "{}",
+        overview.headline
+    );
+    let push = overview
+        .actions
+        .iter()
+        .find(|a| a.kind == cohors_core::ActionKind::Push)
+        .expect("a push step");
+    assert_eq!(push.title, "Push 2 commits from 2 checkouts");
+    assert!(
+        !overview
+            .actions
+            .iter()
+            .any(|a| a.kind == cohors_core::ActionKind::Worktrees),
+        "the worktrees are rows, so there is no separate step about them"
+    );
+
+    // A second repository beside it makes a fleet: one row each, and the
+    // worktrees are the first repository's own list again.
+    make_repo(&root.join("code/other"));
+    let rows = Scanner::new(Some(&cfg), &[]).unwrap().scan();
+    let names: Vec<&str> = rows.iter().map(|r| r.name.as_str()).collect();
+    assert_eq!(names, ["other", "shop"]);
+    assert_eq!(cohors_core::lone_repository(&rows), None);
+    let shop = &rows[1];
+    assert_eq!(shop.worktrees.len(), 2);
+    assert!(rows.iter().all(|r| r.linked.is_none()));
+}

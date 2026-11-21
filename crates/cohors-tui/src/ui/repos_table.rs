@@ -260,6 +260,15 @@ impl<'a> RepoRow<'a> {
 
 /// How the current branch relates to its upstream, in a word or two.
 pub(crate) fn upstream_label(snap: &RepoSnapshot, theme: &Theme) -> (String, Style) {
+    // A row that is a linked worktree: what it holds that is on no remote,
+    // drawn like "ahead" because a push is what clears it. Its branch usually
+    // has no upstream, and "no upstream" would hide how much is in it.
+    if snap.linked.is_some() && snap.unpushed() > 0 {
+        return (
+            theme.glyphs.ahead_behind(snap.unpushed(), snap.behind()),
+            theme.ahead(),
+        );
+    }
     match &snap.upstream {
         // Level with its upstream: nothing to say, so nothing is said.
         Some(up) if up.ahead == 0 && up.behind == 0 => (String::new(), theme.dim()),
@@ -432,13 +441,23 @@ fn cell_spans(row: &RepoRow, column: Column, now: i64, theme: &Theme) -> Vec<Spa
 }
 
 /// The column header line.
-pub(crate) fn header_line(columns: &[Column], theme: &Theme) -> Line<'static> {
+/// What a row of the table is: a repository of a fleet, or, when the rows
+/// are one repository's main checkout and its worktrees, a checkout.
+pub(crate) fn row_noun(app: &App) -> &'static str {
+    if cohors_core::lone_repository(&app.repos).is_some() {
+        "checkout"
+    } else {
+        "repository"
+    }
+}
+
+pub(crate) fn header_line(columns: &[Column], name: &str, theme: &Theme) -> Line<'static> {
     let ell = theme.glyphs.ellipsis();
     let mut text = " ".repeat(MARK_WIDTH);
     for column in columns {
         let width = column.width;
         let label = match column.id {
-            ColumnId::Name => text::cell("repository", width, ell),
+            ColumnId::Name => text::cell(name, width, ell),
             ColumnId::Branch => text::cell("branch", width, ell),
             ColumnId::Upstream => text::cell("upstream", width, ell),
             ColumnId::Staged => text::cell_right("stg", width, ell),
@@ -499,7 +518,15 @@ pub(crate) fn table_title(app: &App, shown: usize, theme: &Theme) -> Vec<Span<'s
         format!("{shown} of {total}")
     };
     let mut spans = vec![
-        Span::styled("Repositories", Style::new().add_modifier(Modifier::BOLD)),
+        // One repository's checkouts, or a fleet's repositories.
+        Span::styled(
+            if cohors_core::lone_repository(&app.repos).is_some() {
+                "Checkouts"
+            } else {
+                "Repositories"
+            },
+            Style::new().add_modifier(Modifier::BOLD),
+        ),
         Span::styled(format!("  {count}"), theme.dim()),
     ];
     let mut note = |text: String, style: Style| {
@@ -597,7 +624,7 @@ pub(crate) fn render_repos_card(
     }
     let columns = columns(TableKind::Overview, inner.width(), Wanted::of(&app.repos));
     frame.render_widget(
-        Paragraph::new(header_line(&columns, theme)),
+        Paragraph::new(header_line(&columns, row_noun(app), theme)),
         Rect {
             height: 1,
             ..inner.text

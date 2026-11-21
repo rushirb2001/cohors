@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::detail::BranchInfo;
@@ -472,9 +472,56 @@ pub struct RepoSnapshot {
     /// them), and for old caches.
     #[serde(default)]
     pub worktrees: Vec<LinkedWorktree>,
+    /// Set when this row is itself a linked worktree, listed as a row of its
+    /// own, rather than a repository's main checkout: see [`LinkedRow`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub linked: Option<LinkedRow>,
+}
+
+/// What a row that is a linked worktree knows about where it belongs.
+///
+/// A linked worktree is a row in two cases: it is kept under a root beside
+/// its repository, where discovery finds it (ADR-058), or its repository is
+/// the only one cohors is looking at, where its worktrees are the rows worth
+/// seeing (ADR-077).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkedRow {
+    /// The main checkout of the repository it belongs to.
+    pub main: Utf8PathBuf,
+    /// Commits its `HEAD` reaches that are on no remote-tracking branch and
+    /// not in the main checkout: what a [`LinkedWorktree`] counts as
+    /// `unpushed`. An agent's branch usually has no upstream, so "ahead of
+    /// upstream" would say nothing about it; this says how much is in it.
+    #[serde(default)]
+    pub unpushed: u32,
+    /// Of `unpushed`, the commits no sibling worktree listed before this one
+    /// also holds (see [`LinkedWorktree::unpushed_unique`]). A total over the
+    /// rows adds this up, so a commit two worktrees share is counted once.
+    /// Equal to `unpushed` until the row's repository is read beside it.
+    #[serde(default)]
+    pub unpushed_unique: u32,
+}
+
+/// The repository every row belongs to, when the rows are one repository's
+/// checkouts: its main checkout and its linked worktrees, at least one of
+/// them. `None` for a fleet of several repositories (and for a single
+/// repository with no worktree row, which is just a repository).
+pub fn lone_repository(rows: &[RepoSnapshot]) -> Option<&Utf8Path> {
+    let first = rows.first()?.main_checkout()?;
+    let same = rows.iter().all(|row| row.main_checkout() == Some(first));
+    (same && rows.iter().any(|row| row.linked.is_some())).then_some(first)
 }
 
 impl RepoSnapshot {
+    /// The main checkout of the repository this row belongs to: its own
+    /// folder, or, for a row that is a linked worktree, its repository's.
+    pub fn main_checkout(&self) -> Option<&Utf8Path> {
+        match &self.linked {
+            Some(linked) => Some(linked.main.as_path()),
+            None => self.path.as_deref(),
+        }
+    }
+
     /// Convenience constructor for a repo that couldn't be read. The branch is
     /// a placeholder (`Unborn`) since the real state is unknown — the TUI shows
     /// the [`error`](Self::error) instead of the normal columns.
@@ -505,6 +552,7 @@ impl RepoSnapshot {
             groups: Vec::new(),
             branches: Vec::new(),
             worktrees: Vec::new(),
+            linked: None,
         }
     }
 
@@ -516,6 +564,16 @@ impl RepoSnapshot {
     /// Commits ahead of upstream (0 if no upstream).
     pub fn ahead(&self) -> u32 {
         self.upstream.as_ref().map_or(0, |u| u.ahead)
+    }
+
+    /// Commits this checkout holds that a push would send: ahead of its
+    /// upstream, or, for a row that is a linked worktree, on no remote at all
+    /// (an agent's branch usually has no upstream to be ahead of).
+    pub fn unpushed(&self) -> u32 {
+        match &self.linked {
+            Some(linked) => linked.unpushed,
+            None => self.ahead(),
+        }
     }
 
     /// Commits behind upstream (0 if no upstream).
@@ -605,6 +663,7 @@ pub(crate) fn sample(
         groups: Vec::new(),
         branches: Vec::new(),
         worktrees: Vec::new(),
+        linked: None,
     }
 }
 

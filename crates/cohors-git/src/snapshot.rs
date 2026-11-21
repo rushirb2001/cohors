@@ -75,6 +75,7 @@ pub fn snapshot_repo(repo_ref: &RepoRef, now: i64) -> RepoSnapshot {
         groups: Vec::new(),
         branches: extras.branches,
         worktrees: extras.worktrees,
+        linked: extras.linked,
     }
 }
 
@@ -146,6 +147,7 @@ struct Extras {
     activity: Vec<u8>,
     branches: Vec<BranchInfo>,
     worktrees: Vec<LinkedWorktree>,
+    linked: Option<cohors_core::LinkedRow>,
 }
 
 /// The history inputs a [`HistoryMemo`] is keyed on. If none of these moved,
@@ -157,6 +159,9 @@ struct Extras {
 #[derive(PartialEq, Eq, Clone)]
 struct HistoryKey {
     head: Option<git2::Oid>,
+    /// For a linked worktree, what its main checkout has checked out: its
+    /// activity counts only what that does not reach.
+    main: Option<git2::Oid>,
     upstream: Option<git2::Oid>,
     /// A new tag can appear without HEAD moving; stamp the tag refs cheaply
     /// (mtimes of `.git/packed-refs` and `.git/refs/tags`, in whole seconds).
@@ -213,6 +218,7 @@ fn history_key(repo: &git2::Repository, now: i64) -> HistoryKey {
     const WEEK: i64 = 7 * 24 * 60 * 60;
     HistoryKey {
         head,
+        main: main_head_of_linked(repo),
         upstream,
         tag_stamp,
         week: now / WEEK,
@@ -284,18 +290,25 @@ fn git2_extras(path: &Utf8Path, now: i64) -> Extras {
     // Linked worktrees, each read like a small repo of its own. Fresh every
     // scan, like the main checkout's status: files change without a ref moving.
     extras.worktrees = linked_worktrees(&repo, extras.remote_url.is_some());
+    // And when this checkout is itself a linked worktree: where it belongs.
+    extras.linked = linked_row(&repo, extras.remote_url.is_some());
 
     // `stash_foreach` needs `&mut`, so do it last after the shared borrows end.
     // Index 0 is the most recent stash; capture its oid to time it afterward.
     let mut stash_count = 0u32;
     let mut newest_stash: Option<git2::Oid> = None;
-    let _ = repo.stash_foreach(|index, _, oid| {
-        stash_count += 1;
-        if index == 0 {
-            newest_stash = Some(*oid);
-        }
-        true
-    });
+    // Stashes belong to the repository, not to a checkout: every linked
+    // worktree lists the same ones. The main checkout's row reports them, so
+    // a worktree's row does not report them again.
+    if extras.linked.is_none() {
+        let _ = repo.stash_foreach(|index, _, oid| {
+            stash_count += 1;
+            if index == 0 {
+                newest_stash = Some(*oid);
+            }
+            true
+        });
+    }
     extras.stash_count = stash_count;
     extras.stash_latest = newest_stash
         .and_then(|oid| repo.find_commit(oid).ok())
@@ -378,14 +391,21 @@ fn tag_info(repo: &git2::Repository) -> Option<TagInfo> {
 /// `None` if it has never fetched.
 #[cfg(feature = "git2-fallback")]
 fn last_fetch_time(repo: &git2::Repository) -> Option<i64> {
-    let meta = std::fs::metadata(repo.path().join("FETCH_HEAD")).ok()?;
-    let secs = meta
-        .modified()
-        .ok()?
-        .duration_since(std::time::UNIX_EPOCH)
-        .ok()?
-        .as_secs();
-    Some(secs as i64)
+    let stamp = |dir: &std::path::Path| -> Option<i64> {
+        let meta = std::fs::metadata(dir.join("FETCH_HEAD")).ok()?;
+        let secs = meta
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_secs();
+        Some(secs as i64)
+    };
+    // Git keeps a `FETCH_HEAD` per checkout, but what a fetch brings in is
+    // shared by all of them. So a linked worktree is as fresh as the newest
+    // fetch in its own folder or in its repository's: without the second it
+    // reads "never fetched" beside a main checkout fetched a minute ago.
+    stamp(repo.path()).max(stamp(repo.commondir()))
 }
 
 #[cfg(feature = "git2-fallback")]
@@ -521,6 +541,94 @@ fn linked_worktrees(repo: &git2::Repository, has_remote: bool) -> Vec<LinkedWork
         }
     }
     found
+}
+
+/// The main checkout of the repository `repo` is a linked worktree of (or the
+/// bare repository itself). `None` when `repo` is not a linked worktree.
+#[cfg(feature = "git2-fallback")]
+fn main_checkout_of(repo: &git2::Repository) -> Option<&std::path::Path> {
+    if !repo.is_worktree() {
+        return None;
+    }
+    // A linked worktree's git folder is `<common>/worktrees/<name>`; the
+    // common folder is the main checkout's `.git` (or a bare repository).
+    let common = repo.commondir();
+    if common.file_name().is_some_and(|dir| dir == ".git") {
+        common.parent()
+    } else {
+        Some(common)
+    }
+}
+
+/// What the main checkout has checked out, when `repo` is a linked worktree.
+///
+/// A linked worktree shares its repository's whole history, so anything that
+/// walks back from its `HEAD` (commits this week, the standup) would list the
+/// main checkout's commits again under every worktree's row. Those walks stop
+/// here instead: a worktree's row counts what its main checkout does not
+/// already have.
+#[cfg(feature = "git2-fallback")]
+pub(crate) fn main_head_of_linked(repo: &git2::Repository) -> Option<git2::Oid> {
+    let main = git2::Repository::open(main_checkout_of(repo)?).ok()?;
+    main.head().ok()?.target()
+}
+
+/// When `repo` is a linked worktree read as a row of its own: its
+/// repository's main checkout, and the commits it holds that are on no remote
+/// (the same count its repository's own list gives it, see
+/// [`unpushed_commits`]). `None` for a main checkout.
+#[cfg(feature = "git2-fallback")]
+fn linked_row(repo: &git2::Repository, has_remote: bool) -> Option<cohors_core::LinkedRow> {
+    if !repo.is_worktree() {
+        return None;
+    }
+    let main_dir = main_checkout_of(repo)?;
+    let main = camino::Utf8PathBuf::from_path_buf(main_dir.canonicalize().ok()?).ok()?;
+    let mut unpushed = 0;
+    if has_remote && let Some(tip) = repo.head().ok().and_then(|head| head.peel_to_commit().ok()) {
+        // What the main checkout has checked out is its own to report.
+        unpushed = unpushed_commits(repo, tip.id(), main_head_of_linked(repo), &[]);
+    }
+    Some(cohors_core::LinkedRow {
+        main,
+        unpushed,
+        // Only its repository's own list knows what its siblings share; the
+        // scanner copies that in when it reads the two together.
+        unpushed_unique: unpushed,
+    })
+}
+
+/// The folders of `path`'s linked worktrees that are still on disk, in name
+/// order. Empty when `path` is itself a linked worktree (only a main checkout
+/// lists them) or has none. A worktree whose folder is gone is left out: it
+/// cannot be a row, and its repository reports it as missing.
+#[cfg(feature = "git2-fallback")]
+pub fn linked_worktree_paths(path: &Utf8Path) -> Vec<camino::Utf8PathBuf> {
+    let Ok(repo) = git2::Repository::open(path.as_std_path()) else {
+        return Vec::new();
+    };
+    if repo.is_worktree() {
+        return Vec::new();
+    }
+    let Ok(names) = repo.worktrees() else {
+        return Vec::new();
+    };
+    let mut names: Vec<&str> = names.iter().flatten().flatten().collect();
+    names.sort_unstable();
+    names
+        .into_iter()
+        .take(MAX_WORKTREES)
+        .filter_map(|name| {
+            let folder = repo.find_worktree(name).ok()?.path().canonicalize().ok()?;
+            camino::Utf8PathBuf::from_path_buf(folder).ok()
+        })
+        .collect()
+}
+
+/// Without libgit2 linked worktrees are not read at all.
+#[cfg(not(feature = "git2-fallback"))]
+pub fn linked_worktree_paths(_path: &Utf8Path) -> Vec<camino::Utf8PathBuf> {
+    Vec::new()
 }
 
 /// Read one linked worktree. `None` only when git cannot find it by the name
@@ -736,6 +844,10 @@ fn commit_activity(repo: &git2::Repository, now: i64) -> Vec<u8> {
     };
     if walk.push_head().is_err() {
         return buckets; // unborn HEAD / empty repo
+    }
+    // A linked worktree counts only what its main checkout does not have.
+    if let Some(main) = main_head_of_linked(repo) {
+        let _ = walk.hide(main);
     }
     let _ = walk.set_sorting(git2::Sort::TIME); // newest commit first
 

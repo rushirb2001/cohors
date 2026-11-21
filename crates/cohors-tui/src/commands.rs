@@ -3009,6 +3009,35 @@ fn open_url(url: &str) -> std::io::Result<()> {
 /// Bare `cohors` — launch the interactive dashboard.
 pub fn run_tui(cli: &Cli) -> Result<()> {
     let scanner = Arc::new(crate::scan::from_cli(cli)?);
+    let configured = config_path(cli).map(|p| p.exists()).unwrap_or(false);
+
+    // A first run (no `--root`, no config) typed inside a repository that has
+    // linked worktrees opens that repository: its checkouts are what there is
+    // to see, more than a scan of the home folder would show (ADR-077). It
+    // says how to see every repository. Once a config exists, plain `cohors`
+    // is the fleet, wherever it is typed.
+    if cli.root.is_empty()
+        && !configured
+        && let Some(main) = repository_here()
+    {
+        let config = cli.config.as_deref().map(Utf8Path::new);
+        let here = Arc::new(crate::scan::Scanner::new_allowing_missing_config(
+            config,
+            &[main.to_string()],
+        )?);
+        if !cli.watch {
+            let color = wants_color(std::io::stdout().is_terminal());
+            print!(
+                "{}",
+                opened_here_note(main.file_name().unwrap_or("it"), color)
+            );
+        }
+        return match scoped_onboard(&here, cli.watch)? {
+            // The cache holds whichever fleet was scanned last, not this one.
+            Onboard::Proceed => crate::tui::run(here, cli, false, cli.watch),
+            Onboard::Quit => Ok(()),
+        };
+    }
 
     // The launch screen lives in the plain terminal, not the alt-screen. `--root`
     // gets the scoped-view greeting; a bare first run (no `--root`, no config)
@@ -3020,7 +3049,7 @@ pub fn run_tui(cli: &Cli) -> Result<()> {
             Onboard::Proceed => scanner,
             Onboard::Quit => return Ok(()),
         }
-    } else if config_path(cli).map(|p| p.exists()).unwrap_or(false) {
+    } else if configured {
         scanner
     } else {
         match onboard(&scanner, cli.watch)? {
@@ -3030,6 +3059,32 @@ pub fn run_tui(cli: &Cli) -> Result<()> {
     };
 
     crate::tui::run(scanner, cli, !cli.no_cache, cli.watch)
+}
+
+/// The repository the command was typed in, when it has linked worktrees.
+fn repository_here() -> Option<Utf8PathBuf> {
+    let folder = std::env::current_dir().ok()?;
+    let folder = Utf8PathBuf::from_path_buf(folder).ok()?;
+    cohors_fleet::repository_with_worktrees_at(&folder)
+}
+
+/// Said above the start screen when a first run opened the repository it was
+/// typed in: why this one, and how to see the rest.
+fn opened_here_note(name: &str, color: bool) -> String {
+    format!(
+        "\n  {}\n  {}\n",
+        bold(
+            color,
+            &format!(
+                "Showing {}, the repository you are in, and its worktrees.",
+                crate::ui::text::safe(name)
+            )
+        ),
+        dim(
+            color,
+            "For every repository: cohors --root <folder>, or cohors init."
+        ),
+    )
 }
 
 /// `cohors demo` — launch the dashboard on a built-in sample fleet. No config,

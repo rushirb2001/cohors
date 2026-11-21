@@ -189,7 +189,8 @@ impl Selector {
         if self.dirty && !repo.is_dirty() {
             return false;
         }
-        if self.ahead && repo.ahead() == 0 {
+        // "Has commits to push": for a linked worktree's row, on no remote.
+        if self.ahead && repo.unpushed() == 0 {
             return false;
         }
         if self.behind && repo.behind() == 0 {

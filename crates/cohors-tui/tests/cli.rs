@@ -589,6 +589,46 @@ fn a_piped_report_keeps_every_reason_whole() {
     }
 }
 
+/// A first run (no config, no `--root`) typed inside a repository that has
+/// worktrees opens that repository, from its main checkout or from inside a
+/// worktree, and says how to see every repository (ADR-077). This output is a
+/// pipe, so the start screen is printed and cohors stops there.
+#[test]
+fn a_first_run_inside_a_repo_with_worktrees_opens_that_repo() {
+    let cache = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let base = TempDir::new().unwrap();
+    let (repo, agent) = repo_with_left_behind_worktree(base.path());
+    let first_run_in = |folder: &Path| {
+        let mut cmd = cohors(cache.path());
+        cmd.current_dir(folder)
+            .env("HOME", home.path())
+            .env_remove("XDG_CONFIG_HOME");
+        stdout_of(&cmd.assert().success())
+    };
+    for folder in [&repo, &agent] {
+        let screen = first_run_in(folder);
+        assert!(
+            screen.contains("Showing api, the repository you are in, and its worktrees."),
+            "{screen}"
+        );
+        assert!(
+            screen.contains("For every repository: cohors --root <folder>, or cohors init."),
+            "{screen}"
+        );
+        // The main checkout and the worktree, as two checkouts.
+        assert!(screen.contains("2 checkouts."), "{screen}");
+        assert!(screen.contains("agent-a"), "{screen}");
+    }
+
+    // A repository with no worktree is an ordinary first run: nothing about
+    // "the repository you are in".
+    let plain = base.path().join("plain");
+    init_repo_with_commit(&plain);
+    let screen = first_run_in(&plain);
+    assert!(!screen.contains("Showing"), "{screen}");
+}
+
 /// Every failure reads `cohors: what went wrong`, on one line, exit 1.
 #[test]
 fn a_failure_says_cohors_not_error() {

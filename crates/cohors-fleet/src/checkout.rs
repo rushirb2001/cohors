@@ -17,6 +17,17 @@ pub struct Checkout {
     pub worktree: Option<String>,
 }
 
+/// The main checkout of the repository `folder` is in, when that repository
+/// has linked worktrees still on disk. `None` anywhere else.
+///
+/// Someone who works in one repository with several worktrees has more to
+/// see right there than a first scan of their home folder would show them,
+/// so a first run typed inside such a repository opens it (ADR-077).
+pub fn repository_with_worktrees_at(folder: &Utf8Path) -> Option<Utf8PathBuf> {
+    let (main, _) = cohors_git::owning_repo(folder)?;
+    (!cohors_git::linked_worktree_paths(&main).is_empty()).then_some(main)
+}
+
 /// The repository that owns whatever checkout `folder` is in, or `None` when
 /// `folder` is not inside a git repository (or cannot be read as one).
 pub fn checkout_at(folder: &Utf8Path, now: i64) -> Option<Checkout> {

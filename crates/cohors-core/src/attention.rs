@@ -317,10 +317,21 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
     if repo.has_error() {
         reasons.push(AttentionReason::Unreadable);
     } else {
-        let ahead = repo.ahead();
         let behind = repo.behind();
-        if ahead > 0 && behind > 0 {
-            reasons.push(AttentionReason::Diverged { ahead, behind });
+        // A row that is a linked worktree counts its commits against every
+        // remote, not against its branch's upstream. An agent's branch
+        // usually has no upstream, and "branch never pushed" would hide how
+        // much is in it; and a commit that is already on some remote branch
+        // is backed up, whatever this branch's own upstream says.
+        let ahead = match &repo.linked {
+            Some(linked) => linked.unpushed,
+            None => repo.ahead(),
+        };
+        if repo.ahead() > 0 && behind > 0 {
+            reasons.push(AttentionReason::Diverged {
+                ahead: repo.ahead(),
+                behind,
+            });
         } else if ahead > 0 {
             let aging = repo
                 .last_commit_time()
@@ -331,7 +342,7 @@ pub fn assess(repo: &RepoSnapshot, now: i64) -> Assessment {
             });
         } else if behind > 0 {
             reasons.push(AttentionReason::Behind { commits: behind });
-        } else if is_unpublished(repo) {
+        } else if repo.linked.is_none() && is_unpublished(repo) {
             reasons.push(AttentionReason::Unpublished);
         }
 
@@ -697,6 +708,7 @@ mod tests {
             groups: Vec::new(),
             branches: Vec::new(),
             worktrees: Vec::new(),
+            linked: None,
         }
     }
 

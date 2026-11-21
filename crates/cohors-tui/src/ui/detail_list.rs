@@ -75,7 +75,11 @@ fn render_list(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: &Theme
     }
     let columns = columns(TableKind::Detail, inner.width(), Wanted::of(&app.repos));
     frame.render_widget(
-        Paragraph::new(header_line(&columns, theme)),
+        Paragraph::new(header_line(
+            &columns,
+            super::repos_table::row_noun(app),
+            theme,
+        )),
         Rect {
             height: 1,
             ..inner.text
@@ -142,7 +146,12 @@ fn render_repo_cards(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: 
             ),
             Pane::Signals => (
                 vec![Span::styled("signals", bold)],
-                vec![hint("f", "fetch")],
+                // On a worktree's row with a known agent session, `a`
+                // reopens that conversation.
+                match snap.filter(|s| s.linked.is_some() && app.session_in(&s.id).is_some()) {
+                    Some(_) => vec![hint("f", "fetch"), hint("a", "resume")],
+                    None => vec![hint("f", "fetch")],
+                },
             ),
             _ => (
                 {
@@ -177,9 +186,15 @@ fn render_repo_cards(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: 
                 theme.dim(),
             ))],
             (Pane::State, Some(snap)) => state_lines(snap, now, width, theme),
-            (Pane::Signals, Some(snap)) => {
-                signal_lines(snap, line, now, width, inner.height as usize, theme)
-            }
+            (Pane::Signals, Some(snap)) => signal_lines(
+                snap,
+                line,
+                app.session_in(&snap.id),
+                now,
+                width,
+                inner.height as usize,
+                theme,
+            ),
             (_, Some(_)) => task_lines(entry, width, theme),
         };
         draw_scrolled(frame, inner, lines, app, focused);
@@ -285,10 +300,12 @@ fn state_lines(snap: &RepoSnapshot, now: i64, width: usize, theme: &Theme) -> Ve
 /// its path off the bottom, so the card closes up before anything is lost:
 /// first the blank lines go, then each label shares a line with its value.
 /// Past that (seven reasons or more) the reasons come first and the card
-/// scrolls, as it always has.
+/// scrolls, as it always has. A row that is a linked worktree also says
+/// which agent session ran there (ADR-077).
 fn signal_lines(
     snap: &RepoSnapshot,
     line: Option<&RepoLine>,
+    session: Option<&cohors_core::suggest::AgentSession>,
     now: i64,
     width: usize,
     rows: usize,
@@ -337,6 +354,13 @@ fn signal_lines(
     let mut facts: Vec<(&'static str, String, Cut)> = Vec::new();
     if let Some(commit) = &snap.last_commit {
         facts.push(("last commit", text::safe(&commit.summary), text::clip));
+    }
+    // The agent session that ran in this checkout: when, and what it was
+    // about. The time leads, so cutting a long title never loses it.
+    if let Some(session) = session {
+        let when = cohors_core::time::relative(session.last_active, now);
+        let about = format!("{when} ago: {}", text::safe(&session.title));
+        facts.push(("agent session", about, text::clip));
     }
     if let Some(path) = &snap.path {
         // A path is cut from the front: its end is the part that tells.

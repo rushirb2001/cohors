@@ -302,6 +302,10 @@ struct Seen<'a> {
     id: &'a str,
     name: &'a str,
     reasons: Vec<AttentionReason>,
+    /// Of this row's unpushed commits, how many a sibling worktree's row
+    /// already counts (rows that are linked worktrees often share history).
+    /// Left out of every total, so a shared commit is counted once.
+    counted_elsewhere: u32,
 }
 
 /// Collects the repositories that share one kind of trouble.
@@ -336,6 +340,14 @@ pub fn overview(
     now: i64,
 ) -> Overview {
     let entry_of = |id: &str| entries.iter().find(|e| e.id == id);
+    // What a row is called. When the rows are one repository's checkouts
+    // (its main one and its linked worktrees, ADR-077) they are "checkouts":
+    // "5 repositories" would be wrong about a single repository.
+    let (place, places) = if crate::model::lone_repository(repos).is_some() {
+        ("checkout", "checkouts")
+    } else {
+        ("repository", "repositories")
+    };
     let mut figures = KeyFigures {
         repos: repos.len(),
         ..Default::default()
@@ -401,6 +413,10 @@ pub fn overview(
             id: &repo.id.0,
             name: &repo.name,
             reasons: assessment.reasons,
+            counted_elsewhere: repo
+                .linked
+                .as_ref()
+                .map_or(0, |l| l.unpushed.saturating_sub(l.unpushed_unique)),
         });
     }
     // Most urgent first; within a level, alphabetical without regard to case.
@@ -440,7 +456,7 @@ pub fn overview(
                 }
                 AttentionReason::Unpushed { commits, aging } => {
                     figures.unpushed_repos += 1;
-                    figures.unpushed_commits += commits;
+                    figures.unpushed_commits += commits.saturating_sub(repo.counted_elsewhere);
                     unpushed_aging |= aging;
                     unpushed.push(repo);
                 }
@@ -602,8 +618,8 @@ pub fn overview(
                 "Check {}",
                 count(
                     n,
-                    "repository that could not be read",
-                    "repositories that could not be read"
+                    &format!("{place} that could not be read"),
+                    &format!("{places} that could not be read")
                 )
             ),
             format!("Nothing else is known about {}.", names(&unreadable.names)),
@@ -619,7 +635,7 @@ pub fn overview(
             Severity::Risk,
             format!(
                 "Finish the merge or rebase paused in {}",
-                count(n, "repository", "repositories")
+                count(n, place, places)
             ),
             format!(
                 "Nothing else can proceed there until it is resolved: {}.",
@@ -656,7 +672,7 @@ pub fn overview(
             format!(
                 "Push {} from {}",
                 count(commits as usize, "commit", "commits"),
-                count(n, "repository", "repositories")
+                count(n, place, places)
             ),
             format!(
                 "They exist only on this machine: {}.{age}",
@@ -754,10 +770,7 @@ pub fn overview(
         add(
             ActionKind::ReviewStash,
             Severity::Warn,
-            format!(
-                "Review stashes in {}",
-                count(n, "repository", "repositories")
-            ),
+            format!("Review stashes in {}", count(n, place, places)),
             format!(
                 "Parked for more than a week in {}.",
                 names(&stale_stash.names)
@@ -776,8 +789,8 @@ pub fn overview(
                 "Pull {}",
                 count(
                     n,
-                    "repository that is behind",
-                    "repositories that are behind"
+                    &format!("{place} that is behind"),
+                    &format!("{places} that are behind")
                 )
             ),
             format!(
@@ -805,7 +818,7 @@ pub fn overview(
                     "uncommitted files"
                 )
             ),
-            format!("In {}.{most}", count(n, "repository", "repositories")),
+            format!("In {}.{most}", count(n, place, places)),
             "Review changes".to_string(),
             None,
             dirty,
@@ -816,7 +829,7 @@ pub fn overview(
         add(
             ActionKind::Fetch,
             Severity::Info,
-            format!("Fetch {}", count(n, "repository", "repositories")),
+            format!("Fetch {}", count(n, place, places)),
             format!(
                 "Not fetched in over {} days, so their ahead and behind counts cannot be trusted. Oldest: {} days.",
                 STALE_FETCH_SECS / DAY,
@@ -872,12 +885,12 @@ pub fn overview(
         (0, _) => "No repositories found.".to_string(),
         (n, 0) => format!(
             "{}. No work is at risk{middle}, {} clean.",
-            count(n, "repository", "repositories"),
+            count(n, place, places),
             count(figures.clean, "is", "are")
         ),
         (n, risky) => format!(
             "{}. {} work at risk{middle}, {} clean.",
-            count(n, "repository", "repositories"),
+            count(n, place, places),
             count(risky, "has", "have"),
             count(figures.clean, "is", "are")
         ),

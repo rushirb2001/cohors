@@ -1208,6 +1208,7 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
         ConfirmAction::BulkStash(ids) => ids.as_slice(),
         ConfirmAction::BulkCommit { ids, .. } => ids.as_slice(),
         ConfirmAction::AgentSetup(id) => std::slice::from_ref(id),
+        ConfirmAction::ResumeAgent { repo, .. } => std::slice::from_ref(repo),
         ConfirmAction::Remote { ids, .. } => ids.as_slice(),
         // Every repository: the prompt says how many, and a list of all of
         // them would bury it.

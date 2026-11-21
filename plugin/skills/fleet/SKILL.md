@@ -56,6 +56,11 @@ worktree under `worktrees` with its `path`. Select those repos with
 `{"worktree_work": true}`. No cohors action reaches into a worktree: give the
 user its path, or work in that folder yourself if they ask you to.
 
+When cohors is looking at one repository only, its worktrees are rows
+themselves: each has a `linked` field naming the repository's main checkout
+and its `unpushed` commits, and the repository's own `worktrees` list is
+empty. Treat such a row like any repo.
+
 Worktrees often share commits (one branch cut from another). For how many
 commits a repo's worktrees hold, use the number in its reasons or in the
 `overview` step, which count each commit once. Do not add up each worktree's

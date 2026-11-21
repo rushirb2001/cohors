@@ -338,6 +338,9 @@ pub enum ConfirmAction {
     /// (`cohors agent setup-repo`). Not destructive, but it starts an agent
     /// session with a prompt already submitted, so it asks first.
     AgentSetup(RepoId),
+    /// Reopen the agent session that ran in this checkout (a linked
+    /// worktree's row), in its folder: `cohors agent --resume <session>`.
+    ResumeAgent { repo: RepoId, session: String },
 }
 
 /// One repo's slot in a command run.
@@ -579,6 +582,10 @@ pub struct App {
     pub run: Option<CommandRun>,
     /// The destructive action awaiting confirmation (`Some` ⇒ `Mode::Confirm`).
     pub confirm: Option<Pending>,
+    /// The agent sessions that ran in the rows' folders, when the rows are
+    /// one repository's checkouts (ADR-077). Read off the loop after each
+    /// scan; empty for a fleet, where sessions belong to `cohors next`.
+    pub sessions: Vec<cohors_core::suggest::AgentSession>,
     /// The "Open with…" picker (`Some` ⇒ `Mode::OpenWith`).
     pub open_with: Option<OpenWith>,
     /// The "push which branch?" picker (`Some` ⇒ `Mode::PushBranch`).
@@ -735,6 +742,7 @@ impl App {
             command_edit: crate::command::LineState::default(),
             run: None,
             confirm: None,
+            sessions: Vec::new(),
             open_with: None,
             push_pick: None,
             detail: None,
@@ -1448,7 +1456,7 @@ impl App {
                 Cmd::None
             }
             KeyCode::Char('a') => {
-                self.request_agent_setup();
+                self.request_agent();
                 Cmd::None
             }
             KeyCode::Char('o') => Cmd::OpenWith,
@@ -1938,6 +1946,10 @@ impl App {
             && let [only] = ids.as_slice()
             && let Some(repo) = self.repos.iter().find(|r| &r.id == only)
             && repo.branches.len() > 1
+            // A linked worktree's row is about the one branch it has checked
+            // out. It lists the repository's other branches too (they are
+            // shared), but there is nothing to choose: it asks to push its own.
+            && repo.linked.is_none()
             && !repo.has_error()
             && !self.busy.contains(&repo.id)
         {
@@ -1975,7 +1987,7 @@ impl App {
             if repo.has_error() || repo.path.is_none() || self.busy.contains(&id) {
                 continue;
             }
-            if bulk_push && repo.upstream.as_ref().is_none_or(|u| u.ahead == 0) {
+            if bulk_push && repo.unpushed() == 0 {
                 nothing_to_push += 1;
                 continue;
             }
@@ -2007,16 +2019,23 @@ impl App {
             self.status = Some("no repos to fetch".to_string());
             return;
         }
-        let noun = if readable == 1 {
-            "repository"
-        } else {
-            "repositories"
-        };
+        let (one, many) = self.row_nouns();
+        let noun = if readable == 1 { one } else { many };
         self.confirm = Some(Pending {
             prompt: format!("Fetch all {readable} {noun}?"),
             action: ConfirmAction::FetchAll,
         });
         self.mode = Mode::Confirm;
+    }
+
+    /// What a row is called: a repository of a fleet, or a checkout when the
+    /// rows are one repository's main checkout and its worktrees.
+    fn row_nouns(&self) -> (&'static str, &'static str) {
+        if cohors_core::lone_repository(&self.repos).is_some() {
+            ("checkout", "checkouts")
+        } else {
+            ("repository", "repositories")
+        }
     }
 
     /// The question a fetch, pull or push asks. It says what will happen and
@@ -2030,15 +2049,20 @@ impl App {
             .collect();
         let count =
             |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
-        let these = count(repos.len(), "repository", "repositories");
+        let (one, many) = self.row_nouns();
+        let these = count(repos.len(), one, many);
         match verb {
             BulkVerb::Fetch => format!("Fetch {these}?"),
             BulkVerb::Pull => format!("Pull {these}? Fast-forward only."),
             BulkVerb::Push => {
+                // Each commit once: rows that are linked worktrees of one
+                // repository often share some.
                 let commits: u32 = repos
                     .iter()
-                    .filter_map(|r| r.upstream.as_ref())
-                    .map(|u| u.ahead)
+                    .map(|r| match &r.linked {
+                        Some(linked) => linked.unpushed_unique,
+                        None => r.ahead(),
+                    })
                     .sum();
                 let mut prompt = if commits > 0 {
                     format!(
@@ -2066,6 +2090,45 @@ impl App {
                 prompt
             }
         }
+    }
+
+    /// The newest agent session known to have run in `repo`'s folder.
+    pub fn session_in(&self, repo: &RepoId) -> Option<&cohors_core::suggest::AgentSession> {
+        self.sessions
+            .iter()
+            .filter(|session| session.repo == repo.0)
+            .max_by_key(|session| session.last_active)
+    }
+
+    /// `a` on a row. On a repository it starts the agent to set the
+    /// repository up for the launchpad, as before. On a row that is a linked
+    /// worktree it reopens the agent session that ran there, which is what
+    /// such a worktree is usually for: the work in it was an agent's, and
+    /// that conversation knows what is left to do.
+    fn request_agent(&mut self) {
+        let Some(repo) = self.current_repo() else {
+            self.status = Some("no repo selected".to_string());
+            return;
+        };
+        if repo.linked.is_none() {
+            return self.request_agent_setup();
+        }
+        let (id, name) = (repo.id.clone(), repo.name.clone());
+        let Some(session) = self.session_in(&id) else {
+            self.status = Some(format!("no agent session found for {name}"));
+            return;
+        };
+        // What it was about, in the agent's own words (text a repository's
+        // work wrote, so control characters are dropped).
+        let about = crate::ui::text::clip(&crate::ui::text::safe(&session.title), 56, '…');
+        self.confirm = Some(Pending {
+            prompt: format!("Resume the agent session in {name}? “{about}”"),
+            action: ConfirmAction::ResumeAgent {
+                repo: id,
+                session: session.id.clone(),
+            },
+        });
+        self.mode = Mode::Confirm;
     }
 
     /// Ask before handing the repository under the cursor to the user's
@@ -2262,6 +2325,7 @@ mod tests {
             groups: Vec::new(),
             branches: Vec::new(),
             worktrees: Vec::new(),
+            linked: None,
         }
     }
 

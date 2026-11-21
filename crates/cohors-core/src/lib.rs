@@ -47,9 +47,9 @@ pub mod view;
 pub use attention::{Assessment, AttentionReason, FleetSummary, Severity, assess, fleet_summary};
 pub use detail::{BranchInfo, ChangeState, ChangedFile, RepoChanges, RepoDetail};
 pub use model::{
-    Branch, CiStatus, CommitMeta, Contributor, LinkedWorktree, PullRequest, RemoteDetail,
-    RemoteInfo, RemoteKind, RepoId, RepoOperation, RepoRef, RepoSnapshot, TagInfo, Upstream,
-    WorktreeStatus, classify_remote, remote_host,
+    Branch, CiStatus, CommitMeta, Contributor, LinkedRow, LinkedWorktree, PullRequest,
+    RemoteDetail, RemoteInfo, RemoteKind, RepoId, RepoOperation, RepoRef, RepoSnapshot, TagInfo,
+    Upstream, WorktreeStatus, classify_remote, lone_repository, remote_host,
 };
 pub use overview::{
     ActionKind, KeyFigures, NextAction, Overview, RepoCommits, RepoLine, RepoWork, SuggestedAction,
