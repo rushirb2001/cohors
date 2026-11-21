@@ -15,12 +15,12 @@ expression: "render_to_string(&fleet_app(), 119, 53)"
 ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
                                                                                                                        
 ╭─  1  ▶ Do next ─────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│▸ RISK      Check 1 repository that could not be read                           Nothing else is known about legacy-… │
-│  RISK   P  Push 4 commits from 3 repositories                                  They exist only on this machine: pa… │
-│  RISK      Back up 6 commits and 3 uncommitted files sitting in 2 worktrees    A worktree is easy to forget, and c… │
-│  WARN      Reconcile 1 diverged branch                                         Local and remote both moved, so nei… │
-│  NOTE   p  Pull 2 repositories that are behind                                 A fast-forward pull cannot lose wor… │
-│  NOTE      Commit or discard 26 uncommitted files                              In 6 repositories. Largest: web-app… │
+│▸ RISK      Check 1 repository that could not be read    Nothing else is known about legacy-billing.                 │
+│  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: payments, design-system a… │
+│  RISK      Back up 6 commits and 3 uncommitted files sitting in 2 worktrees  A worktree is easy to forget, and cle… │
+│  WARN      Reconcile 1 diverged branch                  Local and remote both moved, so neither a push nor a fast-… │
+│  NOTE   p  Pull 2 repositories that are behind          A fast-forward pull cannot lose work: web-app and data-pip… │
+│  NOTE      Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app with 7.                 │
 ╰─  ⏎  do the highlighted step   P  push 3   p  pull 2  ──────────────────────────────────────────────────────────────╯
                                                                                                                        
 ╭─  2  ▲ Work at risk  6 ─────────────────────────────────────────────────────────────────────────────────────────────╮

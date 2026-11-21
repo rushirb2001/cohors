@@ -730,12 +730,29 @@ fn render_do_next(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
         .max()
         .unwrap_or(0);
     let show_why = width >= 70;
-    let title_width = if show_why {
-        (longest + 4).min(width.saturating_sub(LEAD + 24))
-    } else {
-        width.saturating_sub(LEAD)
+    let room = width.saturating_sub(LEAD);
+    // Wide enough for every title, as long as the reasons keep 24 columns.
+    let for_all = (longest + 4).min(room.saturating_sub(24));
+    // One title much longer than every other would take that room from each
+    // row's reason. When the reasons would be left short, the column fits
+    // the other titles instead and the long one runs on in its own row.
+    // Titles of similar length are left alone: the column fits them all and
+    // the reasons stay in one line down the card.
+    let mut lengths: Vec<usize> = actions.iter().map(|a| a.title.chars().count()).collect();
+    lengths.sort_unstable_by(|a, b| b.cmp(a));
+    let others = match lengths[..] {
+        [long, next, ..] if long >= next + OUTLIER && room - for_all < WHY_WANTED => {
+            Some((next + 4).min(room.saturating_sub(24)))
+        }
+        _ => None,
     };
-    let why_width = width.saturating_sub(LEAD + title_width);
+    let title_width = match (show_why, others) {
+        (false, _) => room,
+        (true, Some(others)) => others,
+        (true, None) => for_all,
+    };
+    let why_width = room.saturating_sub(title_width);
+    let runs_on = show_why && title_width < for_all;
 
     let window = list_window(
         app.scrolls.next.get(),
@@ -746,8 +763,35 @@ fn render_do_next(frame: &mut Frame, area: Rect, app: &App, theme: &Theme, focus
     app.scrolls.next.set(window.offset);
     let cursor = focused.then_some(app.cursors.next);
     draw_list(frame, inner, window, 1, cursor, theme, |index| {
-        Item::line(do_next_line(&actions[index], title_width, why_width, theme))
+        let action = &actions[index];
+        let (title_width, why_width) = if runs_on {
+            run_on(action.title.chars().count(), title_width, why_width)
+        } else {
+            (title_width, why_width)
+        };
+        Item::line(do_next_line(action, title_width, why_width, theme))
     });
+}
+
+/// What the reasons of the Do next card want. With less than this, a single
+/// title much longer than the rest is set aside rather than fitted.
+const WHY_WANTED: usize = 56;
+/// How much longer than every other title one has to be to count as that.
+const OUTLIER: usize = 12;
+
+/// The widths of one row whose title is longer than the title column: the
+/// title takes the columns it needs from its own reason, which gets what is
+/// left. A reason left with only a few columns says nothing, so then the
+/// title has the whole row.
+fn run_on(title: usize, title_width: usize, why_width: usize) -> (usize, usize) {
+    // The two columns after a title are the gap before its reason.
+    let needs = title + 2;
+    if needs <= title_width {
+        return (title_width, why_width);
+    }
+    let row = title_width + why_width;
+    let left = row.saturating_sub(needs);
+    if left < 16 { (row, 0) } else { (needs, left) }
 }
 
 /// One step: severity mark, the key that does it, what to do, and why.
@@ -1571,6 +1615,18 @@ mod tests {
         assert_eq!(top[22], ('█', true));
         assert_eq!(bottom[23], ('█', true));
         assert!(super::braille_chart(&[0, 0, 0]).is_none());
+    }
+
+    #[test]
+    fn a_long_title_takes_room_from_its_own_reason_only() {
+        // A title that fits its column leaves the row as it is.
+        assert_eq!(run_on(40, 45, 61), (45, 61));
+        // A longer one takes what it needs (and the gap after it).
+        assert_eq!(run_on(64, 45, 61), (66, 40));
+        // Left with a few columns, a reason says nothing: the title has the
+        // whole row.
+        assert_eq!(run_on(95, 45, 61), (106, 0));
+        assert_eq!(run_on(200, 45, 61), (106, 0));
     }
 
     use super::*;

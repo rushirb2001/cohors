@@ -177,7 +177,9 @@ fn render_repo_cards(frame: &mut Frame, area: Rect, app: &App, now: i64, theme: 
                 theme.dim(),
             ))],
             (Pane::State, Some(snap)) => state_lines(snap, now, width, theme),
-            (Pane::Signals, Some(snap)) => signal_lines(snap, line, now, width, theme),
+            (Pane::Signals, Some(snap)) => {
+                signal_lines(snap, line, now, width, inner.height as usize, theme)
+            }
             (_, Some(_)) => task_lines(entry, width, theme),
         };
         draw_scrolled(frame, inner, lines, app, focused);
@@ -278,11 +280,18 @@ fn state_lines(snap: &RepoSnapshot, now: i64, width: usize, theme: &Theme) -> Ve
 
 /// The signals card: every reason the repository needs attention, then its
 /// last commit and where it lives.
+///
+/// The card has `rows` lines. A repository with several reasons used to push
+/// its path off the bottom, so the card closes up before anything is lost:
+/// first the blank lines go, then each label shares a line with its value.
+/// Past that (seven reasons or more) the reasons come first and the card
+/// scrolls, as it always has.
 fn signal_lines(
     snap: &RepoSnapshot,
     line: Option<&RepoLine>,
     now: i64,
     width: usize,
+    rows: usize,
     theme: &Theme,
 ) -> Vec<Line<'static>> {
     let ell = theme.glyphs.ellipsis();
@@ -323,24 +332,43 @@ fn signal_lines(
             }
         }
     }
-    let label = |text: &'static str| Line::from(Span::styled(text, theme.dim()));
+    // What follows the reasons: a label, and its value cut to `room` columns.
+    type Cut = fn(&str, usize, char) -> String;
+    let mut facts: Vec<(&'static str, String, Cut)> = Vec::new();
     if let Some(commit) = &snap.last_commit {
-        lines.push(Line::default());
-        lines.push(label("last commit"));
-        lines.push(Line::from(text::clip(
-            &text::safe(&commit.summary),
-            width,
-            ell,
-        )));
+        facts.push(("last commit", text::safe(&commit.summary), text::clip));
     }
     if let Some(path) = &snap.path {
-        lines.push(Line::default());
-        lines.push(label("path"));
-        lines.push(Line::from(text::clip_start(
-            &text::safe(&text::abbrev_home(path.as_str())),
-            width,
-            ell,
-        )));
+        // A path is cut from the front: its end is the part that tells.
+        let shown = text::safe(&text::abbrev_home(path.as_str()));
+        facts.push(("path", shown, text::clip_start));
+    }
+    // Roomy: a blank line, the label, the value. Close: no blank line.
+    // Tight: the label and its value on one line.
+    let taken = lines.len();
+    let per_fact = if taken + facts.len() * 3 <= rows {
+        3
+    } else if taken + facts.len() * 2 <= rows {
+        2
+    } else {
+        1
+    };
+    for (label, value, cut) in facts {
+        let label_span = Span::styled(label, theme.dim());
+        if per_fact == 1 {
+            let room = width.saturating_sub(label.len() + 2);
+            lines.push(Line::from(vec![
+                label_span,
+                Span::raw("  "),
+                Span::raw(cut(&value, room, ell)),
+            ]));
+            continue;
+        }
+        if per_fact == 3 {
+            lines.push(Line::default());
+        }
+        lines.push(Line::from(label_span));
+        lines.push(Line::from(cut(&value, width, ell)));
     }
     lines
 }

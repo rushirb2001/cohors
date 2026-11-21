@@ -31,6 +31,33 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.29] — 2026-11-21
+
+### Fixed
+
+- **A report read through a pipe lost reasons.** `--report` on a pipe (how a
+  coding agent reads cohors) cut each repository's reasons and each step's
+  title to a 96-column row, so the third reason of a busy repository was an
+  ellipsis the agent had to ask again for. A program has no screen to fit:
+  it now gets every reason and every title whole. A terminal still gets them
+  cut to the row.
+- **Failures did not all look like cohors'.** Some said `cohors: no
+  repository matches ...` and others Rust's own `Error: ...`. Every failure
+  now reads `cohors: what went wrong` on one line, with the same exit code
+  as before.
+- **One long step squeezed every step's reason.** In the dashboard's **Do
+  next** card the title column was as wide as the longest title, so a single
+  long one (the worktree step) cut the reason of every other row. A title
+  much longer than the rest now runs on in its own row and the others keep
+  their reasons. Titles of similar length are laid out as before.
+- **A repository with several reasons lost its path.** The **signals** card
+  of the repository view listed the reasons, then the last commit, then the
+  path, and three reasons pushed the path off the bottom. The card now closes
+  up first (no blank lines, then label and value on one line), which fits six
+  reasons with the last commit and the path still showing.
+- `cohors doctor` said "Set up: not by a first run". It says "not yet" and
+  points at the section that explains it.
+
 ## [0.8.28] — 2026-11-21
 
 ### Fixed

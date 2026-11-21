@@ -431,6 +431,18 @@ fn took_label(d: std::time::Duration) -> String {
     }
 }
 
+/// Cut `s` to fit a row on a person's screen. A program reading the report
+/// (`--report` on a pipe, which is how a coding agent reads it) has no screen
+/// to fit, and what is cut it can only get by asking again, so it gets the
+/// text whole and the line runs as long as it needs.
+fn fit(s: &str, max: usize) -> String {
+    if report_on_a_pipe() {
+        s.to_string()
+    } else {
+        clip(s, max)
+    }
+}
+
 /// Clip `s` to `max` columns, marking the cut with an ellipsis.
 fn clip(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
@@ -608,7 +620,7 @@ fn scan_row(line: &cohors_core::RepoLine, w: RowWidths, now: i64, color: bool) -
         .unwrap_or_default();
     // Every reason, not only the first: a repo with a never-pushed branch AND
     // an old stash should say both.
-    let why = clip(&line.reasons.join("; "), w.why);
+    let why = fit(&line.reasons.join("; "), w.why);
     // Pad before painting: ANSI escapes have no width, so colouring first would
     // throw the column alignment off.
     let branch = if w.branch > 0 {
@@ -776,7 +788,7 @@ fn scan_report(
                 "    {} {}  {}\n",
                 severity_mark(action.severity, color),
                 bold(color, &format!("{:<cmd_w$}", action_command(action))),
-                dim(color, &clip(&action.title, title_w)),
+                dim(color, &fit(&action.title, title_w)),
             ));
         }
         out.push('\n');

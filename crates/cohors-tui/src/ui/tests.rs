@@ -1741,6 +1741,86 @@ fn every_update_state_shows_in_the_header() {
     }
 }
 
+/// One step with a long title (the worktree one) used to widen the title
+/// column for every row, cutting each row's reason. The column now fits the
+/// other titles, and the long one runs on in its own row.
+#[test]
+fn one_long_step_does_not_cut_every_other_steps_reason() {
+    let screen = render_to_string(&fleet_app(), 119, 53);
+    // The other steps say why in full...
+    for whole in [
+        "Nothing else is known about legacy-billing.",
+        "In 6 repositories. Largest: web-app with 7.",
+    ] {
+        assert!(screen.contains(whole), "{whole:?} was cut:\n{screen}");
+    }
+    // ...and the long step is not cut to make room for them.
+    let long = "Back up 6 commits and 3 uncommitted files sitting in 2 worktrees";
+    let row = screen
+        .lines()
+        .find(|line| line.contains(long))
+        .unwrap_or_else(|| panic!("the long title was cut:\n{screen}"));
+    // Its own reason follows in what is left of the row.
+    assert!(row.contains("A worktree is easy to forget"), "{row}");
+    // The reasons of the other rows start in one column.
+    let starts: Vec<usize> = [
+        "Nothing else is known",
+        "They exist only on",
+        "In 6 repositories",
+    ]
+    .iter()
+    .map(|why| {
+        let line = screen.lines().find(|l| l.contains(why)).unwrap();
+        line.chars().count() - line[line.find(why).unwrap()..].chars().count()
+    })
+    .collect();
+    assert!(
+        starts.windows(2).all(|pair| pair[0] == pair[1]),
+        "{starts:?}"
+    );
+}
+
+/// A repository with several reasons used to push its path off the bottom of
+/// the signals card. The card closes up instead: every reason, the last
+/// commit and the path are all there.
+#[test]
+fn the_signals_card_keeps_the_path_when_there_are_many_reasons() {
+    let mut app = detail_app();
+    app.selected = app
+        .view()
+        .iter()
+        .position(|row| app.repos[row.index].name == "web-app")
+        .expect("the sample fleet has web-app");
+    let screen = render_to_string(&app, 119, 40);
+    for want in [
+        // Four reasons, where two used to be the most that left room.
+        "6 commits not pushed in 2 worktr",
+        "3 uncommitted files in worktree",
+        "5 commits behind",
+        "7 uncommitted files",
+        "last commit",
+        "wip: cart drawer animation",
+        "~/code/web-app",
+    ] {
+        assert!(screen.contains(want), "missing {want:?} in:\n{screen}");
+    }
+    // payments has two reasons: its card keeps the roomy layout, the label
+    // on a line of its own above the value.
+    let roomy = render_to_string(&detail_app(), 119, 40);
+    let label = roomy
+        .lines()
+        .position(|line| line.contains("path") && !line.contains("~/code/"))
+        .expect("a line with the label alone");
+    assert!(
+        roomy
+            .lines()
+            .nth(label + 1)
+            .unwrap()
+            .contains("~/code/payments"),
+        "{roomy}"
+    );
+}
+
 /// The list has no header, so its key bar carries the notice: at the right
 /// end, where an action's result goes, and only when the keys keep their room.
 #[test]

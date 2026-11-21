@@ -13,12 +13,12 @@ expression: "render_to_string(&app, 120, 45)"
 │ 14 commits      │ │ in 2 repos      │ │ in 6 repos       │ │ all recent      │ │ 3 high, 1 doing │ │ prev week 61    │
 ╰─────────────────╯ ╰─────────────────╯ ╰──────────────────╯ ╰─────────────────╯ ╰─────────────────╯ ╰─────────────────╯
 ╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│  RISK      Check 1 repository that could not be read                           Nothing else is known about legacy-b… │
-│  RISK   P  Push 4 commits from 3 repositories                                  They exist only on this machine: pay… │
-│  RISK      Back up 6 commits and 3 uncommitted files sitting in 2 worktrees    A worktree is easy to forget, and cl… │
-│  WARN      Reconcile 1 diverged branch                                         Local and remote both moved, so neit… │
-│  NOTE   p  Pull 2 repositories that are behind                                 A fast-forward pull cannot lose work… │
-│  NOTE      Commit or discard 26 uncommitted files                              In 6 repositories. Largest: web-app … │
+│  RISK      Check 1 repository that could not be read    Nothing else is known about legacy-billing.                  │
+│  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: payments, design-system an… │
+│  RISK      Back up 6 commits and 3 uncommitted files sitting in 2 worktrees  A worktree is easy to forget, and clea… │
+│  WARN      Reconcile 1 diverged branch                  Local and remote both moved, so neither a push nor a fast-f… │
+│  NOTE   p  Pull 2 repositories that are behind          A fast-forward pull cannot lose work: web-app and data-pipe… │
+│  NOTE      Commit or discard 26 uncommitted files       In 6 repositories. Largest: web-app with 7.                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─  2  ▲ Work at risk  6 ──────────────────────────────────────────────────────────────────────────────────────────────╮
 │  RISK  analytics             main           1 commit not pushed, older than 2 days, 2 stashes    4d  Push            │

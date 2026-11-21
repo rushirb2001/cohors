@@ -545,6 +545,66 @@ fn report_prints_the_plain_report_to_a_pipe_and_json_still_wins() {
     assert!(both.trim_start().starts_with('{'), "{both}");
 }
 
+/// A person's terminal gets each repository's reasons cut to the row. A
+/// program reading the report through a pipe (a coding agent) has no screen
+/// to fit, and what is cut it could only get by asking again.
+#[test]
+fn a_piped_report_keeps_every_reason_whole() {
+    let cache = TempDir::new().unwrap();
+    let root = TempDir::new().unwrap();
+    // A repository with a lot to say: its own unpushed commit, uncommitted
+    // files, and an agent's worktree holding a commit and a file.
+    let (repo, agent) = repo_with_left_behind_worktree(root.path());
+    commit_in(&repo, "mine.txt");
+    std::fs::write(repo.join("notes.txt"), "uncommitted").unwrap();
+    std::fs::write(agent.join("left.txt"), "never committed").unwrap();
+
+    for command in ["scan", "overview"] {
+        let report = stdout_of(
+            &read_cmd(cache.path(), root.path(), &[command, "--report"])
+                .assert()
+                .success(),
+        );
+        let row = report
+            .lines()
+            .find(|line| line.contains("api") && line.contains("not pushed"))
+            .unwrap_or_else(|| panic!("no row for the repository in:\n{report}"));
+        for reason in [
+            "1 commit not pushed",
+            "1 commit not pushed in worktree agent-a",
+            "1 uncommitted file in worktree agent-a",
+            "1 uncommitted file",
+        ] {
+            assert!(
+                row.contains(reason),
+                "{command}: {reason:?} missing from {row:?}"
+            );
+        }
+        assert!(!row.contains('…'), "{command}: the row was cut: {row:?}");
+        // A step's title is whole too.
+        assert!(
+            report.contains("sitting in 1 worktree"),
+            "{command}: {report}"
+        );
+    }
+}
+
+/// Every failure reads `cohors: what went wrong`, on one line, exit 1.
+#[test]
+fn a_failure_says_cohors_not_error() {
+    let cache = TempDir::new().unwrap();
+    let missing = cache.path().join("no-such-folder");
+    let assert = read_cmd(cache.path(), &missing, &["overview", "--report"])
+        .assert()
+        .failure()
+        .code(1);
+    let stderr = stderr_of(&assert);
+    assert!(stderr.starts_with("cohors: "), "{stderr:?}");
+    assert!(stderr.contains("no such folder"), "{stderr:?}");
+    assert!(!stderr.contains("Error:"), "{stderr:?}");
+    assert_eq!(stderr.trim_end().lines().count(), 1, "{stderr:?}");
+}
+
 // ----- `cohors hook` (ADR-073) -----------------------------------------------
 //
 // Claude Code runs a hook as a program: the event arrives as JSON on standard

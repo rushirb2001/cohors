@@ -303,11 +303,17 @@ fn main() -> anyhow::Result<()> {
     if let Some(pending) = pending {
         update::print_notice(pending);
     }
-    // A command that already explained itself only needs its exit status.
-    if let Err(err) = &result
-        && let Some(code) = err.downcast_ref::<commands::ExitCode>()
-    {
-        std::process::exit(code.0);
+    if let Err(err) = result {
+        // A command that already explained itself only needs its exit status.
+        if let Some(code) = err.downcast_ref::<commands::ExitCode>() {
+            std::process::exit(code.0);
+        }
+        // Every other failure reads the way those do: `cohors: what went
+        // wrong`, on one line. Returning the error from `main` would print
+        // Rust's own `Error: ...` instead, so two failures of the same
+        // command could look like they came from two programs.
+        eprintln!("cohors: {err:#}");
+        std::process::exit(1);
     }
-    result
+    Ok(())
 }

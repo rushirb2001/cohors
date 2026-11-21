@@ -416,7 +416,9 @@ fn render(r: &Report) -> String {
     row(
         &mut out,
         "Set up",
-        r.set_up.as_deref().unwrap_or("not by a first run"),
+        r.set_up
+            .as_deref()
+            .unwrap_or("not yet (see cohors' own install, below)"),
     );
     let (auto, why) = &r.auto;
     let state = match auto {
@@ -660,7 +662,10 @@ mod tests {
         };
         let text = render(&empty);
         assert!(text.contains("not set up; the first run"), "{text}");
-        assert!(text.contains("Set up        not by a first run"), "{text}");
+        assert!(
+            text.contains("Set up        not yet (see cohors' own install, below)"),
+            "{text}"
+        );
         assert!(text.contains("No problems found."), "{text}");
         assert!(!text.contains("Notes"), "{text}");
         assert!(text.contains("not asked yet (GitHub releases)"), "{text}");
