@@ -105,7 +105,7 @@ pub enum BulkVerb {
 
 impl BulkVerb {
     /// The typed verb for an action-registry verb name, if it is one of the
-    /// three that run without a confirmation.
+    /// three that talk to a remote (and so ask once before they run).
     fn from_registry(verb: &str) -> Option<Self> {
         match verb {
             "fetch" => Some(BulkVerb::Fetch),
@@ -114,6 +114,18 @@ impl BulkVerb {
             _ => None,
         }
     }
+}
+
+/// Who chose the repositories of a fetch, pull or push.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Chosen {
+    /// The person: the marked repositories, or the one under the cursor. A
+    /// push of several leaves out the ones with nothing to push.
+    ByTheSelection,
+    /// The overview, for a "Do next" step: exactly the repositories that need
+    /// the action, so none is left out. This is what lets a push publish
+    /// branches that have no upstream yet.
+    ByTheStep,
 }
 
 /// A set of repositories the table is narrowed to, e.g. the ones a "Do next"
@@ -233,14 +245,6 @@ pub enum Cmd {
     Restart,
     /// Re-run the scan.
     Refresh,
-    /// Fetch the selected repo.
-    FetchSelected,
-    /// Fetch every repo.
-    FetchAll,
-    /// Pull (fast-forward-only) the selected repo.
-    PullSelected,
-    /// Push the selected repo's current branch to its upstream.
-    PushSelected,
     /// Open the per-repo detail pane for the current repo (lazy-loads its data).
     OpenDetail,
     /// Open the selected repo in lazygit.
@@ -271,12 +275,6 @@ pub enum Cmd {
     PushBranchAccept,
     /// Adopt the auto-detected roots from the empty-state rescue prompt.
     UseSuggestedRoots,
-    /// Run a bulk git action over exactly these repositories — a "Do next"
-    /// step, whose targets come from the overview rather than the selection.
-    Act {
-        verb: BulkVerb,
-        ids: Vec<RepoId>,
-    },
     /// Collect the standup and copy it as markdown without opening the view.
     CopyStandupMarkdown,
     /// Copy the setup tip's command (`i`). The dashboard never runs it.
@@ -304,17 +302,16 @@ pub enum VerbBinding {
 #[cfg(test)]
 pub fn verb_binding(verb: &str) -> Option<VerbBinding> {
     Some(match verb {
-        "fetch" => VerbBinding::Direct(Cmd::FetchSelected),
-        "pull" => VerbBinding::Direct(Cmd::PullSelected),
-        "push" => VerbBinding::Direct(Cmd::PushSelected),
         "run" => VerbBinding::Direct(Cmd::RunCommand),
-        // Confirm-gated: 'S' / `:commit <msg>` open a modal, then ConfirmAccept.
-        "stash" | "commit" => VerbBinding::Confirmed,
+        // Confirm-gated: the key (or `:` command) opens a modal, then
+        // ConfirmAccept runs it. Fetch, pull and push ask too (ADR-077).
+        "fetch" | "pull" | "push" | "stash" | "commit" => VerbBinding::Confirmed,
         _ => return None,
     })
 }
 
-/// A destructive bulk action awaiting confirmation.
+/// An action awaiting confirmation: one that changes or destroys work, or one
+/// that talks to a remote.
 #[derive(Debug, Clone)]
 pub struct Pending {
     /// The question shown in the modal, e.g. "Stash changes in 4 repos?".
@@ -322,9 +319,17 @@ pub struct Pending {
     pub action: ConfirmAction,
 }
 
-/// What a confirmed modal will do. One variant per destructive bulk action.
-#[derive(Debug, Clone)]
+/// What a confirmed modal will do. One variant per kind of action that asks.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConfirmAction {
+    /// `git fetch`, `git pull --ff-only` or `git push` across exactly these
+    /// repos. None of them destroys work, but each talks to a remote and a
+    /// push publishes, so none runs on a bare keystroke: `p` and `P` are one
+    /// Shift apart, and Enter on "Do next" runs whichever step is under the
+    /// cursor after a fetch has re-ranked them (ADR-077).
+    Remote { verb: BulkVerb, ids: Vec<RepoId> },
+    /// `git fetch` in every readable repository (the `F` key).
+    FetchAll,
     /// `git stash push` across these repos.
     BulkStash(Vec<RepoId>),
     /// `git add -A && git commit -m <message>` across these repos.
@@ -1139,7 +1144,7 @@ impl App {
             KeyCode::Char('t') => return Some(self.open_launchpad()),
             // Fetching everything and copying the standup are about the
             // whole fleet, so they do not depend on where the cursor is.
-            KeyCode::Char('F') => return Some(Cmd::FetchAll),
+            KeyCode::Char('F') => self.request_fetch_all(),
             KeyCode::Char('Y') => {
                 self.copy_standup_pending = true;
                 return Some(Cmd::CopyStandupMarkdown);
@@ -1428,9 +1433,10 @@ impl App {
     /// when the key is not one of them. Keep [`repo_key_verb`] in step.
     fn on_key_repo(&mut self, key: KeyEvent) -> Option<Cmd> {
         let cmd = match key.code {
-            KeyCode::Char('f') => Cmd::FetchSelected,
-            KeyCode::Char('p') => Cmd::PullSelected,
-            KeyCode::Char('P') => Cmd::PushSelected,
+            // Each asks first: nothing reaches a remote on one keystroke.
+            KeyCode::Char('f') => self.request_remote(BulkVerb::Fetch),
+            KeyCode::Char('p') => self.request_remote(BulkVerb::Pull),
+            KeyCode::Char('P') => self.request_remote(BulkVerb::Push),
             // A commit needs a message, so `c` opens the command line with
             // `commit ` typed; Enter then asks for confirmation as before.
             KeyCode::Char('c') => {
@@ -1464,8 +1470,8 @@ impl App {
 
     /// Carry out one or more "Do next" steps of the same kind of work.
     ///
-    /// A step with a fetch, pull or push verb runs that action over exactly the
-    /// step's repositories. A stash step asks first. Everything else needs a
+    /// A step with a fetch, pull or push verb asks, then runs that action over
+    /// exactly the step's repositories. A stash step asks first too. Everything else needs a
     /// person to look, so it navigates: the launchpad for tasks, otherwise the
     /// repository table narrowed to the step's repositories.
     fn perform(&mut self, steps: &[NextAction]) -> Cmd {
@@ -1491,7 +1497,12 @@ impl App {
                 Cmd::None
             }
             Some(verb) => match BulkVerb::from_registry(verb) {
-                Some(verb) => Cmd::Act { verb, ids },
+                // The overview chose exactly these repositories; the dialog
+                // names them, and `y` runs the step.
+                Some(verb) => {
+                    self.confirm_remote(verb, ids, Chosen::ByTheStep);
+                    Cmd::None
+                }
                 None => self.narrow_to(&first.title, ids),
             },
             None => self.narrow_to(&first.title, ids),
@@ -1688,9 +1699,9 @@ impl App {
     fn apply_command(&mut self, parsed: Option<crate::command::Command>) -> Cmd {
         use crate::command::Command as C;
         match parsed {
-            Some(C::Fetch) => return Cmd::FetchSelected,
-            Some(C::Pull) => return Cmd::PullSelected,
-            Some(C::Push) => return Cmd::PushSelected,
+            Some(C::Fetch) => return self.request_remote(BulkVerb::Fetch),
+            Some(C::Pull) => return self.request_remote(BulkVerb::Pull),
+            Some(C::Push) => return self.request_remote(BulkVerb::Push),
             Some(C::Commit(message)) => self.request_bulk_commit(message),
             Some(C::Refresh) => return Cmd::Refresh,
             Some(C::Standup) => return self.open_standup(),
@@ -1914,6 +1925,149 @@ impl App {
         }
     }
 
+    /// `f`, `p`, `P` and the `:fetch`, `:pull`, `:push` commands: ask before
+    /// the action runs over the action targets (the marked repositories, or
+    /// the one under the cursor).
+    ///
+    /// A push of one repository that has several local branches opens the
+    /// "push which branch?" picker instead, as it always has. That picker is
+    /// itself a dialog that waits for Enter, so nothing is pushed on the way.
+    fn request_remote(&mut self, verb: BulkVerb) -> Cmd {
+        let ids = self.action_targets();
+        if verb == BulkVerb::Push
+            && let [only] = ids.as_slice()
+            && let Some(repo) = self.repos.iter().find(|r| &r.id == only)
+            && repo.branches.len() > 1
+            && !repo.has_error()
+            && !self.busy.contains(&repo.id)
+        {
+            // The checked-out branch is highlighted first.
+            let cursor = repo.branches.iter().position(|b| b.is_current).unwrap_or(0);
+            self.push_pick = Some(PushPick {
+                id: repo.id.clone(),
+                name: repo.name.clone(),
+                branches: repo.branches.clone(),
+                cursor,
+            });
+            self.mode = Mode::PushBranch;
+            return Cmd::None;
+        }
+        self.confirm_remote(verb, ids, Chosen::ByTheSelection);
+        Cmd::None
+    }
+
+    /// Ask before a fetch, pull or push over `ids`.
+    ///
+    /// The dialog names exactly the repositories that will be acted on, so
+    /// the ones that cannot be are left out here, before it opens: a
+    /// repository that cannot be read, one already busy with another action,
+    /// and, when several are pushed at once from a selection, the ones with
+    /// nothing to push (on a large fleet most branches are level with their
+    /// upstream or local-only, and each would only report a failure).
+    fn confirm_remote(&mut self, verb: BulkVerb, ids: Vec<RepoId>, chosen: Chosen) {
+        let bulk_push = verb == BulkVerb::Push && chosen == Chosen::ByTheSelection && ids.len() > 1;
+        let mut nothing_to_push = 0usize;
+        let mut kept: Vec<RepoId> = Vec::new();
+        for id in ids {
+            let Some(repo) = self.repos.iter().find(|r| r.id == id) else {
+                continue;
+            };
+            if repo.has_error() || repo.path.is_none() || self.busy.contains(&id) {
+                continue;
+            }
+            if bulk_push && repo.upstream.as_ref().is_none_or(|u| u.ahead == 0) {
+                nothing_to_push += 1;
+                continue;
+            }
+            kept.push(id);
+        }
+        if kept.is_empty() {
+            self.status = Some(if nothing_to_push > 0 {
+                format!("nothing to push — {nothing_to_push} up to date or local-only")
+            } else {
+                "no repo selected".to_string()
+            });
+            return;
+        }
+        self.confirm = Some(Pending {
+            prompt: self.remote_prompt(verb, &kept),
+            action: ConfirmAction::Remote { verb, ids: kept },
+        });
+        self.mode = Mode::Confirm;
+    }
+
+    /// `F`: ask before fetching every readable repository.
+    fn request_fetch_all(&mut self) {
+        let readable = self
+            .repos
+            .iter()
+            .filter(|r| !r.has_error() && r.path.is_some() && !self.busy.contains(&r.id))
+            .count();
+        if readable == 0 {
+            self.status = Some("no repos to fetch".to_string());
+            return;
+        }
+        let noun = if readable == 1 {
+            "repository"
+        } else {
+            "repositories"
+        };
+        self.confirm = Some(Pending {
+            prompt: format!("Fetch all {readable} {noun}?"),
+            action: ConfirmAction::FetchAll,
+        });
+        self.mode = Mode::Confirm;
+    }
+
+    /// The question a fetch, pull or push asks. It says what will happen and
+    /// to how many repositories; the dialog lists their names under it. A
+    /// push also says how many commits leave this machine, and how many
+    /// branches reach their remote for the first time.
+    fn remote_prompt(&self, verb: BulkVerb, ids: &[RepoId]) -> String {
+        let repos: Vec<&RepoSnapshot> = ids
+            .iter()
+            .filter_map(|id| self.repos.iter().find(|r| &r.id == id))
+            .collect();
+        let count =
+            |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+        let these = count(repos.len(), "repository", "repositories");
+        match verb {
+            BulkVerb::Fetch => format!("Fetch {these}?"),
+            BulkVerb::Pull => format!("Pull {these}? Fast-forward only."),
+            BulkVerb::Push => {
+                let commits: u32 = repos
+                    .iter()
+                    .filter_map(|r| r.upstream.as_ref())
+                    .map(|u| u.ahead)
+                    .sum();
+                let mut prompt = if commits > 0 {
+                    format!(
+                        "Push {} from {these}?",
+                        count(commits as usize, "commit", "commits")
+                    )
+                } else {
+                    format!("Push {these}?")
+                };
+                // A branch with no upstream is published by the push.
+                let unpublished = repos
+                    .iter()
+                    .filter(|r| r.upstream.is_none() && r.remote_url.is_some())
+                    .count();
+                if unpublished > 0 {
+                    prompt.push_str(&format!(
+                        " {} for the first time.",
+                        count(
+                            unpublished,
+                            "branch reaches its remote",
+                            "branches reach their remote"
+                        )
+                    ));
+                }
+                prompt
+            }
+        }
+    }
+
     /// Ask before handing the repository under the cursor to the user's
     /// coding agent to write (or update) its launchpad file. One repository at
     /// a time: an agent session is interactive, so it cannot be a bulk action.
@@ -2115,6 +2269,27 @@ mod tests {
         KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE)
     }
 
+    /// Press `on` and say what it asked to confirm, closing the dialog again
+    /// so the next key in the test goes to the screen. The key itself must
+    /// never start anything: it only ever asks.
+    fn asked(app: &mut App, on: KeyEvent) -> Option<ConfirmAction> {
+        assert_eq!(app.on_key(on), Cmd::None, "a key must not act by itself");
+        let asked = app.confirm.take().map(|pending| pending.action);
+        if asked.is_some() {
+            assert_eq!(app.mode, Mode::Confirm);
+            app.mode = Mode::Normal;
+        }
+        asked
+    }
+
+    /// The confirmation a fetch, pull or push over `ids` asks for.
+    fn remote(verb: BulkVerb, ids: &[RepoId]) -> Option<ConfirmAction> {
+        Some(ConfirmAction::Remote {
+            verb,
+            ids: ids.to_vec(),
+        })
+    }
+
     fn code(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, KeyModifiers::NONE)
     }
@@ -2217,22 +2392,20 @@ mod tests {
             .collect();
         assert!(!targets.is_empty());
 
-        // Its own key, from "Do next"…
-        assert_eq!(
-            app.on_key(key('p')),
-            Cmd::Act {
-                verb: BulkVerb::Pull,
-                ids: targets.clone()
-            }
-        );
-        // …and Enter on the highlighted step.
+        // Its own key, from "Do next", asks about exactly those…
+        assert_eq!(asked(&mut app, key('p')), remote(BulkVerb::Pull, &targets));
+        // …and so does Enter on the highlighted step.
         app.cursors.next = index;
         assert_eq!(
-            app.on_key(code(KeyCode::Enter)),
-            Cmd::Act {
-                verb: BulkVerb::Pull,
-                ids: targets
-            }
+            asked(&mut app, code(KeyCode::Enter)),
+            remote(BulkVerb::Pull, &targets)
+        );
+        // Only `y` then runs it; the loop reads what was asked.
+        app.on_key(code(KeyCode::Enter));
+        assert_eq!(app.on_key(key('y')), Cmd::ConfirmAccept);
+        assert_eq!(
+            app.confirm.as_ref().map(|pending| pending.action.clone()),
+            remote(BulkVerb::Pull, &targets)
         );
     }
 
@@ -2248,28 +2421,26 @@ mod tests {
             repos: repos.iter().map(|r| r.to_string()).collect(),
         };
         let mut app = demo_app();
+        // Three repositories of the sample fleet, by id.
+        let (a, b, c) = ("demo/payments", "demo/design-system", "demo/analytics");
         let overview = app.overview.as_mut().unwrap();
         overview.actions = vec![
-            step(ActionKind::Push, &["a", "b"]),
-            // "b" is listed by both steps and must be pushed once.
-            step(ActionKind::Publish, &["b", "c"]),
+            step(ActionKind::Push, &[a, b]),
+            // `b` is listed by both steps and must be pushed once.
+            step(ActionKind::Publish, &[b, c]),
         ];
-        let ids = |names: &[&str]| names.iter().map(|n| RepoId(n.to_string())).collect();
+        let ids = |names: &[&str]| -> Vec<RepoId> {
+            names.iter().map(|n| RepoId(n.to_string())).collect()
+        };
         assert_eq!(
-            app.on_key(key('P')),
-            Cmd::Act {
-                verb: BulkVerb::Push,
-                ids: ids(&["a", "b", "c"])
-            }
+            asked(&mut app, key('P')),
+            remote(BulkVerb::Push, &ids(&[a, b, c]))
         );
-        // Enter acts on the highlighted step alone.
+        // Enter asks about the highlighted step alone.
         app.cursors.next = 1;
         assert_eq!(
-            app.on_key(code(KeyCode::Enter)),
-            Cmd::Act {
-                verb: BulkVerb::Push,
-                ids: ids(&["b", "c"])
-            }
+            asked(&mut app, code(KeyCode::Enter)),
+            remote(BulkVerb::Push, &ids(&[b, c]))
         );
     }
 
@@ -2460,9 +2631,11 @@ mod tests {
     fn the_table_keys_work_in_the_detail_view_too() {
         let mut app = demo_app();
         app.screen = Screen::Repos;
-        assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
-        assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
-        assert_eq!(app.on_key(key('P')), Cmd::PushSelected);
+        let row = app.action_targets();
+        assert_eq!(row.len(), 1);
+        assert_eq!(asked(&mut app, key('f')), remote(BulkVerb::Fetch, &row));
+        assert_eq!(asked(&mut app, key('p')), remote(BulkVerb::Pull, &row));
+        assert_eq!(asked(&mut app, key('P')), remote(BulkVerb::Push, &row));
         assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
         app.on_key(key('>'));
         assert_eq!(app.sort, SortMode::Recent);
@@ -2497,9 +2670,10 @@ mod tests {
         // The same keys as the table, about the highlighted repository.
         assert_eq!(app.current_repo().unwrap().id, row);
         assert_eq!(app.action_targets(), vec![row.clone()]);
-        assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
-        assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
-        assert_eq!(app.on_key(key('P')), Cmd::PushSelected);
+        let only = std::slice::from_ref(&row);
+        assert_eq!(asked(&mut app, key('f')), remote(BulkVerb::Fetch, only));
+        assert_eq!(asked(&mut app, key('p')), remote(BulkVerb::Pull, only));
+        assert_eq!(asked(&mut app, key('P')), remote(BulkVerb::Push, only));
         assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
         // `S` is "stash" here as everywhere: it asks about that repository.
         assert_eq!(app.on_key(key('S')), Cmd::None);
@@ -2523,7 +2697,11 @@ mod tests {
         let mut app = demo_app();
         for card in ['1', '2', '3', '4', '5'] {
             app.on_key(key(card));
-            assert_eq!(app.on_key(key('F')), Cmd::FetchAll, "{card}");
+            assert_eq!(
+                asked(&mut app, key('F')),
+                Some(ConfirmAction::FetchAll),
+                "{card}"
+            );
         }
     }
 
@@ -3070,10 +3248,14 @@ mod tests {
     #[test]
     fn action_keys_map_to_commands() {
         let mut app = app_with(&[("a", false)]);
-        assert_eq!(app.on_key(key('f')), Cmd::FetchSelected);
-        assert_eq!(app.on_key(key('F')), Cmd::FetchAll);
-        assert_eq!(app.on_key(key('p')), Cmd::PullSelected);
-        assert_eq!(app.on_key(key('P')), Cmd::PushSelected);
+        // (A repository with no folder cannot be acted on, so give it one.)
+        app.repos[0].path = Some("/code/a".into());
+        let a = app.action_targets();
+        // Nothing that reaches a remote runs on its key: each one asks.
+        assert_eq!(asked(&mut app, key('f')), remote(BulkVerb::Fetch, &a));
+        assert_eq!(asked(&mut app, key('F')), Some(ConfirmAction::FetchAll));
+        assert_eq!(asked(&mut app, key('p')), remote(BulkVerb::Pull, &a));
+        assert_eq!(asked(&mut app, key('P')), remote(BulkVerb::Push, &a));
         assert_eq!(app.on_key(key('o')), Cmd::OpenWith);
         assert_eq!(app.on_key(key('L')), Cmd::Lazygit);
         assert_eq!(app.on_key(key('y')), Cmd::CopyPath);
@@ -3082,6 +3264,212 @@ mod tests {
         assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::None);
         assert_eq!(app.screen, Screen::Repos);
         assert_eq!(app.on_key(code(KeyCode::Enter)), Cmd::OpenDetail);
+    }
+
+    // ── Nothing reaches a remote on one keystroke (ADR-077) ─────────────────
+
+    /// The slip this exists for: `F` (fetch all) is typed with Shift held,
+    /// and with Shift still down the key meant as `p` (pull) arrives as `P`
+    /// (push). Before, that pushed. Now `F` only asks, and the stray `P` is
+    /// "not y", which cancels: nothing is fetched and nothing is pushed.
+    #[test]
+    fn a_slip_of_the_shift_key_never_pushes() {
+        let mut app = demo_app();
+        app.on_key(key('5'));
+        assert_eq!(app.on_key(key('F')), Cmd::None);
+        assert_eq!(app.mode, Mode::Confirm);
+        assert_eq!(app.on_key(key('P')), Cmd::None);
+        assert!(app.confirm.is_none(), "the stray key cancelled the fetch");
+        assert_eq!(app.mode, Mode::Normal);
+        // Typed again on purpose, `P` asks, and every key but `y` backs out.
+        for other in ['p', 'P', 'f', 'F', 'n', ' ', 'q'] {
+            assert_eq!(app.on_key(key('P')), Cmd::None);
+            assert!(app.confirm.is_some() || app.mode == Mode::PushBranch);
+            assert_eq!(app.on_key(key(other)), Cmd::None, "{other:?} is not yes");
+            assert!(app.confirm.is_none(), "{other:?} left the dialog open");
+            // (A push of a repository with several branches opens the branch
+            // picker instead; leave it for the next round.)
+            app.mode = Mode::Normal;
+            app.push_pick = None;
+        }
+        for cancel in [KeyCode::Esc, KeyCode::Enter] {
+            app.on_key(key('p'));
+            assert_eq!(app.on_key(code(cancel)), Cmd::None, "{cancel:?}");
+            assert!(app.confirm.is_none());
+        }
+    }
+
+    /// Enter on "Do next" runs nothing by itself, whichever step a fetch has
+    /// moved under the cursor: every step with a verb asks, and the question
+    /// is about that step's own repositories.
+    #[test]
+    fn enter_on_a_step_asks_whichever_step_is_under_the_cursor() {
+        let mut app = demo_app();
+        app.on_key(key('1'));
+        let steps = app.actions().to_vec();
+        let mut with_a_verb = 0;
+        for (index, step) in steps.iter().enumerate() {
+            let Some(verb) = step.verb.as_deref().and_then(BulkVerb::from_registry) else {
+                continue;
+            };
+            with_a_verb += 1;
+            app.cursors.next = index;
+            let ids: Vec<RepoId> = step.repos.iter().map(|id| RepoId(id.clone())).collect();
+            // (The sample fleet's steps name only repositories it can read.)
+            assert_eq!(
+                asked(&mut app, code(KeyCode::Enter)),
+                remote(verb, &ids),
+                "{}",
+                step.title
+            );
+        }
+        assert!(
+            with_a_verb >= 2,
+            "the sample fleet has a push and a pull step"
+        );
+    }
+
+    #[test]
+    fn the_question_says_what_will_happen_and_to_how_many() {
+        let mut app = demo_app();
+        app.on_key(key('5'));
+        let prompt = |app: &mut App, on: char| {
+            app.on_key(key(on));
+            let prompt = app.confirm.take().map(|pending| pending.prompt);
+            app.mode = Mode::Normal;
+            prompt
+        };
+        // The sample fleet has twelve repositories, one of them unreadable.
+        assert_eq!(
+            prompt(&mut app, 'F').as_deref(),
+            Some("Fetch all 11 repositories?")
+        );
+        assert_eq!(
+            prompt(&mut app, 'f').as_deref(),
+            Some("Fetch 1 repository?")
+        );
+        assert_eq!(
+            prompt(&mut app, 'p').as_deref(),
+            Some("Pull 1 repository? Fast-forward only.")
+        );
+        // A push says how many commits leave this machine.
+        let step = step(&app, ActionKind::Push);
+        app.on_key(key('1'));
+        app.cursors.next = step;
+        app.on_key(code(KeyCode::Enter));
+        let pending = app.confirm.take().unwrap();
+        app.mode = Mode::Normal;
+        assert_eq!(pending.prompt, "Push 4 commits from 3 repositories?");
+        // And when a branch has no upstream yet, that the push publishes it.
+        let mut fresh = snap("fresh", false);
+        fresh.upstream = None;
+        fresh.remote_url = Some("git@example.com:me/fresh.git".into());
+        fresh.path = Some("/code/fresh".into());
+        let mut app = App::new(vec![], String::new());
+        app.set_repos(vec![fresh]);
+        app.focus = Card::Repos;
+        assert_eq!(
+            prompt(&mut app, 'P').as_deref(),
+            Some("Push 1 repository? 1 branch reaches its remote for the first time.")
+        );
+    }
+
+    /// Several repositories pushed at once: the ones with nothing to push
+    /// are left out before the question, so it names exactly what is pushed.
+    #[test]
+    fn a_push_of_several_asks_only_about_the_ones_with_something_to_push() {
+        let mut app = demo_app();
+        app.on_key(key('5'));
+        app.on_key(key('*'));
+        assert!(app.selection.len() > 3);
+        let ahead: HashSet<RepoId> = app
+            .repos
+            .iter()
+            .filter(|r| !r.has_error() && r.upstream.as_ref().is_some_and(|u| u.ahead > 0))
+            .map(|r| r.id.clone())
+            .collect();
+        assert!(!ahead.is_empty() && ahead.len() < app.selection.len());
+        let Some(ConfirmAction::Remote { verb, ids }) = asked(&mut app, key('P')) else {
+            panic!("a push of the marked repositories asks");
+        };
+        assert_eq!(verb, BulkVerb::Push);
+        assert_eq!(ids.iter().cloned().collect::<HashSet<_>>(), ahead);
+        // A fetch of the same selection leaves out only what cannot be read.
+        let Some(ConfirmAction::Remote { ids, .. }) = asked(&mut app, key('f')) else {
+            panic!("a fetch of the marked repositories asks");
+        };
+        assert_eq!(
+            ids.len(),
+            app.repos.iter().filter(|r| !r.has_error()).count()
+        );
+
+        // Nothing to push at all: it says so, and asks nothing.
+        let mut level = app_with(&[("a", false), ("b", false)]);
+        for repo in &mut level.repos {
+            repo.path = Some(format!("/code/{}", repo.name).into());
+        }
+        level.on_key(key('*'));
+        assert_eq!(asked(&mut level, key('P')), None);
+        assert_eq!(
+            level.status.as_deref(),
+            Some("nothing to push — 2 up to date or local-only")
+        );
+    }
+
+    /// One repository with several local branches: `P` opens the "push which
+    /// branch?" picker, as before. It is a dialog that waits for Enter, so it
+    /// is the question.
+    #[test]
+    fn a_push_of_a_repo_with_several_branches_opens_the_picker() {
+        let mut app = demo_app();
+        app.on_key(key('5'));
+        app.selected = app
+            .view()
+            .iter()
+            .position(|row| app.repos[row.index].name == "payments")
+            .unwrap();
+        assert_eq!(app.on_key(key('P')), Cmd::None);
+        assert_eq!(app.mode, Mode::PushBranch);
+        assert!(app.confirm.is_none());
+        let pick = app.push_pick.as_ref().unwrap();
+        assert_eq!(pick.name, "payments");
+        assert_eq!(pick.branches[pick.cursor].name, "main");
+        // Esc leaves without pushing.
+        assert_eq!(app.on_key(code(KeyCode::Esc)), Cmd::None);
+        assert!(app.push_pick.is_none());
+    }
+
+    #[test]
+    fn a_repo_that_cannot_be_read_is_not_asked_about_and_the_command_line_asks_too() {
+        let mut app = demo_app();
+        app.on_key(key('5'));
+        app.selected = app
+            .view()
+            .iter()
+            .position(|row| app.repos[row.index].has_error())
+            .unwrap();
+        for on in ['f', 'p', 'P'] {
+            assert_eq!(asked(&mut app, key(on)), None, "{on}");
+            assert_eq!(app.status.as_deref(), Some("no repo selected"));
+        }
+        // `:pull` is the same question as `p`.
+        app.selected = 0;
+        let row = app.action_targets();
+        for (typed, verb) in [
+            ("fetch", BulkVerb::Fetch),
+            ("pull", BulkVerb::Pull),
+            ("push", BulkVerb::Push),
+        ] {
+            app.on_key(key(':'));
+            for c in typed.chars() {
+                app.on_key(key(c));
+            }
+            assert_eq!(
+                asked(&mut app, code(KeyCode::Enter)),
+                remote(verb, &row),
+                ":{typed}"
+            );
+        }
     }
 
     /// Structural parity, TUI half: every action in the shared registry must be

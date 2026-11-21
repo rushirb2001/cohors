@@ -101,7 +101,7 @@ The mouse works too: click a card to focus it, a row to select it and the same r
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys-dark.svg">
   <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys-light.svg">
-  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys.svg" alt="Dashboard keys: P p f push, pull, fetch; c S commit, stash (asks first); F fetch everything; 1 to 5 jump to a card; colon for the command line; Enter opens a repo; slash filters; s and Y show and copy the standup; t shows tasks; question mark lists every key." width="100%">
+  <img src="https://raw.githubusercontent.com/rushirb2001/cohors/main/assets/readme/keys.svg" alt="Dashboard keys: P p f push, pull, fetch (asks first); c S commit, stash (asks first); F fetch everything (asks first); 1 to 5 jump to a card; colon for the command line; Enter opens a repo; slash filters; s and Y show and copy the standup; t shows tasks; question mark lists every key." width="100%">
 </picture>
 
 <br>

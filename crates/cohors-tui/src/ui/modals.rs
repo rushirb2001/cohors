@@ -1208,6 +1208,10 @@ pub(crate) fn render_confirm(frame: &mut Frame, full: Rect, app: &App, theme: &T
         ConfirmAction::BulkStash(ids) => ids.as_slice(),
         ConfirmAction::BulkCommit { ids, .. } => ids.as_slice(),
         ConfirmAction::AgentSetup(id) => std::slice::from_ref(id),
+        ConfirmAction::Remote { ids, .. } => ids.as_slice(),
+        // Every repository: the prompt says how many, and a list of all of
+        // them would bury it.
+        ConfirmAction::FetchAll => &[],
     };
     let names: Vec<&str> = ids
         .iter()

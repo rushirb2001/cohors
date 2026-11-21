@@ -31,6 +31,25 @@ source of truth.
 
 ## [Unreleased]
 
+## [0.8.31] — 2026-11-21
+
+### Changed
+
+- **In the dashboard, fetch, pull and push ask before they run.** Each used to
+  start on its key. `p` pulls and `P` pushes, one Shift apart, and `F` (fetch
+  everything) is typed with Shift held, so a pull meant after a fetch could
+  arrive as a push; and Enter on **Do next** ran whichever step a fetch had
+  just moved under the cursor. A branch was pushed that way without anyone
+  choosing to. Now every one of them opens the same dialog commit and stash
+  use: what will happen, to how many repositories, their names, and `y` to go
+  ahead. Any other key backs out, so a stray keystroke does nothing. This
+  covers `f`, `p`, `P`, `F`, a step's own key and Enter on **Do next**, and
+  `:fetch`, `:pull` and `:push`. A push says how many commits leave this
+  machine and how many branches reach their remote for the first time.
+  Pushing one repository that has several branches still opens the "push
+  which branch?" picker, which waits for Enter as before. The command line
+  (`cohors push` and the rest) already listed its targets and asked.
+
 ## [0.8.30] — 2026-11-21
 
 ### Fixed

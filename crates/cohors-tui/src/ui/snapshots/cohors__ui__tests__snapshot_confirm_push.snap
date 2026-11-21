@@ -1,0 +1,28 @@
+---
+source: crates/cohors-tui/src/ui/tests.rs
+expression: "render_to_string(&app, 100, 24)"
+---
+ cohors  ~/code   12 repositories. 6 have work at risk, 4 need a look, 2 are clean.  scanned 2m ago 
+ 5 not backed up  3 stashes  26 uncommitted  0 stale  5 tasks  44 commits 7d                        
+╭─  1  ▶ Do next ──────────────────────────────────────────────────────────────────────────────────╮
+│  RISK      Check 1 repository that could not be read    Nothing else is known about legacy-bill… │
+│  RISK   P  Push 4 commits from 3 repositories           They exist only on this machine: paymen… │
+│   ↓ 4 more                                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─  2  ▲ Work at ris╔══════════════════════════════════════════════════════════╗───────────────────╮
+│  RISK  analytics  ║ Confirm                                                  ║d  Push            │
+│  RISK  legacy-bill╟──────────────────────────────────────────────────────────╢                   │
+│   ↓ 4 more        ║ Push 8 commits from 4 repositories?                      ║                   │
+╰───────────────────║                                                          ║───────────────────╯
+╭─  3  ✓ Open tasks ║ analytics, design-system, mobile-app, payments           ║───────────────────╮
+│ repository        ╟──────────────────────────────────────────────────────────╢██████████      8  │
+│ payments          ║                y confirm · N / Esc cancel                ║                   │
+│   ↓ 2 more        ╚══════════════════════════════════════════════════════════╝ek.                │
+╰────────────────────────────────────────╯ ╰───────────────────────────────────────────────────────╯
+╭─  5  ▤ Repositories  12  11 marked ──────────────────────────────────────────────────────────────╮
+│        repository        branch    upstream      stg  mod  new  stash  tasks   age  last commit  │
+│● RISK  analytics         main      ↑1              ·    ·    ·      2      ·    4d  perf: preco… │
+│  RISK  legacy-billing    unreadable                                                 could not r… │
+│   ↓ 10 more                                                                                      │
+╰─  ␣  select   ⏎  detail   f  fetch   p  pull   P  push   c  commit   S  stash   o  open  ────────╯
+  1-5  card  tab  next  ↑↓  move  s  standup  t  tasks  :  command  r  rescan  ?  help  q  quit

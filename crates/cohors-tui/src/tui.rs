@@ -34,7 +34,7 @@ use ratatui::crossterm::terminal::{
 use crate::action;
 use crate::app::{
     App, BulkVerb, Cmd, CommandRun, ConfirmAction, DetailView, LaunchpadView, Mode, OpenWith,
-    Opener, PushPick, RunResult, RunState,
+    Opener, RunResult, RunState,
 };
 use crate::cli::Cli;
 use crate::ground::{Fed, GroundReply};
@@ -348,15 +348,7 @@ fn run_demo_loop(terminal: &mut Tui, ground: Ground) -> Result<()> {
                             Some("demo mode — install cohors to act on real repos".to_string());
                     }
                     // Everything that would touch real repos is a friendly no-op.
-                    Cmd::Refresh
-                    | Cmd::FetchSelected
-                    | Cmd::FetchAll
-                    | Cmd::PullSelected
-                    | Cmd::PushSelected
-                    | Cmd::PushBranchAccept
-                    | Cmd::Act { .. }
-                    | Cmd::Lazygit
-                    | Cmd::ConfirmAccept => {
+                    Cmd::Refresh | Cmd::PushBranchAccept | Cmd::Lazygit | Cmd::ConfirmAccept => {
                         app.status =
                             Some("demo mode — install cohors to act on real repos".to_string());
                     }
@@ -519,23 +511,6 @@ fn run_loop(
                         break;
                     }
                     Cmd::Refresh => start_refresh(&mut app, &scanner, &tx),
-                    Cmd::FetchSelected => {
-                        start_action_targets(&mut app, &tx, ActionKind::Fetch, &mut batch)
-                    }
-                    Cmd::FetchAll => start_fetch_all(&mut app, &tx, &mut batch),
-                    Cmd::PullSelected => {
-                        start_action_targets(&mut app, &tx, ActionKind::Pull, &mut batch)
-                    }
-                    Cmd::PushSelected => start_push(&mut app, &tx, &mut batch),
-                    // A "Do next" step: the overview already chose the targets.
-                    Cmd::Act { verb, ids } => {
-                        let kind = match verb {
-                            BulkVerb::Fetch => ActionKind::Fetch,
-                            BulkVerb::Pull => ActionKind::Pull,
-                            BulkVerb::Push => ActionKind::Push,
-                        };
-                        start_action_on(&mut app, &tx, kind, ids, Targets::Exact, &mut batch)
-                    }
                     Cmd::CopyStandupMarkdown => spawn_standup(&mut app, &scanner, &tx),
                     Cmd::PushBranchAccept => accept_push_branch(&mut app, &tx),
                     Cmd::CopyPath => copy_selected(&mut app),
@@ -565,6 +540,19 @@ fn run_loop(
                                 }
                                 ConfirmAction::AgentSetup(id) => {
                                     run_agent_setup(terminal, &mut app, &scanner, &tx, &id)?
+                                }
+                                // Fetch, pull and push start nowhere else:
+                                // only an accepted dialog reaches a remote.
+                                ConfirmAction::Remote { verb, ids } => {
+                                    let kind = match verb {
+                                        BulkVerb::Fetch => ActionKind::Fetch,
+                                        BulkVerb::Pull => ActionKind::Pull,
+                                        BulkVerb::Push => ActionKind::Push,
+                                    };
+                                    start_action_on(&mut app, &tx, kind, ids, &mut batch)
+                                }
+                                ConfirmAction::FetchAll => {
+                                    start_fetch_all(&mut app, &tx, &mut batch)
                                 }
                             }
                         }
@@ -844,34 +832,6 @@ fn start_refresh(app: &mut App, scanner: &Arc<Scanner>, tx: &Sender<BgMsg>) {
     spawn_scan(scanner, tx.clone());
 }
 
-/// Start a fetch/pull on the selected repo.
-/// Run `kind` across the action target set (the marked selection, or the repo
-/// under the cursor when nothing is marked) — so `f`/`p` act on the whole
-/// selection. With a single target it keeps the per-repo status; with several it
-/// shows an aggregate count.
-fn start_action_targets(
-    app: &mut App,
-    tx: &Sender<BgMsg>,
-    kind: ActionKind,
-    batch: &mut Option<Batch>,
-) {
-    let ids = app.action_targets();
-    start_action_on(app, tx, kind, ids, Targets::Selection, batch);
-}
-
-/// Where a list of action targets came from, which decides how much the loop
-/// second-guesses it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Targets {
-    /// The marked selection (or the cursor). A bulk push leaves out the
-    /// repositories with nothing to push rather than reporting a failure each.
-    Selection,
-    /// Chosen by the overview for a "Do next" step: exactly the repositories
-    /// that need the action, so none is left out. This is what lets a push
-    /// publish branches that have no upstream yet.
-    Exact,
-}
-
 /// Run `kind` over `ids` on the shared action pool, with the per-repo busy
 /// markers and the aggregate status line.
 fn start_action_on(
@@ -879,7 +839,6 @@ fn start_action_on(
     tx: &Sender<BgMsg>,
     kind: ActionKind,
     ids: Vec<RepoId>,
-    source: Targets,
     batch: &mut Option<Batch>,
 ) {
     // Pull/stash/commit mutate the worktree, so a conflicted or mid-operation
@@ -892,15 +851,8 @@ fn start_action_on(
     let mut targets: Vec<(RepoId, Utf8PathBuf, String)> = Vec::new();
     let mut skipped: Option<String> = None;
     let mut skipped_count = 0usize;
-    // "Push all": on a big fleet most checked-out branches are local-only or up to
-    // date, so pushing every one just fails with "no upstream". A *bulk* push targets
-    // only repos whose current branch is ahead of its upstream and counts the rest
-    // as "nothing to push", instead of firing a `git push` at each that reports back
-    // a failure. A single-repo push still attempts, so its real git result shows
-    // (and a specific branch is chosen through the picker, not here).
-    let bulk_push =
-        source == Targets::Selection && ids.len() > 1 && matches!(kind, ActionKind::Push);
-    let mut nothing_count = 0usize;
+    // The dialog that led here already named these repositories (and left
+    // out, for a push of several, the ones with nothing to push).
     for id in ids {
         let Some(r) = app.repos.iter().find(|r| r.id == id) else {
             continue;
@@ -914,17 +866,12 @@ fn start_action_on(
             skipped = Some(format!("{}: {reason}", r.name));
             continue;
         }
-        if bulk_push && r.upstream.as_ref().is_none_or(|u| u.ahead == 0) {
-            nothing_count += 1;
-            continue;
-        }
         targets.push((r.id.clone(), path, r.name.clone()));
     }
     if targets.is_empty() {
-        app.status = Some(match (skipped, nothing_count) {
-            (Some(reason), _) => format!("skipped — {reason}"),
-            (None, n) if n > 0 => format!("nothing to push — {n} up to date or local-only"),
-            _ => "no repo selected".to_string(),
+        app.status = Some(match skipped {
+            Some(reason) => format!("skipped — {reason}"),
+            None => "no repo selected".to_string(),
         });
         return;
     }
@@ -938,8 +885,6 @@ fn start_action_on(
     // Surface any guarded skips alongside the progress note.
     let skip_note = if skipped_count > 0 {
         format!("  ·  {skipped_count} skipped (conflict/operation)")
-    } else if nothing_count > 0 {
-        format!("  ·  {nothing_count} nothing to push")
     } else {
         String::new()
     };
@@ -957,32 +902,6 @@ fn start_action_on(
         app.busy.insert(id.clone());
         spawn_action(tx.clone(), kind.clone(), id, path, name);
     }
-}
-
-/// Push: a single multi-branch target asks *which* branch first (a repo can have
-/// several local branches, and `git push` only pushes the checked-out one); a
-/// single-branch repo or a bulk selection pushes each target's current branch
-/// directly, as before.
-fn start_push(app: &mut App, tx: &Sender<BgMsg>, batch: &mut Option<Batch>) {
-    let targets = app.action_targets();
-    if let [only] = targets.as_slice()
-        && let Some(repo) = app.repos.iter().find(|r| &r.id == only)
-        && repo.branches.len() > 1
-        && !repo.has_error()
-        && !app.busy.contains(&repo.id)
-    {
-        // Current branch pre-selected (Enter pushes the checkout by default).
-        let cursor = repo.branches.iter().position(|b| b.is_current).unwrap_or(0);
-        app.push_pick = Some(PushPick {
-            id: repo.id.clone(),
-            name: repo.name.clone(),
-            branches: repo.branches.clone(),
-            cursor,
-        });
-        app.mode = Mode::PushBranch;
-        return;
-    }
-    start_action_targets(app, tx, ActionKind::Push, batch);
 }
 
 /// Push the branch highlighted in the picker. The checked-out branch (with an

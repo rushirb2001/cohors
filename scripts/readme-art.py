@@ -252,9 +252,9 @@ def compare(theme):
 # ── Keys: tiles laid out like a keyboard ─────────────────────────────────────
 
 KEYS = [
-    (["P", "p", "f"], "Push, pull, fetch", ""),
+    (["P", "p", "f"], "Push, pull, fetch", "asks first"),
     (["c", "S"], "Commit, stash", "asks first"),
-    (["F"], "Fetch everything", ""),
+    (["F"], "Fetch everything", "asks first"),
     (["1", "–", "5"], "Jump to a card", ""),
     ([":"], "Command line", "Tab completes"),
     (["Enter"], "Open a repo", ""),

@@ -1348,6 +1348,21 @@ fn snapshot_detail_with_remote() {
     insta::assert_snapshot!(render_to_string(&app, 100, 28));
 }
 
+/// What a push asks before anything leaves the machine: how many commits,
+/// from which repositories, and that only `y` goes ahead.
+#[test]
+fn snapshot_confirm_push() {
+    let mut app = fleet_app();
+    app.focus = Card::Repos;
+    // Mark every repository, then press the push key.
+    for c in ['*', 'P'] {
+        use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        app.on_key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE));
+    }
+    assert_eq!(app.mode, Mode::Confirm);
+    insta::assert_snapshot!(render_to_string(&app, 100, 24));
+}
+
 #[test]
 fn snapshot_confirm_stash() {
     use crate::app::{ConfirmAction, Pending};
